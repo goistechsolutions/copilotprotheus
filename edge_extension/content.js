@@ -1,15 +1,22 @@
 (function () {
   const WIDGET_ID  = 'cprot-widget-frame'
+  let sessionData = {
+    company: '01',
+    branch: '0101',
+    user: 'admin',
+    environment: 'validacao'
+  }
+  let widgetInjected = false;
 
   function getContext(configuredTenant) {
     const p = new URLSearchParams(window.location.search)
     return new URLSearchParams({
       tenant_id:   configuredTenant || p.get('tenant_id')   || '',
-      environment: p.get('environment') || 'validacao',
-      company:     p.get('company')     || '01',
-      branch:      p.get('branch')      || '0101',
+      environment: sessionData.environment,
+      company:     sessionData.company,
+      branch:      sessionData.branch,
       module:      detectModule(),
-      user:        p.get('user')        || 'admin',
+      user:        sessionData.user,
       station:     'WEB01',
       session_id:  'ext-' + Date.now(),
       pedido:      p.get('pedido')      || '',
@@ -19,7 +26,6 @@
   }
 
   function detectModule() {
-    // tenta detectar modulo pelo titulo da pagina ou URL
     const url   = window.location.href.toLowerCase()
     const title = document.title.toLowerCase()
     const map   = {
@@ -34,9 +40,59 @@
     return 'PROTHEUS'
   }
 
+  function extractProtheusSession() {
+    // 1. Tentar ler do sessionStorage
+    for (let i = 0; i < sessionStorage.length; i++) {
+       const key = sessionStorage.key(i);
+       const val = sessionStorage.getItem(key);
+       if (!val) continue;
+       try {
+         const json = JSON.parse(val);
+         if (json.cEmpresa) sessionData.company = json.cEmpresa;
+         if (json.cFilial) sessionData.branch = json.cFilial;
+         if (json.cUsuario || json.user) sessionData.user = json.cUsuario || json.user;
+         if (json.environment) sessionData.environment = json.environment;
+       } catch(e) {}
+    }
+    
+    // 2. Extração via Web Scraping Heurístico (DOM)
+    const allSpans = Array.from(document.querySelectorAll('span, div, label'));
+    
+    for (const el of allSpans) {
+      const text = el.innerText || '';
+      
+      // Procura formato "Empresa: 01" ou "Empresa 01"
+      let match = text.match(/Empresa[\s:]+([0-9a-zA-Z]+)/i);
+      if (match && match[1]) sessionData.company = match[1].substring(0, 2);
+      
+      // Procura formato "Filial: 0101"
+      match = text.match(/Filial[\s:]+([0-9a-zA-Z]+)/i);
+      if (match && match[1]) sessionData.branch = match[1].substring(0, 4);
+      
+      // Procura formato "Usuário: admin"
+      match = text.match(/Usu[aá]rio[\s:]+([0-9a-zA-Z_]+)/i);
+      if (match && match[1]) sessionData.user = match[1];
+    }
+  }
+
+  function isUserLoggedIn() {
+    // 1. Se tem campo de senha visível, não está logado
+    const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]'));
+    const isLoginVisible = passwordInputs.some(el => el.offsetParent !== null);
+    if (isLoginVisible) return false;
+
+    // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, ainda não entrou no workspace
+    const hasInitialModal = document.body.innerText.includes("Programa Inicial") && document.body.innerText.includes("Ambiente no servidor");
+    if (hasInitialModal) return false;
+
+    // Se não tem senha e não tem modal inicial, assumimos que está logado no Workspace!
+    return true;
+  }
+
   function injectWidget() {
-    // evita duplicar
-    if (document.getElementById(WIDGET_ID)) return
+    if (widgetInjected || document.getElementById(WIDGET_ID)) return;
+
+    extractProtheusSession();
 
     chrome.storage.local.get(['widget_url', 'tenant_id'], function (result) {
       const widgetBaseUrl = result.widget_url || 'https://copilot.elitecorp.tec.br/';
@@ -60,34 +116,39 @@
         transition:   'width 0.2s ease, height 0.2s ease',
       })
 
-      // aguarda body estar disponivel
       const target = document.body || document.documentElement
       target.appendChild(iframe)
+      widgetInjected = true;
     });
   }
-
-  function ensureWidget() {
-    if (!document.getElementById(WIDGET_ID)) injectWidget()
+  
+  function removeWidget() {
+    const frame = document.getElementById(WIDGET_ID);
+    if (frame) {
+      frame.remove();
+      widgetInjected = false;
+    }
   }
 
-  // Injetar imediatamente se body existir
+  // Monitor principal: avalia login e logout
+  function checkSessionState() {
+    if (isUserLoggedIn()) {
+      if (!widgetInjected) injectWidget();
+    } else {
+      if (widgetInjected) removeWidget();
+    }
+  }
+
+  // Avaliação inicial
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectWidget)
+    document.addEventListener('DOMContentLoaded', checkSessionState)
   } else {
-    injectWidget()
+    checkSessionState()
   }
 
-  // Reinjetar se o DOM remover o iframe (SPA / Protheus WebApp)
-  const observer = new MutationObserver(() => ensureWidget())
-  observer.observe(document.documentElement, { childList: true, subtree: true })
-
-  // Reinjetar em navegacoes SPA (pushState / replaceState)
-  const _push    = history.pushState.bind(history)
-  const _replace = history.replaceState.bind(history)
-  history.pushState    = (...a) => { _push(...a);    setTimeout(ensureWidget, 300) }
-  history.replaceState = (...a) => { _replace(...a); setTimeout(ensureWidget, 300) }
-  window.addEventListener('popstate',  () => setTimeout(ensureWidget, 300))
-  window.addEventListener('hashchange',() => setTimeout(ensureWidget, 300))
+  // Observa mudanças no DOM para reagir a SPA (login/logout)
+  const observer = new MutationObserver(() => checkSessionState())
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: false })
 
   // Toggle Ctrl+Shift+P
   document.addEventListener('keydown', e => {
@@ -98,67 +159,29 @@
     }
   })
 
-  // Resize listener
+  // Resize listener & Scraping
   window.addEventListener('message', e => {
     if (e.data && e.data.type === 'cprot-resize') {
       const f = document.getElementById(WIDGET_ID)
       if (!f) return
 
       if (e.data.maximized) {
-        // Modo maximizado: cobre toda a viewport
-        Object.assign(f.style, {
-          width: '100vw',
-          height: '100vh',
-          top: '0',
-          right: '0',
-          bottom: '0',
-          left: '0',
-          borderRadius: '0',
-        })
+        Object.assign(f.style, { width: '100vw', height: '100vh', top: '0', right: '0', bottom: '0', left: '0', borderRadius: '0' })
       } else if (e.data.open && !e.data.minimized) {
-        // Modo normal aberto
-        Object.assign(f.style, {
-          width: '420px',
-          height: '620px',
-          top: 'auto',
-          left: 'auto',
-          right: '0',
-          bottom: '0',
-          borderRadius: '',
-        })
+        Object.assign(f.style, { width: '420px', height: '620px', top: 'auto', left: 'auto', right: '0', bottom: '0', borderRadius: '' })
       } else if (e.data.open && e.data.minimized) {
-        Object.assign(f.style, {
-          width: '420px',
-          height: '120px',
-          top: 'auto',
-          left: 'auto',
-          right: '0',
-          bottom: '0',
-          borderRadius: '',
-        })
+        Object.assign(f.style, { width: '420px', height: '120px', top: 'auto', left: 'auto', right: '0', bottom: '0', borderRadius: '' })
       } else {
-        // Fechado: botão launcher
-        Object.assign(f.style, {
-          width: '100px',
-          height: '100px',
-          top: 'auto',
-          left: 'auto',
-          right: '0',
-          bottom: '0',
-          borderRadius: '',
-        })
+        Object.assign(f.style, { width: '100px', height: '100px', top: 'auto', left: 'auto', right: '0', bottom: '0', borderRadius: '' })
       }
     }
     
-    // Leitura da tela (Screen Scraping)
     if (e.data && e.data.type === 'cprot-request-screen') {
       const f = document.getElementById(WIDGET_ID)
       if (!f || !f.contentWindow) return
       
       let text = document.body.innerText || ''
-      // Limpa espacos duplos e quebras longas
       text = text.replace(/\s+/g, ' ').trim()
-      // Limita a 4000 caracteres para poupar o LLM
       text = text.substring(0, 4000)
       
       f.contentWindow.postMessage({ type: 'cprot-screen-data', text }, '*')
