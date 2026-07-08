@@ -24,8 +24,9 @@ export default function AdminDashboard() {
     cnpj: '', ie: '', razao_social: '', email: '', telefone: '', endereco: '',
     protheus_grupo: '', protheus_empresa: '', protheus_unidade: '', protheus_filial: '',
     protheus_ambientes: 'validacao', protheus_usuario: '',
-    protheus_rest_url: '', protheus_webapp_url: '', licenca_uso: ''
+    protheus_rest_url: '', protheus_webapp_url: '', licenca_uso: '', status: 'ativa'
   });
+  const [companyFilter, setCompanyFilter] = useState('ativa');
 
   // Tenant Modal State
   const [showTenantModal, setShowTenantModal] = useState(false);
@@ -220,7 +221,7 @@ export default function AdminDashboard() {
         cnpj: '', ie: '', razao_social: '', email: '', telefone: '', endereco: '',
         protheus_grupo: '', protheus_empresa: '', protheus_unidade: '', protheus_filial: '',
         protheus_ambientes: 'validacao', protheus_usuario: '',
-        protheus_rest_url: '', protheus_webapp_url: '', licenca_uso: ''
+        protheus_rest_url: '', protheus_webapp_url: '', licenca_uso: '', status: 'ativa'
       });
     }
     setShowCompanyModal(true);
@@ -570,9 +571,21 @@ export default function AdminDashboard() {
             <div className="admin-card">
               <div className="admin-card-header">
                 <h2>Empresas SaaS Cadastradas</h2>
-                <button className="admin-btn admin-btn-primary" onClick={() => openCompanyModal('add')}>
-                  ➕ Cadastrar Empresa
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="admin-menu" style={{ width: 'auto', padding: '0', background: 'transparent', margin: 0, border: 'none', display: 'flex', gap: '4px' }}>
+                    <button 
+                      style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid var(--admin-border)', background: companyFilter === 'ativa' ? 'var(--admin-accent)' : '#fff', color: companyFilter === 'ativa' ? '#fff' : 'inherit' }}
+                      onClick={() => setCompanyFilter('ativa')}
+                    >Ativas</button>
+                    <button 
+                      style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid var(--admin-border)', background: companyFilter === 'inativa' ? 'var(--admin-accent)' : '#fff', color: companyFilter === 'inativa' ? '#fff' : 'inherit' }}
+                      onClick={() => setCompanyFilter('inativa')}
+                    >Inativas</button>
+                  </div>
+                  <button className="admin-btn admin-btn-primary" onClick={() => openCompanyModal('add')}>
+                    ➕ Cadastrar Empresa
+                  </button>
+                </div>
               </div>
 
               <div className="admin-table-container">
@@ -588,7 +601,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {companies.map((c) => (
+                    {companies.filter(c => (c.status || 'ativa') === companyFilter).map((c) => (
                       <tr key={c.id}>
                         <td><strong>{c.razao_social}</strong></td>
                         <td>{c.cnpj}</td>
@@ -605,7 +618,7 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ))}
-                    {companies.length === 0 && (
+                    {companies.filter(c => (c.status || 'ativa') === companyFilter).length === 0 && (
                       <tr>
                         <td colSpan="6" style={{ textAlign: 'center', color: 'var(--admin-text-secondary)' }}>Nenhuma empresa cadastrada no banco de dados.</td>
                       </tr>
@@ -905,6 +918,16 @@ export default function AdminDashboard() {
                     onChange={e => setCompanyForm({ ...companyForm, telefone: e.target.value })} 
                     placeholder="Ex: (11) 99999-9999" 
                   />
+                </div>
+                <div className="admin-form-group">
+                  <label>Status da Empresa:</label>
+                  <select 
+                    value={companyForm.status || 'ativa'} 
+                    onChange={e => setCompanyForm({ ...companyForm, status: e.target.value })}
+                  >
+                    <option value="ativa">Ativa</option>
+                    <option value="inativa">Inativa</option>
+                  </select>
                 </div>
               </div>
 

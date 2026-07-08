@@ -98,6 +98,7 @@ class Company(Base):
     protheus_rest_url = Column(String(1024), nullable=True) # URL do portal REST do Protheus
     protheus_webapp_url = Column(String(1024), nullable=True) # URL do WebClient/WebApp do Protheus
     licenca_uso = Column(Text, nullable=True) # Usage license token
+    status = Column(String(50), server_default='ativa') # ativa/inativa
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
