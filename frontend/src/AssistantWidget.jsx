@@ -169,13 +169,20 @@ export default function AssistantWidget({ embedded = false, compact = false, con
         setSessionBlockMessage("");
       } else {
         const errData = await vResp.json();
-        const errMsg = errData.detail || "Licença inválida ou usuário não autorizado.";
+        let errMsg = errData.detail || "Licença inválida ou usuário não autorizado.";
+        if (!context.tenant_id && tenantIdVal === "01") {
+           errMsg = "Extensão não configurada! Clique no ícone do Copilot na barra superior do seu navegador e preencha o 'Grupo/Tenant ID' (ex: rodol_prd). Depois, dê um F5 na página.";
+        }
         setSessionBlocked(true);
         setSessionBlockMessage(errMsg);
       }
     } catch (e) {
       setSessionBlocked(true);
-      setSessionBlockMessage("Erro de conexão ao validar licença.");
+      let errMsg = e.message || "Erro de conexão ao validar licença.";
+      if (!context.tenant_id && tenantIdVal === "01") {
+         errMsg = "Extensão não configurada! Clique no ícone do Copilot na barra do seu navegador e preencha o 'Grupo/Tenant ID' (ex: rodol_prd). Depois, dê F5 na página.";
+      }
+      setSessionBlockMessage(errMsg);
       setToken("");
       localStorage.removeItem("token");
     }
