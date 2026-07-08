@@ -1,0 +1,7 @@
+tenant:
+  name: pilot_rodolltda
+  rest_url: https://rodolltda195384.protheus.cloudtotvs.com.br:10707/rest
+  webapp_url: https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html
+  vscode_server_url: https://rodolltda195384.protheus.cloudtotvs.com.br:10714
+  auth_mode: basic
+  timeout_seconds: 120

@@ -1,0 +1,34 @@
+# Segredos e variáveis de ambiente
+*.env
+config/pilot.env
+middleware/.env
+backend/.env
+
+# Bancos de dados locais
+*.db
+*.sqlite
+backend/*.db
+copilot_protheus.db
+assistant.db
+
+# Logs
+*.log
+backend/backend.log
+middleware/logs/
+
+# Dependências
+node_modules/
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Builds e outputs
+dist/
+build/
+out/
+.vscode/
+.idea/
+
+# Arquivos gerados grandes
+backend/app/services/endpoints_cache.json

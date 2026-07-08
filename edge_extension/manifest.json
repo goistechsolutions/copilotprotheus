@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Copilot Protheus",
+  "version": "1.1.0",
+  "description": "Assistente Copilot Protheus integrado ao WebApp TOTVS",
+  "permissions": ["scripting", "storage"],
+  "host_permissions": [
+    "*://*.cloudtotvs.com.br/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.cloudtotvs.com.br/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Copilot Protheus"
+  },
+  "icons": {
+    "16":  "icon16.png",
+    "48":  "icon48.png",
+    "128": "icon128.png"
+  }
+}

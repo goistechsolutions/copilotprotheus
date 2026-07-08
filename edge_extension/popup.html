@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Copilot Protheus</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background: #0f172a; color: #e5eef8; width: 280px; padding: 20px; margin: 0; }
+    h2 { font-size: 16px; margin: 0 0 8px; }
+    p { font-size: 12px; color: #9fb2cc; margin: 0 0 16px; }
+    button { width: 100%; padding: 10px; border: none; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+    .primary { background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; }
+    .secondary { background: #1e293b; color: #9fb2cc; border: 1px solid #253857; }
+    .hint { font-size: 11px; color: #4b6a9e; margin-top: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>✦ Copilot Protheus</h2>
+  <p>Assistente integrado ao WebApp da TOTVS</p>
+  <button class="primary" id="open">Abrir no Protheus</button>
+  <button class="secondary" id="toggle">Mostrar / Ocultar Widget</button>
+  <div class="hint">Atalho: Ctrl+Shift+P</div>
+  
+  <div style="margin-top: 14px; border-top: 1px solid #253857; padding-top: 14px;">
+    <label style="font-size: 11px; color: #9fb2cc; display: block; margin-bottom: 4px;">URL do Widget (Vite/Nuvem):</label>
+    <input id="widget-url" type="text" placeholder="https://copilot.elitecorp.tec.br/" style="width: calc(100% - 16px); padding: 8px; border: 1px solid #253857; border-radius: 6px; background: #1e293b; color: #fff; font-size: 11px; margin-bottom: 8px; outline: none;" />
+    
+    <label style="font-size: 11px; color: #9fb2cc; display: block; margin-bottom: 4px;">URL de Lançamento (FastAPI):</label>
+    <input id="launch-url" type="text" placeholder="https://copilot.elitecorp.tec.br/api/launch" style="width: calc(100% - 16px); padding: 8px; border: 1px solid #253857; border-radius: 6px; background: #1e293b; color: #fff; font-size: 11px; margin-bottom: 8px; outline: none;" />
+    
+    <button class="secondary" id="save" style="padding: 6px; font-size: 11px; margin-bottom: 0;">Salvar Configurações</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
