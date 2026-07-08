@@ -59,7 +59,7 @@
     const allSpans = Array.from(document.querySelectorAll('span, div, label'));
     
     for (const el of allSpans) {
-      const text = el.innerText || '';
+      const text = el.textContent || '';
       
       // Procura formato "Empresa: 01" ou "Empresa 01"
       let match = text.match(/Empresa[\s:]+([0-9a-zA-Z]+)/i);
@@ -84,7 +84,8 @@
     if (isLoginVisible) return false;
 
     // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, ainda não entrou no workspace
-    const hasInitialModal = document.body.innerText.includes("Programa Inicial") && document.body.innerText.includes("Ambiente no servidor");
+    const bodyText = document.body.textContent || "";
+    const hasInitialModal = bodyText.includes("Programa Inicial") && bodyText.includes("Ambiente no servidor");
     if (hasInitialModal) return false;
 
     // Se não tem senha e não tem modal inicial, assumimos que está logado no Workspace!
