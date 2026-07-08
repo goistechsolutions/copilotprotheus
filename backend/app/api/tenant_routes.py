@@ -43,6 +43,33 @@ def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
+    
+    # --- Criação do Schema PostgreSQL do Cliente ---
+    import re
+    from sqlalchemy import text
+    from app.db.database import Base
+    
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant.id)
+    if clean_tenant and clean_tenant not in ["public", "default"]:
+        try:
+            db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
+            db.commit()
+            db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
+            db.commit()
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+            db.commit()
+            
+            import app.models.knowledge
+            Base.metadata.create_all(bind=db.connection())
+            db.commit()
+            
+            # Restaura o search_path
+            db.execute(text("SET search_path TO public"))
+            db.commit()
+        except Exception as e:
+            # Em caso de erro na criação do schema, loga, mas retorna sucesso no cadastro
+            print(f"Aviso: Erro ao criar schema para o tenant {clean_tenant}: {e}")
+            
     return tenant
 
 @router.put("/tenants/{tenant_id}", response_model=TenantResponse)
