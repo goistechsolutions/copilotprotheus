@@ -1,10 +1,10 @@
 (function () {
   const WIDGET_ID  = 'cprot-widget-frame'
 
-  function getContext() {
+  function getContext(configuredTenant) {
     const p = new URLSearchParams(window.location.search)
     return new URLSearchParams({
-      tenant_id:   p.get('tenant_id')   || '',
+      tenant_id:   configuredTenant || p.get('tenant_id')   || '',
       environment: p.get('environment') || 'validacao',
       company:     p.get('company')     || '01',
       branch:      p.get('branch')      || '0101',
@@ -38,12 +38,13 @@
     // evita duplicar
     if (document.getElementById(WIDGET_ID)) return
 
-    chrome.storage.local.get(['widget_url'], function (result) {
+    chrome.storage.local.get(['widget_url', 'tenant_id'], function (result) {
       const widgetBaseUrl = result.widget_url || 'https://copilot.elitecorp.tec.br/';
+      const configuredTenant = result.tenant_id || '';
       
       const iframe = document.createElement('iframe')
       iframe.id    = WIDGET_ID
-      iframe.src   = widgetBaseUrl + (widgetBaseUrl.endsWith('/') ? '' : '/') + '?' + getContext()
+      iframe.src   = widgetBaseUrl + (widgetBaseUrl.endsWith('/') ? '' : '/') + '?' + getContext(configuredTenant)
       iframe.allow = 'clipboard-write'
       Object.assign(iframe.style, {
         position:     'fixed',
