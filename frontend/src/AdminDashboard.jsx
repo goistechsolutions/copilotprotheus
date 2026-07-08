@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import './AdminDashboard.css';
 
-const DEFAULT_MIDDLEWARE = window.location.origin;
+const DEFAULT_MIDDLEWARE = import.meta.env.VITE_MIDDLEWARE_URL || "http://localhost:3001";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -30,7 +31,8 @@ export default function AdminDashboard() {
   const [showTenantModal, setShowTenantModal] = useState(false);
   const [tenantModalMode, setTenantModalMode] = useState('add');
   const [tenantForm, setTenantForm] = useState({
-    id: '', name: '', protheus_rest_url: '', protheus_user: '', protheus_password: '', auth_mode: 'basic'
+    id: '', name: '', protheus_rest_url: '', protheus_user: '', protheus_password: '', auth_mode: 'basic',
+    system_prompt: '', temperature: 0.7
   });
 
   // License Generator State
@@ -116,14 +118,47 @@ export default function AdminDashboard() {
     fetchData();
   }, [adminKey]);
 
+  // Process data for charts
+  const chartDataPerDay = useMemo(() => {
+    const counts = {};
+    const now = new Date();
+    // Fill last 7 days with 0
+    for(let i=6; i>=0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      counts[d.toLocaleDateString()] = 0;
+    }
+    audits.forEach(a => {
+      const dateStr = new Date(a.created_at || Date.now()).toLocaleDateString();
+      if(counts[dateStr] !== undefined) counts[dateStr]++;
+    });
+    return Object.entries(counts).map(([date, count]) => ({ date, Interacoes: count }));
+  }, [audits]);
+
+  const chartDataPerTenant = useMemo(() => {
+    const counts = {};
+    audits.forEach(a => {
+      const t = a.tenant_id || 'Desconhecido';
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([tenant, count]) => ({ tenant, Interacoes: count }))
+      .sort((a,b) => b.Interacoes - a.Interacoes).slice(0,5);
+  }, [audits]);
+
   // CRUD Tenant handlers
   const openTenantModal = (mode, tenant = null) => {
     setTenantModalMode(mode);
     if (mode === 'edit' && tenant) {
-      setTenantForm(tenant);
+      setTenantForm({
+        ...tenant,
+        system_prompt: tenant.system_prompt || '',
+        temperature: tenant.temperature !== undefined ? tenant.temperature : 0.7
+      });
     } else {
       setTenantForm({
-        id: '', name: '', protheus_rest_url: '', protheus_user: '', protheus_password: '', auth_mode: 'basic'
+        id: '', name: '', protheus_rest_url: '', protheus_user: '', protheus_password: '', auth_mode: 'basic',
+        system_prompt: '', temperature: 0.7
       });
     }
     setShowTenantModal(true);
@@ -281,6 +316,37 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setLoading(true);
+    try {
+      const headers = getHeaders();
+      delete headers['Content-Type']; // Let the browser set the boundary for multipart/form-data
+      
+      const resp = await fetch(`${DEFAULT_MIDDLEWARE}/api/knowledge/upload`, {
+        method: 'POST',
+        headers: headers,
+        body: formData
+      });
+      if (resp.ok) {
+        alert("Arquivo enviado e ingerido com sucesso!");
+        fetchData();
+      } else {
+        alert("Erro no upload do arquivo.");
+      }
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setLoading(false);
+      e.target.value = null;
+    }
+  };
+
   return (
     <div className="admin-layout">
       {/* Sidebar */}
@@ -375,6 +441,43 @@ export default function AdminDashboard() {
                     <div className="admin-metric-value">{audits.length}</div>
                   </div>
                   <div className="admin-metric-icon">📈</div>
+                </div>
+              </div>
+
+              {/* Charts Section */}
+              <div className="admin-form-row" style={{ marginTop: '20px' }}>
+                <div className="admin-card" style={{ flex: 1 }}>
+                  <div className="admin-card-header">
+                    <h2>Interações (Últimos 7 Dias)</h2>
+                  </div>
+                  <div style={{ width: '100%', height: 250 }}>
+                    <ResponsiveContainer>
+                      <LineChart data={chartDataPerDay} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="date" tick={{fontSize: 12}} tickLine={false} axisLine={false} />
+                        <YAxis tick={{fontSize: 12}} tickLine={false} axisLine={false} />
+                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                        <Line type="monotone" dataKey="Interacoes" stroke="var(--admin-accent)" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} activeDot={{r: 6}} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="admin-card" style={{ flex: 1 }}>
+                  <div className="admin-card-header">
+                    <h2>Uso por Cliente (Top 5)</h2>
+                  </div>
+                  <div style={{ width: '100%', height: 250 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={chartDataPerTenant} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="tenant" tick={{fontSize: 12}} tickLine={false} axisLine={false} />
+                        <YAxis tick={{fontSize: 12}} tickLine={false} axisLine={false} />
+                        <RechartsTooltip cursor={{fill: '#f1f5f9'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                        <Bar dataKey="Interacoes" fill="var(--admin-accent)" radius={[4, 4, 0, 0]} barSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
 
@@ -646,9 +749,15 @@ export default function AdminDashboard() {
               <div className="admin-card" style={{ flex: 1 }}>
                 <div className="admin-card-header">
                   <h2>Documentos Ingeridos (Base RAG Vetorial)</h2>
-                  <button className="admin-btn admin-btn-primary" onClick={handleTriggerIngest}>
-                    🚀 Disparar Ingestão Geral
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <label className="admin-btn admin-btn-secondary" style={{ cursor: 'pointer', margin: 0 }}>
+                      📂 Upload Arquivo
+                      <input type="file" style={{ display: 'none' }} accept=".pdf,.txt,.md,.html" onChange={handleFileUpload} />
+                    </label>
+                    <button className="admin-btn admin-btn-primary" onClick={handleTriggerIngest}>
+                      🚀 Reprocessar Pasta
+                    </button>
+                  </div>
                 </div>
                 <div className="admin-table-container">
                   <table className="admin-table">
@@ -727,7 +836,7 @@ export default function AdminDashboard() {
               </div>
               <div style={{ flex: 1, borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--admin-border)', background: '#fff' }}>
                 <iframe 
-                  src="/adminer/?pgsql=db&username=postgres&db=copilot_protheus" 
+                  src={`${DEFAULT_MIDDLEWARE}/adminer/?pgsql=db&username=postgres&db=copilot_protheus`} 
                   title="Adminer Database Manager"
                   style={{ width: '100%', height: '100%', border: 'none' }}
                 />
