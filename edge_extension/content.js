@@ -76,6 +76,8 @@
   }
 
   function isUserLoggedIn() {
+    if (!document.body) return false; // Se o body ainda não existe, não está logado/carregado
+
     // 1. Se tem campo de senha visível, não está logado
     const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]'));
     const isLoginVisible = passwordInputs.some(el => el.offsetParent !== null);
