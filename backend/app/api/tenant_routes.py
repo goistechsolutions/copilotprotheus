@@ -46,7 +46,7 @@ def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
     
     # --- Criação do Schema PostgreSQL do Cliente ---
     import re
-    from sqlalchemy import text
+    from sqlalchemy import text, MetaData
     from app.db.database import Base
     
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant.id)
@@ -56,16 +56,20 @@ def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
             db.commit()
             db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
             db.commit()
-            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-            db.commit()
             
             import app.models.knowledge
-            Base.metadata.create_all(bind=db.connection())
+            
+            # Clonar o MetaData para forçar a criação das tabelas no novo schema
+            tenant_metadata = MetaData(schema=clean_tenant)
+            for table_name, table in Base.metadata.tables.items():
+                # Ignorar tabelas globais que já estão no schema public
+                if table.schema == "public" or table_name in ["tenants", "companies"]:
+                    continue
+                table.tometadata(tenant_metadata)
+                
+            tenant_metadata.create_all(bind=db.connection())
             db.commit()
             
-            # Restaura o search_path
-            db.execute(text("SET search_path TO public"))
-            db.commit()
         except Exception as e:
             # Em caso de erro na criação do schema, loga, mas retorna sucesso no cadastro
             print(f"Aviso: Erro ao criar schema para o tenant {clean_tenant}: {e}")
