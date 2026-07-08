@@ -1,10 +1,10 @@
 (function () {
   const WIDGET_ID  = 'cprot-widget-frame'
   let sessionData = {
-    company: '01',
-    branch: '0101',
-    user: 'admin',
-    environment: 'validacao'
+    company: '',
+    branch: '',
+    user: '',
+    environment: ''
   }
   let widgetInjected = false;
 
