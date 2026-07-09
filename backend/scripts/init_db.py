@@ -10,7 +10,7 @@ from app.db.database import Base
 # Import the models to register them
 from app.models.knowledge import Document, DocumentChunk, Memory, AuditLog
 
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:sap_password_123@127.0.0.1:5435/copilot_protheus')
+DATABASE_URL = os.getenv('DATABASE_URL', '')
 
 def init_db():
     print("Connecting to database:", DATABASE_URL)

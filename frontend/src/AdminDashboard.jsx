@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import './AdminDashboard.css';
 
-const DEFAULT_MIDDLEWARE = import.meta.env.VITE_MIDDLEWARE_URL || "http://localhost:3001";
+const DEFAULT_MIDDLEWARE = import.meta.env.VITE_MIDDLEWARE_URL || "";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');

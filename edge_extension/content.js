@@ -189,5 +189,34 @@
       
       f.contentWindow.postMessage({ type: 'cprot-screen-data', text }, '*')
     }
+
+    if (e.data && e.data.type === 'cprot-request-analysis') {
+      const f = document.getElementById(WIDGET_ID)
+      if (!f || !f.contentWindow) return
+
+      const query = e.data.query;
+      const payload = {
+        context: sessionData,
+        query: query
+      };
+
+      // Fazer a chamada para o backend (Hetzner via Tunnel)
+      fetch('https://copilot-api.elitecorp.tec.br/api/ask', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
+        f.contentWindow.postMessage({ type: 'cprot-dashboard-data', payloadGemini: data }, '*');
+      })
+      .catch(err => {
+        console.error("Erro ao comunicar com backend Hetzner:", err);
+        f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "Não foi possível carregar a análise." }, '*');
+      });
+    }
   })
 })()

@@ -1,6 +1,6 @@
 const router = require('express').Router()
 const axios = require('axios')
-const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000'
+const backendUrl = process.env.BACKEND_URL || ''
 
 const proxy = async (req, res, path, method = 'get') => {
   try {

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import MarkdownText from "./components/MarkdownText";
 
 const STORAGE_KEY = "copilot_protheus_chat_v2";
-const DEFAULT_MIDDLEWARE = import.meta.env.VITE_MIDDLEWARE_URL || "http://127.0.0.1:3001";
+const DEFAULT_MIDDLEWARE = import.meta.env.VITE_MIDDLEWARE_URL || "";
 
 function loadInitial(context) {
   try {

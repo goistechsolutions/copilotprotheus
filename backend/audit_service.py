@@ -2,7 +2,7 @@
 import os
 import asyncpg
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:sap_password_123@127.0.0.1:5435/copilot_protheus")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 _pool = None
 
 async def get_pool():

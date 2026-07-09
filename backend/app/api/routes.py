@@ -40,6 +40,25 @@ async def ask(
                 sql_used=""
             )
         
+    # Keras / JAX Intent Routing (Cognitive Firewall)
+    try:
+        from app.services.intent_service import IntentService
+        intent = IntentService().predict_intent(payload.question)
+        if intent == "GREETING":
+            return AskResponse(
+                answer="Olá! Sou o CopilotProtheus. Como posso ajudar com os dados do seu ERP hoje?",
+                intent="GREETING",
+                backend="keras_local"
+            )
+        elif intent == "OFF_TOPIC":
+            return AskResponse(
+                answer="**Bloqueado:** Desculpe, mas eu respondo apenas a questões relacionadas ao sistema Protheus e análises de dados empresariais.",
+                intent="OFF_TOPIC",
+                backend="keras_local"
+            )
+    except Exception as e:
+        pass # Fallback silencioso para o LLM real se o Keras falhar
+
     return await AssistantService(db).answer_question(payload, ctx)
 
 from fastapi.responses import StreamingResponse
@@ -76,6 +95,19 @@ async def ask_stream(
             return
             
         try:
+            # Keras / JAX Intent Routing (Cognitive Firewall) para o Stream
+            from app.services.intent_service import IntentService
+            intent = IntentService().predict_intent(payload.question)
+            
+            if intent == "GREETING":
+                yield f"data: {json.dumps({'token': 'Olá! Sou o CopilotProtheus. Como posso ajudar com os dados do seu ERP hoje?'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            elif intent == "OFF_TOPIC":
+                yield f"data: {json.dumps({'token': '**Bloqueado:** Desculpe, mas eu respondo apenas a questões relacionadas ao sistema Protheus e análises de dados empresariais.'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+                
             service = AssistantService(db)
             async for token in service.answer_question_stream(payload, ctx):
                 yield f"data: {json.dumps({'token': token})}\n\n"
