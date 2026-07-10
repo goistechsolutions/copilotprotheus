@@ -103,8 +103,17 @@ class ConfigUpdate(BaseModel):
 
 @router.get("/config")
 def get_config(admin: str = Depends(verify_admin)):
-    """Retorna as chaves e valores configurados no .env (ocultando senhas parcialmente)"""
+    """Retorna as chaves e valores configurados no .env (ocultando chaves de tenant)"""
     config_dict = dotenv.dotenv_values(ENV_PATH)
+    
+    # Remove chaves que pertencem às Empresas SaaS (Tenant)
+    keys_to_hide = [
+        "PROTHEUS_REST_URL", "PROTHEUS_USER", "PROTHEUS_PASSWORD", 
+        "PROTHEUS_URL", "PROTHEUS_ENVIRONMENT", "WEBAPP_URL"
+    ]
+    for k in keys_to_hide:
+        config_dict.pop(k, None)
+        
     return {"configs": config_dict}
 
 @router.post("/config")
