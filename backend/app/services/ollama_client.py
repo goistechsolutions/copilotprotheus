@@ -18,7 +18,7 @@ Seu objetivo eh responder perguntas usando dados reais do sistema chamando as fe
 ====================
 DIRETRIZES DE TOOLS:
 - Para obter faturamento, vendas, clientes ou relatorios, voce DEVE chamar 'consultar_protheus'.
-- Para rodar consultas SQL no Oracle, chame 'consultar_protheus' com endpoint="QueryRest" e query_params={"cQuery": "sua query SQL"}.
+- Para rodar consultas SQL no Oracle, chame 'consultar_protheus' com endpoint="QueryRest" e query_params={{"cQuery": "sua query SQL"}}.
 - NUNCA use SELECT TOP. Para limitar linhas no Oracle, use a clausula WHERE ROWNUM <= N (nunca no final depois do ORDER BY), ou use FETCH FIRST N ROWS ONLY no final (ex: ORDER BY F2_DOC FETCH FIRST 3 ROWS ONLY).
 - Datas no Protheus sao strings 'YYYYMMDD' (ex: 30/06/2026 eh '20260630'). NUNCA use TO_DATE.
 - NUNCA use tabelas ficticias (como SA_VENDA, SA0102). Use estritamente as tabelas reais listadas abaixo.
