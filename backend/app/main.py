@@ -66,6 +66,48 @@ app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
 app.include_router(admin_router, prefix="/api/admin")
 
+import httpx
+from fastapi import Request
+from fastapi.responses import Response
+
+# Proxy for Adminer
+@app.route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_adminer(request: Request, path: str):
+    adminer_url = f"http://adminer:8080/{path}"
+    async with httpx.AsyncClient() as client:
+        # Pega query params
+        params = request.query_params
+        
+        # Pega body
+        body = await request.body()
+        
+        # Faz a requisição
+        proxy_req = client.build_request(
+            request.method,
+            adminer_url,
+            params=params,
+            headers={k: v for k, v in request.headers.items() if k.lower() != 'host'},
+            content=body
+        )
+        try:
+            proxy_res = await client.send(proxy_req, stream=True)
+            headers = dict(proxy_res.headers)
+            
+            # Remove security headers to allow iframe embedding
+            headers.pop("x-frame-options", None)
+            headers.pop("content-security-policy", None)
+            headers.pop("X-Frame-Options", None)
+            headers.pop("Content-Security-Policy", None)
+            
+            return Response(
+                content=await proxy_res.aread(),
+                status_code=proxy_res.status_code,
+                headers=headers
+            )
+        except Exception as e:
+            logger.error(f"Erro no proxy do adminer: {e}")
+            return JSONResponse(status_code=502, content={"detail": f"Erro de proxy: {e}"})
+
 # Mount admin frontend
 os.makedirs("static/admin", exist_ok=True)
 app.mount("/admin", StaticFiles(directory="static/admin", html=True), name="admin")

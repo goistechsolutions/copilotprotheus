@@ -1,0 +1,155 @@
+import { useState } from 'react';
+import axios from 'axios';
+import { Key, Copy, CheckCircle } from 'lucide-react';
+
+export default function Licenses() {
+  const [adminKey, setAdminKey] = useState('');
+  const [cnpj, setCnpj] = useState('');
+  const [plan, setPlan] = useState('premium');
+  const [days, setDays] = useState(365);
+  const [token, setToken] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setToken('');
+    
+    // Calcula a data de expiração com base nos dias escolhidos
+    const expiration = new Date();
+    expiration.setDate(expiration.getDate() + parseInt(days));
+    const expirationIso = expiration.toISOString();
+
+    try {
+      const res = await axios.post('/api/license/generate', 
+        {
+          cnpj: cnpj.replace(/[^0-9]/g, ''),
+          expiration_date: expirationIso,
+          plan_level: plan
+        },
+        {
+          headers: { 'X-Admin-Key': adminKey }
+        }
+      );
+      setToken(res.data.token);
+    } catch (error) {
+      alert("Erro ao gerar licença: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="max-w-4xl">
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-slate-800 mb-2">Gerador de Licenças Offline</h2>
+        <p className="text-slate-500">Crie tokens JWT seguros para ativar empresas clientes (SaaS) sem necessidade de banco de dados na nuvem para validação.</p>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
+        
+        {/* Formulário */}
+        <div className="p-6 md:w-1/2 border-r border-slate-200 bg-slate-50">
+          <form onSubmit={handleGenerate} className="space-y-4">
+            
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Chave Admin (X-Admin-Key)</label>
+              <input 
+                type="password" 
+                required
+                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                placeholder="Insira a ADMIN_PASSWORD"
+                value={adminKey}
+                onChange={e => setAdminKey(e.target.value)}
+              />
+              <p className="text-xs text-slate-500 mt-1">Requerido para assinar criptograficamente o JWT.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ da Empresa</label>
+              <input 
+                type="text" 
+                required
+                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                placeholder="Ex: 00.000.000/0001-00"
+                value={cnpj}
+                onChange={e => setCnpj(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nível do Plano</label>
+                <select 
+                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                  value={plan}
+                  onChange={e => setPlan(e.target.value)}
+                >
+                  <option value="basic">Básico</option>
+                  <option value="premium">Premium</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Validade (Dias)</label>
+                <input 
+                  type="number" 
+                  min="1"
+                  required
+                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                  value={days}
+                  onChange={e => setDays(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-lg font-bold transition-all mt-4"
+            >
+              <Key size={18} />
+              {loading ? "Gerando..." : "Gerar Token de Licença"}
+            </button>
+          </form>
+        </div>
+
+        {/* Resultado */}
+        <div className="p-6 md:w-1/2 bg-white flex flex-col items-center justify-center">
+          {!token ? (
+            <div className="text-center text-slate-400">
+              <Key size={48} className="mx-auto mb-4 opacity-50" />
+              <p>O token gerado aparecerá aqui.</p>
+            </div>
+          ) : (
+            <div className="w-full h-full flex flex-col">
+              <label className="block text-sm font-semibold text-emerald-700 mb-2 flex items-center gap-2">
+                <CheckCircle size={18} /> Licença Gerada com Sucesso!
+              </label>
+              <textarea 
+                readOnly
+                value={token}
+                className="w-full flex-1 p-4 bg-slate-900 text-emerald-400 font-mono text-sm rounded-lg border border-slate-800 focus:outline-none mb-4 resize-none break-all"
+              />
+              <button 
+                onClick={handleCopy}
+                className="w-full flex items-center justify-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold p-3 rounded-lg transition-colors"
+              >
+                {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
+                {copied ? "Copiado!" : "Copiar Token"}
+              </button>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
