@@ -27,6 +27,8 @@ def get_tenant_config(tenant_id: str) -> dict:
         if company and company.protheus_rest_url:
             return {
                 "rest_url": company.protheus_rest_url,
+                "webapp_url": company.protheus_webapp_url,
+                "vscode_server_url": "",
                 "user": company.protheus_usuario or settings.protheus_user,
                 "password": settings.protheus_password, # Fallback, pois a senha do usuario e passada dinamicamente
                 "auth_mode": "basic"
@@ -36,6 +38,8 @@ def get_tenant_config(tenant_id: str) -> dict:
         if tenant:
             return {
                 "rest_url": tenant.protheus_rest_url,
+                "webapp_url": tenant.webapp_url if hasattr(tenant, "webapp_url") else "",
+                "vscode_server_url": tenant.vscode_server_url if hasattr(tenant, "vscode_server_url") else "",
                 "user": tenant.protheus_user,
                 "password": decrypt_password(tenant.encrypted_protheus_password),
                 "auth_mode": tenant.auth_mode or "basic"

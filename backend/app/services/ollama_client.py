@@ -11,8 +11,8 @@ OLLAMA_URL   = settings.ollama_url
 OLLAMA_MODEL = settings.ollama_model
 LLM_BACKEND  = settings.llm_backend
 
-def get_system_prompt():
-    base_prompt = """Voce e o Copilot Protheus, especialista no ERP TOTVS Protheus (RODOL Ltda, filial 0101, banco Oracle).
+def get_system_prompt(tenant_name: str = "Empresa"):
+    base_prompt = f"""Voce e o Copilot Protheus, especialista no ERP TOTVS Protheus ({tenant_name}, banco Oracle).
 Seu objetivo eh responder perguntas usando dados reais do sistema chamando as ferramentas (tools) disponiveis.
 
 ====================
@@ -72,7 +72,8 @@ SYSTEM_PROMPT = get_system_prompt()
 
 def _build_messages(question, protheus_data, intent, context, history):
     import json
-    msgs = [{"role": "system", "content": get_system_prompt()}]
+    tenant_name = context.get("company", "Empresa") if context else "Empresa"
+    msgs = [{"role": "system", "content": get_system_prompt(tenant_name)}]
     if context:
         parts = []
         for k, label in [
@@ -121,13 +122,11 @@ def _fallback_response(models: list) -> str:
     return (
         f"**Modelo '{OLLAMA_MODEL}' nao encontrado.**\n\n"
         f"Modelos disponiveis: `{', '.join(models)}`\n\n"
-        f"Edite `backend\.env` e defina:\n"
+        f"Edite `backend/.env` e defina:\n"
         f"```\nOLLAMA_MODEL={models[0]}\n```"
     )
 
-PROTHEUS_REST_URL = os.getenv("PROTHEUS_REST_URL", "https://rodolltda195384.protheus.cloudtotvs.com.br:10707/rest")
-PROTHEUS_USER     = os.getenv("PROTHEUS_USER", "admin")
-PROTHEUS_PASSWORD = os.getenv("PROTHEUS_PASSWORD", "Rodol2026@")
+
 
 TOOLS = [
     {
@@ -263,9 +262,10 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
                     "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
                 })
             else:
+                tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
                     "role": "system",
-                    "content": "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                    "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa {tenant_name} para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
                 })
             
             payload["messages"] = messages
@@ -383,9 +383,10 @@ async def stream_llm(
                         "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
                     })
                 else:
+                    tenant_name = context.get("company", "Empresa") if context else "Empresa"
                     messages.append({
                         "role": "system",
-                        "content": "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                        "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa {tenant_name} para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
                     })
                 
                 payload["messages"] = messages
