@@ -13,7 +13,7 @@ class CompanyBase(BaseModel):
     protheus_empresa: Optional[str] = None
     protheus_unidade: Optional[str] = None
     protheus_filial: str
-    protheus_ambientes: str
+    protheus_ambientes: Optional[str] = "producao"
     protheus_usuario: Optional[str] = None
     protheus_rest_url: Optional[str] = None
     protheus_webapp_url: Optional[str] = None

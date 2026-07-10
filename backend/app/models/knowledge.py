@@ -93,7 +93,7 @@ class Company(Base):
     protheus_empresa = Column(String(50), nullable=True)  # Código de empresa
     protheus_unidade = Column(String(50), nullable=True)  # Unidade de negócio
     protheus_filial = Column(String(50), nullable=False)   # Código de filial
-    protheus_ambientes = Column(String(255), nullable=False) # Ambientes (ex: "producao,validacao")
+    protheus_ambientes = Column(String(255), nullable=True, server_default='producao') # Ambientes (ex: "producao,validacao")
     protheus_usuario = Column(String(100), nullable=True) # Código de usuário
     protheus_rest_url = Column(String(1024), nullable=True) # URL do portal REST do Protheus
     protheus_webapp_url = Column(String(1024), nullable=True) # URL do WebClient/WebApp do Protheus
