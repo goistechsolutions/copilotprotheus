@@ -12,6 +12,7 @@ from app.api.integration_routes import router as integration_router
 from app.api.report_routes import router as report_router
 from app.api.company_routes import router as company_router
 from app.api.tenant_routes import router as tenant_router
+from app.api.infra_routes import router as infra_router
 from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
 from app.core.config import settings
@@ -65,6 +66,7 @@ app.include_router(report_router, prefix="/api")
 app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
 app.include_router(admin_router, prefix="/api/admin")
+app.include_router(infra_router)
 
 import httpx
 from fastapi import Request

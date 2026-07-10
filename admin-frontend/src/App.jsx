@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Settings, Database, LayoutDashboard, ShieldAlert, Building, Key, Brain } from 'lucide-react';
+import { Settings, Database, LayoutDashboard, ShieldAlert, Building, Key, Brain, Cloud } from 'lucide-react';
 
 import Config from './pages/Config';
 import Tables from './pages/Tables';
@@ -8,6 +8,7 @@ import Companies from './pages/Companies';
 import Licenses from './pages/Licenses';
 import RagMemories from './pages/RagMemories';
 import Adminer from './pages/Adminer';
+import Infra from './pages/Infra';
 
 function Sidebar() {
   const location = useLocation();
@@ -19,6 +20,7 @@ function Sidebar() {
     { path: '/rag', label: 'RAG e Memórias', icon: <Brain size={20} /> },
     { path: '/tables', label: 'Tabelas Permitidas', icon: <Database size={20} /> },
     { path: '/adminer', label: 'Banco de Dados', icon: <Database size={20} /> },
+    { path: '/infra', label: 'Infraestrutura', icon: <Cloud size={20} /> },
     { path: '/config', label: 'Configurações Globais', icon: <Settings size={20} /> },
   ];
 
@@ -64,6 +66,7 @@ function App() {
             <Route path="/rag" element={<RagMemories />} />
             <Route path="/tables" element={<Tables />} />
             <Route path="/adminer" element={<Adminer />} />
+            <Route path="/infra" element={<Infra />} />
             <Route path="/config" element={<Config />} />
           </Routes>
         </main>
