@@ -20,7 +20,7 @@ class ServerActionRequest(BaseModel):
 
 @router.get("/hetzner/servers", dependencies=[Depends(verify_admin_key)])
 async def get_hetzner_servers():
-    token = os.getenv("HETZNER_API_TOKEN")
+    token = os.getenv("HETZNER_API_TOKEN") or os.getenv("HETZNER-API-TOKEN")
     if not token:
         raise HTTPException(status_code=400, detail="HETZNER_API_TOKEN não configurado no .env")
     
@@ -46,7 +46,7 @@ async def get_hetzner_servers():
 
 @router.post("/hetzner/servers/{server_id}/action", dependencies=[Depends(verify_admin_key)])
 async def perform_hetzner_action(server_id: int, req: ServerActionRequest):
-    token = os.getenv("HETZNER_API_TOKEN")
+    token = os.getenv("HETZNER_API_TOKEN") or os.getenv("HETZNER-API-TOKEN")
     if not token:
         raise HTTPException(status_code=400, detail="HETZNER_API_TOKEN não configurado no .env")
     
@@ -68,8 +68,8 @@ async def perform_hetzner_action(server_id: int, req: ServerActionRequest):
 
 @router.post("/cloudflare/purge-cache", dependencies=[Depends(verify_admin_key)])
 async def purge_cloudflare_cache():
-    zone_id = os.getenv("CLOUDFLARE_ZONE_ID")
-    token = os.getenv("CLOUDFLARE_API_TOKEN")
+    zone_id = os.getenv("CLOUDFLARE_ZONE_ID") or os.getenv("CLOUDFLARE-ZONE-ID")
+    token = os.getenv("CLOUDFLARE_API_TOKEN") or os.getenv("CLOUDFLARE-API-TOKEN")
     
     if not zone_id or not token:
         raise HTTPException(status_code=400, detail="Variáveis CLOUDFLARE_ZONE_ID ou CLOUDFLARE_API_TOKEN ausentes no .env")
