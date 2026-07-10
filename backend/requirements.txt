@@ -21,3 +21,4 @@ keras>=3.0.0
 jax>=0.4.26
 jaxlib>=0.4.26
 numpy>=1.26.0
+python-multipart>=0.0.9
