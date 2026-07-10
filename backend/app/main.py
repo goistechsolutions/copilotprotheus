@@ -55,12 +55,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+from app.api.admin_routes import router as admin_router
+from fastapi.staticfiles import StaticFiles
+
 app.include_router(router)
 app.include_router(knowledge_router, prefix="/api")
 app.include_router(integration_router, prefix="/api")
 app.include_router(report_router, prefix="/api")
 app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
+app.include_router(admin_router, prefix="/api/admin")
+
+# Mount admin frontend
+os.makedirs("static/admin", exist_ok=True)
+app.mount("/admin", StaticFiles(directory="static/admin", html=True), name="admin")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):

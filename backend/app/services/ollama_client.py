@@ -11,7 +11,8 @@ OLLAMA_URL   = settings.ollama_url
 OLLAMA_MODEL = settings.ollama_model
 LLM_BACKEND  = settings.llm_backend
 
-SYSTEM_PROMPT = """Voce e o Copilot Protheus, especialista no ERP TOTVS Protheus (RODOL Ltda, filial 0101, banco Oracle).
+def get_system_prompt():
+    base_prompt = """Voce e o Copilot Protheus, especialista no ERP TOTVS Protheus (RODOL Ltda, filial 0101, banco Oracle).
 Seu objetivo eh responder perguntas usando dados reais do sistema chamando as ferramentas (tools) disponiveis.
 
 ====================
@@ -24,14 +25,22 @@ DIRETRIZES DE TOOLS:
 
 ====================
 TABELAS REAIS DO BANCO (USE ESTAS INFORMACOES):
-1. FATURAMENTO/VENDAS: SF2010 (Cabecalho: F2_FILIAL, F2_DOC, F2_SERIE, F2_CLIENTE, F2_LOJA, F2_EMISSAO, F2_VALBRUT) e SD2010 (Itens: D2_FILIAL, D2_DOC, D2_COD, D2_QUANT, D2_TOTAL, D2_EMISSAO)
-2. ENTRADAS/COMPRAS: SF1010 (Cabecalho: F1_FILIAL, F1_DOC, F1_SERIE, F1_FORNECE, F1_LOJA, F1_EMISSAO, F1_VALBRUT) e SD1010 (Itens: D1_FILIAL, D1_DOC, D1_COD, D1_QUANT, D1_TOTAL, D1_EMISSAO)
-3. CLIENTES: SA1010 (A1_COD, A1_NOME, A1_LC, A1_MSBLQL)
-4. FORNECEDORES: SA2010 (A2_COD, A2_NOME)
-5. PRODUTOS E SALDOS: SB1010 (B1_COD, B1_DESC) e SB2010 (B2_COD, B2_QATU)
-6. FINANCEIRO (TITULOS): SE1010 (Contas a Receber: E1_NUM, E1_CLIENTE, E1_VENCTO, E1_VALOR, E1_SALDO), SE2010 (Contas a Pagar: E2_NUM, E2_FORNECE, E2_VENCTO, E2_VALOR, E2_SALDO)
-7. CONTABILIDADE: CT1010 (Plano de Contas: CT1_CONTA, CT1_DESC01), CTT010 (Centros de Custo: CTT_CUSTO, CTT_DESC01, CTT_CCSUP), CT2010 (Lancamentos: CT2_DATA, CT2_DEBITO, CT2_CREDIT, CT2_VALOR)
+"""
+    try:
+        import json
+        from pathlib import Path
+        tables_path = Path("tables_config.json")
+        if tables_path.exists():
+            with open(tables_path, "r", encoding="utf-8") as f:
+                tables = json.load(f)
+            for idx, t in enumerate(tables, 1):
+                base_prompt += f"{idx}. {t.get('description', '')}: {t.get('alias', '')} ({t.get('tipo', '')}: {t.get('fields', '')})\n"
+        else:
+            base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
+    except Exception:
+        base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
 
+    base_prompt += """
 ====================
 EXEMPLOS DE CHAMADAS (FEW-SHOT):
 - Pergunta: "gerar relatorio de faturamento de 30/06/2026"
@@ -56,11 +65,14 @@ APRESENTACAO DO RESULTADO:
 ```sql
 [Consulta SQL exata gerada para a tool]
 ```"""
+    return base_prompt
 
+# Maintain backwards compatibility for imports that expect SYSTEM_PROMPT constant
+SYSTEM_PROMPT = get_system_prompt()
 
 def _build_messages(question, protheus_data, intent, context, history):
     import json
-    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    msgs = [{"role": "system", "content": get_system_prompt()}]
     if context:
         parts = []
         for k, label in [
