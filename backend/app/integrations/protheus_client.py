@@ -1,13 +1,16 @@
 import requests
-from app.core.settings import PROTHEUS_REST_URL, PROTHEUS_USER, PROTHEUS_PASSWORD, TIMEOUT_SECONDS, AUTH_MODE
+from app.core.settings import TIMEOUT_SECONDS, AUTH_MODE
 
 class ProtheusClient:
-    def __init__(self):
-        self.base_url = PROTHEUS_REST_URL.rstrip('/')
+    def __init__(self, rest_url: str, user: str, password: str, auth_mode: str = AUTH_MODE):
+        self.base_url = rest_url.rstrip('/') if rest_url else ""
+        self.user = user
+        self.password = password
+        self.auth_mode = auth_mode
 
     def _auth(self):
-        if AUTH_MODE.lower() == 'basic' and PROTHEUS_USER:
-            return (PROTHEUS_USER, PROTHEUS_PASSWORD)
+        if self.auth_mode.lower() == 'basic' and self.user:
+            return (self.user, self.password)
         return None
 
     def ping(self):

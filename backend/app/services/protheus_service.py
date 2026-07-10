@@ -45,12 +45,7 @@ def get_tenant_config(tenant_id: str) -> dict:
     finally:
         db.close()
         
-    return {
-        "rest_url": settings.protheus_rest_url,
-        "user": settings.protheus_user,
-        "password": settings.protheus_password,
-        "auth_mode": settings.auth_mode
-    }
+    raise ValueError(f"Configurações do Protheus não encontradas para o tenant_id: {tenant_id}")
 
 async def descobrir_apis_protheus(palavra_chave: str) -> str:
     cache_path = os.path.join(os.path.dirname(__file__), "endpoints_cache.json")
