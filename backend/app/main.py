@@ -73,8 +73,8 @@ from fastapi import Request
 from fastapi.responses import Response
 
 # Proxy for Adminer
-@app.route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def proxy_adminer(request: Request, path: str):
+@app.api_route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
+async def adminer_proxy(request: Request, path: str):
     adminer_url = f"http://adminer:8080/{path}"
     async with httpx.AsyncClient() as client:
         # Pega query params
