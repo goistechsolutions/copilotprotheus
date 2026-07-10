@@ -28,6 +28,8 @@ services:
     environment:
       # Sobrescreve URL do banco para apontar ao container db
       - DATABASE_URL=postgresql+psycopg2://postgres:sap_password_123@db:5432/copilot_protheus
+    volumes:
+      - ./backend/.env:/app/.env
     depends_on:
       - db
     extra_hosts:

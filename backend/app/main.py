@@ -101,6 +101,13 @@ async def adminer_proxy(request: Request, path: str):
             headers.pop("X-Frame-Options", None)
             headers.pop("Content-Security-Policy", None)
             
+            # Remove hop-by-hop and encoding headers that break the response
+            headers.pop("transfer-encoding", None)
+            headers.pop("content-encoding", None)
+            headers.pop("content-length", None)
+            headers.pop("connection", None)
+            headers.pop("keep-alive", None)
+            
             return Response(
                 content=await proxy_res.aread(),
                 status_code=proxy_res.status_code,
