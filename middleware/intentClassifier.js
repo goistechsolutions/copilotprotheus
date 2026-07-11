@@ -3,10 +3,10 @@ const axios = require("axios");
 const BACKEND_URL = process.env.BACKEND_URL || "";
 
 const KEYWORDS = {
-  analise_faturamento: ["faturamento","pedido de venda","sc5","sc6","faturar","nao faturado","nf"],
-  financeiro:          ["titulo","inadimplencia","vencido","receber","fluxo de caixa","se1","se2"],
-  estoque:             ["saldo","estoque","ruptura","produto","sb2","minimo","disponivel"],
-  compras:             ["compra","fornecedor","sc7","pedido de compra","atraso","sc1"],
+  analise_faturamento: ["venda","pedido de venda","sc5","sc6","sc9","faturado","nao faturado","liberado","bloqueio","faturamento","nota de saida","sf2","sd2","fechado","rejeitado","denegado"],
+  financeiro:          ["titulo","inadimplencia","vencido","receber","pagar","fluxo de caixa","se1","se2","se5"],
+  estoque:             ["saldo","lote","enderecamento","estoque","ruptura","produto","sb2","sb8","sbf","minimo","disponivel"],
+  compras:             ["compra","fornecedor","sc7","pedido de compra","atraso","sc1", "nota de entrada", "sf1","sd1"],
 };
 const MODULE_MAP = { SIGAFAT:"analise_faturamento", SIGAFIN:"financeiro", SIGAEST:"estoque", SIGACOM:"compras" };
 
