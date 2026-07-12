@@ -195,19 +195,24 @@
       if (!f || !f.contentWindow) return
 
       const query = e.data.query;
-      const payload = {
-        context: sessionData,
-        query: query
-      };
+      
+      chrome.storage.local.get(['tenant_id'], function (result) {
+        const configuredTenant = result.tenant_id || '';
+        
+        const payload = {
+          context: sessionData,
+          question: query,
+          tenant_id: configuredTenant
+        };
 
-      // Fazer a chamada para o backend (Hetzner via Tunnel)
-      fetch('https://copilot-api.elitecorp.tec.br/api/ask', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      })
+        // Fazer a chamada para o Middleware (que fará o enriquecimento dos dados do ERP)
+        fetch('https://copilot-api.elitecorp.tec.br/chat/ask', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
       .then(res => res.json())
       .then(data => {
         // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
@@ -216,6 +221,7 @@
       .catch(err => {
         console.error("Erro ao comunicar com backend Hetzner:", err);
         f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "Não foi possível carregar a análise." }, '*');
+      });
       });
     }
   })
