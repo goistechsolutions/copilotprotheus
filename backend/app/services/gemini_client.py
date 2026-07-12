@@ -129,8 +129,16 @@ async def ask_gemini(
     url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
+        try:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 503:
+                return "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
+            return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
+        except httpx.RequestError as e:
+            return f"Erro de conexão com a API do Gemini: {str(e)}"
+            
         resp_json = resp.json()
         
         candidate = resp_json.get("candidates", [{}])[0]
@@ -227,8 +235,19 @@ async def stream_gemini(
     async with httpx.AsyncClient(timeout=120.0) as client:
         # Primeiro, fazemos chamada síncrona/não-stream para verificar se chamará ferramentas
         url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
+        try:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 503:
+                yield "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
+            else:
+                yield f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
+            return
+        except httpx.RequestError as e:
+            yield f"Erro de conexão com a API do Gemini: {str(e)}"
+            return
+            
         resp_json = resp.json()
         
         candidate = resp_json.get("candidates", [{}])[0]
