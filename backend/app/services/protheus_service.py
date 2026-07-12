@@ -49,6 +49,17 @@ def get_tenant_config(tenant_id: str) -> dict:
     finally:
         db.close()
         
+    if settings.protheus_rest_url:
+        logger.warning(f"Tenant {tenant_id} nao encontrado no BD. Usando fallback global do .env.")
+        return {
+            "rest_url": settings.protheus_rest_url,
+            "webapp_url": settings.webapp_url,
+            "vscode_server_url": settings.vscode_server_url,
+            "user": settings.protheus_user,
+            "password": settings.protheus_password,
+            "auth_mode": settings.auth_mode or "basic"
+        }
+        
     raise ValueError(f"Configurações do Protheus não encontradas para o tenant_id: {tenant_id}")
 
 async def descobrir_apis_protheus(palavra_chave: str) -> str:
