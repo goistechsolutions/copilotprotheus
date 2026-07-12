@@ -10,8 +10,9 @@ def generate_license(cnpj: str, expiration_date: str, plan_level: str = "standar
     Gera um token JWT assinado contendo as informações da licença.
     expiration_date deve estar no formato YYYY-MM-DD.
     """
-    # Converter expiração para timestamp UNIX
-    dt = datetime.strptime(expiration_date, "%Y-%m-%d")
+    # Converter expiração para timestamp UNIX (garante que apenas YYYY-MM-DD seja lido, ignorando a hora)
+    date_str = expiration_date[:10] if "T" in expiration_date else expiration_date
+    dt = datetime.strptime(date_str, "%Y-%m-%d")
     payload = {
         "cnpj": cnpj,
         "exp": int(dt.timestamp()),
