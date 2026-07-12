@@ -73,9 +73,9 @@ export default function App() {
   const cores = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#cbd5e1'];
 
   let dataConfig = null;
-  if (payloadGemini) {
+  if (payloadGemini && payloadGemini.datasets) {
     dataConfig = {
-      labels: payloadGemini.labels,
+      labels: payloadGemini.labels || [],
       datasets: payloadGemini.datasets.map((dataset) => ({
         label: dataset.label,
         data: dataset.dados,
@@ -153,26 +153,34 @@ export default function App() {
         </div>
       )}
 
-      {/* Área do Dashboard Gerado */}
+      {/* Área do Dashboard Gerado ou Resposta em Texto */}
       {!isLoading && !error && payloadGemini && (
         <div className="flex-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-y-auto">
-          <div className="mb-4">
-            <h3 className="text-lg font-bold text-gray-800">{payloadGemini.titulo}</h3>
-            <p className="text-xs text-gray-400">Análise inteligente gerada pelo Copilot</p>
-          </div>
+          {payloadGemini.datasets ? (
+            <>
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-800">{payloadGemini.titulo}</h3>
+                <p className="text-xs text-gray-400">Análise inteligente gerada pelo Copilot</p>
+              </div>
 
-          <div className="mb-6 h-64 flex items-center justify-center">
-            {payloadGemini.tipo_grafico === 'bar' && <Bar data={dataConfig} options={options} />}
-            {payloadGemini.tipo_grafico === 'line' && <Line data={dataConfig} options={options} />}
-            {payloadGemini.tipo_grafico === 'pie' && <Pie data={dataConfig} />}
-          </div>
+              <div className="mb-6 h-64 flex items-center justify-center">
+                {payloadGemini.tipo_grafico === 'bar' && <Bar data={dataConfig} options={options} />}
+                {payloadGemini.tipo_grafico === 'line' && <Line data={dataConfig} options={options} />}
+                {payloadGemini.tipo_grafico === 'pie' && <Pie data={dataConfig} />}
+              </div>
 
-          <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg">
-            <div className="flex items-center mb-1 gap-2">
-              <span className="text-blue-600 font-bold text-sm uppercase tracking-wider">Insight da IA</span>
+              <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg">
+                <div className="flex items-center mb-1 gap-2">
+                  <span className="text-blue-600 font-bold text-sm uppercase tracking-wider">Insight da IA</span>
+                </div>
+                <p className="text-sm text-gray-700 leading-relaxed">{payloadGemini.insights}</p>
+              </div>
+            </>
+          ) : (
+            <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+              {payloadGemini.answer || JSON.stringify(payloadGemini, null, 2)}
             </div>
-            <p className="text-sm text-gray-700 leading-relaxed">{payloadGemini.insights}</p>
-          </div>
+          )}
         </div>
       )}
       
