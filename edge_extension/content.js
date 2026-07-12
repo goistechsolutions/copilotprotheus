@@ -197,7 +197,7 @@
       const query = e.data.query;
       
       chrome.storage.local.get(['tenant_id'], function (result) {
-        const configuredTenant = result.tenant_id || '';
+        const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
         
         const payload = {
           context: sessionData,
