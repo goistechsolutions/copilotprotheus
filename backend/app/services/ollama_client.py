@@ -60,6 +60,16 @@ EXPORTACAO DE ARQUIVOS (PDF E EXCEL):
 ====================
 APRESENTACAO DO RESULTADO:
 - Apresente os dados em formato de RELATORIO GERENCIAL profissional com tabelas Markdown limpas, totais e insights.
+- SE O USUARIO PEDIR UM DASHBOARD, GRAFICO OU VISUALIZACAO INTERATIVA: Retorne a resposta contendo um bloco de codigo JSON no exato formato a seguir:
+```json
+{
+  "titulo": "Titulo do Dashboard",
+  "tipo_grafico": "bar" (ou "line", "pie"),
+  "labels": ["Item 1", "Item 2", "Item 3"],
+  "datasets": [{"label": "Nome da Serie", "dados": [10, 20, 30]}],
+  "insights": "Texto com a analise dos dados obtidos na pesquisa."
+}
+```
 - NUNCA invente dados ou use dados de exemplo. Se nao houver dados reais, informe claramente.
 - TRANSPARENCIA DE CONSULTAS SQL (OBRIGATORIO): No final da resposta, inclua a nota tecnica mostrando a query utilizada no seguinte formato:
 ---

@@ -59,7 +59,37 @@ async def ask(
     except Exception as e:
         pass # Fallback silencioso para o LLM real se o Keras falhar
 
-    return await AssistantService(db).answer_question(payload, ctx)
+    answer_dict = await AssistantService(db).answer_question(payload, ctx)
+    answer_text = answer_dict.get("answer", "")
+    
+    # Extrair JSON de dashboard se o LLM tiver formatado como JSON
+    dashboard_data = {}
+    try:
+        import json
+        import re
+        json_match = re.search(r'```(?:json)?\n(.*?)\n```', answer_text, re.DOTALL)
+        if json_match:
+            clean_ans = json_match.group(1).strip()
+        else:
+            clean_ans = answer_text.strip()
+            
+        if clean_ans.startswith('{') and clean_ans.endswith('}'):
+            parsed = json.loads(clean_ans)
+            if "datasets" in parsed:
+                dashboard_data = parsed
+    except Exception:
+        pass
+
+    return AskResponse(
+        answer=dashboard_data.get("answer", answer_text),
+        intent=answer_dict.get("intent"),
+        backend=answer_dict.get("backend"),
+        datasets=dashboard_data.get("datasets"),
+        labels=dashboard_data.get("labels"),
+        tipo_grafico=dashboard_data.get("tipo_grafico"),
+        titulo=dashboard_data.get("titulo"),
+        insights=dashboard_data.get("insights")
+    )
 
 from fastapi.responses import StreamingResponse
 import json
