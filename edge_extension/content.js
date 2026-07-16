@@ -207,7 +207,7 @@
       const query = e.data.query;
       const image = e.data.image;
       
-      chrome.storage.local.get(['tenant_id'], function (result) {
+      chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
         const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
         
         const payload = {
@@ -215,7 +215,9 @@
           question: query,
           tenant_id: configuredTenant,
           history: e.data.history || [],
-          image: image
+          image: image,
+          agent_user: result.agent_user,
+          agent_password: result.agent_password
         };
 
         // Fazer a chamada para o Middleware (que fará o enriquecimento dos dados do ERP)

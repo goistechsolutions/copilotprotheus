@@ -26,6 +26,23 @@ async def ask(
     if current_user and "tenant_id" in current_user:
         ctx["tenant_id"] = current_user["tenant_id"]
         
+    tenant_id = ctx.get("tenant_id", "default")
+    
+    # Validar Usuário do Agente (Extensão)
+    from fastapi import HTTPException
+    from app.models.knowledge import AgentUser
+    import hashlib
+    if not payload.agent_user or not payload.agent_password:
+        raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot ausentes. Configure-os no menu da extensão.")
+    hashed = hashlib.sha256(payload.agent_password.encode('utf-8')).hexdigest()
+    agent = db.query(AgentUser).filter(
+        AgentUser.tenant_id == tenant_id,
+        AgentUser.username == payload.agent_user,
+        AgentUser.password_hash == hashed
+    ).first()
+    if not agent:
+        raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot incorretos.")
+        
     # Validar licença da empresa se cadastrada
     from app.models.knowledge import Company
     from app.services.license_service import verify_license
@@ -104,6 +121,23 @@ async def ask_stream(
     ctx = parse_context(request, payload)
     if current_user and "tenant_id" in current_user:
         ctx["tenant_id"] = current_user["tenant_id"]
+        
+    tenant_id = ctx.get("tenant_id", "default")
+        
+    # Validar Usuário do Agente (Extensão)
+    from fastapi import HTTPException
+    from app.models.knowledge import AgentUser
+    import hashlib
+    if not payload.agent_user or not payload.agent_password:
+        raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot ausentes. Configure-os no menu da extensão.")
+    hashed = hashlib.sha256(payload.agent_password.encode('utf-8')).hexdigest()
+    agent = db.query(AgentUser).filter(
+        AgentUser.tenant_id == tenant_id,
+        AgentUser.username == payload.agent_user,
+        AgentUser.password_hash == hashed
+    ).first()
+    if not agent:
+        raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot incorretos.")
         
     # Validar licença antes de iniciar o generator do stream
     from app.models.knowledge import Company

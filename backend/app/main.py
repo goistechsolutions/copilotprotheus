@@ -57,6 +57,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 from app.api.admin_routes import router as admin_router
+from app.api.auth_routes import router as auth_router
 from fastapi.staticfiles import StaticFiles
 
 app.include_router(router)
@@ -65,6 +66,7 @@ app.include_router(integration_router, prefix="/api")
 app.include_router(report_router, prefix="/api")
 app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
+app.include_router(auth_router, prefix="/api/auth")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(infra_router)
 
