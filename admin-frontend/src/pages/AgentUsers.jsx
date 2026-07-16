@@ -8,13 +8,17 @@ export default function AgentUsers() {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({});
 
+  const axiosConfig = {
+    auth: { username: 'admin', password: 'admin123' }
+  };
+
   useEffect(() => {
     fetchUsers();
   }, []);
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get('/api/admin/agent-users');
+      const res = await axios.get('/api/admin/agent-users', axiosConfig);
       setUsers(res.data || []);
     } catch (error) {
       console.error("Erro ao carregar usuários:", error);
@@ -39,7 +43,7 @@ export default function AgentUsers() {
     }
     
     try {
-      await axios.post('/api/admin/agent-users', formData);
+      await axios.post('/api/admin/agent-users', formData, axiosConfig);
       setEditing(false);
       fetchUsers();
     } catch (error) {
@@ -50,7 +54,7 @@ export default function AgentUsers() {
   const handleDelete = async (id) => {
     if (confirm("Tem certeza que deseja remover o acesso deste usuário?")) {
       try {
-        await axios.delete(`/api/admin/agent-users/${id}`);
+        await axios.delete(`/api/admin/agent-users/${id}`, axiosConfig);
         fetchUsers();
       } catch (error) {
         alert("Erro ao excluir usuário.");
