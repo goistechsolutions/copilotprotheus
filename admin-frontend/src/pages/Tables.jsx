@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Plus, Trash2, Save } from 'lucide-react';
+import { Plus, Trash2, Save, Database } from 'lucide-react';
 
 export default function Tables() {
   const [tables, setTables] = useState([]);
@@ -54,94 +54,104 @@ export default function Tables() {
     setTables(newTables);
   };
 
-  if (loading) return <div className="p-8 text-slate-500">Carregando tabelas...</div>;
+  if (loading) return <div className="p-8 text-slate-500 flex justify-center"><div className="animate-pulse font-medium text-brand-600">Carregando tabelas...</div></div>;
 
   return (
-    <div className="max-w-5xl">
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">Tabelas Permitidas</h2>
+          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Tabelas Permitidas</h2>
           <p className="text-slate-500">Defina quais tabelas do Protheus a IA do Copilot tem permissão para ler.</p>
         </div>
         <button 
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all"
+          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-sm shrink-0"
         >
           <Save size={18} />
           {saving ? "Salvando..." : "Salvar Configuração"}
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="p-4 font-semibold text-slate-600 text-sm">Tabela / Alias</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Descrição</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Tipo</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Campos (separados por vírgula)</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm w-16 text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tables.map((t, index) => (
-              <tr key={index} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                <td className="p-4">
-                  <input 
-                    type="text" 
-                    value={t.alias} 
-                    onChange={(e) => updateTable(index, 'alias', e.target.value)}
-                    className="w-24 px-3 py-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none uppercase"
-                    placeholder="SF1"
-                  />
-                </td>
-                <td className="p-4">
-                  <input 
-                    type="text" 
-                    value={t.description} 
-                    onChange={(e) => updateTable(index, 'description', e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="Entradas"
-                  />
-                </td>
-                <td className="p-4">
-                  <select 
-                    value={t.tipo} 
-                    onChange={(e) => updateTable(index, 'tipo', e.target.value)}
-                    className="px-3 py-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="Cabecalho">Cabeçalho</option>
-                    <option value="Itens">Itens</option>
-                    <option value="Cadastro">Cadastro</option>
-                    <option value="Saldo">Saldo</option>
-                    <option value="Financeiro">Financeiro</option>
-                    <option value="Contabil">Contábil</option>
-                    <option value="Geral">Geral</option>
-                  </select>
-                </td>
-                <td className="p-4">
-                  <input 
-                    type="text" 
-                    value={t.fields} 
-                    onChange={(e) => updateTable(index, 'fields', e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none uppercase font-mono text-xs"
-                    placeholder="F1_DOC, F1_FILIAL..."
-                  />
-                </td>
-                <td className="p-4 text-center">
-                  <button onClick={() => removeTable(index)} className="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors">
-                    <Trash2 size={18} />
-                  </button>
-                </td>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Tabela / Alias</th>
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Descrição</th>
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Tipo</th>
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Campos Permitidos (separados por vírgula)</th>
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-center w-24">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {tables.map((t, index) => (
+                <tr key={index} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-6 py-4">
+                    <input 
+                      type="text" 
+                      value={t.alias} 
+                      onChange={(e) => updateTable(index, 'alias', e.target.value)}
+                      className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none uppercase font-bold text-slate-800 transition-all shadow-sm"
+                      placeholder="SF1"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <input 
+                      type="text" 
+                      value={t.description} 
+                      onChange={(e) => updateTable(index, 'description', e.target.value)}
+                      className="w-full min-w-[200px] bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all shadow-sm text-slate-800 font-medium"
+                      placeholder="Entradas"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <select 
+                      value={t.tipo} 
+                      onChange={(e) => updateTable(index, 'tipo', e.target.value)}
+                      className="w-full min-w-[120px] bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all shadow-sm text-slate-800 font-medium"
+                    >
+                      <option value="Cabecalho">Cabeçalho</option>
+                      <option value="Itens">Itens</option>
+                      <option value="Cadastro">Cadastro</option>
+                      <option value="Saldo">Saldo</option>
+                      <option value="Financeiro">Financeiro</option>
+                      <option value="Contabil">Contábil</option>
+                      <option value="Geral">Geral</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4">
+                    <input 
+                      type="text" 
+                      value={t.fields} 
+                      onChange={(e) => updateTable(index, 'fields', e.target.value)}
+                      className="w-full min-w-[300px] bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none uppercase font-mono transition-all shadow-sm text-slate-700"
+                      placeholder="F1_DOC, F1_FILIAL..."
+                    />
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button onClick={() => removeTable(index)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors border border-transparent hover:border-red-100">
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {tables.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center">
+                    <Database size={48} className="mx-auto text-slate-300 mb-3 opacity-50" />
+                    <p className="text-slate-500 font-medium">Nenhuma tabela permitida cadastrada.</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         <div className="p-4 bg-slate-50 border-t border-slate-200">
           <button 
             onClick={addTable}
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded"
+            className="flex items-center gap-2 text-brand-600 hover:text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg transition-colors border border-transparent hover:border-brand-100"
           >
             <Plus size={18} />
             Adicionar Nova Tabela

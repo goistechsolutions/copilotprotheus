@@ -47,37 +47,37 @@ export default function Licenses() {
   };
 
   return (
-    <div className="max-w-4xl">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-slate-800 mb-2">Gerador de Licenças Offline</h2>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Gerador de Licenças Offline</h2>
         <p className="text-slate-500">Crie tokens JWT seguros para ativar empresas clientes (SaaS) sem necessidade de banco de dados na nuvem para validação.</p>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
         
         {/* Formulário */}
-        <div className="p-6 md:w-1/2 border-r border-slate-200 bg-slate-50">
-          <form onSubmit={handleGenerate} className="space-y-4">
+        <div className="p-6 md:w-1/2 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50/50">
+          <form onSubmit={handleGenerate} className="space-y-5">
             
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Chave Admin (X-Admin-Key)</label>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Chave Admin (X-Admin-Key)</label>
               <input 
                 type="password" 
                 required
-                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
                 placeholder="Insira a ADMIN_PASSWORD"
                 value={adminKey}
                 onChange={e => setAdminKey(e.target.value)}
               />
-              <p className="text-xs text-slate-500 mt-1">Requerido para assinar criptograficamente o JWT.</p>
+              <p className="text-xs text-slate-500 mt-2 font-medium">Requerido para assinar criptograficamente o JWT.</p>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ da Empresa</label>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">CNPJ da Empresa</label>
               <input 
                 type="text" 
                 required
-                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
                 placeholder="Ex: 00.000.000/0001-00"
                 value={cnpj}
                 onChange={e => setCnpj(e.target.value)}
@@ -86,9 +86,9 @@ export default function Licenses() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nível do Plano</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nível do Plano</label>
                 <select 
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
                   value={plan}
                   onChange={e => setPlan(e.target.value)}
                 >
@@ -98,12 +98,12 @@ export default function Licenses() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Validade (Dias)</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Validade (Dias)</label>
                 <input 
                   type="number" 
                   min="1"
                   required
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
                   value={days}
                   onChange={e => setDays(e.target.value)}
                 />
@@ -113,7 +113,7 @@ export default function Licenses() {
             <button 
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-lg font-bold transition-all mt-4"
+              className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-lg font-bold transition-all mt-4 shadow-sm"
             >
               <Key size={18} />
               {loading ? "Gerando..." : "Gerar Token de Licença"}
@@ -122,28 +122,28 @@ export default function Licenses() {
         </div>
 
         {/* Resultado */}
-        <div className="p-6 md:w-1/2 bg-white flex flex-col items-center justify-center">
+        <div className="p-6 md:w-1/2 bg-white flex flex-col items-center justify-center min-h-[300px]">
           {!token ? (
             <div className="text-center text-slate-400">
-              <Key size={48} className="mx-auto mb-4 opacity-50" />
-              <p>O token gerado aparecerá aqui.</p>
+              <Key size={48} className="mx-auto mb-4 opacity-30 text-slate-300" />
+              <p className="font-medium text-slate-500">O token gerado aparecerá aqui.</p>
             </div>
           ) : (
             <div className="w-full h-full flex flex-col">
-              <label className="block text-sm font-semibold text-emerald-700 mb-2 flex items-center gap-2">
+              <label className="block text-sm font-bold text-emerald-600 mb-3 flex items-center gap-2">
                 <CheckCircle size={18} /> Licença Gerada com Sucesso!
               </label>
               <textarea 
                 readOnly
                 value={token}
-                className="w-full flex-1 p-4 bg-slate-900 text-emerald-400 font-mono text-sm rounded-lg border border-slate-800 focus:outline-none mb-4 resize-none break-all"
+                className="w-full flex-1 p-4 bg-slate-900 text-emerald-400 font-mono text-sm rounded-xl border border-slate-800 focus:outline-none mb-4 resize-none break-all shadow-inner"
               />
               <button 
                 onClick={handleCopy}
-                className="w-full flex items-center justify-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold p-3 rounded-lg transition-colors"
+                className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-3 rounded-lg transition-colors border border-emerald-200"
               >
                 {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
-                {copied ? "Copiado!" : "Copiar Token"}
+                {copied ? "Copiado para a área de transferência!" : "Copiar Token"}
               </button>
             </div>
           )}

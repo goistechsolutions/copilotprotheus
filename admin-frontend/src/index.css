@@ -15,29 +15,12 @@
 
 @layer base {
   body {
-    @apply antialiased text-slate-100 bg-[#0f172a];
-    background-image: 
-      radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
-      radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
-      radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
-    background-attachment: fixed;
+    @apply antialiased text-slate-800 bg-slate-50;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 }
 
 @layer utilities {
-  .glass-panel {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl;
-  }
-  
-  .glass-header {
-    @apply bg-slate-900/40 backdrop-blur-md border-b border-white/10;
-  }
-  
-  .glass-input {
-    @apply bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:bg-white/10 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all;
-  }
-
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -46,6 +29,6 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-white/10 rounded-full hover:bg-white/20;
+    @apply bg-slate-200 rounded-full hover:bg-slate-300;
   }
 }
