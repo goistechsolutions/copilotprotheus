@@ -27,6 +27,8 @@ def get_tenant_config(tenant_id: str) -> dict:
         if company and company.protheus_rest_url:
             return {
                 "rest_url": company.protheus_rest_url,
+                "webapp_url": company.protheus_webapp_url,
+                "vscode_server_url": "",
                 "user": company.protheus_usuario or settings.protheus_user,
                 "password": settings.protheus_password, # Fallback, pois a senha do usuario e passada dinamicamente
                 "auth_mode": "basic"
@@ -36,6 +38,8 @@ def get_tenant_config(tenant_id: str) -> dict:
         if tenant:
             return {
                 "rest_url": tenant.protheus_rest_url,
+                "webapp_url": tenant.webapp_url if hasattr(tenant, "webapp_url") else "",
+                "vscode_server_url": tenant.vscode_server_url if hasattr(tenant, "vscode_server_url") else "",
                 "user": tenant.protheus_user,
                 "password": decrypt_password(tenant.encrypted_protheus_password),
                 "auth_mode": tenant.auth_mode or "basic"
@@ -45,12 +49,18 @@ def get_tenant_config(tenant_id: str) -> dict:
     finally:
         db.close()
         
-    return {
-        "rest_url": settings.protheus_rest_url,
-        "user": settings.protheus_user,
-        "password": settings.protheus_password,
-        "auth_mode": settings.auth_mode
-    }
+    if settings.protheus_rest_url:
+        logger.warning(f"Tenant {tenant_id} nao encontrado no BD. Usando fallback global do .env.")
+        return {
+            "rest_url": settings.protheus_rest_url,
+            "webapp_url": settings.webapp_url,
+            "vscode_server_url": settings.vscode_server_url,
+            "user": settings.protheus_user,
+            "password": settings.protheus_password,
+            "auth_mode": settings.auth_mode or "basic"
+        }
+        
+    raise ValueError(f"Configurações do Protheus não encontradas para o tenant_id: {tenant_id}")
 
 async def descobrir_apis_protheus(palavra_chave: str) -> str:
     cache_path = os.path.join(os.path.dirname(__file__), "endpoints_cache.json")

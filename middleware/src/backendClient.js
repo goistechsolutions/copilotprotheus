@@ -2,7 +2,7 @@ const axios = require('axios')
 require('dotenv').config()
 
 const client = axios.create({
-  baseURL: process.env.BACKEND_URL || 'http://127.0.0.1:8000',
+  baseURL: process.env.BACKEND_URL || '',
   timeout: parseInt(process.env.BACKEND_TIMEOUT_MS || '600000', 10)
 })
 

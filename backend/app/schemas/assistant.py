@@ -26,3 +26,8 @@ class AskResponse(BaseModel):
     sql: Optional[str] = None
     warnings: Optional[List[str]] = None
     sources: Optional[List[Dict[str, Any]]] = None
+    datasets: Optional[List[Dict[str, Any]]] = None
+    labels: Optional[List[str]] = None
+    tipo_grafico: Optional[str] = None
+    titulo: Optional[str] = None
+    insights: Optional[str] = None

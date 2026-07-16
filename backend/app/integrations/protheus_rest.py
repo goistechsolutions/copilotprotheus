@@ -1,26 +1,12 @@
-import os
 import requests
+from app.services.protheus_service import get_tenant_config
 
-PROTHEUS_REST_URL = os.getenv('PROTHEUS_REST_URL', 'https://rodolltda195384.protheus.cloudtotvs.com.br:10707/rest')
-
-def ping_protheus():
-    rest_url = None
-    try:
-        from app.db.database import SessionLocal
-        from app.models.knowledge import Company
-        db = SessionLocal()
-        comp = db.query(Company).first()
-        if comp and comp.protheus_rest_url:
-            rest_url = comp.protheus_rest_url
-        db.close()
-    except Exception:
-        pass
-
-    if not rest_url:
-        rest_url = os.getenv('PROTHEUS_REST_URL', 'https://rodolltda195384.protheus.cloudtotvs.com.br:10707/rest')
+def ping_protheus(tenant_id: str = "default"):
+    config = get_tenant_config(tenant_id)
+    rest_url = config.get("rest_url", "")
 
     try:
-        r = requests.get(f'{rest_url.rstrip("/")}/health', timeout=5)
+        r = requests.get(f'{rest_url.rstrip("/")}/health', timeout=5, verify=False)
         return {'ok': True, 'status_code': r.status_code, 'body': r.text[:200]}
     except Exception as e:
         return {'ok': False, 'error': str(e)}

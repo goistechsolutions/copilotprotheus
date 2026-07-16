@@ -8,7 +8,7 @@ class RAGService:
     def _get_embedding(self, text: str):
         import httpx
         import os
-        url = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+        url = os.getenv("OLLAMA_URL", "")
         model = os.getenv("OLLAMA_MODEL", "llama3")
         try:
             with httpx.Client(timeout=600.0) as client:

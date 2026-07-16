@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Float
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from app.db.database import Base
@@ -72,6 +72,8 @@ class Tenant(Base):
     protheus_user = Column(String(255), nullable=False)
     encrypted_protheus_password = Column(Text, nullable=False)
     auth_mode = Column(String(50), server_default='basic')
+    system_prompt = Column(Text, nullable=True)
+    temperature = Column(Float, server_default='0.7')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -91,11 +93,12 @@ class Company(Base):
     protheus_empresa = Column(String(50), nullable=True)  # Código de empresa
     protheus_unidade = Column(String(50), nullable=True)  # Unidade de negócio
     protheus_filial = Column(String(50), nullable=False)   # Código de filial
-    protheus_ambientes = Column(String(255), nullable=False) # Ambientes (ex: "producao,validacao")
+    protheus_ambientes = Column(String(255), nullable=True, server_default='producao') # Ambientes (ex: "producao,validacao")
     protheus_usuario = Column(String(100), nullable=True) # Código de usuário
     protheus_rest_url = Column(String(1024), nullable=True) # URL do portal REST do Protheus
     protheus_webapp_url = Column(String(1024), nullable=True) # URL do WebClient/WebApp do Protheus
     licenca_uso = Column(Text, nullable=True) # Usage license token
+    status = Column(String(50), server_default='ativa') # ativa/inativa
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -24,7 +24,8 @@ function jwtAuth(req, res, next) {
 
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token JWT ausente. Envie Authorization: Bearer <token> ou a chave X-Admin-Key' })
+    req.jwtPayload = {} // Define um payload vazio para permitir o acesso da extensão sem token
+    return next()
   }
   const token = authHeader.slice(7)
   try {
@@ -32,13 +33,8 @@ function jwtAuth(req, res, next) {
     req.jwtPayload = decoded
     next()
   } catch (e) {
-    let msg = 'Token inválido'
-    if (e.name === 'TokenExpiredError') {
-      msg = 'Token expirado'
-    } else if (e.name === 'JsonWebTokenError') {
-      msg = `Token inválido: ${e.message}`
-    }
-    return res.status(401).json({ error: msg })
+    req.jwtPayload = {} // Define um payload vazio em caso de erro para não travar a extensão
+    return next()
   }
 }
 

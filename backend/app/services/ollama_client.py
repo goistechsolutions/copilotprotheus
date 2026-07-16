@@ -11,26 +11,41 @@ OLLAMA_URL   = settings.ollama_url
 OLLAMA_MODEL = settings.ollama_model
 LLM_BACKEND  = settings.llm_backend
 
-SYSTEM_PROMPT = """Voce e o Copilot Protheus, especialista no ERP TOTVS Protheus (RODOL Ltda, filial 0101, banco Oracle).
+def get_system_prompt(tenant_name: str = "Empresa"):
+    from datetime import datetime
+    hoje_str = datetime.now().strftime("%d/%m/%Y")
+    hoje_db = datetime.now().strftime("%Y%m%d")
+    
+    base_prompt = f"""Voce e o Copilot Protheus, especialista no ERP TOTVS Protheus ({tenant_name}, banco Oracle).
 Seu objetivo eh responder perguntas usando dados reais do sistema chamando as ferramentas (tools) disponiveis.
+HOJE EH {hoje_str} (formato banco: {hoje_db}). Use essa data exata como referencia para qualquer calculo de "hoje", "ontem", "proximos X dias" ou "ultimos X dias".
 
 ====================
 DIRETRIZES DE TOOLS:
 - Para obter faturamento, vendas, clientes ou relatorios, voce DEVE chamar 'consultar_protheus'.
-- Para rodar consultas SQL no Oracle, chame 'consultar_protheus' com endpoint="QueryRest" e query_params={"cQuery": "sua query SQL"}.
+- Para rodar consultas SQL no Oracle, chame 'consultar_protheus' com endpoint="QueryRest" e query_params={{"cQuery": "sua query SQL"}}.
 - NUNCA use SELECT TOP. Para limitar linhas no Oracle, use a clausula WHERE ROWNUM <= N (nunca no final depois do ORDER BY), ou use FETCH FIRST N ROWS ONLY no final (ex: ORDER BY F2_DOC FETCH FIRST 3 ROWS ONLY).
 - Datas no Protheus sao strings 'YYYYMMDD' (ex: 30/06/2026 eh '20260630'). NUNCA use TO_DATE.
 - NUNCA use tabelas ficticias (como SA_VENDA, SA0102). Use estritamente as tabelas reais listadas abaixo.
 
 ====================
 TABELAS REAIS DO BANCO (USE ESTAS INFORMACOES):
-1. FATURAMENTO/VENDAS: SF2010 (Cabecalho: F2_FILIAL, F2_DOC, F2_SERIE, F2_CLIENTE, F2_LOJA, F2_EMISSAO, F2_VALBRUT) e SD2010 (Itens: D2_FILIAL, D2_DOC, D2_COD, D2_QUANT, D2_TOTAL, D2_EMISSAO)
-2. CLIENTES: SA1010 (A1_COD, A1_NOME, A1_LC, A1_MSBLQL)
-3. FORNECEDORES: SA2010 (A2_COD, A2_NOME)
-4. PRODUTOS E SALDOS: SB1010 (B1_COD, B1_DESC) e SB2010 (B2_COD, B2_QATU)
-5. FINANCEIRO (TITULOS): SE1010 (E1_NUM, E1_CLIENTE, E1_VENCTO, E1_VALOR, E1_SALDO)
-6. CONTABILIDADE: CT1010 (Plano de Contas: CT1_CONTA, CT1_DESC01), CTT010 (Centros de Custo: CTT_CUSTO, CTT_DESC01, CTT_CCSUP), CT2010 (Lancamentos: CT2_DATA, CT2_DEBITO, CT2_CREDIT, CT2_VALOR)
+"""
+    try:
+        import json
+        from pathlib import Path
+        tables_path = Path("tables_config.json")
+        if tables_path.exists():
+            with open(tables_path, "r", encoding="utf-8") as f:
+                tables = json.load(f)
+            for idx, t in enumerate(tables, 1):
+                base_prompt += f"{idx}. {t.get('description', '')}: {t.get('alias', '')} ({t.get('tipo', '')}: {t.get('fields', '')})\n"
+        else:
+            base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
+    except Exception:
+        base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
 
+    base_prompt += """
 ====================
 EXEMPLOS DE CHAMADAS (FEW-SHOT):
 - Pergunta: "gerar relatorio de faturamento de 30/06/2026"
@@ -39,6 +54,8 @@ EXEMPLOS DE CHAMADAS (FEW-SHOT):
   Acao: Chamar consultar_protheus(endpoint="QueryRest", query_params={"cQuery": "SELECT D2_COD, SUM(D2_TOTAL) AS TOTAL_PROD, SUM(D2_QUANT) AS QTD_PROD FROM SD2010 WHERE D_E_L_E_T_ = ' ' AND D2_FILIAL = '0101' AND D2_EMISSAO = '20260630' GROUP BY D2_COD ORDER BY TOTAL_PROD DESC"})
 - Pergunta: "clientes mais ativos em junho de 2026"
   Acao: Chamar consultar_protheus(endpoint="QueryRest", query_params={"cQuery": "SELECT F2_CLIENTE, SUM(F2_VALBRUT) AS TOTAL_COMPRADO FROM SF2010 WHERE D_E_L_E_T_ = ' ' AND F2_FILIAL = '0101' AND F2_EMISSAO >= '20260601' AND F2_EMISSAO <= '20260630' GROUP BY F2_CLIENTE ORDER BY TOTAL_COMPRADO DESC"})
+- Pergunta: "gerar relatorio de fluxo de caixa dos proximos 6 dias"
+  Acao: Chamar consultar_protheus(endpoint="QueryRest", query_params={"cQuery": "SELECT 'RECEBIMENTOS' AS TIPO, E1_VENCTO AS DATA, SUM(E1_SALDO) AS TOTAL FROM SE1010 WHERE D_E_L_E_T_ = ' ' AND E1_FILIAL = '0101' AND E1_VENCTO >= '20260712' AND E1_VENCTO <= '20260717' AND E1_SALDO > 0 GROUP BY E1_VENCTO UNION ALL SELECT 'PAGAMENTOS' AS TIPO, E2_VENCTO AS DATA, SUM(E2_SALDO) AS TOTAL FROM SE2010 WHERE D_E_L_E_T_ = ' ' AND E2_FILIAL = '0101' AND E2_VENCTO >= '20260712' AND E2_VENCTO <= '20260717' AND E2_SALDO > 0 GROUP BY E2_VENCTO ORDER BY DATA, TIPO"})
 
 ====================
 EXPORTACAO DE ARQUIVOS (PDF E EXCEL):
@@ -48,6 +65,16 @@ EXPORTACAO DE ARQUIVOS (PDF E EXCEL):
 ====================
 APRESENTACAO DO RESULTADO:
 - Apresente os dados em formato de RELATORIO GERENCIAL profissional com tabelas Markdown limpas, totais e insights.
+- SE O USUARIO PEDIR UM DASHBOARD, GRAFICO OU VISUALIZACAO INTERATIVA: Retorne a resposta contendo um bloco de codigo JSON no exato formato a seguir:
+```json
+{
+  "titulo": "Titulo do Dashboard",
+  "tipo_grafico": "bar" (ou "line", "pie"),
+  "labels": ["Item 1", "Item 2", "Item 3"],
+  "datasets": [{"label": "Nome da Serie", "dados": [10, 20, 30]}],
+  "insights": "Texto com a analise dos dados obtidos na pesquisa."
+}
+```
 - NUNCA invente dados ou use dados de exemplo. Se nao houver dados reais, informe claramente.
 - TRANSPARENCIA DE CONSULTAS SQL (OBRIGATORIO): No final da resposta, inclua a nota tecnica mostrando a query utilizada no seguinte formato:
 ---
@@ -55,11 +82,15 @@ APRESENTACAO DO RESULTADO:
 ```sql
 [Consulta SQL exata gerada para a tool]
 ```"""
+    return base_prompt
 
+# Maintain backwards compatibility for imports that expect SYSTEM_PROMPT constant
+SYSTEM_PROMPT = get_system_prompt()
 
 def _build_messages(question, protheus_data, intent, context, history):
     import json
-    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    tenant_name = context.get("company", "Empresa") if context else "Empresa"
+    msgs = [{"role": "system", "content": get_system_prompt(tenant_name)}]
     if context:
         parts = []
         for k, label in [
@@ -108,13 +139,11 @@ def _fallback_response(models: list) -> str:
     return (
         f"**Modelo '{OLLAMA_MODEL}' nao encontrado.**\n\n"
         f"Modelos disponiveis: `{', '.join(models)}`\n\n"
-        f"Edite `backend\.env` e defina:\n"
+        f"Edite `backend/.env` e defina:\n"
         f"```\nOLLAMA_MODEL={models[0]}\n```"
     )
 
-PROTHEUS_REST_URL = os.getenv("PROTHEUS_REST_URL", "https://rodolltda195384.protheus.cloudtotvs.com.br:10707/rest")
-PROTHEUS_USER     = os.getenv("PROTHEUS_USER", "admin")
-PROTHEUS_PASSWORD = os.getenv("PROTHEUS_PASSWORD", "Rodol2026@")
+
 
 TOOLS = [
     {
@@ -245,14 +274,15 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
                     })
             
             if _has_real_data(tool_results):
-                messages.append({
-                    "role": "system",
-                    "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
-                })
+                    messages.append({
+                        "role": "system",
+                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
+                    })
             else:
+                tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
                     "role": "system",
-                    "content": "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                    "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa {tenant_name} para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
                 })
             
             payload["messages"] = messages
@@ -367,12 +397,13 @@ async def stream_llm(
                 if _has_real_data(tool_results):
                     messages.append({
                         "role": "system",
-                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
+                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
                     })
                 else:
+                    tenant_name = context.get("company", "Empresa") if context else "Empresa"
                     messages.append({
                         "role": "system",
-                        "content": "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                        "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa {tenant_name} para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
                     })
                 
                 payload["messages"] = messages

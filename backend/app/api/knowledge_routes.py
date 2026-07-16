@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, UploadFile, File
+import shutil
+from pathlib import Path
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.crud.knowledge_crud import KnowledgeCRUD
@@ -9,6 +11,17 @@ router = APIRouter(prefix='/knowledge', tags=['knowledge'])
 
 @router.post('/ingest')
 def ingest(db: Session = Depends(get_db), x_tenant_id: str = Header("default")):
+    service = IngestionService(db)
+    return service.ingest(tenant_id=x_tenant_id)
+
+@router.post('/upload')
+def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db), x_tenant_id: str = Header("default")):
+    docs_dir = Path(r"C:\projeto\copilotprotheus\docs")
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    file_path = docs_dir / file.filename
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
     service = IngestionService(db)
     return service.ingest(tenant_id=x_tenant_id)
 

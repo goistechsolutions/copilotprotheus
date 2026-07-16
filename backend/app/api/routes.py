@@ -40,7 +40,56 @@ async def ask(
                 sql_used=""
             )
         
-    return await AssistantService(db).answer_question(payload, ctx)
+    # Keras / JAX Intent Routing (Cognitive Firewall)
+    try:
+        from app.services.intent_service import IntentService
+        intent = IntentService().predict_intent(payload.question)
+        if intent == "GREETING":
+            return AskResponse(
+                answer="Olá! Sou o CopilotProtheus. Como posso ajudar com os dados do seu ERP hoje?",
+                intent="GREETING",
+                backend="keras_local"
+            )
+        elif intent == "OFF_TOPIC":
+            return AskResponse(
+                answer="**Bloqueado:** Desculpe, mas eu respondo apenas a questões relacionadas ao sistema Protheus e análises de dados empresariais.",
+                intent="OFF_TOPIC",
+                backend="keras_local"
+            )
+    except Exception as e:
+        pass # Fallback silencioso para o LLM real se o Keras falhar
+
+    answer_dict = await AssistantService(db).answer_question(payload, ctx)
+    answer_text = answer_dict.get("answer", "")
+    
+    # Extrair JSON de dashboard se o LLM tiver formatado como JSON
+    dashboard_data = {}
+    try:
+        import json
+        import re
+        json_match = re.search(r'```(?:json)?\n(.*?)\n```', answer_text, re.DOTALL)
+        if json_match:
+            clean_ans = json_match.group(1).strip()
+        else:
+            clean_ans = answer_text.strip()
+            
+        if clean_ans.startswith('{') and clean_ans.endswith('}'):
+            parsed = json.loads(clean_ans)
+            if "datasets" in parsed:
+                dashboard_data = parsed
+    except Exception:
+        pass
+
+    return AskResponse(
+        answer=dashboard_data.get("answer", answer_text),
+        intent=answer_dict.get("intent"),
+        backend=answer_dict.get("backend"),
+        datasets=dashboard_data.get("datasets"),
+        labels=dashboard_data.get("labels"),
+        tipo_grafico=dashboard_data.get("tipo_grafico"),
+        titulo=dashboard_data.get("titulo"),
+        insights=dashboard_data.get("insights")
+    )
 
 from fastapi.responses import StreamingResponse
 import json
@@ -76,6 +125,19 @@ async def ask_stream(
             return
             
         try:
+            # Keras / JAX Intent Routing (Cognitive Firewall) para o Stream
+            from app.services.intent_service import IntentService
+            intent = IntentService().predict_intent(payload.question)
+            
+            if intent == "GREETING":
+                yield f"data: {json.dumps({'token': 'Olá! Sou o CopilotProtheus. Como posso ajudar com os dados do seu ERP hoje?'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            elif intent == "OFF_TOPIC":
+                yield f"data: {json.dumps({'token': '**Bloqueado:** Desculpe, mas eu respondo apenas a questões relacionadas ao sistema Protheus e análises de dados empresariais.'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+                
             service = AssistantService(db)
             async for token in service.answer_question_stream(payload, ctx):
                 yield f"data: {json.dumps({'token': token})}\n\n"
@@ -89,37 +151,37 @@ async def ask_stream(
 @router.get("/launch")
 def launch(request: Request):
     params = dict(request.query_params)
-    if not params:
-        params = {
-            'environment': os.getenv('PROTHEUS_ENVIRONMENT', 'validacao'),
-            'company': os.getenv('PROTHEUS_COMPANY', '01'),
-            'branch': os.getenv('PROTHEUS_BRANCH', '0101'),
-            'module': os.getenv('PROTHEUS_MODULE', 'SIGAFAT'),
-            'user': os.getenv('PROTHEUS_USER', 'admin'),
-            'station': os.getenv('PROTHEUS_STATION', 'WEB01'),
-            'session_id': os.getenv('PROTHEUS_SESSION_ID', 'protheus-web-001'),
-            'tenant_id': 'pilot_rodolltda'
-        }
+    tenant_id = params.get('tenant_id', 'pilot_rodolltda')
     
     # Resolve a URL do WebClient/WebApp do Protheus dinamicamente do banco de dados (SaaS)
     from app.db.database import SessionLocal
     from app.models.knowledge import Company
     
-    tenant_id = params.get('tenant_id', 'pilot_rodolltda')
     launch_url = None
-    
     db = SessionLocal()
     try:
         company = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
         if company and company.protheus_webapp_url:
             launch_url = company.protheus_webapp_url
+            
+            # Use company data for defaults if not provided in params
+            if not params.get('environment') and company.protheus_ambientes:
+                params['environment'] = company.protheus_ambientes.split(',')[0].strip()
+            if not params.get('company') and company.protheus_empresa:
+                params['company'] = company.protheus_empresa
+            if not params.get('branch') and company.protheus_filial:
+                params['branch'] = company.protheus_filial
+            if not params.get('user'):
+                params['user'] = company.protheus_usuario.split(',')[0].strip() if company.protheus_usuario else 'admin'
     except Exception as e:
         pass
     finally:
         db.close()
         
     if not launch_url:
-        launch_url = os.getenv('PROTHEUS_URL', 'https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html')
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"URL do WebApp não configurada para o tenant {tenant_id}")
+        
     from fastapi.responses import RedirectResponse
     qs = urlencode(params)
     target_url = f"{launch_url}?{qs}"

@@ -1,0 +1,68 @@
+[
+  {
+    "description": "FATURAMENTO/VENDAS (Notas Fiscais de Saida)",
+    "alias": "SF2010 (Cabecalho) e SD2010 (Itens)",
+    "tipo": "Campos Principais",
+    "fields": "SF2: F2_FILIAL, F2_DOC, F2_SERIE, F2_CLIENTE, F2_LOJA, F2_EMISSAO, F2_VALBRUT. SD2: D2_FILIAL, D2_DOC, D2_SERIE, D2_COD, D2_QUANT, D2_PRCVEN, D2_TOTAL."
+  },
+  {
+    "description": "CLIENTES",
+    "alias": "SA1010",
+    "tipo": "Campos Principais",
+    "fields": "A1_FILIAL, A1_COD, A1_LOJA, A1_NOME, A1_NREDUZ, A1_CGC, A1_MUN, A1_EST."
+  },
+  {
+    "description": "PRODUTOS",
+    "alias": "SB1010",
+    "tipo": "Campos Principais",
+    "fields": "B1_FILIAL, B1_COD, B1_DESC, B1_TIPO, B1_UM, B1_LOCPAD, B1_GRUPO."
+  },
+  {
+    "description": "PEDIDOS DE VENDA",
+    "alias": "SC5010 (Cabecalho) e SC6010 (Itens)",
+    "tipo": "Campos Principais",
+    "fields": "SC5: C5_FILIAL, C5_NUM, C5_TIPO, C5_CLIENTE, C5_LOJACLI, C5_EMISSAO. SC6: C6_FILIAL, C6_NUM, C6_ITEM, C6_PRODUTO, C6_QTDVEN, C6_PRCVEN, C6_VALOR."
+  },
+  {
+    "description": "COMPRAS (Notas Fiscais de Entrada)",
+    "alias": "SF1010 (Cabecalho) e SD1010 (Itens)",
+    "tipo": "Campos Principais",
+    "fields": "SF1: F1_FILIAL, F1_DOC, F1_SERIE, F1_FORNECE, F1_LOJA, F1_EMISSAO, F1_VALBRUT. SD1: D1_FILIAL, D1_DOC, D1_SERIE, D1_COD, D1_QUANT, D1_VUNIT, D1_TOTAL."
+  },
+  {
+    "description": "FORNECEDORES",
+    "alias": "SA2010",
+    "tipo": "Campos Principais",
+    "fields": "A2_FILIAL, A2_COD, A2_LOJA, A2_NOME, A2_NREDUZ, A2_CGC, A2_MUN, A2_EST."
+  },
+  {
+    "description": "FINANCEIRO - CONTAS A RECEBER",
+    "alias": "SE1010",
+    "tipo": "Campos Principais",
+    "fields": "E1_FILIAL, E1_PREFIXO, E1_NUM, E1_PARCELA, E1_TIPO, E1_CLIENTE, E1_LOJA, E1_NOMCLI, E1_EMISSAO, E1_VENCTO, E1_VENCREA, E1_VALOR, E1_SALDO, E1_BAIXA."
+  },
+  {
+    "description": "FINANCEIRO - CONTAS A PAGAR",
+    "alias": "SE2010",
+    "tipo": "Campos Principais",
+    "fields": "E2_FILIAL, E2_PREFIXO, E2_NUM, E2_PARCELA, E2_TIPO, E2_FORNECE, E2_LOJA, E2_NOMFOR, E2_EMISSAO, E2_VENCTO, E2_VENCREA, E2_VALOR, E2_SALDO, E2_BAIXA."
+  },
+  {
+    "description": "FINANCEIRO - MOVIMENTACAO BANCARIA",
+    "alias": "SE5010",
+    "tipo": "Campos Principais",
+    "fields": "E5_FILIAL, E5_DATA, E5_TIPO, E5_MOEDA, E5_VALOR, E5_BANCO, E5_AGENCIA, E5_CONTA, E5_HISTOR, E5_PREFIXO, E5_NUMERO, E5_PARCELA."
+  },
+  {
+    "description": "FINANCEIRO - BANCOS",
+    "alias": "SA6010",
+    "tipo": "Campos Principais",
+    "fields": "A6_FILIAL, A6_COD, A6_AGENCIA, A6_NUMCON, A6_NOME."
+  },
+  {
+    "description": "ESTOQUE - SALDOS FISICOS E FINANCEIROS",
+    "alias": "SB2010",
+    "tipo": "Campos Principais",
+    "fields": "B2_FILIAL, B2_COD, B2_LOCAL, B2_QATU, B2_QEMP, B2_VATU, B2_CM1."
+  }
+]

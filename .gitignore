@@ -36,3 +36,4 @@ backend/app/services/endpoints_cache.json
 # Arquivos de sistema do Windows
 desktop.ini
 Thumbs.db
+.tmp.driveupload/

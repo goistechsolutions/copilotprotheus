@@ -1,10 +1,10 @@
 (function () {
   const WIDGET_ID  = 'cprot-widget-frame'
   let sessionData = {
-    company: '01',
-    branch: '0101',
-    user: 'admin',
-    environment: 'validacao'
+    company: '',
+    branch: '',
+    user: '',
+    environment: ''
   }
   let widgetInjected = false;
 
@@ -188,6 +188,42 @@
       text = text.substring(0, 4000)
       
       f.contentWindow.postMessage({ type: 'cprot-screen-data', text }, '*')
+    }
+
+    if (e.data && e.data.type === 'cprot-request-analysis') {
+      const f = document.getElementById(WIDGET_ID)
+      if (!f || !f.contentWindow) return
+
+      const query = e.data.query;
+      
+      chrome.storage.local.get(['tenant_id'], function (result) {
+        const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
+        
+        const payload = {
+          context: sessionData,
+          question: query,
+          tenant_id: configuredTenant,
+          history: e.data.history || []
+        };
+
+        // Fazer a chamada para o Middleware (que fará o enriquecimento dos dados do ERP)
+        fetch('https://copilot-api.elitecorp.tec.br/chat/ask', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
+      .then(res => res.json())
+      .then(data => {
+        // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
+        f.contentWindow.postMessage({ type: 'cprot-dashboard-data', payloadGemini: data }, '*');
+      })
+      .catch(err => {
+        console.error("Erro ao comunicar com backend Hetzner:", err);
+        f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "Não foi possível carregar a análise." }, '*');
+      });
+      });
     }
   })
 })()

@@ -28,6 +28,8 @@ services:
     environment:
       # Sobrescreve URL do banco para apontar ao container db
       - DATABASE_URL=postgresql+psycopg2://postgres:sap_password_123@db:5432/copilot_protheus
+    volumes:
+      - ./backend/.env:/app/.env
     depends_on:
       - db
     extra_hosts:
@@ -76,6 +78,16 @@ services:
     depends_on:
       - db
     restart: always
+
+  # Cloudflare Tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: copilot-protheus-cloudflared
+    command: tunnel --no-autoupdate run --token eyJhIjoiNmMzNjg4YjE5ZjNiN2E3NGE0ZTVlNjE0NWFjMTU1OTMiLCJ0IjoiYWE2NDdiZGMtNjVhYi00NGZhLThmNjYtMWM4OTliNDQ3ZDUxIiwicyI6Ik1UTTBObUl3TkRjdFpqazFPUzAwT0dJMUxUazNabUl0TkdFelpqZ3lPVEF3WXpndyJ9
+    restart: always
+    depends_on:
+      - frontend
+      - backend
 
 volumes:
   pgdata:

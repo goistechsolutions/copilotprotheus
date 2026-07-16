@@ -1,27 +1,16 @@
-# Estágio 1: Build da aplicação React
-FROM node:20-alpine AS build
-
+# Estágio de build
+FROM node:20-alpine as build
 WORKDIR /app
-
-# Instala dependências
 COPY package*.json ./
-RUN npm ci
-
-# Compila para produção
+RUN npm install
 COPY . .
 RUN npm run build
 
-# Estágio 2: Servidor Nginx para entrega dos arquivos estáticos
+# Estágio de produção com Nginx
 FROM nginx:alpine
-
-# Copia a configuração customizada do Nginx para suportar roteamento SPA
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copia os arquivos gerados pelo build para a pasta padrão do Nginx
+# Copia o build do React para a pasta de HTML do Nginx
 COPY --from=build /app/dist /usr/share/nginx/html
-
-# Expõe a porta 80
+# Copia configuração do Nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
-
-# Inicia o Nginx
 CMD ["nginx", "-g", "daemon off;"]

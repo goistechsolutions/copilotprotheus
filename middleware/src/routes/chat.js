@@ -36,7 +36,7 @@ router.post('/ask', async (req, res) => {
   const intent = classify(question, ctx.module)
   logger.info(`intent=${intent.name} module=${ctx.module} user=${ctx.user} pedido=${ctx.pedido}`)
 
-  ctx.tenant_id = req.jwtPayload.tenant_id || 'default'
+  ctx.tenant_id = req.jwtPayload.tenant_id || req.body.tenant_id || (context && context.tenant_id) || 'default'
   ctx.token = req.headers.authorization ? req.headers.authorization.split(' ')[1] : null
 
   let protheusData = {}
@@ -47,7 +47,7 @@ router.post('/ask', async (req, res) => {
     intent: intent.name,
     intent_description: intent.description,
     ...ctx,
-    tenant_id: req.jwtPayload.tenant_id || 'default',
+    tenant_id: ctx.tenant_id,
     protheus_data: protheusData,
     history,
   }
@@ -94,7 +94,7 @@ router.post('/stream', async (req, res) => {
   const intent = classify(question, ctx.module)
   logger.info(`stream intent=${intent.name} module=${ctx.module} user=${ctx.user} pedido=${ctx.pedido}`)
 
-  ctx.tenant_id = req.jwtPayload.tenant_id || 'default'
+  ctx.tenant_id = req.jwtPayload.tenant_id || req.body.tenant_id || (context && context.tenant_id) || 'default'
   ctx.token = req.headers.authorization ? req.headers.authorization.split(' ')[1] : null
 
   let protheusData = {}
@@ -105,7 +105,7 @@ router.post('/stream', async (req, res) => {
     intent: intent.name,
     intent_description: intent.description,
     ...ctx,
-    tenant_id: req.jwtPayload.tenant_id || 'default',
+    tenant_id: ctx.tenant_id,
     protheus_data: protheusData,
     history,
   }

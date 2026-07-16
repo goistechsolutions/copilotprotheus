@@ -2,7 +2,7 @@ const router = require('express').Router()
 const axios = require('axios')
 const logger = require('../logger')
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000'
+const BACKEND_URL = process.env.BACKEND_URL || ''
 
 // Proxy para geração de relatório
 router.post('/generate', async (req, res) => {
