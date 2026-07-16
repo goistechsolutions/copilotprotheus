@@ -18,7 +18,7 @@ class Settings(BaseModel):
     timeout_seconds: int = int(os.getenv("TIMEOUT_SECONDS", "30"))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     ollama_url: str = os.getenv("OLLAMA_URL", "")
-    ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "gemma4:e4b")
     gemini_api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     llm_backend: str = os.getenv("LLM_BACKEND", "ollama")
