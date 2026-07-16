@@ -17,11 +17,14 @@ export default function App() {
   const [error, setError] = useState(null);
   
   // Contexto simulado ou recebido da extensão
-  const [context, setContext] = useState({
-    module: 'SIGAFAT',
-    branch: '0101',
-    user: 'admin',
-    profile: 'Negócio'
+  const [context, setContext] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      module: params.get('module') || 'PROTHEUS',
+      branch: params.get('branch') || '0101',
+      user: params.get('user') || 'admin',
+      profile: 'Negócio'
+    };
   });
 
   const [historyItems, setHistoryItems] = useState([]);

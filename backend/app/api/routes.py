@@ -83,15 +83,13 @@ async def ask(
     parsed_data = {}
     try:
         import json
-        import re
-        json_match = re.search(r'```(?:json)?\n(.*?)\n```', answer_text, re.DOTALL)
-        if json_match:
-            clean_ans = json_match.group(1).strip()
-        else:
-            clean_ans = answer_text.strip()
-            
-        if clean_ans.startswith('{') and clean_ans.endswith('}'):
+        start_idx = answer_text.find('{')
+        end_idx = answer_text.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            clean_ans = answer_text[start_idx:end_idx+1]
             parsed_data = json.loads(clean_ans)
+        else:
+            parsed_data = {"executive_summary": answer_text}
     except Exception as e:
         print(f"Erro ao parsear JSON da resposta: {e}")
         parsed_data = {"executive_summary": answer_text}
