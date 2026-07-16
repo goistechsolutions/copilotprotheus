@@ -227,33 +227,48 @@
           agent_password: result.agent_password
         };
 
-        // Fazer a chamada para o Middleware (que fará o enriquecimento dos dados do ERP)
-        fetch('https://copilot-api.elitecorp.tec.br/chat/ask', {
+        // Fazer a chamada para o Middleware via background script para evitar CSP do Protheus
+        chrome.runtime.sendMessage({
+          action: 'cprot_api_fetch',
+          url: 'https://copilot-api.elitecorp.tec.br/chat/ask',
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(payload)
-        })
-      .then(async res => {
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`HTTP ${res.status}: ${text}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
-        f.contentWindow.postMessage({ type: 'cprot-dashboard-data', payloadGemini: data }, '*');
-      })
-      .catch(err => {
-        console.error("Erro ao comunicar com backend Hetzner:", err);
-        let msg = "Não foi possível carregar a análise.";
-        if (err.message && err.message.includes('504')) {
-           msg = "Tempo limite excedido. A consulta demorou muito e foi cancelada para proteger o banco de dados. Tente adicionar filtros como datas ou quantidades menores.";
-        }
-        f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: msg }, '*');
-      });
+        }, function(response) {
+          if (!response) {
+            const err = chrome.runtime.lastError ? chrome.runtime.lastError.message : "Desconhecido";
+            console.error("Erro ao comunicar com background:", err);
+            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: `Erro de comunicação interna: ${err}` }, '*');
+            return;
+          }
+          if (response.error) {
+            console.error("Erro ao comunicar com backend Hetzner:", response.error);
+            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: `Falha na requisição (Background): ${response.error}` }, '*');
+            return;
+          }
+          if (!response.ok) {
+            console.error("HTTP Error:", response.status, response.text);
+            let msg = "Não foi possível carregar a análise.";
+            if (response.status === 504) {
+               msg = "Tempo limite excedido. A consulta demorou muito e foi cancelada para proteger o banco de dados. Tente adicionar filtros como datas ou quantidades menores.";
+            } else {
+               msg = `Erro do servidor: ${response.status}`;
+            }
+            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: msg }, '*');
+            return;
+          }
+          
+          try {
+            const data = JSON.parse(response.text);
+            // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
+            f.contentWindow.postMessage({ type: 'cprot-dashboard-data', payloadGemini: data }, '*');
+          } catch(e) {
+            console.error("Erro ao parsear JSON:", e);
+            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "Erro na resposta do servidor." }, '*');
+          }
+        });
       });
     }
   })

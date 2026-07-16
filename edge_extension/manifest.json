@@ -5,7 +5,8 @@
   "description": "Assistente Copilot Protheus integrado ao WebApp TOTVS",
   "permissions": ["scripting", "storage", "tabs"],
   "host_permissions": [
-    "*://*.cloudtotvs.com.br/*"
+    "*://*.cloudtotvs.com.br/*",
+    "https://copilot-api.elitecorp.tec.br/*"
   ],
   "background": {
     "service_worker": "background.js"
