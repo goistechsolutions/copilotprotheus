@@ -12,8 +12,13 @@ OLLAMA_MODEL = settings.ollama_model
 LLM_BACKEND  = settings.llm_backend
 
 def get_system_prompt(tenant_name: str = "Empresa"):
+    from datetime import datetime
+    hoje_str = datetime.now().strftime("%d/%m/%Y")
+    hoje_db = datetime.now().strftime("%Y%m%d")
+    
     base_prompt = f"""Voce e o Copilot Protheus, especialista no ERP TOTVS Protheus ({tenant_name}, banco Oracle).
 Seu objetivo eh responder perguntas usando dados reais do sistema chamando as ferramentas (tools) disponiveis.
+HOJE EH {hoje_str} (formato banco: {hoje_db}). Use essa data exata como referencia para qualquer calculo de "hoje", "ontem", "proximos X dias" ou "ultimos X dias".
 
 ====================
 DIRETRIZES DE TOOLS:
@@ -269,10 +274,10 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
                     })
             
             if _has_real_data(tool_results):
-                messages.append({
-                    "role": "system",
-                    "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
-                })
+                    messages.append({
+                        "role": "system",
+                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
+                    })
             else:
                 tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
@@ -392,7 +397,7 @@ async def stream_llm(
                 if _has_real_data(tool_results):
                     messages.append({
                         "role": "system",
-                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
+                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
                     })
                 else:
                     tenant_name = context.get("company", "Empresa") if context else "Empresa"

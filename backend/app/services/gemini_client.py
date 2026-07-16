@@ -5,7 +5,7 @@ import logging
 from typing import Optional, AsyncGenerator
 from app.core.config import settings
 from app.services.protheus_service import descobrir_apis_protheus, execute_protheus_tool
-from app.services.ollama_client import _has_real_data, SYSTEM_PROMPT
+from app.services.ollama_client import _has_real_data, get_system_prompt
 
 logger = logging.getLogger("app.gemini")
 
@@ -118,10 +118,11 @@ async def ask_gemini(
 
     contents = _build_gemini_messages(question, protheus_data, intent, context, history)
     
+    tenant_name = context.get("company", "Empresa") if context else "Empresa"
     payload = {
         "contents": contents,
         "systemInstruction": {
-            "parts": [{"text": SYSTEM_PROMPT}]
+            "parts": [{"text": get_system_prompt(tenant_name)}]
         },
         "tools": GEMINI_TOOLS
     }
@@ -185,7 +186,7 @@ async def ask_gemini(
                 
             # Instrução de apresentação dos dados reais
             if _has_real_data(tool_results):
-                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
+                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
             else:
                 instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
                 
@@ -224,10 +225,11 @@ async def stream_gemini(
 
     contents = _build_gemini_messages(question, protheus_data, intent, context, history)
     
+    tenant_name = context.get("company", "Empresa") if context else "Empresa"
     payload = {
         "contents": contents,
         "systemInstruction": {
-            "parts": [{"text": SYSTEM_PROMPT}]
+            "parts": [{"text": get_system_prompt(tenant_name)}]
         },
         "tools": GEMINI_TOOLS
     }
@@ -290,7 +292,7 @@ async def stream_gemini(
                 })
                 
             if _has_real_data(tool_results):
-                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente-os diretamente como um relatorio executivo profissional com tabelas Markdown limpas, totais e insights. NAO gere codigo, scripts ou tutoriais. NAO explique como obter os dados. Apresente os RESULTADOS."
+                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
             else:
                 instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
                 
