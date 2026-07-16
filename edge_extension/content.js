@@ -202,7 +202,8 @@
         const payload = {
           context: sessionData,
           question: query,
-          tenant_id: configuredTenant
+          tenant_id: configuredTenant,
+          history: e.data.history || []
         };
 
         // Fazer a chamada para o Middleware (que fará o enriquecimento dos dados do ERP)

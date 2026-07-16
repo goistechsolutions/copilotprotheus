@@ -31,14 +31,18 @@ export default function App() {
   const [payloadGemini, setPayloadGemini] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [history, setHistory] = useState([]);
 
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     const handleMessage = (event) => {
       if (event.data && event.data.type === 'cprot-dashboard-data') {
-        setPayloadGemini(event.data.payloadGemini);
+        const payload = event.data.payloadGemini;
+        setPayloadGemini(payload);
         setIsLoading(false);
+        // Atualiza o history com a resposta
+        setHistory(prev => [...prev, { role: 'assistant', text: payload.answer || payload.insights || 'Dashboard gerado.' }]);
       }
       if (event.data && event.data.type === 'cprot-dashboard-error') {
         setError(event.data.error);
@@ -63,11 +67,18 @@ export default function App() {
     setIsLoading(true);
     setError(null);
     setPayloadGemini(null);
+    
+    // Atualiza history com a pergunta do usuário
+    const currentQuery = query;
+    setHistory(prev => [...prev, { role: 'user', text: currentQuery }]);
 
     window.parent.postMessage({
       type: 'cprot-request-analysis',
-      query: query
+      query: currentQuery,
+      history: history
     }, '*');
+    
+    setQuery('');
   };
 
   const cores = [
