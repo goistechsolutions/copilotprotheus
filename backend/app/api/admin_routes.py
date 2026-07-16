@@ -161,7 +161,8 @@ def get_logs(limit: int = 50, skip: int = 0, db: Session = Depends(get_db), admi
     return {"logs": logs}
 
 # --- Endpoints de AgentUsers ---
-from app.models.knowledge import AgentUser
+from app.models.knowledge import AgentUser, AgentRole
+from typing import List, Optional
 import hashlib
 
 @router.get("/agent-users")
@@ -183,6 +184,7 @@ class AgentUserCreate(BaseModel):
     tenant_id: str
     username: str
     password: str
+    role: str = 'user'
 
 @router.post("/agent-users")
 def create_agent_user(req: AgentUserCreate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
@@ -197,11 +199,33 @@ def create_agent_user(req: AgentUserCreate, db: Session = Depends(get_db), admin
     new_user = AgentUser(
         tenant_id=req.tenant_id,
         username=req.username,
-        password_hash=hashed
+        password_hash=hashed,
+        role=req.role
     )
     db.add(new_user)
     db.commit()
     return {"success": True, "message": "Usuário criado com sucesso."}
+
+class AgentUserUpdate(BaseModel):
+    tenant_id: str
+    username: str
+    password: Optional[str] = None
+    role: str
+
+@router.put("/agent-users/{user_id}")
+def update_agent_user(user_id: int, req: AgentUserUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    user = db.query(AgentUser).filter(AgentUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    
+    user.tenant_id = req.tenant_id
+    user.username = req.username
+    user.role = req.role
+    if req.password:
+        user.password_hash = hashlib.sha256(req.password.encode('utf-8')).hexdigest()
+    
+    db.commit()
+    return {"success": True, "message": "Usuário atualizado com sucesso."}
 
 @router.delete("/agent-users/{user_id}")
 def delete_agent_user(user_id: int, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
@@ -210,3 +234,40 @@ def delete_agent_user(user_id: int, db: Session = Depends(get_db), admin: str = 
         db.delete(user)
         db.commit()
     return {"success": True, "message": "Usuário removido com sucesso."}
+
+# --- Endpoints de AgentRoles ---
+
+class AgentRoleCreateUpdate(BaseModel):
+    tenant_id: str
+    name: str
+    permissions: List[str]
+
+@router.get("/agent-roles")
+def get_agent_roles(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    roles = db.query(AgentRole).order_by(AgentRole.name.asc()).all()
+    return [{"id": r.id, "tenant_id": r.tenant_id, "name": r.name, "permissions": r.permissions} for r in roles]
+
+@router.post("/agent-roles")
+def create_agent_role(req: AgentRoleCreateUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    new_role = AgentRole(tenant_id=req.tenant_id, name=req.name, permissions=req.permissions)
+    db.add(new_role)
+    db.commit()
+    return {"success": True}
+
+@router.put("/agent-roles/{role_id}")
+def update_agent_role(role_id: int, req: AgentRoleCreateUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    role = db.query(AgentRole).filter(AgentRole.id == role_id).first()
+    if role:
+        role.tenant_id = req.tenant_id
+        role.name = req.name
+        role.permissions = req.permissions
+        db.commit()
+    return {"success": True}
+
+@router.delete("/agent-roles/{role_id}")
+def delete_agent_role(role_id: int, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    role = db.query(AgentRole).filter(AgentRole.id == role_id).first()
+    if role:
+        db.delete(role)
+        db.commit()
+    return {"success": True}

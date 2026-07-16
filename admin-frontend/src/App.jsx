@@ -3,6 +3,7 @@ import { Settings, Database, LayoutDashboard, ShieldAlert, Building, Key, Brain,
 
 import Config from './pages/Config';
 import AgentUsers from './pages/AgentUsers';
+import AgentRoles from './pages/AgentRoles';
 import Tables from './pages/Tables';
 import Logs from './pages/Logs';
 import Companies from './pages/Companies';
@@ -18,6 +19,7 @@ function Sidebar() {
     { path: '/', label: 'Visão Geral (Logs)', icon: <LayoutDashboard size={20} /> },
     { path: '/companies', label: 'Empresas SaaS', icon: <Building size={20} /> },
     { path: '/agent-users', label: 'Usuários Copilot', icon: <UserCog size={20} /> },
+    { path: '/agent-roles', label: 'Cargos e Permissões', icon: <ShieldAlert size={20} /> },
     { path: '/licenses', label: 'Gerador de Licenças', icon: <Key size={20} /> },
     { path: '/rag', label: 'RAG e Memórias', icon: <Brain size={20} /> },
     { path: '/tables', label: 'Tabelas Permitidas', icon: <Database size={20} /> },
@@ -65,6 +67,7 @@ function App() {
             <Route path="/" element={<Logs />} />
             <Route path="/companies" element={<Companies />} />
             <Route path="/agent-users" element={<AgentUsers />} />
+            <Route path="/agent-roles" element={<AgentRoles />} />
             <Route path="/licenses" element={<Licenses />} />
             <Route path="/rag" element={<RagMemories />} />
             <Route path="/tables" element={<Tables />} />
