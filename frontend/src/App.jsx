@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -32,8 +32,45 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
+  const chartRef = useRef(null);
 
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleExportPNG = () => {
+    if (chartRef.current) {
+      const url = chartRef.current.toBase64Image();
+      const link = document.createElement('a');
+      link.download = `${payloadGemini.titulo || 'dashboard'}.png`;
+      link.href = url;
+      link.click();
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (!payloadGemini) return;
+    let csv = 'Categoria';
+    payloadGemini.datasets.forEach(d => {
+      csv += `,${d.label}`;
+    });
+    csv += '\n';
+
+    const labels = payloadGemini.labels || [];
+    labels.forEach((label, i) => {
+      csv += `${label}`;
+      payloadGemini.datasets.forEach(d => {
+        csv += `,${d.dados[i] !== undefined ? d.dados[i] : ''}`;
+      });
+      csv += '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${payloadGemini.titulo || 'dashboard'}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     const handleMessage = (event) => {
@@ -223,10 +260,21 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mb-8 flex-1 min-h-[300px] w-full relative">
-                {payloadGemini.tipo_grafico === 'bar' && <Bar data={dataConfig} options={options} />}
-                {payloadGemini.tipo_grafico === 'line' && <Line data={dataConfig} options={options} />}
-                {payloadGemini.tipo_grafico === 'pie' && <Pie data={dataConfig} options={options} />}
+              <div className="mb-4 flex-1 min-h-[300px] w-full relative">
+                {payloadGemini.tipo_grafico === 'bar' && <Bar ref={chartRef} data={dataConfig} options={options} />}
+                {payloadGemini.tipo_grafico === 'line' && <Line ref={chartRef} data={dataConfig} options={options} />}
+                {payloadGemini.tipo_grafico === 'pie' && <Pie ref={chartRef} data={dataConfig} options={options} />}
+              </div>
+              
+              <div className="flex gap-2 mb-2 justify-end">
+                <button onClick={handleExportCSV} className="text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md flex items-center gap-1 transition shadow-sm border border-gray-200">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                  Exportar Dados (CSV)
+                </button>
+                <button onClick={handleExportPNG} className="text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md flex items-center gap-1 transition shadow-sm border border-gray-200">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                  Baixar Imagem (PNG)
+                </button>
               </div>
 
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-5 rounded-xl shadow-inner mt-4 relative overflow-hidden">
