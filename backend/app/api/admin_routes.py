@@ -119,7 +119,20 @@ def get_config(admin: str = Depends(verify_admin)):
 @router.post("/config")
 def update_config(update: ConfigUpdate, admin: str = Depends(verify_admin)):
     """Atualiza uma chave no arquivo .env e no objeto settings em memória"""
-    dotenv.set_key(ENV_PATH, update.key, update.value)
+    # Usar dotenv apenas para ler o estado atual
+    config_dict = dotenv.dotenv_values(ENV_PATH)
+    config_dict[update.key] = update.value
+    
+    # Escrever de volta no .env manualmente para evitar erro "Device or resource busy" do Docker
+    with open(ENV_PATH, "w", encoding="utf-8") as f:
+        for k, v in config_dict.items():
+            if v is not None:
+                # Tratar quebras de linha ou caracteres especiais
+                v_escaped = str(v).replace('\n', '\\n')
+                f.write(f"{k}='{v_escaped}'\n")
+            else:
+                f.write(f"{k}=\n")
+                
     os.environ[update.key] = update.value
     
     # Atualizar o objeto settings em memória (se o campo existir no schema do Settings)
