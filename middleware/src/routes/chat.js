@@ -59,8 +59,10 @@ router.post('/ask', async (req, res) => {
     const { data } = await backendClient.ask(payload, token)
     res.json({ ...data, intent: intent.name })
   } catch (e) {
-    logger.error(`POST /chat/ask backend err=${e.message}`)
-    res.status(502).json({ error: 'Falha ao conectar no backend', detail: e.message })
+    const statusCode = e.status || 502;
+    const detail = e.detail || e.message;
+    logger.error(`POST /chat/ask backend err=${statusCode} ${detail}`)
+    res.status(statusCode).json({ error: 'Falha ao conectar no backend', detail: detail })
   }
 })
 
@@ -123,8 +125,10 @@ router.post('/stream', async (req, res) => {
     const responseStream = await backendClient.askStream(payload, token)
     responseStream.data.pipe(res)
   } catch (e) {
-    logger.error(`POST /chat/stream backend err=${e.message}`)
-    res.write(`data: ${JSON.stringify({ error: 'Falha ao conectar no backend', detail: e.message })}\n\n`)
+    const statusCode = e.status || 502;
+    const detail = e.detail || e.message;
+    logger.error(`POST /chat/stream backend err=${statusCode} ${detail}`)
+    res.write(`data: ${JSON.stringify({ error: 'Falha ao conectar no backend', detail: detail })}\n\n`)
     res.end()
   }
 })

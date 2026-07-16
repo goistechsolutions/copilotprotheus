@@ -15,7 +15,12 @@ module.exports = {
       }
       return await client.post('/api/ask', payload, { headers })
     } catch (e) {
-      throw new Error(`${e.response?.status || 'NO_STATUS'} ${e.message}`)
+      const status = e.response?.status || 502;
+      const detail = e.response?.data?.detail || e.message;
+      const error = new Error(`${status} ${detail}`);
+      error.status = status;
+      error.detail = detail;
+      throw error;
     }
   },
   askStream: async (payload, token = null) => {
@@ -29,7 +34,12 @@ module.exports = {
       }
       return await client.post('/api/ask/stream', payload, { headers, responseType: 'stream' })
     } catch (e) {
-      throw new Error(`${e.response?.status || 'NO_STATUS'} ${e.message}`)
+      const status = e.response?.status || 502;
+      const detail = e.response?.data?.detail || e.message;
+      const error = new Error(`${status} ${detail}`);
+      error.status = status;
+      error.detail = detail;
+      throw error;
     }
   },
   getCompanyByTenant: async (tenantId, token = null) => {
