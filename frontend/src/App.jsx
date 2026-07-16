@@ -70,23 +70,57 @@ export default function App() {
     }, '*');
   };
 
-  const cores = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#cbd5e1'];
+  const cores = [
+    'rgba(59, 130, 246, 0.8)', // blue-500
+    'rgba(16, 185, 129, 0.8)', // emerald-500
+    'rgba(139, 92, 246, 0.8)', // violet-500
+    'rgba(245, 158, 11, 0.8)', // amber-500
+    'rgba(236, 72, 153, 0.8)', // pink-500
+  ];
+  const borderCores = [
+    'rgb(37, 99, 235)',
+    'rgb(5, 150, 105)',
+    'rgb(124, 58, 237)',
+    'rgb(217, 119, 6)',
+    'rgb(219, 39, 119)',
+  ];
 
   let dataConfig = null;
   if (payloadGemini && payloadGemini.datasets) {
     dataConfig = {
       labels: payloadGemini.labels || [],
-      datasets: payloadGemini.datasets.map((dataset) => ({
+      datasets: payloadGemini.datasets.map((dataset, i) => ({
         label: dataset.label,
         data: dataset.dados,
-        backgroundColor: payloadGemini.tipo_grafico === 'pie' ? cores : cores[0],
-        borderColor: cores[0],
-        borderWidth: 1,
+        backgroundColor: payloadGemini.tipo_grafico === 'pie' ? cores : cores[i % cores.length],
+        borderColor: payloadGemini.tipo_grafico === 'pie' ? borderCores : borderCores[i % borderCores.length],
+        borderWidth: 2,
+        borderRadius: payloadGemini.tipo_grafico === 'bar' ? 6 : 0,
+        tension: 0.4, // smooth curves for line charts
+        fill: payloadGemini.tipo_grafico === 'line', // fill under the line
       })),
     };
   }
 
-  const options = { responsive: true, plugins: { legend: { position: 'top' } } };
+  const options = { 
+    responsive: true, 
+    maintainAspectRatio: false,
+    plugins: { 
+      legend: { position: 'top', labels: { font: { family: 'Inter, sans-serif', weight: 'bold' } } },
+      tooltip: {
+        backgroundColor: 'rgba(17, 24, 39, 0.9)',
+        titleFont: { size: 14, family: 'Inter, sans-serif' },
+        bodyFont: { size: 13, family: 'Inter, sans-serif' },
+        padding: 12,
+        cornerRadius: 8,
+        displayColors: true
+      }
+    },
+    scales: payloadGemini?.tipo_grafico !== 'pie' ? {
+      y: { beginAtZero: true, grid: { color: 'rgba(243, 244, 246, 1)' }, ticks: { font: { family: 'Inter' } } },
+      x: { grid: { display: false }, ticks: { font: { family: 'Inter' } } }
+    } : {}
+  };
 
   if (!isOpen) {
     return (
@@ -138,9 +172,16 @@ export default function App() {
 
       {/* Área de Loading */}
       {isLoading && (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-white rounded-xl border border-gray-100">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-          <p className="font-medium">Processando via Gemini...</p>
+        <div className="flex-1 flex flex-col items-center justify-center bg-white/60 backdrop-blur-sm rounded-xl border border-gray-100 mb-4 shadow-sm animate-pulse">
+          <div className="relative w-16 h-16 flex items-center justify-center mb-4">
+            <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+            <svg className="w-6 h-6 text-blue-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          </div>
+          <p className="font-bold text-gray-700 text-lg bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
+            Analisando dados do ERP...
+          </p>
+          <p className="text-sm text-gray-400 mt-1">Gerando insights com inteligência artificial</p>
         </div>
       )}
 
@@ -155,29 +196,41 @@ export default function App() {
 
       {/* Área do Dashboard Gerado ou Resposta em Texto */}
       {!isLoading && !error && payloadGemini && (
-        <div className="flex-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-y-auto">
+        <div className="flex-1 bg-white p-6 rounded-xl shadow-xl border border-gray-100 overflow-y-auto transform transition-all duration-500 ease-in-out opacity-100 translate-y-0 relative z-10">
           {payloadGemini.datasets ? (
-            <>
-              <div className="mb-4">
-                <h3 className="text-lg font-bold text-gray-800">{payloadGemini.titulo}</h3>
-                <p className="text-xs text-gray-400">Análise inteligente gerada pelo Copilot</p>
+            <div className="flex flex-col h-full animate-fade-in-up">
+              <div className="mb-6 pb-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-extrabold text-gray-800 tracking-tight">{payloadGemini.titulo}</h3>
+                  <p className="text-sm text-blue-600 font-semibold mt-1 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.22 4.624 1 1 0 01-.89.89 8.96 8.96 0 00-4.043 1.05 1 1 0 01-1.05.001h-.001z"></path></svg>
+                    Painel Gerencial Interativo
+                  </p>
+                </div>
+                <div className="bg-blue-50 p-2 rounded-lg">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                </div>
               </div>
 
-              <div className="mb-6 h-64 flex items-center justify-center">
+              <div className="mb-8 flex-1 min-h-[300px] w-full relative">
                 {payloadGemini.tipo_grafico === 'bar' && <Bar data={dataConfig} options={options} />}
                 {payloadGemini.tipo_grafico === 'line' && <Line data={dataConfig} options={options} />}
-                {payloadGemini.tipo_grafico === 'pie' && <Pie data={dataConfig} />}
+                {payloadGemini.tipo_grafico === 'pie' && <Pie data={dataConfig} options={options} />}
               </div>
 
-              <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg">
-                <div className="flex items-center mb-1 gap-2">
-                  <span className="text-blue-600 font-bold text-sm uppercase tracking-wider">Insight da IA</span>
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-5 rounded-xl shadow-inner mt-4 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                <div className="flex items-center mb-2 gap-2">
+                  <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-widest flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    Insight da IA
+                  </span>
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed">{payloadGemini.insights}</p>
+                <p className="text-sm text-gray-700 leading-relaxed font-medium">{payloadGemini.insights}</p>
               </div>
-            </>
+            </div>
           ) : (
-            <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+            <div className="text-gray-700 whitespace-pre-wrap leading-relaxed animate-fade-in-up">
               {payloadGemini.answer || JSON.stringify(payloadGemini, null, 2)}
             </div>
           )}
