@@ -214,14 +214,24 @@
           },
           body: JSON.stringify(payload)
         })
-      .then(res => res.json())
+      .then(async res => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        return res.json();
+      })
       .then(data => {
         // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
         f.contentWindow.postMessage({ type: 'cprot-dashboard-data', payloadGemini: data }, '*');
       })
       .catch(err => {
         console.error("Erro ao comunicar com backend Hetzner:", err);
-        f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "Não foi possível carregar a análise." }, '*');
+        let msg = "Não foi possível carregar a análise.";
+        if (err.message && err.message.includes('504')) {
+           msg = "Tempo limite excedido. A consulta demorou muito e foi cancelada para proteger o banco de dados. Tente adicionar filtros como datas ou quantidades menores.";
+        }
+        f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: msg }, '*');
       });
       });
     }

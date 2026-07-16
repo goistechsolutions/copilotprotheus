@@ -36,8 +36,8 @@ class AssistantService:
         ctx['document_context'] = doc_context
         ctx['memory_context'] = mem_context
 
-        # 5. Generate Answer with Timeout
-        timeout_sec = 120
+        # 5. Generate Answer with Timeout (reduzido para 90s para evitar 504 do Cloudflare)
+        timeout_sec = 90
         status_audit = "S"
         try:
             llm_func = ask_gemini if settings.llm_backend == "gemini" else ask_llm

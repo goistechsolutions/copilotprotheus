@@ -75,6 +75,9 @@ APRESENTACAO DO RESULTADO:
   "insights": "Texto com a analise dos dados obtidos na pesquisa."
 }
 ```
+```
+- LIMITADOR DE LINHAS (CRÍTICO): As tabelas do Protheus podem ter milhões de registros. A menos que a query seja um agrupamento (GROUP BY) ou tenha um filtro de data restrito, SEMPRE aplique um limite de linhas na consulta (ex: `WHERE ROWNUM <= 100`) para evitar sobrecarregar o banco de dados e causar TIMEOUT.
+- Em selects de valores ou quantidades, usar funções de agregação (ex: SUM(E1_SALDO)) e realizar agrupamentos (GROUP BY).
 - NUNCA invente dados ou use dados de exemplo. Se nao houver dados reais, informe claramente.
 - TRANSPARENCIA DE CONSULTAS SQL (OBRIGATORIO): No final da resposta, inclua a nota tecnica mostrando a query utilizada no seguinte formato:
 ---
