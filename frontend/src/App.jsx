@@ -99,6 +99,29 @@ export default function App() {
         setError(event.data.error);
         setIsLoading(false);
       }
+      if (event.data && event.data.type === 'cprot-screen-data') {
+        const textFromScreen = event.data.text;
+        if (!textFromScreen) {
+           setError("Não foi possível ler os dados da tela atual.");
+           setIsLoading(false);
+           return;
+        }
+        
+        setHistory(prevHistory => {
+          const promptText = `Analise a tela atual do sistema que o usuário está visualizando. Extraia e resuma os principais números e painéis que estão sendo mostrados:\n\n[DADOS CAPTURADOS DA TELA]\n${textFromScreen}`;
+          const historyForBackend = prevHistory.map(h => ({ role: h.role, text: h.text }));
+
+          if (window.parent) {
+            window.parent.postMessage({
+              type: 'cprot-request-analysis',
+              query: promptText,
+              history: historyForBackend
+            }, '*');
+          }
+
+          return [...prevHistory, { role: 'user', text: 'Analisar tela atual', payload: null }];
+        });
+      }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -130,6 +153,14 @@ export default function App() {
     }, '*');
     
     setQuery('');
+  };
+
+  const handleAnalyzeScreen = () => {
+    setIsLoading(true);
+    setError(null);
+    if (window.parent) {
+      window.parent.postMessage({ type: 'cprot-request-screen' }, '*');
+    }
   };
 
   const cores = [
@@ -296,6 +327,15 @@ export default function App() {
 
       <div className="p-4 bg-white border-t border-gray-100 shrink-0">
         <form onSubmit={handleAsk} className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleAnalyzeScreen}
+            className="bg-gray-100 text-gray-600 w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-200 transition shrink-0 border border-gray-200"
+            title="Analisar Tela Atual"
+            disabled={isLoading}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+          </button>
           <input
             type="text"
             className="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
