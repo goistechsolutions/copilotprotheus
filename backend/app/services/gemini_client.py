@@ -201,11 +201,10 @@ async def ask_gemini(
                     }]
                 })
                 
-            # Instrução de apresentação dos dados reais
             if _has_real_data(tool_results):
-                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
+                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
             else:
-                instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
                 
             contents.append({
                 "role": "user",
@@ -310,9 +309,9 @@ async def stream_gemini(
                 })
                 
             if _has_real_data(tool_results):
-                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
+                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
             else:
-                instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa RODOL Ltda para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
                 
             contents.append({
                 "role": "user",

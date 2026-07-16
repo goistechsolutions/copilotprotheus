@@ -34,3 +34,14 @@ class AskResponse(BaseModel):
     tipo_grafico: Optional[str] = None
     titulo: Optional[str] = None
     insights: Optional[str] = None
+    
+    # New Layered Response Fields
+    executive_summary: Optional[str] = None
+    applied_filters: Optional[List[str]] = None
+    details: Optional[str] = None
+    technical_sql: Optional[str] = None
+    kpis: Optional[List[Dict[str, Any]]] = None
+    action_buttons: Optional[List[Dict[str, str]]] = None
+    
+    # Metadados de Auditoria
+    audit_trail: Optional[Dict[str, Any]] = None

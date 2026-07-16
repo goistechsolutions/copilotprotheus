@@ -63,34 +63,37 @@ EXEMPLOS DE CHAMADAS (FEW-SHOT):
   Acao: Chamar consultar_protheus(endpoint="QueryRest", query_params={"cQuery": "SELECT 'RECEBIMENTOS' AS TIPO, E1_VENCTO AS DATA, SUM(E1_SALDO) AS TOTAL FROM SE1010 WHERE D_E_L_E_T_ = ' ' AND E1_FILIAL = '0101' AND E1_VENCTO >= '20260712' AND E1_VENCTO <= '20260717' AND E1_SALDO > 0 GROUP BY E1_VENCTO UNION ALL SELECT 'PAGAMENTOS' AS TIPO, E2_VENCTO AS DATA, SUM(E2_SALDO) AS TOTAL FROM SE2010 WHERE D_E_L_E_T_ = ' ' AND E2_FILIAL = '0101' AND E2_VENCTO >= '20260712' AND E2_VENCTO <= '20260717' AND E2_SALDO > 0 GROUP BY E2_VENCTO ORDER BY DATA, TIPO"})
 
 ====================
-EXPORTACAO DE ARQUIVOS (PDF E EXCEL):
-- O Copilot Protheus possui uma barra de ferramentas com botoes de exportacao direta para Excel (📊 Excel) e PDF (📄 PDF) localizados na parte inferior do painel do chat, logo abaixo de qualquer resposta que contenha tabelas ou relatorios.
-- Se o usuario pedir para gerar, exportar, converter ou fazer o download do resultado anterior ou de qualquer tabela em formato Excel ou PDF, informe-o claramente de que ele pode clicar diretamente nos botoes "📊 Excel" ou "📄 PDF" que aparecem logo abaixo da tabela no painel do Copilot para fazer o download do arquivo instantaneamente.
+APRESENTACAO DO RESULTADO (EXTREMAMENTE IMPORTANTE):
+- Voce DEVE responder SEMPRE utilizando o seguinte formato JSON rigoroso. NUNCA responda em texto livre fora do JSON.
+- O JSON deve conter a estrutura de camadas para que o frontend exiba a informacao de forma estruturada.
+- Se o usuario pedir apenas para bater papo, preencha o campo "executive_summary" e deixe os outros vazios.
 
-====================
-APRESENTACAO DO RESULTADO:
-- Apresente os dados em formato de RELATORIO GERENCIAL profissional com tabelas Markdown limpas, totais e insights.
-- SE O USUARIO PEDIR UM DASHBOARD, GRAFICO OU VISUALIZACAO INTERATIVA: Retorne a resposta contendo um bloco de codigo JSON no exato formato a seguir:
+Formato JSON OBRIGATORIO:
 ```json
 {
-  "titulo": "Titulo do Dashboard",
-  "tipo_grafico": "bar" (ou "line", "pie"),
-  "labels": ["Item 1", "Item 2", "Item 3"],
-  "datasets": [{"label": "Nome da Serie", "dados": [10, 20, 30]}],
-  "insights": "Texto com a analise dos dados obtidos na pesquisa."
+  "executive_summary": "Resumo executivo claro e direto em markdown. Ex: 'Ha 5 vencimentos nos proximos 5 dias...'",
+  "applied_filters": ["Filial: 0101", "Periodo: 2026-06", "Cliente: 000001"],
+  "details": "Detalhamento completo (tabelas markdown, analises profundas, explicacoes detalhadas).",
+  "technical_sql": "A query SQL exata que foi gerada e executada, se houver.",
+  "kpis": [
+    {"label": "Qtd Titulos", "value": "15", "color": "blue"},
+    {"label": "Valor Total", "value": "R$ 50.000,00", "color": "green"},
+    {"label": "Maior Risco", "value": "R$ 15.000,00", "color": "red"}
+  ],
+  "action_buttons": [
+    {"label": "Abrir Rotina (FINA040)", "action": "open_routine", "payload": "FINA040"},
+    {"label": "Exportar Excel", "action": "export_excel", "payload": ""}
+  ],
+  "titulo": "Titulo Opcional (se for um Dashboard)",
+  "tipo_grafico": "bar" (ou "line", "pie", null se nao for grafico),
+  "labels": ["Item 1", "Item 2"],
+  "datasets": [{"label": "Nome da Serie", "dados": [10, 20]}],
+  "insights": "Texto com a analise dos graficos (opcional)."
 }
 ```
-```
-- LIMITADOR DE LINHAS (CRÍTICO): As tabelas do Protheus podem ter milhões de registros. A menos que a query seja um agrupamento (GROUP BY) ou tenha um filtro de data restrito, SEMPRE aplique um limite de linhas na consulta (ex: `WHERE ROWNUM <= 100`) para evitar sobrecarregar o banco de dados e causar TIMEOUT.
-- CONTINUIDADE DE CONTEXTO: Se o usuário pedir um complemento a uma resposta anterior (ex: "agora agrupe por cliente", "filtrar apenas pagos"), você DEVE MANTER e APLICAR todos os filtros de data, filial e condições restritivas usados na consulta SQL imediatamente anterior.
-- Em selects de valores ou quantidades, usar funções de agregação (ex: SUM(E1_SALDO)) e realizar agrupamentos (GROUP BY).
-- NUNCA invente dados ou use dados de exemplo. Se nao houver dados reais, informe claramente.
-- TRANSPARENCIA DE CONSULTAS SQL (OBRIGATORIO): No final da resposta, inclua a nota tecnica mostrando a query utilizada no seguinte formato:
----
-**Consulta SQL Executada:**
-```sql
-[Consulta SQL exata gerada para a tool]
-```"""
+- A cor dos KPIs deve ser "red" (risco/negativo), "green" (positivo), "yellow" (alerta) ou "blue" (neutro).
+- NUNCA invente dados ficticios.
+"""
     return base_prompt
 
 # Maintain backwards compatibility for imports that expect SYSTEM_PROMPT constant
@@ -295,13 +298,13 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
             if _has_real_data(tool_results):
                     messages.append({
                         "role": "system",
-                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
+                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
                     })
             else:
                 tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
                     "role": "system",
-                    "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa {tenant_name} para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                    "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
                 })
             
             payload["messages"] = messages
@@ -418,13 +421,13 @@ async def stream_llm(
                 if _has_real_data(tool_results):
                     messages.append({
                         "role": "system",
-                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados. IMPORTANTE: Se o usuario pediu um 'dashboard', 'grafico' ou 'visualizacao interativa', retorne EXCLUSIVAMENTE o codigo JSON conforme o SYSTEM PROMPT. Caso contrario, apresente um relatorio com tabelas Markdown limpas, totais e insights."
+                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
                     })
                 else:
                     tenant_name = context.get("company", "Empresa") if context else "Empresa"
                     messages.append({
                         "role": "system",
-                        "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Informe claramente ao usuario que nao foram encontrados registros no banco de dados da empresa {tenant_name} para a pesquisa solicitada. NUNCA invente ou simule dados ficticios."
+                        "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
                     })
                 
                 payload["messages"] = messages

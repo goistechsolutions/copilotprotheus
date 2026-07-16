@@ -79,8 +79,8 @@ async def ask(
     answer_dict = await AssistantService(db).answer_question(payload, ctx)
     answer_text = answer_dict.get("answer", "")
     
-    # Extrair JSON de dashboard se o LLM tiver formatado como JSON
-    dashboard_data = {}
+    # Extrair JSON do LLM
+    parsed_data = {}
     try:
         import json
         import re
@@ -91,21 +91,31 @@ async def ask(
             clean_ans = answer_text.strip()
             
         if clean_ans.startswith('{') and clean_ans.endswith('}'):
-            parsed = json.loads(clean_ans)
-            if "datasets" in parsed:
-                dashboard_data = parsed
-    except Exception:
-        pass
+            parsed_data = json.loads(clean_ans)
+    except Exception as e:
+        print(f"Erro ao parsear JSON da resposta: {e}")
+        parsed_data = {"executive_summary": answer_text}
 
     return AskResponse(
-        answer=dashboard_data.get("answer", answer_text),
+        answer=parsed_data.get("executive_summary", answer_text),
         intent=answer_dict.get("intent"),
         backend=answer_dict.get("backend"),
-        datasets=dashboard_data.get("datasets"),
-        labels=dashboard_data.get("labels"),
-        tipo_grafico=dashboard_data.get("tipo_grafico"),
-        titulo=dashboard_data.get("titulo"),
-        insights=dashboard_data.get("insights")
+        datasets=parsed_data.get("datasets"),
+        labels=parsed_data.get("labels"),
+        tipo_grafico=parsed_data.get("tipo_grafico"),
+        titulo=parsed_data.get("titulo"),
+        insights=parsed_data.get("insights"),
+        executive_summary=parsed_data.get("executive_summary"),
+        applied_filters=parsed_data.get("applied_filters"),
+        details=parsed_data.get("details"),
+        technical_sql=parsed_data.get("technical_sql"),
+        kpis=parsed_data.get("kpis"),
+        action_buttons=parsed_data.get("action_buttons"),
+        audit_trail={
+            "elapsed_ms": answer_dict.get("response_time_ms"),
+            "backend": answer_dict.get("backend"),
+            "records_returned": answer_dict.get("records_returned", 0)
+        }
     )
 
 from fastapi.responses import StreamingResponse

@@ -227,10 +227,10 @@
           agent_password: result.agent_password
         };
 
-        // Fazer a chamada para o Middleware via background script para evitar CSP do Protheus
+        // Fazer a chamada para a API (Agora rodando na Hetzner via api.copilot.elitecorp.tec.br)
         chrome.runtime.sendMessage({
           action: 'cprot_api_fetch',
-          url: 'https://copilot-api.elitecorp.tec.br/chat/ask',
+          url: 'https://api.copilot.elitecorp.tec.br/chat/ask',
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -271,5 +271,18 @@
         });
       });
     }
+    
+    // Ações vindas do Chat
+    if (e.data && e.data.type === 'cprot-open-routine') {
+      const routine = e.data.routine;
+      // Provisoriamente aciona um toast/alerta nativo
+      // No futuro, se houver função ADVPL/WebClient injetada, chamá-la aqui.
+      alert(`Copilot Protheus:\nAbrindo a rotina solicitada: ${routine}`);
+    }
+    
+    if (e.data && e.data.type === 'cprot-export-excel') {
+      alert(`Copilot Protheus:\nIniciando exportação para Excel...`);
+    }
+
   })
 })()
