@@ -16,7 +16,8 @@ def ingest(db: Session = Depends(get_db), x_tenant_id: str = Header("default")):
 
 @router.post('/upload')
 def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db), x_tenant_id: str = Header("default")):
-    docs_dir = Path(r"C:\projeto\copilotprotheus\docs")
+    # Corrigido para caminho relativo que funciona no Docker (Hetzner) e Local
+    docs_dir = Path("./docs")
     docs_dir.mkdir(parents=True, exist_ok=True)
     file_path = docs_dir / file.filename
     with open(file_path, "wb") as buffer:

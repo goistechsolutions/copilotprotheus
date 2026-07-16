@@ -51,11 +51,13 @@ export default function Config() {
   if (loading) return <div className="p-8 text-slate-500">Carregando configurações...</div>;
 
   return (
-    <div className="max-w-4xl">
-      <h2 className="text-3xl font-bold text-slate-800 mb-6">Configurações Globais</h2>
-      <p className="text-slate-500 mb-8">Gerencie as variáveis de ambiente (.env) da ferramenta. As alterações são aplicadas imediatamente ao backend.</p>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-bold text-slate-800 mb-2">Configurações Globais</h2>
+        <p className="text-slate-500">Gerencie as variáveis de ambiente (.env) da ferramenta. As alterações são aplicadas imediatamente ao backend.</p>
+      </div>
       
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6">
           <div className="space-y-6">
             {Object.entries(configs).map(([key, val]) => (

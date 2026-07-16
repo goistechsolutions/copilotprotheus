@@ -167,6 +167,30 @@ def update_tables(tables: list = Body(...), admin: str = Depends(verify_admin)):
 
 # --- Endpoints de Logs e Monitoramento ---
 
+@router.get("/dashboard-stats")
+def get_dashboard_stats(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    from app.models.knowledge import AuditLog, Company, AgentUser, Memory
+    from datetime import datetime, timedelta
+    
+    # Cálculos
+    total_logs = db.query(AuditLog).count()
+    active_companies = db.query(Company).count()
+    total_users = db.query(AgentUser).count()
+    total_memories = db.query(Memory).count()
+    
+    # Logs das últimas 24h
+    yesterday = datetime.utcnow() - timedelta(days=1)
+    logs_24h = db.query(AuditLog).filter(AuditLog.created_at >= yesterday).count()
+
+    return {
+        "total_consultas": total_logs,
+        "empresas_ativas": active_companies,
+        "usuarios_cadastrados": total_users,
+        "total_memorias": total_memories,
+        "consultas_24h": logs_24h,
+        "status_sistema": "Online"
+    }
+
 @router.get("/logs")
 def get_logs(limit: int = 50, skip: int = 0, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
     """Retorna o histórico de conversas e logs de auditoria"""
