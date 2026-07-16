@@ -32,10 +32,91 @@ export default function App() {
   
   // History will store: { role: 'user' | 'assistant', text: string, payload: object | null }
   const [history, setHistory] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
   
   const chartRefs = useRef({});
   const messagesEndRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Carrega sessoes do localStorage na inicializacao
+  useEffect(() => {
+    const savedSessions = localStorage.getItem('cprot_sessions');
+    if (savedSessions) {
+      try {
+        const parsed = JSON.parse(savedSessions);
+        setSessions(parsed);
+        if (parsed.length > 0) {
+          setCurrentSessionId(parsed[0].id);
+          setHistory(parsed[0].history || []);
+        } else {
+          createNewSession();
+        }
+      } catch(e) {
+        createNewSession();
+      }
+    } else {
+      createNewSession();
+    }
+  }, []);
+
+  // Salva no localStorage sempre que o history muda
+  useEffect(() => {
+    if (currentSessionId && history.length > 0) {
+      setSessions(prev => {
+        const newSessions = [...prev];
+        const idx = newSessions.findIndex(s => s.id === currentSessionId);
+        const title = history.find(h => h.role === 'user')?.text || 'Nova Conversa';
+        
+        if (idx >= 0) {
+          newSessions[idx].history = history;
+          newSessions[idx].title = title.substring(0, 30) + (title.length > 30 ? '...' : '');
+        } else {
+          newSessions.unshift({
+            id: currentSessionId,
+            title: title.substring(0, 30) + (title.length > 30 ? '...' : ''),
+            history: history,
+            date: new Date().toISOString()
+          });
+        }
+        localStorage.setItem('cprot_sessions', JSON.stringify(newSessions));
+        return newSessions;
+      });
+    }
+  }, [history, currentSessionId]);
+
+  const createNewSession = () => {
+    const newId = Date.now().toString();
+    setCurrentSessionId(newId);
+    setHistory([]);
+    setIsSidebarOpen(false);
+  };
+
+  const loadSession = (id) => {
+    const session = sessions.find(s => s.id === id);
+    if (session) {
+      setCurrentSessionId(session.id);
+      setHistory(session.history || []);
+      setIsSidebarOpen(false);
+    }
+  };
+
+  const deleteSession = (id, e) => {
+    e.stopPropagation();
+    setSessions(prev => {
+      const newSessions = prev.filter(s => s.id !== id);
+      localStorage.setItem('cprot_sessions', JSON.stringify(newSessions));
+      if (currentSessionId === id) {
+        if (newSessions.length > 0) {
+          loadSession(newSessions[0].id);
+        } else {
+          createNewSession();
+        }
+      }
+      return newSessions;
+    });
+  };
 
   // Auto-scroll para a última mensagem
   const scrollToBottom = () => {
@@ -58,9 +139,7 @@ export default function App() {
 
   const handleExportCSV = (payloadGemini) => {
     if (!payloadGemini) return;
-    // Adiciona o BOM UTF-8 (\uFEFF) para forçar o Excel a reconhecer a acentuação corretamente
     let csv = '\uFEFFCategoria';
-    // Usa ponto-e-vírgula (;) no lugar de vírgula para separar as colunas no padrão PT-BR
     payloadGemini.datasets.forEach(d => {
       csv += `;${d.label}`;
     });
@@ -82,6 +161,43 @@ export default function App() {
     link.download = `${payloadGemini.titulo || 'dashboard'}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const extractMarkdownTableToCSV = (text) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    const tableLines = lines.filter(line => line.trim().startsWith('|') && line.includes('|'));
+    if (tableLines.length < 3) return null; 
+    
+    let csv = '\uFEFF'; 
+    tableLines.forEach((line, idx) => {
+      if (idx === 1 && line.replace(/[^|\-:]/g, '').length === line.trim().length) return;
+      const columns = line.split('|').slice(1, -1).map(c => c.trim().replace(/"/g, '""'));
+      csv += columns.join(';') + '\n';
+    });
+    return csv;
+  };
+
+  const hasMarkdownTable = (text) => {
+    if (!text) return false;
+    const lines = text.split('\n');
+    return lines.filter(line => line.trim().startsWith('|') && line.includes('|')).length >= 3;
+  };
+
+  const handleExportTextCSV = (text) => {
+    const csv = extractMarkdownTableToCSV(text);
+    if (!csv) return;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `relatorio.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text);
   };
 
   useEffect(() => {
@@ -136,12 +252,12 @@ export default function App() {
   const handleAsk = (e) => {
     e.preventDefault();
     if (!query.trim()) return;
+    if (!currentSessionId) createNewSession();
 
     setIsLoading(true);
     setError(null);
     
     const currentQuery = query;
-    // We send history as just text. We map out the payload to avoid sending massive objects back.
     const historyForBackend = history.map(h => ({ role: h.role, text: h.text }));
 
     setHistory(prev => [...prev, { role: 'user', text: currentQuery, payload: null }]);
@@ -156,6 +272,7 @@ export default function App() {
   };
 
   const handleAnalyzeScreen = () => {
+    if (!currentSessionId) createNewSession();
     setIsLoading(true);
     setError(null);
     if (window.parent) {
@@ -228,12 +345,58 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 font-sans relative shadow-2xl border-l border-gray-200">
+    <div className="flex flex-col h-screen bg-gray-50 font-sans relative shadow-2xl border-l border-gray-200 overflow-hidden">
+      
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="absolute inset-0 bg-black/20 z-20 transition-opacity" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
+
+      {/* Sidebar (Drawer) */}
+      <div className={`absolute top-0 left-0 h-full w-[280px] bg-white z-30 shadow-2xl transform transition-transform duration-300 flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-blue-600 text-white">
+          <h3 className="font-bold">Histórico de Chats</h3>
+          <button onClick={() => setIsSidebarOpen(false)} className="hover:bg-blue-700 p-1 rounded-full transition text-white">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div className="p-3">
+          <button onClick={createNewSession} className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 py-2 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+            Nova Conversa
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {sessions.map(s => (
+            <div 
+              key={s.id} 
+              onClick={() => loadSession(s.id)}
+              className={`p-3 rounded-lg cursor-pointer flex justify-between items-center group transition ${s.id === currentSessionId ? 'bg-blue-50 border border-blue-100' : 'hover:bg-gray-50 border border-transparent'}`}
+            >
+              <div className="truncate text-sm font-medium text-gray-700 flex-1 pr-2">
+                {s.title}
+              </div>
+              <button onClick={(e) => deleteSession(s.id, e)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              </button>
+            </div>
+          ))}
+          {sessions.length === 0 && (
+             <div className="text-center text-gray-400 text-sm mt-4">Nenhuma conversa anterior</div>
+          )}
+        </div>
+      </div>
+
       <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex justify-between items-center z-10 shrink-0">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-          Copilot Protheus
-        </h2>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setIsSidebarOpen(true)} className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-full transition">
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          </button>
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            Copilot Protheus
+          </h2>
+        </div>
         <button 
           onClick={() => setIsOpen(false)}
           className="text-gray-400 hover:text-gray-700 transition-colors bg-gray-100 hover:bg-gray-200 rounded-full p-2"
@@ -282,10 +445,10 @@ export default function App() {
                   
                   <div className="flex gap-2 mb-2 justify-end">
                     <button onClick={() => handleExportCSV(msg.payload)} className="text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded flex items-center gap-1 transition border border-gray-200">
-                      Exportar (CSV)
+                      📊 Exportar (CSV)
                     </button>
                     <button onClick={() => handleExportPNG(idx, msg.payload.titulo)} className="text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded flex items-center gap-1 transition border border-gray-200">
-                      Baixar (PNG)
+                      📷 Baixar (PNG)
                     </button>
                   </div>
 
@@ -301,6 +464,19 @@ export default function App() {
                 </div>
               )}
 
+              {/* Botões de Ação para Mensagens de Texto do Assistente */}
+              {msg.role === 'assistant' && !msg.payload && (
+                 <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2 justify-end">
+                    {hasMarkdownTable(msg.text) && (
+                      <button onClick={() => handleExportTextCSV(msg.text)} className="text-xs font-semibold bg-green-50 hover:bg-green-100 text-green-700 px-2 py-1 rounded flex items-center gap-1 transition border border-green-200">
+                        📊 Excel
+                      </button>
+                    )}
+                    <button onClick={() => handleCopy(msg.text)} className="text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded flex items-center gap-1 transition border border-gray-200">
+                      📋 Copiar
+                    </button>
+                 </div>
+              )}
             </div>
           </div>
         ))}
@@ -325,7 +501,7 @@ export default function App() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+      <div className="p-4 bg-white border-t border-gray-100 shrink-0 relative z-10">
         <form onSubmit={handleAsk} className="flex gap-2">
           <button
             type="button"
