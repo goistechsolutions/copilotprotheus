@@ -48,6 +48,8 @@ router.post('/ask', async (req, res) => {
     intent_description: intent.description,
     ...ctx,
     tenant_id: ctx.tenant_id,
+    agent_user: req.body.agent_user || null,
+    agent_password: req.body.agent_password || null,
     protheus_data: protheusData,
     history,
   }
@@ -106,6 +108,8 @@ router.post('/stream', async (req, res) => {
     intent_description: intent.description,
     ...ctx,
     tenant_id: ctx.tenant_id,
+    agent_user: req.body.agent_user || null,
+    agent_password: req.body.agent_password || null,
     protheus_data: protheusData,
     history,
   }
