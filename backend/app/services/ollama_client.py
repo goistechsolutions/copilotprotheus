@@ -96,7 +96,7 @@ APRESENTACAO DO RESULTADO:
 # Maintain backwards compatibility for imports that expect SYSTEM_PROMPT constant
 SYSTEM_PROMPT = get_system_prompt()
 
-def _build_messages(question, protheus_data, intent, context, history):
+def _build_messages(question, protheus_data, intent, context, history, image=None):
     import json
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
     msgs = [{"role": "system", "content": get_system_prompt(tenant_name)}]
@@ -122,7 +122,17 @@ def _build_messages(question, protheus_data, intent, context, history):
     if history:
         for m in history[-6:]:
             msgs.append({"role":m.get("role","user"),"content":m.get("text","")})
-    msgs.append({"role":"user","content":question})
+            
+    if image:
+        import re
+        match = re.match(r"data:(image/\w+);base64,(.+)", image)
+        if match:
+            msgs.append({"role":"user", "content":question, "images": [match.group(2)]})
+        else:
+            msgs.append({"role":"user", "content":question})
+    else:
+        msgs.append({"role":"user","content":question})
+        
     return msgs
 
 
@@ -321,8 +331,9 @@ async def ask_llm(
     intent: Optional[str] = None,
     context: Optional[dict] = None,
     history: Optional[list] = None,
+    image: Optional[str] = None,
 ) -> str:
-    messages = _build_messages(question, protheus_data, intent, context, history)
+    messages = _build_messages(question, protheus_data, intent, context, history, image)
     try:
         tenant_id = context.get("tenant_id", "default") if context else "default"
         if LLM_BACKEND == "ovms":
@@ -349,8 +360,9 @@ async def stream_llm(
     intent: Optional[str] = None,
     context: Optional[dict] = None,
     history: Optional[list] = None,
+    image: Optional[str] = None,
 ):
-    messages = _build_messages(question, protheus_data, intent, context, history)
+    messages = _build_messages(question, protheus_data, intent, context, history, image)
     
     if LLM_BACKEND == "ovms":
         yield await _call_ovms(messages)
