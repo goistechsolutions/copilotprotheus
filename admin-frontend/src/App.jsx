@@ -1,7 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Settings, Database, LayoutDashboard, ShieldAlert, Building, Key, Brain, Cloud } from 'lucide-react';
+import { Settings, Database, LayoutDashboard, ShieldAlert, Building, Key, Brain, Cloud, UserCog } from 'lucide-react';
 
 import Config from './pages/Config';
+import AgentUsers from './pages/AgentUsers';
 import Tables from './pages/Tables';
 import Logs from './pages/Logs';
 import Companies from './pages/Companies';
@@ -16,6 +17,7 @@ function Sidebar() {
   const menuItems = [
     { path: '/', label: 'Visão Geral (Logs)', icon: <LayoutDashboard size={20} /> },
     { path: '/companies', label: 'Empresas SaaS', icon: <Building size={20} /> },
+    { path: '/agent-users', label: 'Usuários Copilot', icon: <UserCog size={20} /> },
     { path: '/licenses', label: 'Gerador de Licenças', icon: <Key size={20} /> },
     { path: '/rag', label: 'RAG e Memórias', icon: <Brain size={20} /> },
     { path: '/tables', label: 'Tabelas Permitidas', icon: <Database size={20} /> },
@@ -62,6 +64,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Logs />} />
             <Route path="/companies" element={<Companies />} />
+            <Route path="/agent-users" element={<AgentUsers />} />
             <Route path="/licenses" element={<Licenses />} />
             <Route path="/rag" element={<RagMemories />} />
             <Route path="/tables" element={<Tables />} />

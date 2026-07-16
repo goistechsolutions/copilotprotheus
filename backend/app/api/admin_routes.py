@@ -159,3 +159,54 @@ def get_logs(limit: int = 50, skip: int = 0, db: Session = Depends(get_db), admi
     """Retorna o histórico de conversas e logs de auditoria"""
     logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
     return {"logs": logs}
+
+# --- Endpoints de AgentUsers ---
+from app.models.knowledge import AgentUser
+import hashlib
+
+@router.get("/agent-users")
+def get_agent_users(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    users = db.query(AgentUser).order_by(AgentUser.created_at.desc()).all()
+    # Mask passwords
+    return [
+        {
+            "id": u.id, 
+            "tenant_id": u.tenant_id, 
+            "username": u.username, 
+            "role": u.role, 
+            "created_at": u.created_at
+        } 
+        for u in users
+    ]
+
+class AgentUserCreate(BaseModel):
+    tenant_id: str
+    username: str
+    password: str
+
+@router.post("/agent-users")
+def create_agent_user(req: AgentUserCreate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    existing = db.query(AgentUser).filter(
+        AgentUser.tenant_id == req.tenant_id,
+        AgentUser.username == req.username
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Usuário já existe neste Tenant.")
+        
+    hashed = hashlib.sha256(req.password.encode('utf-8')).hexdigest()
+    new_user = AgentUser(
+        tenant_id=req.tenant_id,
+        username=req.username,
+        password_hash=hashed
+    )
+    db.add(new_user)
+    db.commit()
+    return {"success": True, "message": "Usuário criado com sucesso."}
+
+@router.delete("/agent-users/{user_id}")
+def delete_agent_user(user_id: int, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    user = db.query(AgentUser).filter(AgentUser.id == user_id).first()
+    if user:
+        db.delete(user)
+        db.commit()
+    return {"success": True, "message": "Usuário removido com sucesso."}
