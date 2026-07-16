@@ -179,6 +179,13 @@
       }
     }
     
+    if (e.data && e.data.type === 'cprot-save-auth') {
+      chrome.storage.local.set({
+        agent_user: e.data.agent_user,
+        agent_password: e.data.agent_password
+      });
+    }
+
     if (e.data && e.data.type === 'cprot-request-screen') {
       const f = document.getElementById(WIDGET_ID)
       if (!f || !f.contentWindow) return

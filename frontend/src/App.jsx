@@ -39,6 +39,9 @@ export default function App() {
   const messagesEndRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsUser, setSettingsUser] = useState('');
+  const [settingsPassword, setSettingsPassword] = useState('');
 
   // Carrega sessoes do localStorage na inicializacao
   useEffect(() => {
@@ -242,6 +245,10 @@ export default function App() {
       }
     };
     window.addEventListener('message', handleMessage);
+    
+    // Attempt to load settings from parent if they send it initially
+    // or just let the user set it blindly. It's safer to just let them set it.
+
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
@@ -367,6 +374,10 @@ export default function App() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
             Nova Conversa
           </button>
+          <button onClick={() => { setIsSidebarOpen(false); setIsSettingsOpen(true); }} className="w-full mt-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            Configurações
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
           {sessions.map(s => (
@@ -390,6 +401,52 @@ export default function App() {
       </div>
 
       <div className="bg-white p-4 shadow-sm border-b border-gray-100 flex justify-between items-center z-10 shrink-0">
+        
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="absolute inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-800">Configurações de Acesso</h3>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-gray-400 hover:text-red-500 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Usuário Copilot</label>
+                <input 
+                  type="text" 
+                  value={settingsUser} 
+                  onChange={e => setSettingsUser(e.target.value)} 
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                  placeholder="Seu usuário"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Senha Copilot</label>
+                <input 
+                  type="password" 
+                  value={settingsPassword} 
+                  onChange={e => setSettingsPassword(e.target.value)} 
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                  placeholder="Sua senha"
+                />
+              </div>
+              <button 
+                onClick={() => {
+                  window.parent.postMessage({ type: 'cprot-save-auth', agent_user: settingsUser, agent_password: settingsPassword }, '*');
+                  setIsSettingsOpen(false);
+                  alert('Credenciais atualizadas no navegador.');
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition"
+              >
+                Salvar Credenciais
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
         <div className="flex items-center gap-3">
           <button onClick={() => setIsSidebarOpen(true)} className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-full transition">
              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
