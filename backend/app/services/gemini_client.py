@@ -53,7 +53,7 @@ GEMINI_TOOLS = [
     }
 ]
 
-def _build_gemini_messages(question: str, protheus_data: Optional[dict], intent: Optional[str], context: Optional[dict], history: Optional[list]) -> list:
+def _build_gemini_messages(question: str, protheus_data: Optional[dict], intent: Optional[str], context: Optional[dict], history: Optional[list], image: Optional[str] = None) -> list:
     """
     Constrói a lista de mensagens no formato da Gemini API.
     Nota: O system instruction é passado separadamente na Gemini API.
@@ -99,9 +99,25 @@ def _build_gemini_messages(question: str, protheus_data: Optional[dict], intent:
         })
         # Gemini requer que a última mensagem seja do usuário. Adicionamos a pergunta logo em seguida
         
+    # A última mensagem DEVE ser a do usuário contendo a pergunta
+    user_parts = [{"text": question}]
+    
+    if image:
+        import re
+        match = re.match(r"data:(image/\w+);base64,(.+)", image)
+        if match:
+            mime_type = match.group(1)
+            b64_data = match.group(2)
+            user_parts.append({
+                "inlineData": {
+                    "mimeType": mime_type,
+                    "data": b64_data
+                }
+            })
+
     contents.append({
         "role": "user",
-        "parts": [{"text": question}]
+        "parts": user_parts
     })
     
     return contents
@@ -112,11 +128,12 @@ async def ask_gemini(
     intent: Optional[str] = None,
     context: Optional[dict] = None,
     history: Optional[list] = None,
+    image: Optional[str] = None,
 ) -> str:
     if not GEMINI_API_KEY:
         return "**Erro:** A variável `GEMINI_API_KEY` não está configurada no ambiente."
 
-    contents = _build_gemini_messages(question, protheus_data, intent, context, history)
+    contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
     
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
     payload = {
@@ -214,6 +231,7 @@ async def stream_gemini(
     intent: Optional[str] = None,
     context: Optional[dict] = None,
     history: Optional[list] = None,
+    image: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Versão streaming para a API da Gemini.
@@ -223,7 +241,7 @@ async def stream_gemini(
         yield "**Erro:** A variável `GEMINI_API_KEY` não está configurada no ambiente."
         return
 
-    contents = _build_gemini_messages(question, protheus_data, intent, context, history)
+    contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
     
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
     payload = {

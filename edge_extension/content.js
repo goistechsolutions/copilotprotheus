@@ -187,7 +187,17 @@
       text = text.replace(/\s+/g, ' ').trim()
       text = text.substring(0, 4000)
       
-      f.contentWindow.postMessage({ type: 'cprot-screen-data', text }, '*')
+      try {
+        chrome.runtime.sendMessage({ action: "capture_screen" }, function(response) {
+           let imageBase64 = null;
+           if (response && response.dataUrl) {
+              imageBase64 = response.dataUrl;
+           }
+           f.contentWindow.postMessage({ type: 'cprot-screen-data', text: text, image: imageBase64 }, '*')
+        });
+      } catch (err) {
+         f.contentWindow.postMessage({ type: 'cprot-screen-data', text: text, image: null }, '*')
+      }
     }
 
     if (e.data && e.data.type === 'cprot-request-analysis') {
@@ -195,6 +205,7 @@
       if (!f || !f.contentWindow) return
 
       const query = e.data.query;
+      const image = e.data.image;
       
       chrome.storage.local.get(['tenant_id'], function (result) {
         const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
@@ -203,7 +214,8 @@
           context: sessionData,
           question: query,
           tenant_id: configuredTenant,
-          history: e.data.history || []
+          history: e.data.history || [],
+          image: image
         };
 
         // Fazer a chamada para o Middleware (que fará o enriquecimento dos dados do ERP)

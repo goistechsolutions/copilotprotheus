@@ -17,6 +17,7 @@ class AskRequest(BaseModel):
     protheus_data: Optional[Dict[str, Any]] = None
     history: Optional[List[Dict[str, Any]]] = None
     screen_text: Optional[str] = None
+    image: Optional[str] = None
 
 class AskResponse(BaseModel):
     answer: str

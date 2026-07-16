@@ -217,7 +217,8 @@ export default function App() {
       }
       if (event.data && event.data.type === 'cprot-screen-data') {
         const textFromScreen = event.data.text;
-        if (!textFromScreen) {
+        const imageFromScreen = event.data.image;
+        if (!textFromScreen && !imageFromScreen) {
            setError("Não foi possível ler os dados da tela atual.");
            setIsLoading(false);
            return;
@@ -231,7 +232,8 @@ export default function App() {
             window.parent.postMessage({
               type: 'cprot-request-analysis',
               query: promptText,
-              history: historyForBackend
+              history: historyForBackend,
+              image: imageFromScreen
             }, '*');
           }
 

@@ -48,6 +48,7 @@ class AssistantService:
                     intent=intent,
                     context=ctx,
                     history=history,
+                    image=payload.image,
                 ),
                 timeout=timeout_sec
             )
@@ -141,6 +142,7 @@ class AssistantService:
             intent=intent,
             context=ctx,
             history=history,
+            image=payload.image,
         ):
             full_answer.append(token)
             yield token
