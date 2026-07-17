@@ -214,62 +214,72 @@
       const query = e.data.query;
       const image = e.data.image;
       
-      chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
-        const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
-        
-        const payload = {
-          context: sessionData,
-          question: query,
-          tenant_id: configuredTenant,
-          history: e.data.history || [],
-          image: image,
-          agent_user: result.agent_user,
-          agent_password: result.agent_password
-        };
-
-        // Fazer a chamada para a API (Agora rodando na Hetzner via copilot-api.elitecorp.tec.br)
-        chrome.runtime.sendMessage({
-          action: 'cprot_api_fetch',
-          url: 'https://copilot-api.elitecorp.tec.br/chat/ask',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        }, function(response) {
-          if (!response) {
-            const err = chrome.runtime.lastError ? chrome.runtime.lastError.message : "Desconhecido";
-            console.error("Erro ao comunicar com background:", err);
-            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: `Erro de comunicação interna: ${err}` }, '*');
-            return;
-          }
-          if (response.error) {
-            console.error("Erro ao comunicar com backend Hetzner:", response.error);
-            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: `Falha na requisição (Background): ${response.error}` }, '*');
-            return;
-          }
-          if (!response.ok) {
-            console.error("HTTP Error:", response.status, response.text);
-            let msg = "Não foi possível carregar a análise.";
-            if (response.status === 504) {
-               msg = "Tempo limite excedido. A consulta demorou muito e foi cancelada para proteger o banco de dados. Tente adicionar filtros como datas ou quantidades menores.";
-            } else {
-               msg = `Erro do servidor: ${response.status}`;
-            }
-            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: msg }, '*');
-            return;
-          }
+      try {
+        chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
+          const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
           
+          const payload = {
+            context: sessionData,
+            question: query,
+            tenant_id: configuredTenant,
+            history: e.data.history || [],
+            image: image,
+            agent_user: result.agent_user,
+            agent_password: result.agent_password
+          };
+
+          // Fazer a chamada para a API (Agora rodando na Hetzner via copilot-api.elitecorp.tec.br)
           try {
-            const data = JSON.parse(response.text);
-            // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
-            f.contentWindow.postMessage({ type: 'cprot-dashboard-data', payloadGemini: data }, '*');
-          } catch(e) {
-            console.error("Erro ao parsear JSON:", e);
-            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "Erro na resposta do servidor." }, '*');
+            chrome.runtime.sendMessage({
+              action: 'cprot_api_fetch',
+              url: 'https://copilot-api.elitecorp.tec.br/chat/ask',
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(payload)
+            }, function(response) {
+              if (!response) {
+                const err = chrome.runtime.lastError ? chrome.runtime.lastError.message : "Desconhecido";
+                console.error("Erro ao comunicar com background:", err);
+                f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: `Erro de comunicação interna: ${err}` }, '*');
+                return;
+              }
+              if (response.error) {
+                console.error("Erro ao comunicar com backend Hetzner:", response.error);
+                f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: `Falha na requisição (Background): ${response.error}` }, '*');
+                return;
+              }
+              if (!response.ok) {
+                console.error("HTTP Error:", response.status, response.text);
+                let msg = "Não foi possível carregar a análise.";
+                if (response.status === 504) {
+                   msg = "Tempo limite excedido. A consulta demorou muito e foi cancelada para proteger o banco de dados. Tente adicionar filtros como datas ou quantidades menores.";
+                } else {
+                   msg = `Erro do servidor: ${response.status}`;
+                }
+                f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: msg }, '*');
+                return;
+              }
+              
+              try {
+                const data = JSON.parse(response.text);
+                // Manda os dados formatados do Gemini de volta para o React desenhar o gráfico
+                f.contentWindow.postMessage({ type: 'cprot-dashboard-data', payloadGemini: data }, '*');
+              } catch(e) {
+                console.error("Erro ao parsear JSON:", e);
+                f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "Erro na resposta do servidor." }, '*');
+              }
+            });
+          } catch(err) {
+            console.error("Contexto de extensão inválido:", err);
+            f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "A extensão foi atualizada. Por favor, atualize a página do Protheus (Aperte F5)." }, '*');
           }
         });
-      });
+      } catch(err) {
+        console.error("Contexto de extensão inválido ao ler storage:", err);
+        f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "A extensão foi atualizada. Por favor, atualize a página do Protheus (Aperte F5)." }, '*');
+      }
     }
     
     // Ações vindas do Chat
