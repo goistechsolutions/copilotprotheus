@@ -28,7 +28,7 @@ export default function App() {
   });
 
   const [historyItems, setHistoryItems] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   const messagesEndRef = useRef(null);
 
@@ -162,18 +162,23 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden shadow-2xl rounded-tl-xl border border-slate-200">
+    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden shadow-2xl rounded-tl-xl border border-slate-200 relative">
       
       {/* Sidebar Histórico */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} flex-shrink-0 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 overflow-hidden`}>
+      <div className={`absolute left-0 top-0 bottom-0 z-20 ${isSidebarOpen ? 'w-64 border-r shadow-xl' : 'w-0'} bg-white border-slate-200 flex flex-col transition-all duration-300 overflow-hidden`}>
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
             <History className="w-4 h-4 text-blue-600" />
             Histórico
           </h2>
-          <button onClick={clearChat} className="p-1.5 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-md transition-colors" title="Novo Chat">
-            <Plus className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={clearChat} className="p-1.5 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-md transition-colors" title="Novo Chat">
+              <Plus className="w-4 h-4" />
+            </button>
+            <button onClick={() => setIsSidebarOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors" title="Fechar Histórico">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           <ChatHistory history={historyItems} onSelect={() => {}} />
