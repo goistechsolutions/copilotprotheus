@@ -137,8 +137,32 @@ export default function App() {
     setContext(prev => ({ ...prev, profile: nextProfile }));
   };
 
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    // Comunica ao iframe parent (content.js) sobre o redimensionamento
+    if (isOpen) {
+      window.parent.postMessage({ type: 'cprot-resize', open: true, minimized: false, maximized: false }, '*');
+    } else {
+      window.parent.postMessage({ type: 'cprot-resize', open: false }, '*');
+    }
+  }, [isOpen]);
+
+  if (!isOpen) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50">
+        <button
+          onClick={() => setIsOpen(true)}
+          className="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105"
+        >
+          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden shadow-2xl rounded-tl-xl border border-slate-200">
       
       {/* Sidebar Histórico */}
       <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} flex-shrink-0 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 overflow-hidden`}>
@@ -176,10 +200,15 @@ export default function App() {
               </div>
             </div>
           </div>
-          <button onClick={toggleProfile} className="flex items-center gap-1.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-md border border-blue-200 transition-colors">
-            <Settings2 className="w-3.5 h-3.5" />
-            Perfil: {context.profile}
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={toggleProfile} className="flex items-center gap-1.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-md border border-blue-200 transition-colors">
+              <Settings2 className="w-3.5 h-3.5" />
+              Perfil: {context.profile}
+            </button>
+            <button onClick={() => setIsOpen(false)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="Fechar">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
         </header>
 
         {/* Chat Messages */}
