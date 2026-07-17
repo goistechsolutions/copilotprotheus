@@ -211,7 +211,9 @@ TOOLS = [
 
 
 
-def _has_real_data(tool_results: list) -> bool:
+def _analyze_tool_results(tool_results: list) -> str:
+    if not tool_results:
+        return "empty"
     for content in tool_results:
         if not content or not content.strip():
             continue
@@ -221,22 +223,28 @@ def _has_real_data(tool_results: list) -> bool:
                 if len(parsed) > 0:
                     first = parsed[0]
                     if isinstance(first, dict) and ("error" in first or "message" in first and "Nenhuma API" in first.get("message", "")):
-                        continue
-                    return True
+                        return "error"
+                    return "success"
+                return "empty"
             elif isinstance(parsed, dict):
-                if "items" in parsed and isinstance(parsed["items"], list) and len(parsed["items"]) > 0:
-                    return True
+                if "items" in parsed and isinstance(parsed["items"], list):
+                    if len(parsed["items"]) > 0:
+                        return "success"
+                    return "empty"
                 if any(isinstance(v, list) and len(v) > 0 for v in parsed.values()):
-                    return True
+                    return "success"
                 if "error" in parsed or "message" in parsed:
-                    continue
-                return True
+                    return "error"
+                # se eh dict mas nao tem items nem list
+                if len(parsed) > 0:
+                    return "success"
+                return "empty"
         except:
             content_lower = content.lower()
             if "error" in content_lower or "failed" in content_lower or "no content" in content_lower or "empty" in content_lower:
-                continue
-            return True
-    return False
+                return "error"
+            return "success"
+    return "empty"
 
 
 async def _call_ollama(messages: list, tenant_id: str = "default", context: Optional[dict] = None) -> str:
@@ -295,16 +303,23 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
                         "tool_call_id": tool_call_id
                     })
             
-            if _has_real_data(tool_results):
+            analysis_result = _analyze_tool_results(tool_results)
+            if analysis_result == "success":
                     messages.append({
                         "role": "system",
                         "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
                     })
-            else:
+            elif analysis_result == "error":
                 tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
                     "role": "system",
-                    "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
+                    "content": f"INSTRUCAO: A consulta no Protheus falhou com um ERRO. Retorne um JSON preenchendo o 'executive_summary' informando que ocorreu um erro ao consultar o ERP e tente descrever o erro em linguagem amigavel. NUNCA invente ou simule dados ficticios."
+                })
+            else: # empty
+                tenant_name = context.get("company", "Empresa") if context else "Empresa"
+                messages.append({
+                    "role": "system",
+                    "content": f"INSTRUCAO: A consulta no Protheus retornou VAZIA (0 registros). Isso significa que nao ha dados para os filtros ou o periodo informado. Retorne um JSON preenchendo o 'executive_summary' informando exatamente que 'Não foram encontrados dados para esta consulta no ERP'. Não diga que 'a consulta retornou apenas a confirmação', diga apenas que não há dados no momento. NUNCA invente ou simule dados ficticios."
                 })
             
             payload["messages"] = messages

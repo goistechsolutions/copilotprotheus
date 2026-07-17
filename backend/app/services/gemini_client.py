@@ -5,7 +5,7 @@ import logging
 from typing import Optional, AsyncGenerator
 from app.core.config import settings
 from app.services.protheus_service import descobrir_apis_protheus, execute_protheus_tool
-from app.services.ollama_client import _has_real_data, get_system_prompt
+from app.services.ollama_client import _analyze_tool_results, get_system_prompt
 
 logger = logging.getLogger("app.gemini")
 
@@ -201,10 +201,13 @@ async def ask_gemini(
                     }]
                 })
                 
-            if _has_real_data(tool_results):
+            analysis_result = _analyze_tool_results(tool_results)
+            if analysis_result == "success":
                 instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
+            elif analysis_result == "error":
+                instruction = "INSTRUCAO: A consulta no Protheus falhou com um ERRO. Retorne um JSON preenchendo o 'executive_summary' informando que ocorreu um erro ao consultar o ERP e tente descrever o erro em linguagem amigavel. NUNCA invente ou simule dados ficticios."
             else:
-                instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
+                instruction = "INSTRUCAO: A consulta no Protheus retornou VAZIA (0 registros). Isso significa que nao ha dados para os filtros ou o periodo informado. Retorne um JSON preenchendo o 'executive_summary' informando exatamente que 'Não foram encontrados dados para esta consulta no ERP'. Não diga que 'a consulta retornou apenas a confirmação', diga apenas que não há dados no momento. NUNCA invente ou simule dados ficticios."
                 
             contents.append({
                 "role": "user",
@@ -308,10 +311,13 @@ async def stream_gemini(
                     }]
                 })
                 
-            if _has_real_data(tool_results):
+            analysis_result = _analyze_tool_results(tool_results)
+            if analysis_result == "success":
                 instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
+            elif analysis_result == "error":
+                instruction = "INSTRUCAO: A consulta no Protheus falhou com um ERRO. Retorne um JSON preenchendo o 'executive_summary' informando que ocorreu um erro ao consultar o ERP e tente descrever o erro em linguagem amigavel. NUNCA invente ou simule dados ficticios."
             else:
-                instruction = "INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
+                instruction = "INSTRUCAO: A consulta no Protheus retornou VAZIA (0 registros). Isso significa que nao ha dados para os filtros ou o periodo informado. Retorne um JSON preenchendo o 'executive_summary' informando exatamente que 'Não foram encontrados dados para esta consulta no ERP'. Não diga que 'a consulta retornou apenas a confirmação', diga apenas que não há dados no momento. NUNCA invente ou simule dados ficticios."
                 
             contents.append({
                 "role": "user",
