@@ -227,10 +227,10 @@
           agent_password: result.agent_password
         };
 
-        // Fazer a chamada para a API (Agora rodando na Hetzner via api.copilot.elitecorp.tec.br)
+        // Fazer a chamada para a API (Agora rodando na Hetzner via copilot-api.elitecorp.tec.br)
         chrome.runtime.sendMessage({
           action: 'cprot_api_fetch',
-          url: 'https://api.copilot.elitecorp.tec.br/chat/ask',
+          url: 'https://copilot-api.elitecorp.tec.br/chat/ask',
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
