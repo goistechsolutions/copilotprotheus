@@ -112,7 +112,10 @@ async def get_protheus_token(tenant_id: str, user: str = None, password: str = N
             return token
             
     config = get_tenant_config(tenant_id)
-    token_url = f"{config['rest_url'].rstrip('/')}/api/oauth2/v1/token"
+    rest_url = config['rest_url'].strip()
+    if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
+        rest_url = "https://" + rest_url
+    token_url = f"{rest_url.rstrip('/')}/api/oauth2/v1/token"
     payload = {
         "grant_type": "password",
         "username": user if user else config['user'],
@@ -147,7 +150,11 @@ async def _execute_http_get_with_retry(url: str, params: dict, headers: dict) ->
 
 async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None) -> str:
     config = get_tenant_config(tenant_id)
-    url = f"{config['rest_url'].rstrip('/')}/{endpoint.lstrip('/')}"
+    rest_url = config['rest_url'].strip()
+    if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
+        rest_url = "https://" + rest_url
+        
+    url = f"{rest_url.rstrip('/')}/{endpoint.lstrip('/')}"
     
     # Extrai credenciais dinâmicas do contexto do usuário
     user = context.get("user") if context else None
