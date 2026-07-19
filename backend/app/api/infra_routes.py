@@ -6,19 +6,14 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/infra", tags=["Infraestrutura"])
 
-# --- Autenticação Simples de Admin (mesma lógica usada em outros routers admin) ---
-def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
-    expected_key = os.getenv("JWT_SECRET", "default")
-    if not x_admin_key or x_admin_key != expected_key:
-        raise HTTPException(status_code=401, detail="Chave admin inválida ou ausente")
-    return x_admin_key
+from app.api.admin_routes import verify_admin
 
 class ServerActionRequest(BaseModel):
     action: str  # ex: "reboot", "poweron", "poweroff", "reset"
 
 # ----------------- HETZNER CLOUD -----------------
 
-@router.get("/hetzner/servers", dependencies=[Depends(verify_admin_key)])
+@router.get("/hetzner/servers", dependencies=[Depends(verify_admin)])
 async def get_hetzner_servers():
     from pathlib import Path
     import dotenv
@@ -48,7 +43,7 @@ async def get_hetzner_servers():
             })
         return {"servers": servers}
 
-@router.post("/hetzner/servers/{server_id}/action", dependencies=[Depends(verify_admin_key)])
+@router.post("/hetzner/servers/{server_id}/action", dependencies=[Depends(verify_admin)])
 async def perform_hetzner_action(server_id: int, req: ServerActionRequest):
     from pathlib import Path
     import dotenv
@@ -74,7 +69,7 @@ async def perform_hetzner_action(server_id: int, req: ServerActionRequest):
 
 # ----------------- CLOUDFLARE -----------------
 
-@router.post("/cloudflare/purge-cache", dependencies=[Depends(verify_admin_key)])
+@router.post("/cloudflare/purge-cache", dependencies=[Depends(verify_admin)])
 async def purge_cloudflare_cache():
     from pathlib import Path
     import dotenv
