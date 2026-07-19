@@ -38,6 +38,9 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Já existe uma empresa cadastrada com este CNPJ.")
     
+    if payload.tenant_id == "":
+        payload.tenant_id = None
+        
     comp = Company(**payload.model_dump())
     db.add(comp)
     db.commit()
@@ -50,6 +53,9 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa não encontrada.")
     
+    if payload.tenant_id == "":
+        payload.tenant_id = None
+        
     update_data = payload.model_dump(exclude_unset=True)
     for k, v in update_data.items():
         setattr(comp, k, v)
