@@ -12,7 +12,8 @@ function Infra() {
     setLoadingHetzner(true);
     setHetznerError(null);
     try {
-      const response = await fetch('/api/infra/hetzner/servers');
+      const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
+      const response = await fetch('/api/infra/hetzner/servers', { headers: authHeader });
       if (response.status === 400) {
         setHasHetznerKey(false);
         setServers([]);
