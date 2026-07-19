@@ -179,17 +179,17 @@ def update_tables(tables: list = Body(...), admin: str = Depends(verify_admin)):
 @router.get("/dashboard-stats")
 def get_dashboard_stats(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
     from app.models.knowledge import AuditLog, Company, AgentUser, Memory
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     
     # Cálculos
     total_logs = db.query(AuditLog).count()
     active_companies = db.query(Company).count()
     total_users = db.query(AgentUser).count()
     total_memories = db.query(Memory).count()
-    from sqlalchemy.sql import text
     
-    # Logs das últimas 24h
-    logs_24h = db.query(AuditLog).filter(text("created_at >= NOW() - INTERVAL '1 day'")).count()
+    # Logs das últimas 24h usando datetime em Python para ser compatível com Oracle e Postgres
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    logs_24h = db.query(AuditLog).filter(AuditLog.created_at >= yesterday).count()
 
     return {
         "total_consultas": total_logs,
