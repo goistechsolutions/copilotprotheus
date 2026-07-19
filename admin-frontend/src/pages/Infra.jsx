@@ -7,6 +7,9 @@ function Infra() {
   const [loadingHetzner, setLoadingHetzner] = useState(false);
   const [hetznerError, setHetznerError] = useState(null);
   const [hasHetznerKey, setHasHetznerKey] = useState(true);
+  const [cloudflareStatus, setCloudflareStatus] = useState({ r2_active: false, cdn_active: false });
+  const [loadingCloudflare, setLoadingCloudflare] = useState(false);
+  const [purgingCache, setPurgingCache] = useState(false);
 
   const fetchServers = async () => {
     setLoadingHetzner(true);
@@ -35,8 +38,47 @@ function Infra() {
     }
   };
 
+  const fetchCloudflareStatus = async () => {
+    setLoadingCloudflare(true);
+    try {
+      const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
+      const response = await fetch('/api/infra/cloudflare/status', { headers: authHeader });
+      if (response.ok) {
+        const data = await response.json();
+        setCloudflareStatus(data);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar status do Cloudflare:", error);
+    } finally {
+      setLoadingCloudflare(false);
+    }
+  };
+
+  const handlePurgeCache = async () => {
+    if (!confirm("Tem certeza que deseja purgar o cache global da CDN? Isso pode aumentar a carga no servidor temporariamente.")) return;
+    setPurgingCache(true);
+    try {
+      const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
+      const response = await fetch('/api/infra/cloudflare/purge-cache', { 
+        method: 'POST',
+        headers: authHeader 
+      });
+      if (response.ok) {
+        alert("Cache global do Cloudflare purgado com sucesso!");
+      } else {
+        const err = await response.json();
+        alert("Erro ao purgar cache: " + err.detail);
+      }
+    } catch (error) {
+      alert("Erro de conexão ao tentar purgar cache: " + error.message);
+    } finally {
+      setPurgingCache(false);
+    }
+  };
+
   useEffect(() => {
     fetchServers();
+    fetchCloudflareStatus();
   }, []);
 
   return (
@@ -165,26 +207,74 @@ function Infra() {
               <Cloud size={24} />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-lg">Cloudflare CDN</h3>
-              <p className="text-sm text-slate-500">Gerenciamento de Cache Global</p>
+              <h3 className="font-bold text-slate-900 text-lg">Ecossistema Cloudflare</h3>
+              <p className="text-sm text-slate-500">Gerenciamento de Cache Global e R2 Storage</p>
             </div>
           </div>
           <button 
-            className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors border border-transparent hover:border-brand-100"
+            onClick={fetchCloudflareStatus}
+            disabled={loadingCloudflare}
+            className={`p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors border border-transparent hover:border-brand-100 ${loadingCloudflare ? 'opacity-50 cursor-not-allowed' : ''}`}
             title="Atualizar Status"
           >
-            <RefreshCw size={20} />
+            <RefreshCw size={20} className={loadingCloudflare ? 'animate-spin' : ''} />
           </button>
         </div>
         
         <div className="p-6 bg-slate-50">
-          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center flex flex-col items-center">
-             <Globe size={32} className="text-slate-400 mb-3" />
-             <p className="text-slate-900 font-medium">Integração com Cloudflare não ativada.</p>
-             <p className="text-sm text-slate-500 mt-1 mb-4">Adicione as credenciais no menu de Configurações para habilitar a purga de cache diretamente pelo painel.</p>
-             <button className="px-4 py-2 bg-white text-slate-700 rounded-lg text-sm font-medium border border-slate-200 hover:bg-slate-50 transition-colors">
-               Ativar Cloudflare
-             </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* R2 Storage Card */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col items-center text-center">
+              <HardDrive size={32} className={cloudflareStatus.r2_active ? "text-emerald-500 mb-3" : "text-slate-400 mb-3"} />
+              <h4 className="font-bold text-slate-900 mb-1">R2 Object Storage</h4>
+              {cloudflareStatus.r2_active ? (
+                <>
+                  <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                    <CheckCircle2 size={14} /> Ativo
+                  </div>
+                  <p className="text-sm text-slate-500">Armazenamento de documentos RAG está usando o Cloudflare R2.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-slate-900 font-medium text-sm">Integração não ativada.</p>
+                  <p className="text-xs text-slate-500 mt-1 mb-4">Adicione as chaves R2 (Access Key, Secret) nas Configurações.</p>
+                  <Link to="/config" className="px-4 py-2 bg-white text-slate-700 rounded-lg text-sm font-medium border border-slate-200 hover:bg-slate-50 transition-colors">
+                    Configurar R2
+                  </Link>
+                </>
+              )}
+            </div>
+
+            {/* CDN Cache Card */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col items-center text-center">
+              <Globe size={32} className={cloudflareStatus.cdn_active ? "text-brand-500 mb-3" : "text-slate-400 mb-3"} />
+              <h4 className="font-bold text-slate-900 mb-1">CDN Global Cache</h4>
+              {cloudflareStatus.cdn_active ? (
+                <>
+                  <div className="flex items-center gap-1.5 text-brand-600 bg-brand-50 px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                    <CheckCircle2 size={14} /> Ativo
+                  </div>
+                  <p className="text-sm text-slate-500 mb-4">A purga de cache global está habilitada para a sua Zona.</p>
+                  <button 
+                    onClick={handlePurgeCache}
+                    disabled={purgingCache}
+                    className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    {purgingCache ? 'Purgando...' : 'Purgar Cache Agora'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-slate-900 font-medium text-sm">Integração não ativada.</p>
+                  <p className="text-xs text-slate-500 mt-1 mb-4">Adicione o Zone ID e Token da API nas Configurações.</p>
+                  <Link to="/config" className="px-4 py-2 bg-white text-slate-700 rounded-lg text-sm font-medium border border-slate-200 hover:bg-slate-50 transition-colors">
+                    Configurar CDN
+                  </Link>
+                </>
+              )}
+            </div>
+
           </div>
         </div>
       </div>

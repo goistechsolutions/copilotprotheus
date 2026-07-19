@@ -75,6 +75,23 @@ async def perform_hetzner_action(server_id: int, req: ServerActionRequest):
 
 # ----------------- CLOUDFLARE -----------------
 
+@router.get("/cloudflare/status", dependencies=[Depends(verify_admin)])
+async def get_cloudflare_status():
+    from pathlib import Path
+    import dotenv
+    env_config = dotenv.dotenv_values(Path(".env"))
+    
+    # Verifica R2
+    r2_configured = bool(env_config.get("R2_ACCESS_KEY_ID") and env_config.get("R2_SECRET_ACCESS_KEY"))
+    
+    # Verifica CDN
+    cdn_configured = bool(env_config.get("CLOUDFLARE_ZONE_ID") and env_config.get("CLOUDFLARE_API_TOKEN"))
+    
+    return {
+        "r2_active": r2_configured,
+        "cdn_active": cdn_configured
+    }
+
 @router.post("/cloudflare/purge-cache", dependencies=[Depends(verify_admin)])
 async def purge_cloudflare_cache():
     from pathlib import Path
