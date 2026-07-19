@@ -24,24 +24,30 @@ async def get_hetzner_servers():
         raise HTTPException(status_code=400, detail="HETZNER_API_TOKEN não configurado no .env")
     
     headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient() as client:
-        response = await client.get("https://api.hetzner.cloud/v1/servers", headers=headers)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=f"Erro na Hetzner: {response.text}")
-        
-        data = response.json()
-        servers = []
-        for srv in data.get("servers", []):
-            servers.append({
-                "id": srv["id"],
-                "name": srv["name"],
-                "status": srv["status"],
-                "public_ip": srv["public_net"]["ipv4"]["ip"],
-                "cores": srv["server_type"]["cores"],
-                "memory": srv["server_type"]["memory"],
-                "datacenter": srv["datacenter"]["name"]
-            })
-        return {"servers": servers}
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://api.hetzner.cloud/v1/servers", headers=headers, timeout=10.0)
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail=f"Erro na Hetzner: {response.text}")
+            
+            data = response.json()
+            servers = []
+            for srv in data.get("servers", []):
+                public_net = srv.get("public_net", {})
+                ipv4 = public_net.get("ipv4", {})
+                ip = ipv4.get("ip") if ipv4 else None
+                servers.append({
+                    "id": srv.get("id"),
+                    "name": srv.get("name"),
+                    "status": srv.get("status"),
+                    "public_ip": ip,
+                    "cores": srv.get("server_type", {}).get("cores"),
+                    "memory": srv.get("server_type", {}).get("memory"),
+                    "datacenter": srv.get("datacenter", {}).get("name")
+                })
+            return {"servers": servers}
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Erro de conexão com a Hetzner: {str(e)}")
 
 @router.post("/hetzner/servers/{server_id}/action", dependencies=[Depends(verify_admin)])
 async def perform_hetzner_action(server_id: int, req: ServerActionRequest):

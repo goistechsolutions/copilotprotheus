@@ -177,12 +177,10 @@ def get_dashboard_stats(db: Session = Depends(get_db), admin: str = Depends(veri
     active_companies = db.query(Company).count()
     total_users = db.query(AgentUser).count()
     total_memories = db.query(Memory).count()
-    
-    from sqlalchemy.sql import func, text
+    from sqlalchemy.sql import text
     
     # Logs das últimas 24h
-    yesterday = func.now() - text("INTERVAL '1 day'")
-    logs_24h = db.query(AuditLog).filter(AuditLog.created_at >= yesterday).count()
+    logs_24h = db.query(AuditLog).filter(text("created_at >= NOW() - INTERVAL '1 day'")).count()
 
     return {
         "total_consultas": total_logs,
