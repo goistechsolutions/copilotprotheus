@@ -5,6 +5,7 @@ from app.services.rag_service import RAGService
 from app.crud.knowledge_crud import KnowledgeCRUD
 from app.core.audit import AuditService
 from app.core.config import settings
+from app.models.knowledge import Tenant
 import os, time, asyncio
 
 class AssistantService:
@@ -13,6 +14,20 @@ class AssistantService:
         self.rag = RAGService(db)
         self.crud = KnowledgeCRUD(db)
         self.audit = AuditService(db)
+
+    def _load_tenant_config(self, tenant_id: str) -> dict:
+        """Carrega configurações personalizadas do tenant (system_prompt, temperature)."""
+        tenant_cfg = {"system_prompt": None, "temperature": None}
+        try:
+            tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            if tenant:
+                if tenant.system_prompt:
+                    tenant_cfg["system_prompt"] = tenant.system_prompt
+                if tenant.temperature is not None:
+                    tenant_cfg["temperature"] = tenant.temperature
+        except Exception as e:
+            print(f"Aviso: Não foi possível carregar config do tenant {tenant_id}: {e}")
+        return tenant_cfg
 
     async def answer_question(self, payload, ctx: dict) -> dict:
         start_time = time.time()
@@ -23,6 +38,11 @@ class AssistantService:
 
         # 1. Obter o tenant_id (obrigatório para SaaS)
         tenant_id = ctx.get("tenant_id") or "default"
+
+        # 1.1 Carregar configurações personalizadas do tenant (system_prompt, temperature)
+        tenant_cfg = self._load_tenant_config(tenant_id)
+        ctx['tenant_system_prompt'] = tenant_cfg['system_prompt']
+        ctx['tenant_temperature'] = tenant_cfg['temperature']
 
         # 2. Fetch Documentary Context from RAG
         rag_docs = self.rag.search(question, tenant_id=tenant_id, limit=3)
@@ -141,6 +161,11 @@ class AssistantService:
 
         # 1. Obter o tenant_id (obrigatório para SaaS)
         tenant_id = ctx.get("tenant_id") or "default"
+
+        # 1.1 Carregar configurações personalizadas do tenant (system_prompt, temperature)
+        tenant_cfg = self._load_tenant_config(tenant_id)
+        ctx['tenant_system_prompt'] = tenant_cfg['system_prompt']
+        ctx['tenant_temperature'] = tenant_cfg['temperature']
 
         # 2. Fetch Documentary Context from RAG
         rag_docs = self.rag.search(question, tenant_id=tenant_id, limit=3)

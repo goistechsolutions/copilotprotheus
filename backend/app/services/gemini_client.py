@@ -136,13 +136,26 @@ async def ask_gemini(
     contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
     
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
+    
+    # Usar system_prompt personalizado do tenant, se existir
+    tenant_system_prompt = context.get("tenant_system_prompt") if context else None
+    system_instruction_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name)
+    
+    # Usar temperature personalizada do tenant, se existir
+    tenant_temperature = context.get("tenant_temperature") if context else None
+    generation_config = {}
+    if tenant_temperature is not None:
+        generation_config["temperature"] = tenant_temperature
+    
     payload = {
         "contents": contents,
         "systemInstruction": {
-            "parts": [{"text": get_system_prompt(tenant_name)}]
+            "parts": [{"text": system_instruction_text}]
         },
         "tools": GEMINI_TOOLS
     }
+    if generation_config:
+        payload["generationConfig"] = generation_config
 
     url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     
@@ -246,13 +259,26 @@ async def stream_gemini(
     contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
     
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
+    
+    # Usar system_prompt personalizado do tenant, se existir
+    tenant_system_prompt = context.get("tenant_system_prompt") if context else None
+    system_instruction_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name)
+    
+    # Usar temperature personalizada do tenant, se existir
+    tenant_temperature = context.get("tenant_temperature") if context else None
+    generation_config = {}
+    if tenant_temperature is not None:
+        generation_config["temperature"] = tenant_temperature
+    
     payload = {
         "contents": contents,
         "systemInstruction": {
-            "parts": [{"text": get_system_prompt(tenant_name)}]
+            "parts": [{"text": system_instruction_text}]
         },
         "tools": GEMINI_TOOLS
     }
+    if generation_config:
+        payload["generationConfig"] = generation_config
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         # Primeiro, fazemos chamada síncrona/não-stream para verificar se chamará ferramentas

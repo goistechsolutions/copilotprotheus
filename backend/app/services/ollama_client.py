@@ -102,7 +102,12 @@ SYSTEM_PROMPT = get_system_prompt()
 def _build_messages(question, protheus_data, intent, context, history, image=None):
     import json
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
-    msgs = [{"role": "system", "content": get_system_prompt(tenant_name)}]
+    
+    # Usar system_prompt personalizado do tenant, se existir
+    tenant_system_prompt = context.get("tenant_system_prompt") if context else None
+    system_prompt_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name)
+    
+    msgs = [{"role": "system", "content": system_prompt_text}]
     if context:
         parts = []
         for k, label in [
@@ -248,6 +253,11 @@ def _analyze_tool_results(tool_results: list) -> str:
 
 
 async def _call_ollama(messages: list, tenant_id: str = "default", context: Optional[dict] = None) -> str:
+    # Usar temperature personalizada do tenant, se existir
+    temperature = 0.0
+    if context and context.get("tenant_temperature") is not None:
+        temperature = context["tenant_temperature"]
+    
     async with httpx.AsyncClient(timeout=180.0) as client:
         payload = {
             "model": OLLAMA_MODEL, 
@@ -256,7 +266,7 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
             "keep_alive": 0,
             "tools": TOOLS,
             "options": {
-                "temperature": 0.0
+                "temperature": temperature
             }
         }
         resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)

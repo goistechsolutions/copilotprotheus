@@ -6,7 +6,10 @@ from sqlalchemy import text
 from app.crud.knowledge_crud import KnowledgeCRUD
 from app.rag.chunker import chunk_text
 
-DOCS_DIR = Path(r"C:\projeto\copilotprotheus\docs")
+# Diretórios base para documentos compartilhados e por tenant
+BASE_DOCS_DIR = Path("./docs")
+SHARED_DOCS_DIR = BASE_DOCS_DIR / "shared"
+TENANTS_DOCS_DIR = BASE_DOCS_DIR / "tenants"
 
 class IngestionService:
     def __init__(self, db: Session):
@@ -47,11 +50,19 @@ class IngestionService:
             return [{'page': 1, 'text': path.read_text(encoding='utf-8', errors='ignore')}]
         return []
 
-    def ingest(self, tenant_id: str):
+    def _get_docs_dir(self, tenant_id: str, visibility: str) -> Path:
+        """Retorna o diretório correto baseado no tenant e visibilidade."""
+        if visibility == 'shared':
+            return SHARED_DOCS_DIR
+        return TENANTS_DOCS_DIR / tenant_id
+
+    def ingest(self, tenant_id: str, visibility: str = 'tenant'):
         result = {'documents': 0, 'chunks': 0, 'errors': []}
-        if not DOCS_DIR.exists():
+        docs_dir = self._get_docs_dir(tenant_id, visibility)
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        if not docs_dir.exists():
             return result
-        for path in DOCS_DIR.rglob('*'):
+        for path in docs_dir.rglob('*'):
             if path.is_file() and path.suffix.lower() in ['.pdf', '.txt', '.md', '.html']:
                 try:
                     checksum = self.checksum_file(path)
@@ -68,7 +79,8 @@ class IngestionService:
                         'version': None,
                         'status': 'active',
                         'checksum': checksum,
-                        'language': 'pt-BR'
+                        'language': 'pt-BR',
+                        'visibility': visibility
                     })
                     if not doc:
                         continue

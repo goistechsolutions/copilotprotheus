@@ -7,26 +7,26 @@ class KnowledgeCRUD:
 
     def add_document(self, payload):
         q = text("""
-            INSERT INTO documents (tenant_id, title, source_path, source_type, module, category, version, status, checksum, language)
-            VALUES (:tenant_id, :title, :source_path, :source_type, :module, :category, :version, :status, :checksum, :language)
+            INSERT INTO documents (tenant_id, title, source_path, source_type, module, category, version, status, checksum, language, visibility)
+            VALUES (:tenant_id, :title, :source_path, :source_type, :module, :category, :version, :status, :checksum, :language, :visibility)
             RETURNING id, created_at, updated_at
         """)
         return self.db.execute(q, payload).mappings().first()
 
     def list_documents(self, tenant_id: str, limit=100):
-        q = text("SELECT * FROM documents WHERE tenant_id = :tenant_id ORDER BY created_at DESC LIMIT :limit")
+        q = text("SELECT * FROM documents WHERE (visibility = 'shared' OR (visibility = 'tenant' AND tenant_id = :tenant_id)) ORDER BY created_at DESC LIMIT :limit")
         return self.db.execute(q, {"tenant_id": tenant_id, "limit": limit}).mappings().all()
 
     def add_memory(self, payload):
         q = text("""
-            INSERT INTO memories (tenant_id, memory_key, memory_value, memory_type, scope, tags, confidence, source, expires_at)
-            VALUES (:tenant_id, :memory_key, :memory_value, :memory_type, :scope, :tags, :confidence, :source, :expires_at)
+            INSERT INTO memories (tenant_id, memory_key, memory_value, memory_type, scope, tags, confidence, source, expires_at, visibility)
+            VALUES (:tenant_id, :memory_key, :memory_value, :memory_type, :scope, :tags, :confidence, :source, :expires_at, :visibility)
             RETURNING id, created_at, updated_at
         """)
         return self.db.execute(q, payload).mappings().first()
 
     def list_memories(self, tenant_id: str, limit=100):
-        q = text("SELECT * FROM memories WHERE tenant_id = :tenant_id ORDER BY created_at DESC LIMIT :limit")
+        q = text("SELECT * FROM memories WHERE (visibility = 'shared' OR (visibility = 'tenant' AND tenant_id = :tenant_id)) ORDER BY created_at DESC LIMIT :limit")
         return self.db.execute(q, {"tenant_id": tenant_id, "limit": limit}).mappings().all()
 
     def add_audit(self, payload):

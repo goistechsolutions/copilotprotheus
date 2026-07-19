@@ -7,6 +7,7 @@ class Document(Base):
     __tablename__ = 'documents'
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    visibility = Column(String(20), nullable=False, server_default='tenant', index=True)
     title = Column(String(255), nullable=False)
     source_path = Column(String(1024), nullable=False)
     source_type = Column(String(50))
@@ -37,6 +38,7 @@ class Memory(Base):
     __tablename__ = 'memories'
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    visibility = Column(String(20), nullable=False, server_default='tenant', index=True)
     memory_key = Column(String(255), nullable=False, index=True)
     memory_value = Column(Text, nullable=False)
     memory_type = Column(String(50))
@@ -81,6 +83,7 @@ class Company(Base):
     __tablename__ = 'companies'
     __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True) # Código sequencial automático
+    tenant_id = Column(String(100), ForeignKey('public.tenants.id'), index=True, nullable=True)
     cnpj = Column(String(20), unique=True, index=True, nullable=False)
     ie = Column(String(50), nullable=True)
     razao_social = Column(String(255), nullable=False)

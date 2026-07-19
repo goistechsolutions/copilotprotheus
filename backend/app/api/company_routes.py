@@ -98,7 +98,10 @@ def api_verify_license(payload: LicenseVerifyRequest):
 
 @router.get("/companies/by-tenant/{tenant_id}", response_model=CompanyResponse)
 def get_company_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
-    comp = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
+    # Busca pela FK direta tenant_id (preferencial) ou fallback para protheus_grupo
+    comp = db.query(Company).filter(Company.tenant_id == tenant_id).first()
+    if not comp:
+        comp = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada para o tenant.")
     return comp
