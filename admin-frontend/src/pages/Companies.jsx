@@ -4,20 +4,25 @@ import { Building, Plus, Edit2, Trash2, Save, X, Search, Filter } from 'lucide-r
 
 export default function Companies() {
   const [companies, setCompanies] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({});
 
   useEffect(() => {
-    fetchCompanies();
+    fetchData();
   }, []);
 
-  const fetchCompanies = async () => {
+  const fetchData = async () => {
     try {
-      const res = await axios.get('/api/companies');
-      setCompanies(res.data || []);
+      const [compRes, tenRes] = await Promise.all([
+        axios.get('/api/companies'),
+        axios.get('/api/tenants', { auth: { username: 'admin', password: 'admin123' } })
+      ]);
+      setCompanies(compRes.data || []);
+      setTenants(tenRes.data || []);
     } catch (error) {
-      console.error("Erro ao carregar empresas:", error);
+      console.error("Erro ao carregar dados:", error);
     } finally {
       setLoading(false);
     }
@@ -34,6 +39,7 @@ export default function Companies() {
       cnpj: '',
       razao_social: '',
       protheus_grupo: '',
+      tenant_id: '',
       protheus_filial: '',
       protheus_rest_url: '',
       protheus_webapp_url: '',
@@ -50,7 +56,7 @@ export default function Companies() {
         await axios.put(`/api/companies/${editing}`, formData);
       }
       setEditing(null);
-      fetchCompanies();
+      fetchData();
     } catch (error) {
       alert("Erro ao salvar: " + (error.response?.data?.detail || error.message));
     }
@@ -60,7 +66,7 @@ export default function Companies() {
     if (confirm("Tem certeza que deseja excluir esta empresa?")) {
       try {
         await axios.delete(`/api/companies/${id}`);
-        fetchCompanies();
+        fetchData();
       } catch (error) {
         alert("Erro ao excluir.");
       }
@@ -95,7 +101,16 @@ export default function Companies() {
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.razao_social || ''} onChange={e => setFormData({...formData, razao_social: e.target.value})} />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Grupo Protheus / Tenant ID</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tenant Vinculado</label>
+                <select className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.tenant_id || ''} onChange={e => setFormData({...formData, tenant_id: e.target.value})}>
+                  <option value="">Selecione um Tenant...</option>
+                  {tenants.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Grupo Protheus (Legado)</label>
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_grupo || ''} onChange={e => setFormData({...formData, protheus_grupo: e.target.value})} />
               </div>
               <div>

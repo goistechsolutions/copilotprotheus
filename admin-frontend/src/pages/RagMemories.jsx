@@ -9,26 +9,49 @@ export default function RagMemories() {
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [tenants, setTenants] = useState([]);
+  const [selectedTenant, setSelectedTenant] = useState('default');
+  const [visibility, setVisibility] = useState('tenant');
   const fileInputRef = useRef(null);
 
   const axiosConfig = {
     auth: { username: 'admin', password: 'admin123' },
-    headers: { 'X-Tenant-Id': 'default' }
+    headers: { 'X-Tenant-Id': selectedTenant }
   };
 
   useEffect(() => {
+    fetchTenants();
+  }, []);
+
+  useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, selectedTenant, visibility]);
+
+  const fetchTenants = async () => {
+    try {
+      const res = await axios.get('/api/tenants', { auth: { username: 'admin', password: 'admin123' } });
+      setTenants(res.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar tenants:", error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
       if (activeTab === 'rag') {
-        const res = await axios.get('/api/knowledge/documents', axiosConfig);
+        const endpoint = visibility === 'shared' ? '/api/knowledge/documents/shared' : '/api/knowledge/documents';
+        const res = await axios.get(endpoint, axiosConfig);
         setDocs(res.data.items || []);
       } else {
         const res = await axios.get('/api/knowledge/memories', axiosConfig);
-        setMemories(res.data.items || []);
+        let mems = res.data.items || [];
+        if (visibility === 'shared') {
+          mems = mems.filter(m => m.visibility === 'shared');
+        } else {
+          mems = mems.filter(m => m.visibility === 'tenant');
+        }
+        setMemories(mems);
       }
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -40,7 +63,7 @@ export default function RagMemories() {
   const handleIngest = async () => {
     setIngesting(true);
     try {
-      await axios.post('/api/knowledge/ingest', {}, axiosConfig);
+      await axios.post(`/api/knowledge/ingest?visibility=${visibility}`, {}, axiosConfig);
       alert("Ingestão concluída com sucesso! Os vetores foram atualizados.");
       fetchData();
     } catch (error) {
@@ -59,7 +82,7 @@ export default function RagMemories() {
 
     setUploading(true);
     try {
-      await axios.post('/api/knowledge/upload', formData, {
+      await axios.post(`/api/knowledge/upload?visibility=${visibility}`, formData, {
         ...axiosConfig,
         headers: { ...axiosConfig.headers, 'Content-Type': 'multipart/form-data' }
       });
@@ -92,9 +115,39 @@ export default function RagMemories() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">RAG & Inteligência</h2>
-        <p className="text-slate-500">Gerencie a base de conhecimento (PDF/TXT) e os fatos persistentes aprendidos pelo LLM.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">RAG & Inteligência</h2>
+          <p className="text-slate-500">Gerencie a base de conhecimento (PDF/TXT) e os fatos persistentes aprendidos pelo LLM.</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Visibilidade</label>
+            <select 
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 shadow-sm"
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value)}
+            >
+              <option value="tenant">Exclusiva (Tenant)</option>
+              <option value="shared">Compartilhada (Global)</option>
+            </select>
+          </div>
+          {visibility === 'tenant' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Tenant Atual</label>
+              <select 
+                className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 shadow-sm min-w-[200px]"
+                value={selectedTenant}
+                onChange={(e) => setSelectedTenant(e.target.value)}
+              >
+                <option value="default">Default</option>
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -167,6 +220,7 @@ export default function RagMemories() {
                   <tr className="bg-slate-50">
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">ID</th>
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Arquivo Fonte</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Visibilidade</th>
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Formato</th>
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Status</th>
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Data de Ingestão</th>
@@ -189,6 +243,11 @@ export default function RagMemories() {
                         <td className="px-6 py-4 font-bold text-slate-900 flex items-center gap-3">
                           <div className="p-2 bg-brand-50 text-brand-600 rounded-lg border border-brand-100"><FileText size={16} /></div>
                           {doc.title || doc.source_path}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 text-xs font-bold border rounded-md ${doc.visibility === 'shared' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
+                            {doc.visibility === 'shared' ? 'Global' : 'Tenant'}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <span className="px-2.5 py-1 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 rounded-md">

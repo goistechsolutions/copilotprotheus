@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Settings, Database, LayoutDashboard, ShieldAlert, Building, Key, Brain, Cloud, UserCog, LogOut, Menu, Activity } from 'lucide-react';
+import { Settings, Database, LayoutDashboard, ShieldAlert, Building, Key, Brain, Cloud, UserCog, LogOut, Menu, Activity, Server } from 'lucide-react';
 import { useState } from 'react';
 
 import Config from './pages/Config';
@@ -8,6 +8,7 @@ import AgentRoles from './pages/AgentRoles';
 import Tables from './pages/Tables';
 import Logs from './pages/Logs';
 import Companies from './pages/Companies';
+import Tenants from './pages/Tenants';
 import Licenses from './pages/Licenses';
 import RagMemories from './pages/RagMemories';
 import Adminer from './pages/Adminer';
@@ -26,6 +27,7 @@ function Sidebar({ isOpen, setIsOpen }) {
     {
       title: 'Acesso & Licenças',
       items: [
+        { path: '/tenants', label: 'Tenants (Clientes)', icon: <Server size={18} /> },
         { path: '/companies', label: 'Empresas SaaS', icon: <Building size={18} /> },
         { path: '/agent-users', label: 'Usuários Copilot', icon: <UserCog size={18} /> },
         { path: '/agent-roles', label: 'Cargos e Permissões', icon: <ShieldAlert size={18} /> },
@@ -119,6 +121,7 @@ function Topbar({ toggleSidebar }) {
   const getPageTitle = () => {
     switch (location.pathname) {
       case '/': return 'Dashboard Analítico';
+      case '/tenants': return 'Gestão de Tenants';
       case '/companies': return 'Gestão de Empresas SaaS';
       case '/agent-users': return 'Usuários do Copilot';
       case '/agent-roles': return 'Cargos e Permissões';
@@ -167,6 +170,7 @@ function App() {
             <div className="max-w-7xl mx-auto pb-12">
               <Routes>
                 <Route path="/" element={<Logs />} />
+                <Route path="/tenants" element={<Tenants />} />
                 <Route path="/companies" element={<Companies />} />
                 <Route path="/agent-users" element={<AgentUsers />} />
                 <Route path="/agent-roles" element={<AgentRoles />} />
