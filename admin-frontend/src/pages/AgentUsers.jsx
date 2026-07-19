@@ -5,6 +5,7 @@ import { User, Plus, Trash2, Save, X, Edit2, Users } from 'lucide-react';
 export default function AgentUsers() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({});
@@ -19,12 +20,14 @@ export default function AgentUsers() {
 
   const fetchUsersAndRoles = async () => {
     try {
-      const [resUsers, resRoles] = await Promise.all([
+      const [resUsers, resRoles, resTenants] = await Promise.all([
         axios.get('/api/admin/agent-users', axiosConfig),
-        axios.get('/api/admin/agent-roles', axiosConfig)
+        axios.get('/api/admin/agent-roles', axiosConfig),
+        axios.get('/api/tenants', axiosConfig)
       ]);
       setUsers(resUsers.data || []);
       setRoles(resRoles.data || []);
+      setTenants(resTenants.data || []);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
     } finally {
@@ -111,14 +114,18 @@ export default function AgentUsers() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tenant ID (Grupo)</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: pilot_rodolltda"
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Empresa (Tenant)</label>
+                <select 
                   className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" 
-                  value={formData.tenant_id} 
-                  onChange={e => setFormData({...formData, tenant_id: e.target.value})} 
-                />
+                  value={formData.tenant_id || ''} 
+                  onChange={e => setFormData({...formData, tenant_id: e.target.value})}
+                >
+                  <option value="">Selecione uma Empresa...</option>
+                  <option value="default">Global (Padrão)</option>
+                  {tenants.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuário Copilot</label>
@@ -149,8 +156,8 @@ export default function AgentUsers() {
                 >
                   <option value="USER">USER (Padrão)</option>
                   <option value="ADMIN">ADMIN</option>
-                  {roles.filter(r => r.name !== 'USER' && r.name !== 'ADMIN').map(r => (
-                    <option key={r.id} value={r.name}>{r.name} ({r.tenant_id})</option>
+                  {roles.filter(r => r.name !== 'USER' && r.name !== 'ADMIN' && (r.tenant_id === 'default' || r.tenant_id === formData.tenant_id)).map(r => (
+                    <option key={r.id} value={r.name}>{r.name} {r.tenant_id !== 'default' ? '(Empresa)' : '(Global)'}</option>
                   ))}
                 </select>
               </div>
@@ -166,7 +173,7 @@ export default function AgentUsers() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Tenant ID</th>
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Empresa (Tenant)</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Usuário Copilot</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Papel</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Data de Criação</th>
@@ -176,7 +183,9 @@ export default function AgentUsers() {
             <tbody className="divide-y divide-slate-100">
               {users.map(u => (
                 <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-slate-600 font-mono">{u.tenant_id}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-slate-600 font-mono">
+                    {u.tenant_id === 'default' ? 'Global' : (tenants.find(t => t.id === u.tenant_id)?.name || u.tenant_id)}
+                  </td>
                   <td className="px-6 py-4 text-sm text-slate-900 font-bold">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
