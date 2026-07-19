@@ -113,6 +113,28 @@ export default function RagMemories() {
     }
   };
 
+  const handleDeleteMemory = async (id) => {
+    if (!window.confirm("Tem certeza que deseja excluir esta memória permanentemente?")) return;
+    try {
+      await axios.delete(`/api/knowledge/memories/${id}`, axiosConfig);
+      alert("Memória excluída com sucesso.");
+      fetchData();
+    } catch (error) {
+      alert("Erro ao excluir memória. " + (error.response?.data?.detail || ""));
+    }
+  };
+
+  const handleDeleteDocument = async (id) => {
+    if (!window.confirm("Tem certeza que deseja excluir este documento (e seus vetores) permanentemente?")) return;
+    try {
+      await axios.delete(`/api/knowledge/documents/${id}`, axiosConfig);
+      alert("Documento excluído com sucesso.");
+      fetchData();
+    } catch (error) {
+      alert("Erro ao excluir documento. " + (error.response?.data?.detail || ""));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
@@ -224,21 +246,22 @@ export default function RagMemories() {
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Formato</th>
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Status</th>
                     <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Data de Ingestão</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-slate-500 animate-pulse font-medium">Carregando documentos...</td></tr>
+                    <tr><td colSpan="7" className="p-8 text-center text-slate-500 animate-pulse font-medium">Carregando documentos...</td></tr>
                   ) : docs.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="p-12 text-center flex flex-col items-center">
+                      <td colSpan="7" className="p-12 text-center flex flex-col items-center">
                         <FileText size={48} className="text-slate-300 mb-4 opacity-50" />
                         <p className="text-slate-500 font-medium">Sua base de conhecimento está vazia.</p>
                       </td>
                     </tr>
                   ) : (
                     docs.map(doc => (
-                      <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors group">
                         <td className="px-6 py-4 text-sm font-mono text-slate-500">#{doc.id}</td>
                         <td className="px-6 py-4 font-bold text-slate-900 flex items-center gap-3">
                           <div className="p-2 bg-brand-50 text-brand-600 rounded-lg border border-brand-100"><FileText size={16} /></div>
@@ -261,6 +284,15 @@ export default function RagMemories() {
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-500 font-medium text-right">
                           {new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 border border-transparent hover:border-red-100" 
+                            title="Excluir Documento"
+                          >
+                            <XCircle size={18} />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -339,7 +371,11 @@ export default function RagMemories() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 border border-transparent hover:border-red-100" title="Esquecer Fato">
+                        <button 
+                          onClick={() => handleDeleteMemory(m.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 border border-transparent hover:border-red-100" 
+                          title="Esquecer Fato"
+                        >
                           <XCircle size={18} />
                         </button>
                       </td>
