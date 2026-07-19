@@ -43,9 +43,13 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         
     comp = Company(**payload.model_dump())
     db.add(comp)
-    db.commit()
-    db.refresh(comp)
-    return comp
+    try:
+        db.commit()
+        db.refresh(comp)
+        return comp
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Erro no Banco de Dados: {str(e)}")
 
 @router.put("/companies/{company_id}", response_model=CompanyResponse)
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
