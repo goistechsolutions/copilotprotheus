@@ -11,7 +11,7 @@ OLLAMA_URL   = settings.ollama_url
 OLLAMA_MODEL = settings.ollama_model
 LLM_BACKEND  = settings.llm_backend
 
-def get_system_prompt(tenant_name: str = "Empresa"):
+def get_system_prompt(tenant_name: str = "Empresa", tenant_id: str = "default"):
     from datetime import datetime
     hoje_str = datetime.now().strftime("%d/%m/%Y")
     hoje_db = datetime.now().strftime("%Y%m%d")
@@ -37,17 +37,19 @@ DIRETRIZES DE TOOLS:
 TABELAS REAIS DO BANCO (USE ESTAS INFORMACOES):
 """
     try:
-        import json
-        from pathlib import Path
-        tables_path = Path("tables_config.json")
-        if tables_path.exists():
-            with open(tables_path, "r", encoding="utf-8") as f:
-                tables = json.load(f)
+        from app.db.database import SessionLocal
+        from app.models.knowledge import AllowedTable
+        
+        db = SessionLocal()
+        tables = db.query(AllowedTable).filter(AllowedTable.tenant_id == tenant_id).all()
+        if tables:
             for idx, t in enumerate(tables, 1):
-                base_prompt += f"{idx}. {t.get('description', '')}: {t.get('alias', '')} ({t.get('tipo', '')}: {t.get('fields', '')})\n"
+                base_prompt += f"{idx}. {t.description}: {t.alias} ({t.tipo}: {t.fields})\n"
         else:
             base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
-    except Exception:
+        db.close()
+    except Exception as e:
+        print(f"Erro ao buscar tabelas no banco: {e}")
         base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
 
     base_prompt += """
@@ -102,10 +104,11 @@ SYSTEM_PROMPT = get_system_prompt()
 def _build_messages(question, protheus_data, intent, context, history, image=None):
     import json
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
+    tenant_id = context.get("tenant_id", "default") if context else "default"
     
     # Usar system_prompt personalizado do tenant, se existir
     tenant_system_prompt = context.get("tenant_system_prompt") if context else None
-    system_prompt_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name)
+    system_prompt_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name, tenant_id)
     
     msgs = [{"role": "system", "content": system_prompt_text}]
     if context:

@@ -136,10 +136,11 @@ async def ask_gemini(
     contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
     
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
+    tenant_id = context.get("tenant_id", "default") if context else "default"
     
     # Usar system_prompt personalizado do tenant, se existir
     tenant_system_prompt = context.get("tenant_system_prompt") if context else None
-    system_instruction_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name)
+    system_instruction_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name, tenant_id)
     
     # Usar temperature personalizada do tenant, se existir
     tenant_temperature = context.get("tenant_temperature") if context else None
@@ -259,10 +260,11 @@ async def stream_gemini(
     contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
     
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
+    tenant_id = context.get("tenant_id", "default") if context else "default"
     
     # Usar system_prompt personalizado do tenant, se existir
     tenant_system_prompt = context.get("tenant_system_prompt") if context else None
-    system_instruction_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name)
+    system_instruction_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name, tenant_id)
     
     # Usar temperature personalizada do tenant, se existir
     tenant_temperature = context.get("tenant_temperature") if context else None

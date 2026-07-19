@@ -7,7 +7,7 @@ import dotenv
 from pathlib import Path
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.knowledge import AuditLog, Tenant, Company
+from app.models.knowledge import AuditLog, Tenant, Company, AllowedTable
 from app.core.config import settings
 
 router = APIRouter()
@@ -152,25 +152,45 @@ def update_config(update: ConfigUpdate, admin: str = Depends(verify_admin)):
     return {"success": True, "message": f"Chave {update.key} atualizada."}
 
 
-# --- Endpoints de Tabelas (tables_config.json) ---
+# --- Endpoints de Tabelas (Banco de Dados) ---
 
 @router.get("/tables")
-def get_tables(admin: str = Depends(verify_admin)):
-    """Retorna as tabelas permitidas"""
-    if not TABLES_CONFIG_PATH.exists():
-        with open(TABLES_CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(DEFAULT_TABLES, f, indent=4)
+def get_tables(tenant_id: str = "default", db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    """Retorna as tabelas permitidas por tenant"""
+    tables = db.query(AllowedTable).filter(AllowedTable.tenant_id == tenant_id).all()
+    if not tables:
+        # Retorna o default se não tiver nada salvo
         return {"tables": DEFAULT_TABLES}
         
-    with open(TABLES_CONFIG_PATH, "r", encoding="utf-8") as f:
-        tables = json.load(f)
-    return {"tables": tables}
+    result = []
+    for t in tables:
+        result.append({
+            "id": t.id,
+            "alias": t.alias,
+            "description": t.description,
+            "tipo": t.tipo,
+            "fields": t.fields
+        })
+    return {"tables": result}
 
 @router.post("/tables")
-def update_tables(tables: list = Body(...), admin: str = Depends(verify_admin)):
-    """Atualiza as tabelas permitidas"""
-    with open(TABLES_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(tables, f, indent=4)
+def update_tables(tables: list = Body(...), tenant_id: str = Body(..., embed=True), db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    """Atualiza as tabelas permitidas por tenant"""
+    # Deleta as antigas
+    db.query(AllowedTable).filter(AllowedTable.tenant_id == tenant_id).delete()
+    
+    # Insere as novas
+    for t in tables:
+        new_table = AllowedTable(
+            tenant_id=tenant_id,
+            alias=t.get("alias", ""),
+            description=t.get("description", ""),
+            tipo=t.get("tipo", ""),
+            fields=t.get("fields", "")
+        )
+        db.add(new_table)
+    
+    db.commit()
     return {"success": True, "message": "Tabelas atualizadas com sucesso."}
 
 

@@ -125,3 +125,14 @@ class AgentRole(Base):
     name = Column(String(50), nullable=False)
     permissions = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class AllowedTable(Base):
+    __tablename__ = 'allowed_tables'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    alias = Column(String(50), nullable=False)
+    description = Column(String(255), nullable=True)
+    tipo = Column(String(100), nullable=True)
+    fields = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
