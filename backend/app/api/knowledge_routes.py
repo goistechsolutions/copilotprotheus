@@ -39,16 +39,23 @@ def upload_document(
     visibility: str = Query("tenant", description="'shared' para documentos globais, 'tenant' para exclusivos"),
     is_admin: bool = Depends(verify_admin_if_shared)
 ):
-    # Salvar arquivo na subpasta correta do tenant (isolamento por empresa)
-    if visibility == 'shared':
-        docs_dir = SHARED_DOCS_DIR
-    else:
-        docs_dir = TENANTS_DOCS_DIR / x_tenant_id
+    from app.services.r2_client import R2Client
+    import tempfile
+    import os
     
-    docs_dir.mkdir(parents=True, exist_ok=True)
-    file_path = docs_dir / file.filename
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    prefix = 'shared' if visibility == 'shared' else f'tenants/{x_tenant_id}'
+    object_name = f"{prefix}/{file.filename}"
+    
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+        
+    r2 = R2Client()
+    success = r2.upload_file(tmp_path, object_name)
+    os.remove(tmp_path)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Erro ao enviar arquivo para o Cloudflare R2")
     
     service = IngestionService(db)
     return service.ingest(tenant_id=x_tenant_id, visibility=visibility)
@@ -90,7 +97,7 @@ def delete_document(
     crud = KnowledgeCRUD(db)
     # Tenta descobrir a visibilidade para validar
     from sqlalchemy import text
-    q = text("SELECT visibility FROM documents WHERE id = :id")
+    q = text("SELECT visibility, source_path FROM documents WHERE id = :id")
     doc = db.execute(q, {"id": document_id}).mappings().first()
     if doc:
         verify_admin_if_shared(doc["visibility"], credentials)
@@ -98,6 +105,12 @@ def delete_document(
     deleted = crud.delete_document(document_id, x_tenant_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Documento não encontrado ou sem permissão")
+        
+    if doc and doc.get("source_path") and doc["source_path"].startswith("r2://"):
+        from app.services.r2_client import R2Client
+        object_name = doc["source_path"].replace("r2://", "")
+        R2Client().delete_file(object_name)
+        
     return {"message": "Documento excluído com sucesso", "id": document_id}
 
 @router.get('/memories')

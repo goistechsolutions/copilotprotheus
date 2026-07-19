@@ -39,10 +39,18 @@ class R2Client:
             print(f"Error downloading file from R2: {e}")
             return False
             
-    def list_files(self) -> list:
+    def list_files_by_prefix(self, prefix: str = "") -> list:
         try:
-            response = self.s3.list_objects_v2(Bucket=self.bucket_name)
-            return [obj['Key'] for obj in response.get('Contents', [])]
+            response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=prefix)
+            return [obj['Key'] for obj in response.get('Contents', []) if not obj['Key'].endswith('/')]
         except Exception as e:
-            print(f"Error listing files in R2: {e}")
+            print(f"Error listing files in R2 with prefix '{prefix}': {e}")
             return []
+
+    def delete_file(self, object_name: str) -> bool:
+        try:
+            self.s3.delete_object(Bucket=self.bucket_name, Key=object_name)
+            return True
+        except Exception as e:
+            print(f"Error deleting file from R2: {e}")
+            return False

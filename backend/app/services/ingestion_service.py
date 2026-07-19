@@ -57,57 +57,85 @@ class IngestionService:
         return TENANTS_DOCS_DIR / tenant_id
 
     def ingest(self, tenant_id: str, visibility: str = 'tenant'):
+        from app.services.r2_client import R2Client
+        import tempfile
+        import os
+        
         result = {'documents': 0, 'chunks': 0, 'errors': []}
-        docs_dir = self._get_docs_dir(tenant_id, visibility)
-        docs_dir.mkdir(parents=True, exist_ok=True)
-        if not docs_dir.exists():
+        r2 = R2Client()
+        prefix = 'shared/' if visibility == 'shared' else f'tenants/{tenant_id}/'
+        
+        files = r2.list_files_by_prefix(prefix)
+        if not files:
             return result
-        for path in docs_dir.rglob('*'):
-            if path.is_file() and path.suffix.lower() in ['.pdf', '.txt', '.md', '.html']:
-                try:
-                    checksum = self.checksum_file(path)
-                    existing = self.db.execute(text("SELECT id FROM documents WHERE checksum = :checksum"), {"checksum": checksum}).mappings().first()
-                    if existing:
-                        continue
-                    doc = self.crud.add_document({
-                        'tenant_id': tenant_id,
-                        'title': path.stem,
-                        'source_path': str(path),
-                        'source_type': 'file',
-                        'module': None,
-                        'category': None,
-                        'version': None,
-                        'status': 'active',
-                        'checksum': checksum,
-                        'language': 'pt-BR',
-                        'visibility': visibility
-                    })
-                    if not doc:
-                        continue
-                    result['documents'] += 1
-                    extracted = self.extract_text(path)
-                    for item in extracted:
-                        chunks = chunk_text(item['text'])
-                        for idx, chunk in enumerate(chunks):
-                            vec = self._get_embedding(chunk)
-                            if not vec:
-                                continue
-                            self.db.execute(text("""
-                                INSERT INTO document_chunks (document_id, chunk_order, content, token_count, embedding_model, vector, page_number, section)
-                                VALUES (:document_id, :chunk_order, :content, :token_count, :embedding_model, :vector, :page_number, :section)
-                            """), {
-                                'document_id': doc['id'],
-                                'chunk_order': idx,
-                                'content': chunk,
-                                'token_count': len(chunk.split()),
-                                'embedding_model': 'llama3',
-                                'vector': str(vec),
-                                'page_number': item['page'],
-                                'section': None
-                            })
-                            result['chunks'] += 1
-                    self.db.commit()
-                except Exception as e:
-                    self.db.rollback()
-                    result['errors'].append(f'{path}: {e}')
+            
+        for object_name in files:
+            ext = Path(object_name).suffix.lower()
+            if ext not in ['.pdf', '.txt', '.md', '.html']:
+                continue
+                
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                tmp_path = Path(tmp.name)
+            
+            try:
+                success = r2.download_file(object_name, str(tmp_path))
+                if not success:
+                    raise Exception(f"Failed to download {object_name} from R2")
+                    
+                checksum = self.checksum_file(tmp_path)
+                existing = self.db.execute(text("SELECT id FROM documents WHERE checksum = :checksum"), {"checksum": checksum}).mappings().first()
+                if existing:
+                    os.remove(str(tmp_path))
+                    continue
+                    
+                title = Path(object_name).stem
+                doc = self.crud.add_document({
+                    'tenant_id': tenant_id,
+                    'title': title,
+                    'source_path': f"r2://{object_name}",
+                    'source_type': 'file',
+                    'module': None,
+                    'category': None,
+                    'version': None,
+                    'status': 'active',
+                    'checksum': checksum,
+                    'language': 'pt-BR',
+                    'visibility': visibility
+                })
+                
+                if not doc:
+                    os.remove(str(tmp_path))
+                    continue
+                    
+                result['documents'] += 1
+                extracted = self.extract_text(tmp_path)
+                for item in extracted:
+                    chunks = chunk_text(item['text'])
+                    for idx, chunk in enumerate(chunks):
+                        vec = self._get_embedding(chunk)
+                        if not vec:
+                            continue
+                        self.db.execute(text("""
+                            INSERT INTO document_chunks (document_id, chunk_order, content, token_count, embedding_model, vector, page_number, section)
+                            VALUES (:document_id, :chunk_order, :content, :token_count, :embedding_model, :vector, :page_number, :section)
+                        """), {
+                            'document_id': doc['id'],
+                            'chunk_order': idx,
+                            'content': chunk,
+                            'token_count': len(chunk.split()),
+                            'embedding_model': 'llama3',
+                            'vector': str(vec),
+                            'page_number': item['page'],
+                            'section': None
+                        })
+                        result['chunks'] += 1
+                self.db.commit()
+                os.remove(str(tmp_path))
+                
+            except Exception as e:
+                self.db.rollback()
+                result['errors'].append(f'{object_name}: {e}')
+                if tmp_path.exists():
+                    os.remove(str(tmp_path))
+                    
         return result
