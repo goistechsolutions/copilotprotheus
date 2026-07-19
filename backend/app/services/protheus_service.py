@@ -22,15 +22,18 @@ def get_tenant_config(tenant_id: str) -> dict:
     from app.models.knowledge import Company
     db = SessionLocal()
     try:
-        # Busca no Company primeiro (SaaS)
         company = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
         if company and company.protheus_rest_url:
+            pwd = ""
+            if company.protheus_password:
+                pwd = decrypt_password(company.protheus_password)
+                
             return {
                 "rest_url": company.protheus_rest_url,
                 "webapp_url": company.protheus_webapp_url,
                 "vscode_server_url": "",
-                "user": company.protheus_usuario or settings.protheus_user,
-                "password": settings.protheus_password, # Fallback, pois a senha do usuario e passada dinamicamente
+                "user": company.protheus_usuario or "",
+                "password": pwd,
                 "auth_mode": "basic"
             }
             
@@ -49,18 +52,7 @@ def get_tenant_config(tenant_id: str) -> dict:
     finally:
         db.close()
         
-    if settings.protheus_rest_url:
-        logger.warning(f"Tenant {tenant_id} nao encontrado no BD. Usando fallback global do .env.")
-        return {
-            "rest_url": settings.protheus_rest_url,
-            "webapp_url": settings.webapp_url,
-            "vscode_server_url": settings.vscode_server_url,
-            "user": settings.protheus_user,
-            "password": settings.protheus_password,
-            "auth_mode": settings.auth_mode or "basic"
-        }
-        
-    raise ValueError(f"Configurações do Protheus não encontradas para o tenant_id: {tenant_id}")
+    raise ValueError(f"Configurações do Protheus não encontradas no Banco de Dados para o tenant_id: {tenant_id}. Por favor, configure a URL e a Senha no painel administrativo.")
 
 async def descobrir_apis_protheus(palavra_chave: str) -> str:
     cache_path = os.path.join(os.path.dirname(__file__), "endpoints_cache.json")

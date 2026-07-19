@@ -12,6 +12,7 @@ def run_migration():
         try:
             conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_rest_url VARCHAR(1024);"))
             conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_webapp_url VARCHAR(1024);"))
+            conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_password VARCHAR(255);"))
             conn.commit()
             print("[OK] Migracao concluida com sucesso!")
         except Exception as e:

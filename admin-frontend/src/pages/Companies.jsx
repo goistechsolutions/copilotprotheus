@@ -41,6 +41,8 @@ export default function Companies() {
       protheus_grupo: '',
       tenant_id: '',
       protheus_filial: '',
+      protheus_usuario: '',
+      protheus_password: '',
       protheus_rest_url: '',
       protheus_webapp_url: '',
       licenca_uso: '',
@@ -116,6 +118,14 @@ export default function Companies() {
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Filial</label>
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_filial || ''} onChange={e => setFormData({...formData, protheus_filial: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuário Protheus</label>
+                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_usuario || ''} onChange={e => setFormData({...formData, protheus_usuario: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Senha Protheus (Nova)</label>
+                <input type="password" placeholder={editing === 'new' ? "Obrigatório" : "Deixe em branco para manter a atual"} className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_password || ''} onChange={e => setFormData({...formData, protheus_password: e.target.value})} />
               </div>
               <div className="col-span-1 md:col-span-2">
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">URL Portal REST</label>

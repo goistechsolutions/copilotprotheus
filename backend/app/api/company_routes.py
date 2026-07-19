@@ -8,6 +8,7 @@ from app.core.config import settings
 from typing import List, Optional
 from datetime import datetime
 import jwt
+from app.core.security import encrypt_password
 
 router = APIRouter(tags=["companies"])
 
@@ -41,6 +42,9 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     if payload.tenant_id == "":
         payload.tenant_id = None
         
+    if payload.protheus_password:
+        payload.protheus_password = encrypt_password(payload.protheus_password)
+        
     comp = Company(**payload.model_dump())
     db.add(comp)
     try:
@@ -61,6 +65,10 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         payload.tenant_id = None
         
     update_data = payload.model_dump(exclude_unset=True)
+    
+    if "protheus_password" in update_data and update_data["protheus_password"]:
+        update_data["protheus_password"] = encrypt_password(update_data["protheus_password"])
+        
     for k, v in update_data.items():
         setattr(comp, k, v)
         

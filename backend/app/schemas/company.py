@@ -22,7 +22,7 @@ class CompanyBase(BaseModel):
     tenant_id: Optional[str] = None
 
 class CompanyCreate(CompanyBase):
-    pass
+    protheus_password: Optional[str] = None
 
 class CompanyUpdate(BaseModel):
     cnpj: Optional[str] = None
@@ -37,6 +37,7 @@ class CompanyUpdate(BaseModel):
     protheus_filial: Optional[str] = None
     protheus_ambientes: Optional[str] = None
     protheus_usuario: Optional[str] = None
+    protheus_password: Optional[str] = None
     protheus_rest_url: Optional[str] = None
     protheus_webapp_url: Optional[str] = None
     licenca_uso: Optional[str] = None
