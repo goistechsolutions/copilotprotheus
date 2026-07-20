@@ -230,7 +230,7 @@
         // Fazer a chamada para a API (Agora rodando na Hetzner via copilot-api.elitecorp.tec.br)
         chrome.runtime.sendMessage({
           action: 'cprot_api_fetch',
-          url: 'https://copilot-api.elitecorp.tec.br/chat/ask',
+          url: 'https://copilot-api.elitecorp.tec.br/api/ask',
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
