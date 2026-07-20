@@ -31,7 +31,7 @@ class RAGService:
                 SELECT d.title, d.source_path, dc.page_number, dc.content
                 FROM document_chunks dc
                 JOIN documents d ON d.id = dc.document_id
-                WHERE d.tenant_id = :tenant_id AND ({like_clauses})
+                WHERE (d.visibility = 'shared' OR (d.visibility = 'tenant' AND d.tenant_id = :tenant_id)) AND ({like_clauses})
                 ORDER BY dc.created_at DESC
                 LIMIT :limit
             """)
@@ -45,7 +45,7 @@ class RAGService:
             SELECT d.title, d.source_path, dc.page_number, dc.content
             FROM document_chunks dc
             JOIN documents d ON d.id = dc.document_id
-            WHERE dc.vector IS NOT NULL AND d.tenant_id = :tenant_id
+            WHERE dc.vector IS NOT NULL AND (d.visibility = 'shared' OR (d.visibility = 'tenant' AND d.tenant_id = :tenant_id))
             ORDER BY dc.vector <=> :embedding
             LIMIT :limit
         """)

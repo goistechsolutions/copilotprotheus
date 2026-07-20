@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Plus, Trash2, Save, Database } from 'lucide-react';
+import { Plus, Trash2, Save, Database, Building2 } from 'lucide-react';
 
 export default function Tables() {
+  const [tenants, setTenants] = useState([]);
+  const [selectedTenant, setSelectedTenant] = useState('default');
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -12,12 +14,32 @@ export default function Tables() {
   };
 
   useEffect(() => {
-    fetchTables();
+    fetchTenants();
   }, []);
 
-  const fetchTables = async () => {
+  useEffect(() => {
+    if (selectedTenant) {
+      fetchTables(selectedTenant);
+    }
+  }, [selectedTenant]);
+
+  const fetchTenants = async () => {
     try {
-      const res = await axios.get('/api/admin/tables', axiosConfig);
+      const res = await axios.get('/api/admin/tenants', axiosConfig);
+      setTenants(res.data.tenants || []);
+      // If we want to auto-select the first tenant that is not default, we could:
+      // if (res.data.tenants && res.data.tenants.length > 0) {
+      //   setSelectedTenant(res.data.tenants[0].tenant_id);
+      // }
+    } catch (error) {
+      console.error("Erro ao carregar tenants:", error);
+    }
+  };
+
+  const fetchTables = async (tenantId) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`/api/admin/tables?tenant_id=${tenantId}`, axiosConfig);
       setTables(res.data.tables || []);
     } catch (error) {
       console.error("Erro ao carregar tabelas:", error);
@@ -29,7 +51,7 @@ export default function Tables() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await axios.post('/api/admin/tables', tables, axiosConfig);
+      await axios.post('/api/admin/tables', { tables: tables, tenant_id: selectedTenant }, axiosConfig);
       alert("Tabelas atualizadas com sucesso!");
     } catch (error) {
       alert("Erro ao salvar tabelas.");
@@ -54,26 +76,51 @@ export default function Tables() {
     setTables(newTables);
   };
 
-  if (loading) return <div className="p-8 text-slate-500 flex justify-center"><div className="animate-pulse font-medium text-brand-600">Carregando tabelas...</div></div>;
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Tabelas Permitidas</h2>
-          <p className="text-slate-500">Defina quais tabelas do Protheus a IA do Copilot tem permissão para ler.</p>
+          <p className="text-slate-500">Defina quais tabelas do Protheus a IA do Copilot tem permissão para ler por Empresa (Tenant).</p>
         </div>
         <button 
           onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-sm shrink-0"
+          disabled={saving || loading}
+          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-sm shrink-0 disabled:opacity-50"
         >
           <Save size={18} />
           {saving ? "Salvando..." : "Salvar Configuração"}
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* Tenant Selector */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col sm:flex-row items-center gap-4">
+        <div className="bg-brand-50 w-12 h-12 rounded-xl flex items-center justify-center shrink-0">
+          <Building2 className="text-brand-600" size={24} />
+        </div>
+        <div className="flex-1 w-full">
+          <label className="block text-sm font-semibold text-slate-700 mb-1">Selecione o Tenant (Empresa):</label>
+          <select 
+            value={selectedTenant}
+            onChange={(e) => setSelectedTenant(e.target.value)}
+            className="w-full sm:w-80 bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-2.5 transition-all"
+          >
+            <option value="default">Default (Padrão Global)</option>
+            {tenants.map(t => (
+              <option key={t.id} value={t.tenant_id}>
+                {t.name} ({t.tenant_id})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+        {loading && (
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex items-center justify-center">
+            <div className="animate-pulse font-medium text-brand-600">Carregando tabelas do Tenant...</div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -141,7 +188,7 @@ export default function Tables() {
                 <tr>
                   <td colSpan="5" className="px-6 py-12 text-center">
                     <Database size={48} className="mx-auto text-slate-300 mb-3 opacity-50" />
-                    <p className="text-slate-500 font-medium">Nenhuma tabela permitida cadastrada.</p>
+                    <p className="text-slate-500 font-medium">Nenhuma tabela permitida cadastrada para este Tenant.</p>
                   </td>
                 </tr>
               )}

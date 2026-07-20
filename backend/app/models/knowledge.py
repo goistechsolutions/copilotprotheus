@@ -7,6 +7,7 @@ class Document(Base):
     __tablename__ = 'documents'
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    visibility = Column(String(20), nullable=False, server_default='tenant', index=True)
     title = Column(String(255), nullable=False)
     source_path = Column(String(1024), nullable=False)
     source_type = Column(String(50))
@@ -37,6 +38,7 @@ class Memory(Base):
     __tablename__ = 'memories'
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    visibility = Column(String(20), nullable=False, server_default='tenant', index=True)
     memory_key = Column(String(255), nullable=False, index=True)
     memory_value = Column(Text, nullable=False)
     memory_type = Column(String(50))
@@ -81,6 +83,7 @@ class Company(Base):
     __tablename__ = 'companies'
     __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True) # Código sequencial automático
+    tenant_id = Column(String(100), ForeignKey('public.tenants.id'), index=True, nullable=True)
     cnpj = Column(String(20), unique=True, index=True, nullable=False)
     ie = Column(String(50), nullable=True)
     razao_social = Column(String(255), nullable=False)
@@ -95,6 +98,7 @@ class Company(Base):
     protheus_filial = Column(String(50), nullable=False)   # Código de filial
     protheus_ambientes = Column(String(255), nullable=True, server_default='producao') # Ambientes (ex: "producao,validacao")
     protheus_usuario = Column(String(100), nullable=True) # Código de usuário
+    protheus_password = Column(String(255), nullable=True) # Senha criptografada do usuário
     protheus_rest_url = Column(String(1024), nullable=True) # URL do portal REST do Protheus
     protheus_webapp_url = Column(String(1024), nullable=True) # URL do WebClient/WebApp do Protheus
     licenca_uso = Column(Text, nullable=True) # Usage license token
@@ -120,4 +124,15 @@ class AgentRole(Base):
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
     name = Column(String(50), nullable=False)
     permissions = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class AllowedTable(Base):
+    __tablename__ = 'allowed_tables'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    alias = Column(String(50), nullable=False)
+    description = Column(String(255), nullable=True)
+    tipo = Column(String(100), nullable=True)
+    fields = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -11,7 +11,7 @@ OLLAMA_URL   = settings.ollama_url
 OLLAMA_MODEL = settings.ollama_model
 LLM_BACKEND  = settings.llm_backend
 
-def get_system_prompt(tenant_name: str = "Empresa"):
+def get_system_prompt(tenant_name: str = "Empresa", tenant_id: str = "default"):
     from datetime import datetime
     hoje_str = datetime.now().strftime("%d/%m/%Y")
     hoje_db = datetime.now().strftime("%Y%m%d")
@@ -37,17 +37,19 @@ DIRETRIZES DE TOOLS:
 TABELAS REAIS DO BANCO (USE ESTAS INFORMACOES):
 """
     try:
-        import json
-        from pathlib import Path
-        tables_path = Path("tables_config.json")
-        if tables_path.exists():
-            with open(tables_path, "r", encoding="utf-8") as f:
-                tables = json.load(f)
+        from app.db.database import SessionLocal
+        from app.models.knowledge import AllowedTable
+        
+        db = SessionLocal()
+        tables = db.query(AllowedTable).filter(AllowedTable.tenant_id == tenant_id).all()
+        if tables:
             for idx, t in enumerate(tables, 1):
-                base_prompt += f"{idx}. {t.get('description', '')}: {t.get('alias', '')} ({t.get('tipo', '')}: {t.get('fields', '')})\n"
+                base_prompt += f"{idx}. {t.description}: {t.alias} ({t.tipo}: {t.fields})\n"
         else:
             base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
-    except Exception:
+        db.close()
+    except Exception as e:
+        print(f"Erro ao buscar tabelas no banco: {e}")
         base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
 
     base_prompt += """
@@ -102,7 +104,13 @@ SYSTEM_PROMPT = get_system_prompt()
 def _build_messages(question, protheus_data, intent, context, history, image=None):
     import json
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
-    msgs = [{"role": "system", "content": get_system_prompt(tenant_name)}]
+    tenant_id = context.get("tenant_id", "default") if context else "default"
+    
+    # Usar system_prompt personalizado do tenant, se existir
+    tenant_system_prompt = context.get("tenant_system_prompt") if context else None
+    system_prompt_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name, tenant_id)
+    
+    msgs = [{"role": "system", "content": system_prompt_text}]
     if context:
         parts = []
         for k, label in [
@@ -211,7 +219,9 @@ TOOLS = [
 
 
 
-def _has_real_data(tool_results: list) -> bool:
+def _analyze_tool_results(tool_results: list) -> str:
+    if not tool_results:
+        return "empty"
     for content in tool_results:
         if not content or not content.strip():
             continue
@@ -221,25 +231,36 @@ def _has_real_data(tool_results: list) -> bool:
                 if len(parsed) > 0:
                     first = parsed[0]
                     if isinstance(first, dict) and ("error" in first or "message" in first and "Nenhuma API" in first.get("message", "")):
-                        continue
-                    return True
+                        return "error"
+                    return "success"
+                return "empty"
             elif isinstance(parsed, dict):
-                if "items" in parsed and isinstance(parsed["items"], list) and len(parsed["items"]) > 0:
-                    return True
+                if "items" in parsed and isinstance(parsed["items"], list):
+                    if len(parsed["items"]) > 0:
+                        return "success"
+                    return "empty"
                 if any(isinstance(v, list) and len(v) > 0 for v in parsed.values()):
-                    return True
+                    return "success"
                 if "error" in parsed or "message" in parsed:
-                    continue
-                return True
+                    return "error"
+                # se eh dict mas nao tem items nem list
+                if len(parsed) > 0:
+                    return "success"
+                return "empty"
         except:
             content_lower = content.lower()
             if "error" in content_lower or "failed" in content_lower or "no content" in content_lower or "empty" in content_lower:
-                continue
-            return True
-    return False
+                return "error"
+            return "success"
+    return "empty"
 
 
 async def _call_ollama(messages: list, tenant_id: str = "default", context: Optional[dict] = None) -> str:
+    # Usar temperature personalizada do tenant, se existir
+    temperature = 0.0
+    if context and context.get("tenant_temperature") is not None:
+        temperature = context["tenant_temperature"]
+    
     async with httpx.AsyncClient(timeout=180.0) as client:
         payload = {
             "model": OLLAMA_MODEL, 
@@ -248,7 +269,7 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
             "keep_alive": 0,
             "tools": TOOLS,
             "options": {
-                "temperature": 0.0
+                "temperature": temperature
             }
         }
         resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
@@ -295,16 +316,23 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
                         "tool_call_id": tool_call_id
                     })
             
-            if _has_real_data(tool_results):
+            analysis_result = _analyze_tool_results(tool_results)
+            if analysis_result == "success":
                     messages.append({
                         "role": "system",
                         "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
                     })
-            else:
+            elif analysis_result == "error":
                 tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
                     "role": "system",
-                    "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
+                    "content": f"INSTRUCAO: A consulta no Protheus falhou com um ERRO. Retorne um JSON preenchendo o 'executive_summary' informando que ocorreu um erro ao consultar o ERP e tente descrever o erro em linguagem amigavel. NUNCA invente ou simule dados ficticios."
+                })
+            else: # empty
+                tenant_name = context.get("company", "Empresa") if context else "Empresa"
+                messages.append({
+                    "role": "system",
+                    "content": f"INSTRUCAO: A consulta no Protheus retornou VAZIA (0 registros). Isso significa que nao ha dados para os filtros ou o periodo informado. Retorne um JSON preenchendo o 'executive_summary' informando exatamente que 'Não foram encontrados dados para esta consulta no ERP'. Não diga que 'a consulta retornou apenas a confirmação', diga apenas que não há dados no momento. NUNCA invente ou simule dados ficticios."
                 })
             
             payload["messages"] = messages

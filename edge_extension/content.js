@@ -214,23 +214,24 @@
       const query = e.data.query;
       const image = e.data.image;
       
-      chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
-        const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
-        
-        const payload = {
-          context: sessionData,
-          question: query,
-          tenant_id: configuredTenant,
-          history: e.data.history || [],
-          image: image,
-          agent_user: result.agent_user,
-          agent_password: result.agent_password
-        };
+      try {
+        chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
+          const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
+          
+          const payload = {
+            context: sessionData,
+            question: query,
+            tenant_id: configuredTenant,
+            history: e.data.history || [],
+            image: image,
+            agent_user: result.agent_user,
+            agent_password: result.agent_password
+          };
 
         // Fazer a chamada para a API (Agora rodando na Hetzner via copilot-api.elitecorp.tec.br)
         chrome.runtime.sendMessage({
           action: 'cprot_api_fetch',
-          url: 'https://copilot-api.elitecorp.tec.br/api/ask',
+          url: 'https://copilot-api.elitecorp.tec.br/chat/ask',
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

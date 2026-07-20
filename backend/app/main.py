@@ -29,6 +29,18 @@ try:
     from sqlalchemy import text
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        
+        # Simple migrations for newly added columns
+        try:
+            conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);"))
+        except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';"))
+        except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';"))
+        except Exception: pass
+        
         conn.commit()
     Base.metadata.create_all(bind=engine)
     logger.info("Tabelas do banco de dados verificadas/criadas com sucesso com suporte a pgvector.")

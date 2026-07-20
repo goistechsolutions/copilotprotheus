@@ -16,9 +16,10 @@ function Logs() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
         const [logsRes, statsRes] = await Promise.all([
-          fetch('/api/admin/logs?limit=50'),
-          fetch('/api/admin/dashboard-stats')
+          fetch('/api/admin/logs?limit=50', { headers: authHeader }),
+          fetch('/api/admin/dashboard-stats', { headers: authHeader })
         ]);
         
         if (logsRes.ok) {

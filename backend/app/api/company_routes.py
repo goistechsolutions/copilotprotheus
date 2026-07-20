@@ -8,6 +8,7 @@ from app.core.config import settings
 from typing import List, Optional
 from datetime import datetime
 import jwt
+from app.core.security import encrypt_password
 
 router = APIRouter(tags=["companies"])
 
@@ -38,11 +39,21 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Já existe uma empresa cadastrada com este CNPJ.")
     
+    if payload.tenant_id == "":
+        payload.tenant_id = None
+        
+    if payload.protheus_password:
+        payload.protheus_password = encrypt_password(payload.protheus_password)
+        
     comp = Company(**payload.model_dump())
     db.add(comp)
-    db.commit()
-    db.refresh(comp)
-    return comp
+    try:
+        db.commit()
+        db.refresh(comp)
+        return comp
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Erro no Banco de Dados: {str(e)}")
 
 @router.put("/companies/{company_id}", response_model=CompanyResponse)
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
@@ -50,7 +61,14 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa não encontrada.")
     
+    if payload.tenant_id == "":
+        payload.tenant_id = None
+        
     update_data = payload.model_dump(exclude_unset=True)
+    
+    if "protheus_password" in update_data and update_data["protheus_password"]:
+        update_data["protheus_password"] = encrypt_password(update_data["protheus_password"])
+        
     for k, v in update_data.items():
         setattr(comp, k, v)
         
@@ -98,7 +116,10 @@ def api_verify_license(payload: LicenseVerifyRequest):
 
 @router.get("/companies/by-tenant/{tenant_id}", response_model=CompanyResponse)
 def get_company_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
-    comp = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
+    # Busca pela FK direta tenant_id (preferencial) ou fallback para protheus_grupo
+    comp = db.query(Company).filter(Company.tenant_id == tenant_id).first()
+    if not comp:
+        comp = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada para o tenant.")
     return comp

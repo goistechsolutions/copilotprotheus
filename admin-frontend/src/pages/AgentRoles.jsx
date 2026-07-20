@@ -16,6 +16,7 @@ const AVAILABLE_PERMISSIONS = [
 
 export default function AgentRoles() {
   const [roles, setRoles] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({});
@@ -30,8 +31,12 @@ export default function AgentRoles() {
 
   const fetchRoles = async () => {
     try {
-      const res = await axios.get('/api/admin/agent-roles', axiosConfig);
-      setRoles(res.data || []);
+      const [resRoles, resTenants] = await Promise.all([
+        axios.get('/api/admin/agent-roles', axiosConfig),
+        axios.get('/api/tenants', axiosConfig)
+      ]);
+      setRoles(resRoles.data || []);
+      setTenants(resTenants.data || []);
     } catch (error) {
       console.error("Erro ao carregar papéis:", error);
     } finally {
@@ -122,14 +127,18 @@ export default function AgentRoles() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tenant ID (Grupo)</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: pilot_rodolltda"
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Empresa (Tenant)</label>
+                <select 
                   className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" 
-                  value={formData.tenant_id} 
-                  onChange={e => setFormData({...formData, tenant_id: e.target.value})} 
-                />
+                  value={formData.tenant_id || ''} 
+                  onChange={e => setFormData({...formData, tenant_id: e.target.value})}
+                >
+                  <option value="">Selecione uma Empresa...</option>
+                  <option value="default">Global (Padrão)</option>
+                  {tenants.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nome do Cargo</label>
@@ -171,7 +180,7 @@ export default function AgentRoles() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Tenant ID</th>
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Empresa (Tenant)</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Cargo (Papel)</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Permissões</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Ações</th>
@@ -180,7 +189,9 @@ export default function AgentRoles() {
             <tbody className="divide-y divide-slate-100">
               {roles.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-slate-600 font-mono">{r.tenant_id}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-slate-600 font-mono">
+                    {r.tenant_id === 'default' ? 'Global' : (tenants.find(t => t.id === r.tenant_id)?.name || r.tenant_id)}
+                  </td>
                   <td className="px-6 py-4 text-sm text-slate-900 font-bold">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">

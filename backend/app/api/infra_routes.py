@@ -6,19 +6,14 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/infra", tags=["Infraestrutura"])
 
-# --- Autenticação Simples de Admin (mesma lógica usada em outros routers admin) ---
-def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
-    expected_key = os.getenv("JWT_SECRET", "default")
-    if not x_admin_key or x_admin_key != expected_key:
-        raise HTTPException(status_code=401, detail="Chave admin inválida ou ausente")
-    return x_admin_key
+from app.api.admin_routes import verify_admin
 
 class ServerActionRequest(BaseModel):
     action: str  # ex: "reboot", "poweron", "poweroff", "reset"
 
 # ----------------- HETZNER CLOUD -----------------
 
-@router.get("/hetzner/servers", dependencies=[Depends(verify_admin_key)])
+@router.get("/hetzner/servers", dependencies=[Depends(verify_admin)])
 async def get_hetzner_servers():
     from pathlib import Path
     import dotenv
@@ -29,26 +24,32 @@ async def get_hetzner_servers():
         raise HTTPException(status_code=400, detail="HETZNER_API_TOKEN não configurado no .env")
     
     headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient() as client:
-        response = await client.get("https://api.hetzner.cloud/v1/servers", headers=headers)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=f"Erro na Hetzner: {response.text}")
-        
-        data = response.json()
-        servers = []
-        for srv in data.get("servers", []):
-            servers.append({
-                "id": srv["id"],
-                "name": srv["name"],
-                "status": srv["status"],
-                "public_ip": srv["public_net"]["ipv4"]["ip"],
-                "cores": srv["server_type"]["cores"],
-                "memory": srv["server_type"]["memory"],
-                "datacenter": srv["datacenter"]["name"]
-            })
-        return {"servers": servers}
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://api.hetzner.cloud/v1/servers", headers=headers, timeout=10.0)
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail=f"Erro na Hetzner: {response.text}")
+            
+            data = response.json()
+            servers = []
+            for srv in data.get("servers", []):
+                public_net = srv.get("public_net", {})
+                ipv4 = public_net.get("ipv4", {})
+                ip = ipv4.get("ip") if ipv4 else None
+                servers.append({
+                    "id": srv.get("id"),
+                    "name": srv.get("name"),
+                    "status": srv.get("status"),
+                    "public_ip": ip,
+                    "cores": srv.get("server_type", {}).get("cores"),
+                    "memory": srv.get("server_type", {}).get("memory"),
+                    "datacenter": srv.get("datacenter", {}).get("name")
+                })
+            return {"servers": servers}
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Erro de conexão com a Hetzner: {str(e)}")
 
-@router.post("/hetzner/servers/{server_id}/action", dependencies=[Depends(verify_admin_key)])
+@router.post("/hetzner/servers/{server_id}/action", dependencies=[Depends(verify_admin)])
 async def perform_hetzner_action(server_id: int, req: ServerActionRequest):
     from pathlib import Path
     import dotenv
@@ -74,7 +75,24 @@ async def perform_hetzner_action(server_id: int, req: ServerActionRequest):
 
 # ----------------- CLOUDFLARE -----------------
 
-@router.post("/cloudflare/purge-cache", dependencies=[Depends(verify_admin_key)])
+@router.get("/cloudflare/status", dependencies=[Depends(verify_admin)])
+async def get_cloudflare_status():
+    from pathlib import Path
+    import dotenv
+    env_config = dotenv.dotenv_values(Path(".env"))
+    
+    # Verifica R2
+    r2_configured = bool(env_config.get("R2_ACCESS_KEY_ID") and env_config.get("R2_SECRET_ACCESS_KEY"))
+    
+    # Verifica CDN
+    cdn_configured = bool(env_config.get("CLOUDFLARE_ZONE_ID") and env_config.get("CLOUDFLARE_API_TOKEN"))
+    
+    return {
+        "r2_active": r2_configured,
+        "cdn_active": cdn_configured
+    }
+
+@router.post("/cloudflare/purge-cache", dependencies=[Depends(verify_admin)])
 async def purge_cloudflare_cache():
     from pathlib import Path
     import dotenv
