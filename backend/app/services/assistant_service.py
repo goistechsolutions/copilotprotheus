@@ -56,8 +56,9 @@ class AssistantService:
         ctx['document_context'] = doc_context
         ctx['memory_context'] = mem_context
 
-        # 5. Generate Answer with Timeout (reduzido para 90s para evitar 504 do Cloudflare)
-        timeout_sec = 90
+        # 5. Generate Answer with Timeout (reduzido para evitar 504 do Cloudflare)
+        # Cloudflare tem hard limit de 100s. Vamos usar 75s para o principal e desistir se passar.
+        timeout_sec = 75
         status_audit = "S"
         is_fallback_needed = False
         answer = ""
@@ -82,15 +83,21 @@ class AssistantService:
                 
         except (asyncio.TimeoutError, Exception) as e:
             if settings.llm_backend == "gemini":
-                is_fallback_needed = True
+                # Se for timeout do Gemini, não fazemos fallback pois o Ollama demoraria e causaria 504 no Cloudflare
+                if isinstance(e, asyncio.TimeoutError):
+                    answer = "A consulta ao banco de dados do Protheus ou a geração da resposta demorou mais que o esperado (Tempo limite). Tente fazer uma pergunta mais específica ou adicionar filtros de data."
+                    status_audit = "T"
+                else:
+                    is_fallback_needed = True
             else:
-                answer = "Tempo limite excedido." if isinstance(e, asyncio.TimeoutError) else f"Erro ao processar: {str(e)}"
+                answer = "A consulta demorou muito e foi cancelada (Tempo limite)." if isinstance(e, asyncio.TimeoutError) else f"Erro ao processar: {str(e)}"
                 status_audit = "T" if isinstance(e, asyncio.TimeoutError) else "E"
                 
         # AUTOMATIC FALLBACK TO OLLAMA (Gemma)
         if is_fallback_needed:
             print("Gemini unavailable or failed. Triggering local Ollama (Gemma 4) fallback...")
             try:
+                # Fallback tem apenas 15s para garantir que não passe de 100s totais no Cloudflare
                 answer = await asyncio.wait_for(
                     ask_llm(
                         question=question,
@@ -98,9 +105,8 @@ class AssistantService:
                         intent=intent,
                         context=ctx,
                         history=history,
-                        image=payload.image,
                     ),
-                    timeout=timeout_sec
+                    timeout=15
                 )
             except Exception as e:
                 answer = f"Erro no Fallback Local (Ollama): {str(e)}"
