@@ -53,8 +53,7 @@ async def ask(
             verify_license(company.licenca_uso, expected_cnpj=company.cnpj)
         except Exception as e:
             return AskResponse(
-                text=f"**Acesso Bloqueado** — A licença de uso para a empresa **{company.razao_social}** está expirada ou é inválida.\n\nPor favor, atualize a licença nas configurações do Copilot ou contate o suporte da Elitecorp.",
-                sql_used=""
+                answer=f"**Acesso Bloqueado** — A licença de uso para a empresa **{company.razao_social}** está expirada ou é inválida.\n\nPor favor, atualize a licença nas configurações do Copilot ou contate o suporte da Elitecorp."
             )
         
     # Keras / JAX Intent Routing (Cognitive Firewall)
