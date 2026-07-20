@@ -214,8 +214,7 @@
       const query = e.data.query;
       const image = e.data.image;
       
-      try {
-        chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
+      chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
           const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
           
           const payload = {
@@ -228,7 +227,6 @@
             agent_password: result.agent_password
           };
 
-          // Fazer a chamada para a API (Agora rodando na Hetzner via copilot-api.elitecorp.tec.br)
           try {
             chrome.runtime.sendMessage({
               action: 'cprot_api_fetch',
@@ -280,6 +278,7 @@
         console.error("Contexto de extensão inválido ao ler storage:", err);
         f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "A extensão foi atualizada. Por favor, atualize a página do Protheus (Aperte F5)." }, '*');
       }
+      });
     }
     
     // Ações vindas do Chat
@@ -294,5 +293,5 @@
       alert(`Copilot Protheus:\nIniciando exportação para Excel...`);
     }
 
-  })
+  });
 })()
