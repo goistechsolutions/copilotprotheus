@@ -250,11 +250,16 @@
               }
               if (!response.ok) {
                 console.error("HTTP Error:", response.status, response.text);
-                let msg = "Não foi possível carregar a análise.";
+                let msg = `Erro do servidor: ${response.status}`;
                 if (response.status === 504) {
                    msg = "Tempo limite excedido. A consulta demorou muito e foi cancelada para proteger o banco de dados. Tente adicionar filtros como datas ou quantidades menores.";
-                } else {
-                   msg = `Erro do servidor: ${response.status}`;
+                } else if (response.text) {
+                   try {
+                     const errData = JSON.parse(response.text);
+                     if (errData.detail) {
+                       msg = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+                     }
+                   } catch(e) {}
                 }
                 f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: msg }, '*');
                 return;
