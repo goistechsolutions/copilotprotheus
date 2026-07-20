@@ -273,11 +273,6 @@
             console.error("Contexto de extensão inválido:", err);
             f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "A extensão foi atualizada. Por favor, atualize a página do Protheus (Aperte F5)." }, '*');
           }
-        });
-      } catch(err) {
-        console.error("Contexto de extensão inválido ao ler storage:", err);
-        f.contentWindow.postMessage({ type: 'cprot-dashboard-error', error: "A extensão foi atualizada. Por favor, atualize a página do Protheus (Aperte F5)." }, '*');
-      }
       });
     }
     
