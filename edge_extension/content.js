@@ -215,7 +215,7 @@
       const image = e.data.image;
       
       chrome.storage.local.get(['tenant_id', 'agent_user', 'agent_password'], function (result) {
-          const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || 'pilot_rodolltda';
+          const configuredTenant = result.tenant_id || new URLSearchParams(window.location.search).get('tenant_id') || '';
           
           const payload = {
             context: sessionData,
