@@ -48,20 +48,20 @@ async function enrich(intent, context) {
     case 'estoque_produto':
       if (context.produto) {
         tasks.push({ key: 'produto_info', promise: protheus.getProduto(context.produto, context).then(r => r.data) })
-        tasks.push({ key: 'saldo', promise: protheus.getSaldo(context.produto, context.branch || '0101', context).then(r => r.data) })
+        tasks.push({ key: 'saldo', promise: protheus.getSaldo(context.produto, context.branch, context).then(r => r.data) })
       }
       break
 
     case 'compras_pedido':
       if (context.fornecedor) {
-        tasks.push({ key: 'compras', promise: protheus.custom('/ComprasRest', { fornecedor: context.fornecedor, filial: context.branch || '0101' }, context).then(r => r.data) })
+        tasks.push({ key: 'compras', promise: protheus.custom('/ComprasRest', { fornecedor: context.fornecedor, filial: context.branch }, context).then(r => r.data) })
       }
       break
 
     case 'fiscal_nf':
       {
         const { dtDe, dtAte } = getDateRange(context)
-        const f = context.branch || '0101'
+        const f = context.branch
         tasks.push({ key: 'nfs_emitidas', promise: protheus.getNfsEmitidas(dtDe, dtAte, f, context).then(r => r.data).catch(() => null) })
         tasks.push({ key: 'itens_fiscais', promise: protheus.getItensNf(dtDe, dtAte, f, context).then(r => r.data).catch(() => null) })
         tasks.push({ key: 'livros_fiscais', promise: protheus.getLivrosFiscais(dtDe, dtAte, f, context).then(r => r.data).catch(() => null) })
@@ -71,7 +71,7 @@ async function enrich(intent, context) {
     case 'contabil_dados':
       {
         const { dtDe, dtAte } = getDateRange(context)
-        const f = context.branch || '0101'
+        const f = context.branch
         tasks.push({ key: 'lancamentos_contabeis', promise: protheus.getLancamentosContabeis(dtDe, dtAte, f, context).then(r => r.data).catch(() => null) })
         tasks.push({ key: 'balancete', promise: protheus.getBalancete(dtDe, dtAte, f, context).then(r => r.data).catch(() => null) })
         tasks.push({ key: 'plano_contas', promise: protheus.getPlanoContas(f, context).then(r => r.data).catch(() => null) })

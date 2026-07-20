@@ -47,7 +47,8 @@ router.get('/saldo', async (req, res) => {
   const { produto, filial } = req.query
   if (!produto) return res.status(400).json({ error: 'Informe o produto.' })
   const ctx = req.jwtPayload || {}
-  const f = filial || ctx.branch || '0101'
+  const f = filial || ctx.branch
+  if (!f) return res.status(400).json({ error: 'Parâmetro filial é obrigatório.' })
   const key = cache.buildKey(ctx, 'estoque', `saldo:${produto}:${f}`)
   
   try {
@@ -105,7 +106,8 @@ router.get('/titulos', async (req, res) => {
 router.get('/nfs-emitidas', async (req, res) => {
   const { dtDe, dtAte, filial } = req.query
   const ctx = req.jwtPayload || {}
-  const f = filial || ctx.branch || '0101'
+  const f = filial || ctx.branch
+  if (!f) return res.status(400).json({ error: 'Parâmetro filial é obrigatório.' })
   if (!dtDe || !dtAte) return res.status(400).json({ error: 'Parâmetros dtDe e dtAte são obrigatórios (YYYYMMDD).' })
   const key = cache.buildKey(ctx, 'faturamento', `nfs-emitidas:${dtDe}:${dtAte}:${f}`)
   
@@ -124,7 +126,8 @@ router.get('/nfs-emitidas', async (req, res) => {
 router.get('/itens-nf', async (req, res) => {
   const { dtDe, dtAte, filial } = req.query
   const ctx = req.jwtPayload || {}
-  const f = filial || ctx.branch || '0101'
+  const f = filial || ctx.branch
+  if (!f) return res.status(400).json({ error: 'Parâmetro filial é obrigatório.' })
   if (!dtDe || !dtAte) return res.status(400).json({ error: 'Parâmetros dtDe e dtAte são obrigatórios (YYYYMMDD).' })
   const key = cache.buildKey(ctx, 'faturamento', `itens-nf:${dtDe}:${dtAte}:${f}`)
   
@@ -160,7 +163,8 @@ router.get('/tes', async (req, res) => {
 router.get('/livros-fiscais', async (req, res) => {
   const { dtDe, dtAte, filial } = req.query
   const ctx = req.jwtPayload || {}
-  const f = filial || ctx.branch || '0101'
+  const f = filial || ctx.branch
+  if (!f) return res.status(400).json({ error: 'Parâmetro filial é obrigatório.' })
   if (!dtDe || !dtAte) return res.status(400).json({ error: 'Parâmetros dtDe e dtAte são obrigatórios (YYYYMMDD).' })
   const key = cache.buildKey(ctx, 'faturamento', `livros-fiscais:${dtDe}:${dtAte}:${f}`)
   
@@ -181,7 +185,8 @@ router.get('/livros-fiscais', async (req, res) => {
 router.get('/lancamentos', async (req, res) => {
   const { dtDe, dtAte, filial } = req.query
   const ctx = req.jwtPayload || {}
-  const f = filial || ctx.branch || '0101'
+  const f = filial || ctx.branch
+  if (!f) return res.status(400).json({ error: 'Parâmetro filial é obrigatório.' })
   if (!dtDe || !dtAte) return res.status(400).json({ error: 'Parâmetros dtDe e dtAte são obrigatórios (YYYYMMDD).' })
   const key = cache.buildKey(ctx, 'financeiro', `lancamentos:${dtDe}:${dtAte}:${f}`)
   
@@ -200,7 +205,8 @@ router.get('/lancamentos', async (req, res) => {
 router.get('/balancete', async (req, res) => {
   const { dtDe, dtAte, filial } = req.query
   const ctx = req.jwtPayload || {}
-  const f = filial || ctx.branch || '0101'
+  const f = filial || ctx.branch
+  if (!f) return res.status(400).json({ error: 'Parâmetro filial é obrigatório.' })
   if (!dtDe || !dtAte) return res.status(400).json({ error: 'Parâmetros dtDe e dtAte são obrigatórios (YYYYMMDD).' })
   const key = cache.buildKey(ctx, 'financeiro', `balancete:${dtDe}:${dtAte}:${f}`)
   
@@ -219,7 +225,8 @@ router.get('/balancete', async (req, res) => {
 router.get('/plano-contas', async (req, res) => {
   const { filial } = req.query
   const ctx = req.jwtPayload || {}
-  const f = filial || ctx.branch || '0101'
+  const f = filial || ctx.branch
+  if (!f) return res.status(400).json({ error: 'Parâmetro filial é obrigatório.' })
   const key = cache.buildKey(ctx, 'financeiro', `plano-contas:${f}`)
   
   try {

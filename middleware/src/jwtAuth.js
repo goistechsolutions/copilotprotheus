@@ -24,8 +24,7 @@ function jwtAuth(req, res, next) {
 
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    req.jwtPayload = {} // Define um payload vazio para permitir o acesso da extensão sem token
-    return next()
+    return res.status(401).json({ error: 'Token de autenticação ausente ou mal formatado.' })
   }
   const token = authHeader.slice(7)
   try {
@@ -33,8 +32,7 @@ function jwtAuth(req, res, next) {
     req.jwtPayload = decoded
     next()
   } catch (e) {
-    req.jwtPayload = {} // Define um payload vazio em caso de erro para não travar a extensão
-    return next()
+    return res.status(401).json({ error: 'Token de autenticação inválido ou expirado.' })
   }
 }
 

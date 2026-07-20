@@ -53,8 +53,11 @@ async function getClientAndConfig(ctx) {
 
 const getHeaders = (ctx, comp = null) => {
   if (!ctx && !comp) return {};
-  const c = comp?.protheus_empresa || ctx?.company || '01';
-  const b = comp?.protheus_filial || ctx?.branch || '0101';
+  const c = comp?.protheus_empresa || ctx?.company;
+  const b = comp?.protheus_filial || ctx?.branch;
+  if (!c || !b) {
+    throw new Error("Empresa (company) e Filial (branch) são obrigatórios para a comunicação com o Protheus. Verifique a configuração ou o contexto da extensão.");
+  }
   return { headers: { 'TenantId': `${c},${b}` } };
 };
 
@@ -65,7 +68,8 @@ module.exports = {
   },
   getSaldo: async (produto, filial, ctx) => {
     const { cli, comp } = await getClientAndConfig(ctx)
-    const f = filial || comp?.protheus_filial || ctx?.branch || '0101'
+    const f = filial || comp?.protheus_filial || ctx?.branch;
+    if (!f) throw new Error("Filial obrigatória para consultar saldo.");
     return cli.get(`/SaldoRest?produto=${produto}&filial=${f}`, getHeaders(ctx, comp))
   },
   getTitulos: async (cliente, ctx) => {

@@ -84,10 +84,15 @@ app.use(rateLimit({ windowMs: 60000, max: 60, message: { error: 'Rate limit exce
 // --- Rota pública: gerar token JWT (dev/test) ---
 app.post('/auth/token', (req, res) => {
   const { user, module, tenant_id } = req.body || {}
+  
+  if (!user || !tenant_id) {
+    return res.status(400).json({ error: 'Os campos "user" e "tenant_id" são obrigatórios.' })
+  }
+  
   const token = generateToken({ 
-    user: user || 'anonymous', 
+    user, 
     module: module || null,
-    tenant_id: tenant_id || 'default'
+    tenant_id
   })
   res.json({ token, expires_in: parseInt(process.env.JWT_EXPIRY_SECONDS || '3600', 10) })
 })
