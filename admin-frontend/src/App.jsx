@@ -13,6 +13,7 @@ import Licenses from './pages/Licenses';
 import RagMemories from './pages/RagMemories';
 import Adminer from './pages/Adminer';
 import Infra from './pages/Infra';
+import CompanyDashboard from './pages/CompanyDashboard';
 
 function Sidebar({ isOpen, setIsOpen }) {
   const location = useLocation();
@@ -27,18 +28,16 @@ function Sidebar({ isOpen, setIsOpen }) {
     {
       title: 'Acesso & Licenças',
       items: [
-        { path: '/tenants', label: 'Tenants (Clientes)', icon: <Server size={18} /> },
-        { path: '/companies', label: 'Empresas SaaS', icon: <Building size={18} /> },
-        { path: '/agent-users', label: 'Usuários Copilot', icon: <UserCog size={18} /> },
+        { path: '/companies', label: 'Empresas (SaaS)', icon: <Building size={18} /> },
+        { path: '/tenants', label: 'Gestão de Tenants', icon: <Server size={18} /> },
         { path: '/agent-roles', label: 'Cargos e Permissões', icon: <ShieldAlert size={18} /> },
-        { path: '/licenses', label: 'Licenças de Uso', icon: <Key size={18} /> },
       ]
     },
     {
       title: 'Inteligência',
       items: [
         { path: '/rag', label: 'RAG & Memórias', icon: <Brain size={18} /> },
-        { path: '/tables', label: 'Tabelas Permitidas', icon: <Database size={18} /> },
+        { path: '/tables', label: 'Dic. de Dados Global', icon: <Database size={18} /> },
       ]
     },
     {
@@ -119,15 +118,16 @@ function Sidebar({ isOpen, setIsOpen }) {
 function Topbar({ toggleSidebar }) {
   const location = useLocation();
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/companies/')) return 'Dashboard da Empresa';
     switch (location.pathname) {
       case '/': return 'Dashboard Analítico';
       case '/tenants': return 'Gestão de Tenants';
-      case '/companies': return 'Gestão de Empresas SaaS';
+      case '/companies': return 'Empresas (SaaS)';
       case '/agent-users': return 'Usuários do Copilot';
       case '/agent-roles': return 'Cargos e Permissões';
       case '/licenses': return 'Gerenciador de Licenças';
       case '/rag': return 'RAG & Memórias de IA';
-      case '/tables': return 'Tabelas Permitidas do ERP';
+      case '/tables': return 'Dicionário de Dados Global';
       case '/adminer': return 'Acesso Direto ao Banco';
       case '/infra': return 'Controle de Infraestrutura';
       case '/config': return 'Configurações de Ambiente';
@@ -172,6 +172,7 @@ function App() {
                 <Route path="/" element={<Logs />} />
                 <Route path="/tenants" element={<Tenants />} />
                 <Route path="/companies" element={<Companies />} />
+                <Route path="/companies/:id/*" element={<CompanyDashboard />} />
                 <Route path="/agent-users" element={<AgentUsers />} />
                 <Route path="/agent-roles" element={<AgentRoles />} />
                 <Route path="/licenses" element={<Licenses />} />

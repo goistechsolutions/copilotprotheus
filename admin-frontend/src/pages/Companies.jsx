@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Building, Plus, Edit2, Trash2, Save, X, Search, Filter } from 'lucide-react';
+import { Building, Plus, Edit2, Trash2, Save, X, Search, Filter, ArrowRight } from 'lucide-react';
 
 export default function Companies() {
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -169,7 +171,11 @@ export default function Companies() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {companies.map(c => (
-                <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
+                <tr 
+                  key={c.id} 
+                  onClick={() => navigate(`/companies/${c.id}`)}
+                  className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center font-bold text-sm border border-brand-100">
@@ -197,11 +203,11 @@ export default function Companies() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button onClick={() => handleEdit(c)} className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors border border-transparent hover:border-brand-100">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(c.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100">
-                        <Trash2 size={16} />
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); navigate(`/companies/${c.id}`); }} 
+                        className="p-2 text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors font-medium text-xs flex items-center gap-1"
+                      >
+                        Acessar Painel <ArrowRight size={14} />
                       </button>
                     </div>
                   </td>

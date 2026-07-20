@@ -11,6 +11,28 @@ OLLAMA_URL   = settings.ollama_url
 OLLAMA_MODEL = settings.ollama_model
 LLM_BACKEND  = settings.llm_backend
 
+def _log_token_usage_background(tenant_id: str, request_type: str, prompt_tokens: int, completion_tokens: int, model_name: str):
+    try:
+        from app.db.database import SessionLocal
+        from app.models.knowledge import ApiUsageLog, Company
+        db = SessionLocal()
+        company = db.query(Company).filter(Company.tenant_id == tenant_id).first()
+        if company:
+            log = ApiUsageLog(
+                company_id=company.id,
+                session_id=None,
+                request_type=request_type,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                model_name=model_name
+            )
+            db.add(log)
+            db.commit()
+        db.close()
+    except Exception as e:
+        print(f"Failed to log tokens: {e}")
+
 def get_system_prompt(tenant_name: str = "Empresa", tenant_id: str = "default"):
     from datetime import datetime
     hoje_str = datetime.now().strftime("%d/%m/%Y")
@@ -26,31 +48,42 @@ CONHECIMENTO E VISAO (IMPORTANTE):
 - VOCE POSSUI VISAO COMPUTACIONAL! Quando o usuario pedir para analisar a tela atual, uma imagem (screenshot) sera enviada. Voce PODE e DEVE olhar a imagem, extrair os numeros, paineis, grids, tabelas e filtros visiveis e formular sua resposta baseada exclusivamente no que voce esta vendo na tela.
 
 ====================
-DIRETRIZES DE TOOLS:
-- Para obter faturamento, vendas, clientes ou relatorios, voce DEVE chamar 'consultar_protheus'.
-- Para rodar consultas SQL no Oracle, chame 'consultar_protheus' com endpoint="QueryRest" e query_params={{"cQuery": "sua query SQL"}}.
-- NUNCA use SELECT TOP. Para limitar linhas no Oracle, use a clausula WHERE ROWNUM <= N (nunca no final depois do ORDER BY), ou use FETCH FIRST N ROWS ONLY no final (ex: ORDER BY F2_DOC FETCH FIRST 3 ROWS ONLY).
-- Datas no Protheus sao strings 'YYYYMMDD' (ex: 30/06/2026 eh '20260630'). NUNCA use TO_DATE.
-- NUNCA use tabelas ficticias (como SA_VENDA, SA0102). Use estritamente as tabelas reais listadas abaixo.
+DIRETRIZES RESTRITAS DE SQL (PROTHEUS):
+- Permitido apenas: SELECT, WITH, GROUP BY, HAVING, ORDER BY, SUM, COUNT, MAX, MIN, AVG.
+- PROIBIDO: UPDATE, DELETE, TRUNCATE, DROP, ALTER, MERGE, INSERT, CALL, EXEC, BEGIN.
+- NUNCA use SELECT *. Sempre especifique os campos exatos.
+- SEMPRE filtre registros válidos: WHERE D_E_L_E_T_ <> '*'. NUNCA espace o nome D_E_L_E_T_.
+- A chave de filial (*_FILIAL) deve ser filtrada se USA_FILIAL='S'. Respeite a hierarquia de empresa/unidade/filial baseada nas configurações.
+- JOINs devem sempre priorizar o Índice Principal (SIX/X2_UNICO). NUNCA inferir JOIN por X3_RELACAO.
+- NUNCA acesse tabelas SYS (SYS_COMPANY) sem autorização explicita.
+- Para obter dados, chame 'consultar_protheus' com endpoint="QueryRest" e query_params={{"cQuery": "sua query SQL"}}.
+- NUNCA use SELECT TOP. Limite linhas com: WHERE ROWNUM <= 1000 ou FETCH FIRST 1000 ROWS ONLY no final.
+- Datas no Protheus sao strings 'YYYYMMDD' (ex: 30/06/2026 eh '20260630').
 
 ====================
-TABELAS REAIS DO BANCO (USE ESTAS INFORMACOES):
+DICIONARIO DE DADOS (TENANT ATUAL):
 """
     try:
         from app.db.database import SessionLocal
-        from app.models.knowledge import AllowedTable
+        from app.models.knowledge import TenantSchema
         
         db = SessionLocal()
-        tables = db.query(AllowedTable).filter(AllowedTable.tenant_id == tenant_id).all()
-        if tables:
-            for idx, t in enumerate(tables, 1):
-                base_prompt += f"{idx}. {t.description}: {t.alias} ({t.tipo}: {t.fields})\n"
+        schemas = db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).all()
+        if schemas:
+            for s in schemas:
+                meta = s.schema_json
+                campos_list = ", ".join([f"{c['campo']} ({c['tipo']})" for c in meta.get("campos", [])])
+                comp = meta.get("compartilhamento", {})
+                share_str = f"Empresa={comp.get('empresa', 'N')}, Unidade={comp.get('unidade', 'N')}, Filial={comp.get('filial', 'N')}"
+                base_prompt += f"- Tabela: {s.tabela} (Chave: {s.chave}) - {s.nome}\n"
+                base_prompt += f"  Compartilhamento: {share_str} | Indice Princ: {meta.get('indice_principal', '')}\n"
+                base_prompt += f"  Campos: {campos_list}\n\n"
         else:
-            base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
+            base_prompt += "Nenhum dicionario sincronizado para este tenant.\n"
         db.close()
     except Exception as e:
-        print(f"Erro ao buscar tabelas no banco: {e}")
-        base_prompt += "1. FATURAMENTO/VENDAS: SF2010 (Cabecalho) e SD2010 (Itens)\n"
+        print(f"Erro ao buscar schemas no banco: {e}")
+        base_prompt += "Erro ao carregar dicionario de dados.\n"
 
     base_prompt += """
 ====================
@@ -340,8 +373,13 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
             
             resp2 = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
             resp2.raise_for_status()
-            return resp2.json()["message"]["content"]
+            r2_json = resp2.json()
+            if "prompt_eval_count" in r2_json:
+                _log_token_usage_background(tenant_id, "chat_with_tools", r2_json.get("prompt_eval_count", 0), r2_json.get("eval_count", 0), OLLAMA_MODEL)
+            return r2_json["message"]["content"]
             
+        if "prompt_eval_count" in resp_json:
+            _log_token_usage_background(tenant_id, "chat", resp_json.get("prompt_eval_count", 0), resp_json.get("eval_count", 0), OLLAMA_MODEL)
         return message.get("content", "")
 
 

@@ -44,6 +44,24 @@ class AssistantService:
         ctx['tenant_system_prompt'] = tenant_cfg['system_prompt']
         ctx['tenant_temperature'] = tenant_cfg['temperature']
 
+        # 1.2 Checar Limite de Tokens (Licença)
+        try:
+            from app.models.knowledge import Company, CompanyLicense, ApiUsageLog
+            from sqlalchemy import func
+            company = self.db.query(Company).filter(Company.tenant_id == tenant_id).first()
+            if company:
+                license_data = self.db.query(CompanyLicense).filter(CompanyLicense.company_id == company.id).first()
+                if license_data and not license_data.allow_overage:
+                    limit = license_data.max_tokens_monthly
+                    usage = self.db.query(func.sum(ApiUsageLog.total_tokens)).filter(ApiUsageLog.company_id == company.id).scalar() or 0
+                    if usage >= limit:
+                        return {
+                            "answer": "Limite de tokens excedido. O serviço de IA está bloqueado para esta empresa. O consumo excedente não está permitido nas configurações de licença.",
+                            "audit_id": None
+                        }
+        except Exception as e:
+            print(f"Erro ao checar licença: {e}")
+
         # 2. Fetch Documentary Context from RAG
         rag_docs = self.rag.search(question, tenant_id=tenant_id, limit=3)
         doc_context = "\n".join([f"- {d['title']} (Página {d['page_number']}): {d['content']}" for d in rag_docs])

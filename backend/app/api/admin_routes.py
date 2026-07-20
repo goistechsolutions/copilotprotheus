@@ -193,6 +193,111 @@ def update_tables(tables: list = Body(...), tenant_id: str = Body(..., embed=Tru
     db.commit()
     return {"success": True, "message": "Tabelas atualizadas com sucesso."}
 
+@router.post("/sync-schema")
+async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    from app.services.protheus_service import execute_protheus_tool
+    import json
+    from app.models.knowledge import TenantSchema
+
+    tenant_id = payload.get("tenant_id")
+    modulos = payload.get("modulos", [])
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
+
+    query_str = """
+    SELECT 
+    MOD.USR_CODMOD, X2.X2_CHAVE, X2.X2_ARQUIVO, X2.X2_NOME, 
+    X2.X2_TAMFIL, X2.X2_MODO, X2.X2_TAMUN, X2.X2_MODOUN, 
+    X2.X2_TAMEMP, X2.X2_MODOEMP, X2.X2_UNICO, 
+    X3.X3_CAMPO, X3.X3_DESCRIC, X3.X3_TIPO, X3.X3_TAMANHO, 
+    X3.X3_GRPSXG, XG.XG_SIZE, 
+    CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA, 
+    CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE, 
+    CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL 
+    FROM SX2010 X2 
+    INNER JOIN SX3010 X3 ON X2.X2_CHAVE = X3.X3_ARQUIVO AND X3.D_E_L_E_T_ <> '*' 
+    INNER JOIN SYS_USR_MODULE MOD ON X2.X2_MODULO = MOD.USR_MODULO AND MOD.D_E_L_E_T_<>'*' 
+    LEFT JOIN SXG010 XG ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*' 
+    WHERE X2.D_E_L_E_T_ <> '*' 
+    """
+    if modulos:
+        mods_str = ",".join([f"'{m}'" for m in modulos])
+        query_str += f" AND MOD.USR_CODMOD IN ({mods_str})"
+        
+    query_str += " ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
+
+    try:
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
+        result_data = json.loads(response_str)
+        # Se vier formatado pelo ProtheusService (Pode ser array direto ou { "items": [...] })
+        if isinstance(result_data, dict) and "items" in result_data:
+            result_data = result_data["items"]
+        elif isinstance(result_data, dict) and "data" in result_data:
+            result_data = result_data["data"]
+            
+        if not isinstance(result_data, list):
+            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
+            
+        schema_dict = {}
+        for row in result_data:
+            chave = str(row.get("X2_CHAVE", "")).strip()
+            if not chave: continue
+            
+            if chave not in schema_dict:
+                schema_dict[chave] = {
+                    "modulo": str(row.get("USR_CODMOD", "")).strip(),
+                    "tabela": str(row.get("X2_ARQUIVO", "")).strip(),
+                    "nome": str(row.get("X2_NOME", "")).strip(),
+                    "compartilhamento": {
+                        "empresa": str(row.get("USA_EMPRESA", "N")).strip(),
+                        "unidade": str(row.get("USA_UNIDADE", "N")).strip(),
+                        "filial": str(row.get("USA_FILIAL", "N")).strip()
+                    },
+                    "indice_principal": str(row.get("X2_UNICO", "")).strip(),
+                    "campos": []
+                }
+            
+            schema_dict[chave]["campos"].append({
+                "campo": str(row.get("X3_CAMPO", "")).strip(),
+                "descricao": str(row.get("X3_DESCRIC", "")).strip(),
+                "tipo": str(row.get("X3_TIPO", "")).strip(),
+                "tamanho": row.get("X3_TAMANHO", 0)
+            })
+
+        # Salvar no banco
+        db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).delete()
+        
+        for chave, meta in schema_dict.items():
+            db.add(TenantSchema(
+                tenant_id=tenant_id,
+                modulo=meta["modulo"],
+                chave=chave,
+                tabela=meta["tabela"],
+                nome=meta["nome"],
+                schema_json=meta
+            ))
+        db.commit()
+        return {"success": True, "message": f"Schema atualizado. {len(schema_dict)} tabelas sincronizadas."}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/schemas")
+def get_schemas(tenant_id: str, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    from app.models.knowledge import TenantSchema
+    schemas = db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).all()
+    result = []
+    for s in schemas:
+        result.append({
+            "id": s.id,
+            "modulo": s.modulo,
+            "chave": s.chave,
+            "tabela": s.tabela,
+            "nome": s.nome,
+            "campos_count": len(s.schema_json.get("campos", [])),
+            "compartilhamento": s.schema_json.get("compartilhamento", {})
+        })
+    return {"schemas": result}
 
 # --- Endpoints de Logs e Monitoramento ---
 

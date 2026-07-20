@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.knowledge import Company
+from app.models.knowledge import Company, CompanyLicense, ApiUsageLog
+from sqlalchemy import func
 from app.schemas.company import CompanyCreate, CompanyUpdate, CompanyResponse, LicenseGenerateRequest, LicenseVerifyRequest, SessionValidateRequest
 from app.services.license_service import generate_license, verify_license
 from app.core.config import settings
@@ -96,6 +97,33 @@ def api_generate_license(payload: LicenseGenerateRequest, admin_key: str = Depen
         return {"token": token}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao gerar licença: {str(e)}")
+
+@router.get("/companies/{company_id}/billing")
+def get_company_billing(company_id: int, db: Session = Depends(get_db)):
+    # 1. Fetch license or use defaults
+    license_data = db.query(CompanyLicense).filter(CompanyLicense.company_id == company_id).first()
+    limit = license_data.max_tokens_monthly if license_data else 1000000
+    allow_overage = license_data.allow_overage if license_data else False
+    
+    # 2. Sum current month usage
+    # Simplified logic: sum all tokens. In production, filter by current month.
+    usage = db.query(
+        func.sum(ApiUsageLog.prompt_tokens).label("prompt"),
+        func.sum(ApiUsageLog.completion_tokens).label("completion"),
+        func.sum(ApiUsageLog.total_tokens).label("total")
+    ).filter(ApiUsageLog.company_id == company_id).first()
+    
+    total_tokens = usage.total or 0
+    
+    return {
+        "company_id": company_id,
+        "current_usage": total_tokens,
+        "prompt_tokens": usage.prompt or 0,
+        "completion_tokens": usage.completion or 0,
+        "limit": limit,
+        "allow_overage": allow_overage,
+        "percentage": round((total_tokens / limit * 100), 2) if limit > 0 else 0
+    }
 
 @router.post("/license/verify")
 def api_verify_license(payload: LicenseVerifyRequest):

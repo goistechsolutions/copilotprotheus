@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Float, Boolean
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from app.db.database import Base
@@ -136,3 +136,44 @@ class AllowedTable(Base):
     tipo = Column(String(100), nullable=True)
     fields = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class TenantSchema(Base):
+    __tablename__ = 'tenant_schemas'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    modulo = Column(String(50), index=True, nullable=True)
+    chave = Column(String(10), index=True, nullable=False)  # ex: SA1
+    tabela = Column(String(50), nullable=True) # ex: SA1010
+    nome = Column(String(255), nullable=True) # ex: Cadastro de Clientes
+    schema_json = Column(JSON, nullable=False) # Contém campos, índices e metadados de compartilhamento
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class CompanyLicense(Base):
+    __tablename__ = 'company_licenses'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    company_id = Column(Integer, ForeignKey('public.companies.id', ondelete='CASCADE'), index=True, nullable=False, unique=True)
+    max_tokens_monthly = Column(Integer, server_default='1000000')
+    max_concurrent_users = Column(Integer, server_default='1')
+    allow_overage = Column(Boolean, server_default='false', nullable=False)
+    allowed_modules = Column(JSON, nullable=True) # Ex: ["SIGAFAT", "SIGAFIN"]
+    access_groups = Column(JSON, nullable=True) # Quais grupos de usuários têm acesso
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class ApiUsageLog(Base):
+    __tablename__ = 'api_usage_logs'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    company_id = Column(Integer, ForeignKey('public.companies.id', ondelete='CASCADE'), index=True, nullable=False)
+    session_id = Column(String(100), index=True, nullable=True)
+    request_type = Column(String(50), nullable=False) # ex: 'sql_generation', 'rag_query', 'chat'
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    model_name = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Database, Building2, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Database, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function Tables() {
-  const [tenants, setTenants] = useState([]);
-  const [selectedTenant, setSelectedTenant] = useState('default');
+export default function CompanyDictionary({ company }) {
   const [schemas, setSchemas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -16,23 +14,10 @@ export default function Tables() {
   };
 
   useEffect(() => {
-    fetchTenants();
-  }, []);
-
-  useEffect(() => {
-    if (selectedTenant) {
-      fetchSchemas(selectedTenant);
+    if (company?.tenant_id) {
+      fetchSchemas(company.tenant_id);
     }
-  }, [selectedTenant]);
-
-  const fetchTenants = async () => {
-    try {
-      const res = await axios.get('/api/admin/tenants', axiosConfig);
-      setTenants(res.data.tenants || []);
-    } catch (error) {
-      console.error("Erro ao carregar tenants:", error);
-    }
-  };
+  }, [company]);
 
   const fetchSchemas = async (tenantId) => {
     setLoading(true);
@@ -48,7 +33,11 @@ export default function Tables() {
   };
 
   const handleSync = async () => {
-    if (!confirm(`Tem certeza que deseja sincronizar o schema do Protheus para o tenant ${selectedTenant}? Isso pode demorar alguns minutos.`)) {
+    if (!company?.tenant_id) {
+      alert("Empresa não possui tenant vinculado!");
+      return;
+    }
+    if (!confirm(`Tem certeza que deseja sincronizar o schema do Protheus para ${company.razao_social}? Isso pode demorar alguns minutos.`)) {
       return;
     }
     setSyncing(true);
@@ -61,12 +50,12 @@ export default function Tables() {
 
     try {
       const res = await axios.post('/api/admin/sync-schema', { 
-        tenant_id: selectedTenant,
+        tenant_id: company.tenant_id,
         modulos: modulosArray
       }, axiosConfig);
       
       setSyncResult({ type: 'success', message: res.data.message });
-      fetchSchemas(selectedTenant);
+      fetchSchemas(company.tenant_id);
     } catch (error) {
       console.error("Erro ao sincronizar:", error);
       const detail = error.response?.data?.detail || error.message;
@@ -76,36 +65,18 @@ export default function Tables() {
     }
   };
 
+  if (!company?.tenant_id) {
+    return (
+      <div className="p-8 text-center bg-white rounded-xl border border-slate-200">
+        <Database size={48} className="mx-auto text-slate-300 mb-4" />
+        <h3 className="text-lg font-bold text-slate-800">Tenant Não Vinculado</h3>
+        <p className="text-slate-500 mt-2">Você precisa configurar um Tenant_ID na aba Geral antes de acessar o Dicionário.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Dicionário de Dados</h2>
-          <p className="text-slate-500">Sincronize as tabelas e campos permitidos diretamente do Protheus por Empresa (Tenant).</p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col sm:flex-row items-center gap-4">
-        <div className="bg-brand-50 w-12 h-12 rounded-xl flex items-center justify-center shrink-0">
-          <Building2 className="text-brand-600" size={24} />
-        </div>
-        <div className="flex-1 w-full">
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Selecione o Tenant (Empresa):</label>
-          <select 
-            value={selectedTenant}
-            onChange={(e) => setSelectedTenant(e.target.value)}
-            className="w-full sm:w-80 bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-2.5 transition-all"
-          >
-            <option value="default">Default (Padrão Global)</option>
-            {tenants.map(t => (
-              <option key={t.id} value={t.tenant_id}>
-                {t.name} ({t.tenant_id})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
         <h3 className="text-lg font-bold text-slate-800 mb-4">Sincronizar Estrutura do ERP</h3>
         <div className="flex flex-col sm:flex-row gap-4 items-end">
@@ -122,7 +93,7 @@ export default function Tables() {
           </div>
           <button 
             onClick={handleSync}
-            disabled={syncing || selectedTenant === 'default'}
+            disabled={syncing}
             className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw size={18} className={syncing ? "animate-spin" : ""} />
@@ -145,7 +116,7 @@ export default function Tables() {
         <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <Database size={18} className="text-brand-600" />
-            Estrutura Atual do Tenant
+            Estrutura Atual: {company.tenant_id}
           </h3>
           <span className="text-xs font-semibold bg-white px-2 py-1 rounded border border-slate-200 text-slate-600 shadow-sm">
             Total: {schemas.length} Tabelas
@@ -154,7 +125,7 @@ export default function Tables() {
 
         {loading && (
           <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex items-center justify-center">
-            <div className="animate-pulse font-medium text-brand-600">Carregando dicionário do Tenant...</div>
+            <div className="animate-pulse font-medium text-brand-600">Carregando dicionário...</div>
           </div>
         )}
         
