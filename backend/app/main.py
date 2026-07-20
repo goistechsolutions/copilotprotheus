@@ -40,6 +40,15 @@ try:
         try:
             conn.execute(text("ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';"))
         except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"))
+        except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"))
+        except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"))
+        except Exception: pass
         
         conn.commit()
     Base.metadata.create_all(bind=engine)
