@@ -204,8 +204,8 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
 
-    query_str = """
-    SELECT 
+    query_str = f"""
+    SELECT DISTINCT
     MOD.USR_CODMOD, X2.X2_CHAVE, X2.X2_ARQUIVO, X2.X2_NOME, 
     X2.X2_TAMFIL, X2.X2_MODO, X2.X2_TAMUN, X2.X2_MODOUN, 
     X2.X2_TAMEMP, X2.X2_MODOEMP, X2.X2_UNICO, 
@@ -216,7 +216,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL 
     FROM SX2010 X2 
     INNER JOIN SX3010 X3 ON X2.X2_CHAVE = X3.X3_ARQUIVO AND X3.D_E_L_E_T_ <> '*' 
-    INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD ON X2.X2_MODULO = MOD.USR_MODULO 
+    INNER JOIN SYS_USR_MODULE MOD ON X2.X2_MODULO = MOD.USR_MODULO AND MOD.D_E_L_E_T_<>'*'
     LEFT JOIN SXG010 XG ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*' 
     WHERE X2.D_E_L_E_T_ <> '*' 
     """
