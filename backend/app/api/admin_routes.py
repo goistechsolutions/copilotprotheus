@@ -313,12 +313,6 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     if not db_mods:
         print(f"[SYNC-SCHEMA] Tabela protheus_modules vazia para {clean_modulos}. Auto-sincronizando referência SYS_USR_MODULE...")
         modules_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
-        def fix_json_escapes(raw_str: str) -> str:
-            # Corrige string JSON malformada do AdvPL que só escapou aspas (\") e esqueceu de escapar a própria barra (\)
-            s = raw_str.replace('\\', '\\\\')
-            s = s.replace('\\\\"', '\\"')
-            return s
-            
         try:
             resp_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
             res_data = json.loads(fix_json_escapes(resp_str))
