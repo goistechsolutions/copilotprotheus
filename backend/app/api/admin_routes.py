@@ -201,134 +201,112 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     tenant_id = payload.get("tenant_id")
     modulos = payload.get("modulos", [])
-    target_modulos = modulos if modulos else []
-    if not target_modulos:
-        # Tenta descobrir os módulos dinamicamente via query leve
-        try:
-            mod_query = "/* %notparser% */ SELECT DISTINCT USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*' AND USR_CODMOD IS NOT NULL"
-            mod_resp = await execute_protheus_tool("QueryRest", {"cQuery": mod_query}, tenant_id=tenant_id)
-            mod_data = json.loads(mod_resp)
-            if isinstance(mod_data, dict) and "items" in mod_data:
-                mod_data = mod_data["items"]
-            elif isinstance(mod_data, dict) and "data" in mod_data:
-                mod_data = mod_data["data"]
-            if isinstance(mod_data, list):
-                target_modulos = [str(r.get("USR_CODMOD")).strip() for r in mod_data if r.get("USR_CODMOD")]
-        except Exception as ex:
-            logger.warning(f"Não foi possível listar módulos automaticamente: {ex}")
-            
-    if not target_modulos:
-        target_modulos = ["SIGAFIN", "SIGAFAT", "SIGACOM", "SIGAFIS", "SIGACTB", "SIGAEST", "SIGAPEC", "SIGATFM"]
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
 
-    schema_dict = {}
+    query_str = f"""
+    SELECT        
+     MOD.USR_CODMOD,         
+     X2.X2_CHAVE,         
+     X2.X2_ARQUIVO,         
+     X2.X2_NOME,         
+     X2.X2_TAMFIL,         
+     X2.X2_MODO,         
+     X2.X2_TAMUN,         
+     X2.X2_MODOUN,         
+     X2.X2_TAMEMP,         
+     X2.X2_MODOEMP,         
+     X2.X2_UNICO,         
+     X3.X3_CAMPO,         
+     X3.X3_DESCRIC,         
+     X3.X3_TIPO,         
+     X3.X3_TAMANHO,         
+     X3.X3_GRPSXG,   
+     XG.XG_SIZE,         
+     CASE         
+       WHEN X2.X2_MODOEMP='E'         
+        AND NVL(X2.X2_TAMEMP,0)>0         
+       THEN 'S'         
+       ELSE 'N'         
+     END AS USA_EMPRESA,         
+     CASE         
+       WHEN X2.X2_MODOUN='E'         
+        AND NVL(X2.X2_TAMUN,0)>0         
+       THEN 'S'         
+       ELSE 'N'         
+     END AS USA_UNIDADE,         
+     CASE         
+       WHEN X2.X2_MODO='E'         
+        AND NVL(X2.X2_TAMFIL,0)>0         
+       THEN 'S'         
+       ELSE 'N'         
+     END AS USA_FILIAL         
+    FROM SX2010 X2         
+    INNER JOIN SX3010 X3         
+     ON X2.X2_CHAVE = X3.X3_ARQUIVO         
+    AND X3.D_E_L_E_T_ <> '*'        
+    INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD        
+     ON X2.X2_MODULO = MOD.USR_MODULO 
+    LEFT JOIN SXG010 XG   
+     ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*'                                                                                                                       
+    WHERE X2.D_E_L_E_T_ <> '*'
+    """
+    
+    if modulos:
+        mods_str = ", ".join([f"'{m.strip().upper()}'" for m in modulos if m.strip()])
+        if mods_str:
+            query_str += f" AND MOD.USR_CODMOD IN ({mods_str})"
+            
+    query_str += " ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
+    query_str = query_str.replace('\n', ' ').strip()
+    query_str = "/* %notparser% */ " + query_str
 
     try:
-        # Busca módulo a módulo para manter o pacote JSON leve e evitar Erro 500 de estouro de memória no AppServer
-        for mod_code in target_modulos:
-            if not mod_code: continue
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
+        result_data = json.loads(response_str)
+        if isinstance(result_data, dict) and "items" in result_data:
+            result_data = result_data["items"]
+        elif isinstance(result_data, dict) and "data" in result_data:
+            result_data = result_data["data"]
             
-            mod_clean = mod_code.strip().upper()
-            mod_short = mod_clean.replace("SIGA", "")
+        if not isinstance(result_data, list):
+            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
             
-            query_str = f"""
-            SELECT        
-             MOD.USR_CODMOD,         
-             X2.X2_CHAVE,         
-             X2.X2_ARQUIVO,         
-             X2.X2_NOME,         
-             X2.X2_TAMFIL,         
-             X2.X2_MODO,         
-             X2.X2_TAMUN,         
-             X2.X2_MODOUN,         
-             X2.X2_TAMEMP,         
-             X2.X2_MODOEMP,         
-             X2.X2_UNICO,         
-             X3.X3_CAMPO,         
-             X3.X3_DESCRIC,         
-             X3.X3_TIPO,         
-             X3.X3_TAMANHO,         
-             X3.X3_GRPSXG,   
-             XG.XG_SIZE,         
-             CASE         
-               WHEN X2.X2_MODOEMP='E'         
-                AND NVL(X2.X2_TAMEMP,0)>0         
-               THEN 'S'         
-               ELSE 'N'         
-             END AS USA_EMPRESA,         
-             CASE         
-               WHEN X2.X2_MODOUN='E'         
-                AND NVL(X2.X2_TAMUN,0)>0         
-               THEN 'S'         
-               ELSE 'N'         
-             END AS USA_UNIDADE,         
-             CASE         
-               WHEN X2.X2_MODO='E'         
-                AND NVL(X2.X2_TAMFIL,0)>0         
-               THEN 'S'         
-               ELSE 'N'         
-             END AS USA_FILIAL         
-            FROM SX2010 X2         
-            INNER JOIN SX3010 X3         
-             ON X2.X2_CHAVE = X3.X3_ARQUIVO         
-            AND X3.D_E_L_E_T_ <> '*'        
-            INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD        
-             ON X2.X2_MODULO = MOD.USR_MODULO 
-            LEFT JOIN SXG010 XG   
-             ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*'                                                                                                                       
-            WHERE X2.D_E_L_E_T_ <> '*' 
-              AND (
-                UPPER(TRIM(MOD.USR_CODMOD)) = '{mod_clean}' 
-                OR UPPER(TRIM(X2.X2_MODULO)) = '{mod_clean}'
-              )
-            ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO
-            """
+        schema_dict = {}
+        for row in result_data:
+            chave = str(row.get("X2_CHAVE", "")).strip()
+            if not chave: continue
             
-            query_str = query_str.replace('\n', ' ').strip()
-            query_str = "/* %notparser% */ " + query_str
-
-            response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
-            result_data = json.loads(response_str)
-            if isinstance(result_data, dict) and "items" in result_data:
-                result_data = result_data["items"]
-            elif isinstance(result_data, dict) and "data" in result_data:
-                result_data = result_data["data"]
-                
-            if not isinstance(result_data, list):
-                continue
-                
-            for row in result_data:
-                chave = str(row.get("X2_CHAVE", "")).strip()
-                if not chave: continue
-                
-                if chave not in schema_dict:
-                    schema_dict[chave] = {
-                        "modulo": str(row.get("USR_CODMOD", "")).strip(),
-                        "tabela": str(row.get("X2_ARQUIVO", "")).strip(),
-                        "nome": str(row.get("X2_NOME", "")).strip(),
-                        "compartilhamento": {
-                            "empresa": str(row.get("USA_EMPRESA", "N")).strip(),
-                            "unidade": str(row.get("USA_UNIDADE", "N")).strip(),
-                            "filial": str(row.get("USA_FILIAL", "N")).strip()
-                        },
-                        "indice_principal": str(row.get("X2_UNICO", "")).strip(),
-                        "campos": []
-                    }
-                
-                schema_dict[chave]["campos"].append({
-                    "campo": str(row.get("X3_CAMPO", "")).strip(),
-                    "descricao": str(row.get("X3_DESCRIC", "")).strip(),
-                    "tipo": str(row.get("X3_TIPO", "")).strip(),
-                    "tamanho": row.get("X3_TAMANHO", 0)
-                })
+            if chave not in schema_dict:
+                schema_dict[chave] = {
+                    "modulo": str(row.get("USR_CODMOD", "")).strip(),
+                    "tabela": str(row.get("X2_ARQUIVO", "")).strip(),
+                    "nome": str(row.get("X2_NOME", "")).strip(),
+                    "compartilhamento": {
+                        "empresa": str(row.get("USA_EMPRESA", "N")).strip(),
+                        "unidade": str(row.get("USA_UNIDADE", "N")).strip(),
+                        "filial": str(row.get("USA_FILIAL", "N")).strip()
+                    },
+                    "indice_principal": str(row.get("X2_UNICO", "")).strip(),
+                    "campos": []
+                }
+            
+            schema_dict[chave]["campos"].append({
+                "campo": str(row.get("X3_CAMPO", "")).strip(),
+                "descricao": str(row.get("X3_DESCRIC", "")).strip(),
+                "tipo": str(row.get("X3_TIPO", "")).strip(),
+                "tamanho": row.get("X3_TAMANHO", 0)
+            })
 
         if not schema_dict:
             raise Exception("Nenhuma tabela foi retornada pelo Protheus durante a sincronização.")
 
         # Salvar no banco
         if modulos:
+            target_mods = [m.strip().upper() for m in modulos if m.strip()]
             db.query(TenantSchema).filter(
                 TenantSchema.tenant_id == tenant_id,
-                TenantSchema.modulo.in_(target_modulos)
+                TenantSchema.modulo.in_(target_mods)
             ).delete(synchronize_session=False)
         else:
             db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).delete(synchronize_session=False)
