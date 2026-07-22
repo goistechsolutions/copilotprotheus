@@ -381,7 +381,6 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     numeric_codes_in_str = ", ".join([f"'{c}'" for c in mod_codes_list])
     tables_query = f"""
-    /* %notparser% */
     SELECT DISTINCT        
      X2.X2_MODULO,
      X2.X2_CHAVE,         
