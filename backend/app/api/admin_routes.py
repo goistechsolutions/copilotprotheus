@@ -338,33 +338,26 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             print(f"[SYNC-SCHEMA] Aviso ao auto-sincronizar protheus_modules: {ex_mod}")
 
     # Monta conjunto de códigos numéricos de módulo (ex: '05', '5', '06', '6')
-    modulo_codes = set()
+    mod_codes_list = set()
     code_to_codmod = {}
     for m in db_mods:
         code = m.usr_modulo.strip()
         if code:
-            modulo_codes.add(code)
+            mod_codes_list.add(code)
             code_to_codmod[code] = m.usr_codmod
             if code.isdigit():
                 val = int(code)
                 code_str = str(val)
                 code_padded = f"{val:02d}"
-                modulo_codes.add(code_str)
-                modulo_codes.add(code_padded)
+                mod_codes_list.add(code_str)
+                mod_codes_list.add(code_padded)
                 code_to_codmod[code_str] = m.usr_codmod
                 code_to_codmod[code_padded] = m.usr_codmod
 
-    if not modulo_codes:
-        # Fallback se não encontrar o código na SYS_USR_MODULE
-        mod_codes_in_str = ", ".join([f"'{m}'" for m in clean_modulos])
-        where_clause = f"AND (X2.X2_MODULO IN ({mod_codes_in_str}) OR MOD.USR_CODMOD IN ({mod_codes_in_str}))"
-        join_clause = "INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD ON X2.X2_MODULO = MOD.USR_MODULO"
-    else:
-        mod_codes_in_str = ", ".join([f"'{c}'" for c in modulo_codes])
-        where_clause = f"AND X2.X2_MODULO IN ({mod_codes_in_str})"
-        join_clause = ""
+    all_target_codes = list(set(clean_modulos) | mod_codes_list)
+    target_in_str = ", ".join([f"'{c}'" for c in all_target_codes])
 
-    # 2. Consulta oficial exata solicitada pelo usuário:
+    # Consulta oficial com TRIM para evitar incompatibilidade de espaços em branco do Oracle
     tables_query = f"""
     /* %notparser% */
     SELECT DISTINCT        
@@ -383,10 +376,11 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
      CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,         
      CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
     FROM SX2010 X2         
-    INNER JOIN SX3010 X3 ON X2.X2_CHAVE = X3.X3_ARQUIVO AND X3.D_E_L_E_T_ <> '*'
-    {join_clause}
+    INNER JOIN SX3010 X3 ON TRIM(X2.X2_CHAVE) = TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_ <> '*'
+    LEFT JOIN (SELECT DISTINCT TRIM(USR_MODULO) AS USR_MODULO, TRIM(USR_CODMOD) AS USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD 
+      ON TRIM(X2.X2_MODULO) = MOD.USR_MODULO OR TRIM(X2.X2_MODULO) = MOD.USR_CODMOD
     WHERE X2.D_E_L_E_T_ <> '*'
-      {where_clause}
+      AND (TRIM(X2.X2_MODULO) IN ({target_in_str}) OR MOD.USR_CODMOD IN ({target_in_str}))
     ORDER BY X2.X2_MODULO, X2.X2_CHAVE
     """.replace('\n', ' ').strip()
 
