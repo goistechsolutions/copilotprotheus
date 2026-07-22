@@ -153,22 +153,30 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     password = context.get("password") if context else None
     protheus_token = context.get("protheus_token") if context else None
     
-    token = None
+    auth_mode = config.get("auth_mode", "basic")
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
     if protheus_token:
         # Se o token da sessão ativa do Protheus foi fornecido, usa diretamente!
-        token = protheus_token
+        headers["Authorization"] = f"Bearer {protheus_token}"
         logger.info(f"Usando token de sessao Protheus fornecido dinamicamente para {user} no tenant {tenant_id}")
+    elif auth_mode == "basic":
+        import base64
+        u = user if user else config['user']
+        p = password if password else config['password']
+        cred = f"{u}:{p}".encode("utf-8")
+        b64_cred = base64.b64encode(cred).decode("utf-8")
+        headers["Authorization"] = f"Basic {b64_cred}"
+        logger.info(f"Usando autenticacao Basic para {u} no tenant {tenant_id}")
     else:
         try:
             token = await get_protheus_token(tenant_id, user=user, password=password)
+            headers["Authorization"] = f"Bearer {token}"
         except Exception as e:
             logger.error(f"Falha na autenticacao OAuth2 do tenant {tenant_id} (user={user}): {e}")
             return json.dumps({"error": f"Falha na autenticacao OAuth2: {str(e)}"})
-        
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
     
     import urllib3
     urllib3.disable_warnings()
