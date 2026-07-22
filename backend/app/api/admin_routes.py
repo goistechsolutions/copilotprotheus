@@ -337,7 +337,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
         except Exception as ex_mod:
             print(f"[SYNC-SCHEMA] Aviso ao auto-sincronizar protheus_modules: {ex_mod}")
 
-    # Monta conjunto de códigos numéricos de módulo (ex: '05', '5', '06', '6')
+    # Monta conjunto estritamente numérico de códigos de módulo (ex: '05', '5', '06', '6')
     mod_codes_list = set()
     code_to_codmod = {}
     for m in db_mods:
@@ -354,35 +354,58 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
                 code_to_codmod[code_str] = m.usr_codmod
                 code_to_codmod[code_padded] = m.usr_codmod
 
-    all_target_codes = list(set(clean_modulos) | mod_codes_list)
-    target_in_str = ", ".join([f"'{c}'" for c in all_target_codes])
-
-    # Consulta oficial com TRIM para evitar incompatibilidade de espaços em branco do Oracle
-    tables_query = f"""
-    /* %notparser% */
-    SELECT DISTINCT        
-     X2.X2_MODULO,
-     X2.X2_CHAVE,         
-     X2.X2_ARQUIVO,         
-     X2.X2_NOME,         
-     X2.X2_TAMFIL,         
-     X2.X2_MODO,         
-     X2.X2_TAMUN,         
-     X2.X2_MODOUN,         
-     X2.X2_TAMEMP,         
-     X2.X2_MODOEMP,         
-     X2.X2_UNICO,         
-     CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,         
-     CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,         
-     CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
-    FROM SX2010 X2         
-    INNER JOIN SX3010 X3 ON TRIM(X2.X2_CHAVE) = TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_ <> '*'
-    LEFT JOIN (SELECT DISTINCT TRIM(USR_MODULO) AS USR_MODULO, TRIM(USR_CODMOD) AS USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD 
-      ON TRIM(X2.X2_MODULO) = MOD.USR_MODULO OR TRIM(X2.X2_MODULO) = MOD.USR_CODMOD
-    WHERE X2.D_E_L_E_T_ <> '*'
-      AND (TRIM(X2.X2_MODULO) IN ({target_in_str}) OR MOD.USR_CODMOD IN ({target_in_str}))
-    ORDER BY X2.X2_MODULO, X2.X2_CHAVE
-    """.replace('\n', ' ').strip()
+    if mod_codes_list:
+        numeric_codes_in_str = ", ".join([f"'{c}'" for c in mod_codes_list])
+        tables_query = f"""
+        /* %notparser% */
+        SELECT DISTINCT        
+         X2.X2_MODULO,
+         X2.X2_CHAVE,         
+         X2.X2_ARQUIVO,         
+         X2.X2_NOME,         
+         X2.X2_TAMFIL,         
+         X2.X2_MODO,         
+         X2.X2_TAMUN,         
+         X2.X2_MODOUN,         
+         X2.X2_TAMEMP,         
+         X2.X2_MODOEMP,         
+         X2.X2_UNICO,         
+         CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,         
+         CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,         
+         CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
+        FROM SX2010 X2         
+        INNER JOIN SX3010 X3 ON TRIM(X2.X2_CHAVE) = TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_ <> '*'
+        WHERE X2.D_E_L_E_T_ <> '*'
+          AND TRIM(X2.X2_MODULO) IN ({numeric_codes_in_str})
+        ORDER BY X2.X2_MODULO, X2.X2_CHAVE
+        """.replace('\n', ' ').strip()
+    else:
+        siglas_in_str = ", ".join([f"'{m}'" for m in clean_modulos])
+        tables_query = f"""
+        /* %notparser% */
+        SELECT DISTINCT        
+         X2.X2_MODULO,
+         X2.X2_CHAVE,         
+         X2.X2_ARQUIVO,         
+         X2.X2_NOME,         
+         X2.X2_TAMFIL,         
+         X2.X2_MODO,         
+         X2.X2_TAMUN,         
+         X2.X2_MODOUN,         
+         X2.X2_TAMEMP,         
+         X2.X2_MODOEMP,         
+         X2.X2_UNICO,         
+         CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,         
+         CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,         
+         CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
+        FROM SX2010 X2         
+        INNER JOIN SX3010 X3 ON TRIM(X2.X2_CHAVE) = TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_ <> '*'
+        INNER JOIN (SELECT DISTINCT TRIM(USR_MODULO) AS USR_MODULO, TRIM(USR_CODMOD) AS USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD 
+          ON TRIM(X2.X2_MODULO) = MOD.USR_MODULO
+        WHERE X2.D_E_L_E_T_ <> '*'
+          AND MOD.USR_CODMOD IN ({siglas_in_str})
+        ORDER BY X2.X2_MODULO, X2.X2_CHAVE
+        """.replace('\n', ' ').strip()
 
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
