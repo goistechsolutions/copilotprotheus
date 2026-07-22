@@ -313,9 +313,15 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     if not db_mods:
         print(f"[SYNC-SCHEMA] Tabela protheus_modules vazia para {clean_modulos}. Auto-sincronizando referência SYS_USR_MODULE...")
         modules_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
+        def fix_json_escapes(raw_str: str) -> str:
+            # Corrige string JSON malformada do AdvPL que só escapou aspas (\") e esqueceu de escapar a própria barra (\)
+            s = raw_str.replace('\\', '\\\\')
+            s = s.replace('\\\\"', '\\"')
+            return s
+            
         try:
             resp_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
-            res_data = json.loads(resp_str)
+            res_data = json.loads(fix_json_escapes(resp_str))
             if isinstance(res_data, dict) and "items" in res_data: res_data = res_data["items"]
             elif isinstance(res_data, dict) and "data" in res_data: res_data = res_data["data"]
             if isinstance(res_data, dict) and "error" in res_data:
@@ -408,7 +414,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
-        tables_data = json.loads(response_str)
+        tables_data = json.loads(fix_json_escapes(response_str))
         if isinstance(tables_data, dict) and "items" in tables_data:
             tables_data = tables_data["items"]
         elif isinstance(tables_data, dict) and "data" in tables_data:
@@ -477,7 +483,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             """.replace('\n', ' ').strip()
 
             fields_resp_str = await execute_protheus_tool("QueryRest", {"cQuery": fields_query}, tenant_id=tenant_id)
-            fields_data = json.loads(fields_resp_str)
+            fields_data = json.loads(fix_json_escapes(fields_resp_str))
             if isinstance(fields_data, dict) and "items" in fields_data:
                 fields_data = fields_data["items"]
             elif isinstance(fields_data, dict) and "data" in fields_data:
