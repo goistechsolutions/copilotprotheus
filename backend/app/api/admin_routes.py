@@ -227,6 +227,9 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
         for mod_code in target_modulos:
             if not mod_code: continue
             
+            mod_clean = mod_code.strip().upper()
+            mod_short = mod_clean.replace("SIGA", "")
+            
             query_str = f"""
             SELECT        
              MOD.USR_CODMOD,         
@@ -272,7 +275,13 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
              ON X2.X2_MODULO = MOD.USR_MODULO 
             LEFT JOIN SXG010 XG   
              ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*'                                                                                                                       
-            WHERE X2.D_E_L_E_T_ <> '*' AND MOD.USR_CODMOD = '{mod_code}'
+            WHERE X2.D_E_L_E_T_ <> '*' 
+              AND (
+                UPPER(TRIM(MOD.USR_CODMOD)) = '{mod_clean}' 
+                OR UPPER(TRIM(MOD.USR_CODMOD)) LIKE '%{mod_short}%'
+                OR UPPER(TRIM(X2.X2_MODULO)) = '{mod_clean}'
+                OR UPPER(TRIM(X2.X2_MODULO)) = '{mod_short}'
+              )
             ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO
             """
             
