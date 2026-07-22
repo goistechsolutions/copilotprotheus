@@ -24,7 +24,7 @@ def get_db(x_tenant_id: str = Header("default")):
             db.commit()
             
             # Cria o schema do tenant se não existir
-            db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+            db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
             db.commit()
             
             # Define temporariamente o search_path

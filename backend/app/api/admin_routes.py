@@ -208,7 +208,7 @@ async def sync_modules(payload: dict = Body(...), db: Session = Depends(get_db),
 
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
     if clean_tenant != "public":
-        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
         import app.models.knowledge
@@ -269,7 +269,7 @@ def get_protheus_modules(tenant_id: str, db: Session = Depends(get_db), admin: s
 
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
     if clean_tenant != "public":
-        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
         Base.metadata.create_all(bind=db.connection())
@@ -303,7 +303,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
     if clean_tenant != "public":
         db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
         import app.models.knowledge
@@ -530,7 +530,7 @@ def get_schemas(tenant_id: str, db: Session = Depends(get_db), admin: str = Depe
 
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
     if clean_tenant != "public":
-        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
         Base.metadata.create_all(bind=db.connection())
