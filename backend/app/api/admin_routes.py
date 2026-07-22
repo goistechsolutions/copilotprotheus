@@ -289,11 +289,17 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
                 "campos": []
             }
 
+        print(f"[SYNC-SCHEMA] Encontradas {len(tables_data)} tabelas para os módulos {clean_modulos} no tenant '{clean_tenant}'.")
+
         # 2. Busca os campos (SX3010) em lotes leves de 15 tabelas por requisição HTTP
         chunk_size = 15
+        total_chunks = (len(chaves_list) + chunk_size - 1) // chunk_size
+
         for i in range(0, len(chaves_list), chunk_size):
             chunk_chaves = chaves_list[i:i + chunk_size]
             chaves_in_str = ", ".join([f"'{c}'" for c in chunk_chaves])
+            chunk_num = (i // chunk_size) + 1
+            print(f"[SYNC-SCHEMA] Processando lote {chunk_num}/{total_chunks} ({len(chunk_chaves)} tabelas: {', '.join(chunk_chaves)})...")
             
             fields_query = f"""
             /* %notparser% */
