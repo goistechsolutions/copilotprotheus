@@ -43,7 +43,7 @@ export default function CompanyDashboard() {
       // Temporary logic: fetch all companies and find this one.
       // Ideally, add a GET /api/companies/:id endpoint in the backend.
       const res = await axios.get('/api/companies');
-      const found = res.data.find(c => c.id === id);
+      const found = res.data.find(c => String(c.id) === String(id));
       setCompany(found);
     } catch (error) {
       console.error("Erro ao carregar empresa:", error);
