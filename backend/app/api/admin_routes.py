@@ -227,6 +227,9 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     query_str += " ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
     
     query_str = query_str.replace('\n', ' ').strip()
+    
+    # Bypassa o parser problemático do DBAccess/TCGenQry
+    query_str = "%notparser% " + query_str
 
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
