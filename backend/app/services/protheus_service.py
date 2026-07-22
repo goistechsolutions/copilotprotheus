@@ -196,10 +196,8 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     urllib3.disable_warnings()
     
     try:
-        if endpoint.lower() == "queryrest" or endpoint.lower().endswith("/queryrest"):
-            return await _execute_http_post_with_retry(url, query_params, headers)
-        else:
-            return await _execute_http_get_with_retry(url, query_params, headers)
+        # Revertemos para GET para manter compatibilidade com endpoints AdvPL que usam WSRECEIVE cQuery
+        return await _execute_http_get_with_retry(url, query_params, headers)
     except httpx.HTTPStatusError as e:
         error_body = e.response.text
         logger.error(f"Falha HTTP {e.response.status_code} ao chamar Protheus ({url}): {error_body}")
