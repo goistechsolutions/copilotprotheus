@@ -314,13 +314,74 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     if not clean_modulos:
         raise HTTPException(status_code=400, detail="Selecione ao menos um módulo para sincronizar.")
 
-    mods_str = ", ".join([f"'{m}'" for m in clean_modulos])
+    from app.models.knowledge import ProtheusModule, TenantSchema
+    
+    # 1. Verifica/Busca os códigos numéricos X2_MODULO na tabela de referência protheus_modules
+    db_mods = db.query(ProtheusModule).filter(
+        ProtheusModule.tenant_id == tenant_id,
+        ProtheusModule.usr_codmod.in_(clean_modulos)
+    ).all()
 
-    # 1. Consulta metadados das tabelas (SX2010 + SX3010)
+    # Se a tabela de referência protheus_modules ainda estiver vazia no PostgreSQL, auto-sincroniza a referência primeiro
+    if not db_mods:
+        print(f"[SYNC-SCHEMA] Tabela protheus_modules vazia para {clean_modulos}. Auto-sincronizando referência SYS_USR_MODULE...")
+        modules_query = "/* %notparser% */ SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*' ORDER BY USR_MODULO"
+        try:
+            resp_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
+            res_data = json.loads(resp_str)
+            if isinstance(res_data, dict) and "items" in res_data: res_data = res_data["items"]
+            elif isinstance(res_data, dict) and "data" in res_data: res_data = res_data["data"]
+            if isinstance(res_data, list):
+                def get_v(row: dict, k: str) -> str:
+                    if not isinstance(row, dict): return ""
+                    if k in row and row[k] is not None: return str(row[k]).strip()
+                    for rk, rv in row.items():
+                        if rk.strip().upper() == k.upper(): return "" if rv is None else str(rv).strip()
+                    return ""
+                db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).delete(synchronize_session=False)
+                for r in res_data:
+                    um, uc = get_v(r, "USR_MODULO"), get_v(r, "USR_CODMOD")
+                    if uc: db.add(ProtheusModule(tenant_id=tenant_id, usr_modulo=um, usr_codmod=uc))
+                db.commit()
+                db_mods = db.query(ProtheusModule).filter(
+                    ProtheusModule.tenant_id == tenant_id,
+                    ProtheusModule.usr_codmod.in_(clean_modulos)
+                ).all()
+        except Exception as ex_mod:
+            print(f"[SYNC-SCHEMA] Aviso ao auto-sincronizar protheus_modules: {ex_mod}")
+
+    # Monta conjunto de códigos numéricos de módulo (ex: '05', '5', '06', '6')
+    modulo_codes = set()
+    code_to_codmod = {}
+    for m in db_mods:
+        code = m.usr_modulo.strip()
+        if code:
+            modulo_codes.add(code)
+            code_to_codmod[code] = m.usr_codmod
+            if code.isdigit():
+                val = int(code)
+                code_str = str(val)
+                code_padded = f"{val:02d}"
+                modulo_codes.add(code_str)
+                modulo_codes.add(code_padded)
+                code_to_codmod[code_str] = m.usr_codmod
+                code_to_codmod[code_padded] = m.usr_codmod
+
+    if not modulo_codes:
+        # Fallback se não encontrar o código na SYS_USR_MODULE
+        mod_codes_in_str = ", ".join([f"'{m}'" for m in clean_modulos])
+        where_clause = f"AND (X2.X2_MODULO IN ({mod_codes_in_str}) OR MOD.USR_CODMOD IN ({mod_codes_in_str}))"
+        join_clause = "INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD ON X2.X2_MODULO = MOD.USR_MODULO"
+    else:
+        mod_codes_in_str = ", ".join([f"'{c}'" for c in modulo_codes])
+        where_clause = f"AND X2.X2_MODULO IN ({mod_codes_in_str})"
+        join_clause = ""
+
+    # 2. Consulta oficial exata solicitada pelo usuário:
     tables_query = f"""
     /* %notparser% */
     SELECT DISTINCT        
-     MOD.USR_CODMOD,         
+     X2.X2_MODULO,
      X2.X2_CHAVE,         
      X2.X2_ARQUIVO,         
      X2.X2_NOME,         
@@ -336,11 +397,10 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
      CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
     FROM SX2010 X2         
     INNER JOIN SX3010 X3 ON X2.X2_CHAVE = X3.X3_ARQUIVO AND X3.D_E_L_E_T_ <> '*'
-    INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD        
-     ON X2.X2_MODULO = MOD.USR_MODULO 
+    {join_clause}
     WHERE X2.D_E_L_E_T_ <> '*'
-      AND MOD.USR_CODMOD IN ({mods_str})
-    ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE
+      {where_clause}
+    ORDER BY X2.X2_MODULO, X2.X2_CHAVE
     """.replace('\n', ' ').strip()
 
     try:
@@ -369,9 +429,10 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
         for row in tables_data:
             chave = get_field_val(row, "X2_CHAVE")
             if not chave: continue
-            chaves_list.append(chave)
+            x2_mod = get_field_val(row, "X2_MODULO")
+            codmod_name = code_to_codmod.get(x2_mod, get_field_val(row, "USR_CODMOD", clean_modulos[0] if clean_modulos else ""))
             schema_dict[chave] = {
-                "modulo": get_field_val(row, "USR_CODMOD"),
+                "modulo": codmod_name,
                 "tabela": get_field_val(row, "X2_ARQUIVO"),
                 "nome": get_field_val(row, "X2_NOME"),
                 "compartilhamento": {
