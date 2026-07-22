@@ -337,6 +337,28 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
         except Exception as ex_mod:
             print(f"[SYNC-SCHEMA] Aviso ao auto-sincronizar protheus_modules: {ex_mod}")
 
+        # Se ainda assim estiver vazio (a query retornou sucesso 201 mas a tabela tava vazia ou não achou colunas)
+        # Vamos adicionar o mapeamento padrão e inquestionável da TOTVS
+        if not db_mods:
+            print(f"[SYNC-SCHEMA] SYS_USR_MODULE não retornou dados úteis. Aplicando fallback hardcoded para módulos clássicos TOTVS...")
+            fallback_map = {
+                "SIGAATF": "01", "SIGACOM": "02", "SIGAEST": "04", "SIGAFAT": "05", 
+                "SIGAFIN": "06", "SIGAGPE": "07", "SIGAFIS": "09", "SIGAPON": "16", 
+                "SIGATMK": "31", "SIGACTB": "34", "SIGAADV": "34", "SIGAMNT": "43", "SIGAJURI": "76"
+            }
+            try:
+                # Remove se existir lixo para este tenant e insere
+                db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).delete(synchronize_session=False)
+                for nome_mod, num_cod in fallback_map.items():
+                    db.add(ProtheusModule(tenant_id=tenant_id, usr_modulo=num_cod, usr_codmod=nome_mod))
+                db.commit()
+                db_mods = db.query(ProtheusModule).filter(
+                    ProtheusModule.tenant_id == tenant_id,
+                    ProtheusModule.usr_codmod.in_(clean_modulos)
+                ).all()
+            except Exception as e_fallback:
+                print(f"[SYNC-SCHEMA] Erro ao aplicar fallback de módulos: {e_fallback}")
+
     # Monta conjunto estritamente numérico de códigos de módulo (ex: '05', '5', '06', '6')
     mod_codes_list = set()
     code_to_codmod = {}
