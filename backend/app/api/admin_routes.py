@@ -274,64 +274,62 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO
     """
 
-    try:
-        page_size = 1500
-        offset = 0
-        result_data = []
+    query_str = "/* %notparser% */ " + base_query.replace('\n', ' ').strip()
 
-        # Paginação via ROWNUM (Oracle) em lotes leves de 1.500 registros para evitar o erro 500 do Protheus
-        while True:
-            paged_query = f"""
-            /* %notparser% */
-            SELECT * FROM (
-                SELECT ROWNUM AS RNUM, T.* FROM (
-                    {base_query}
-                ) T WHERE ROWNUM <= {offset + page_size}
-            ) WHERE RNUM > {offset}
-            """
-            paged_query = paged_query.replace('\n', ' ').strip()
+    try:
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
+        result_data = json.loads(response_str)
+        if isinstance(result_data, dict) and "items" in result_data:
+            result_data = result_data["items"]
+        elif isinstance(result_data, dict) and "data" in result_data:
+            result_data = result_data["data"]
             
-            response_str = await execute_protheus_tool("QueryRest", {"cQuery": paged_query}, tenant_id=tenant_id)
-            chunk = json.loads(response_str)
-            if isinstance(chunk, dict) and "items" in chunk:
-                chunk = chunk["items"]
-            elif isinstance(chunk, dict) and "data" in chunk:
-                chunk = chunk["data"]
-                
-            if not isinstance(chunk, list) or len(chunk) == 0:
-                break
-                
-            result_data.extend(chunk)
-            if len(chunk) < page_size:
-                break
-                
-            offset += page_size
-            
+        if not isinstance(result_data, list):
+            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
+
+        def get_field_val(row: dict, key: str, default: str = "") -> str:
+            if not isinstance(row, dict): return default
+            if key in row and row[key] is not None:
+                return str(row[key]).strip()
+            key_upper = key.strip().upper()
+            for k, v in row.items():
+                if k.strip().upper() == key_upper:
+                    return "" if v is None else str(v).strip()
+            return default
+
         schema_dict = {}
         for row in result_data:
-            chave = str(row.get("X2_CHAVE", "")).strip()
+            chave = get_field_val(row, "X2_CHAVE")
             if not chave: continue
             
             if chave not in schema_dict:
                 schema_dict[chave] = {
-                    "modulo": str(row.get("USR_CODMOD", "")).strip(),
-                    "tabela": str(row.get("X2_ARQUIVO", "")).strip(),
-                    "nome": str(row.get("X2_NOME", "")).strip(),
+                    "modulo": get_field_val(row, "USR_CODMOD"),
+                    "tabela": get_field_val(row, "X2_ARQUIVO"),
+                    "nome": get_field_val(row, "X2_NOME"),
                     "compartilhamento": {
-                        "empresa": str(row.get("USA_EMPRESA", "N")).strip(),
-                        "unidade": str(row.get("USA_UNIDADE", "N")).strip(),
-                        "filial": str(row.get("USA_FILIAL", "N")).strip()
+                        "empresa": get_field_val(row, "USA_EMPRESA", "N"),
+                        "unidade": get_field_val(row, "USA_UNIDADE", "N"),
+                        "filial": get_field_val(row, "USA_FILIAL", "N")
                     },
-                    "indice_principal": str(row.get("X2_UNICO", "")).strip(),
+                    "indice_principal": get_field_val(row, "X2_UNICO"),
                     "campos": []
                 }
             
-            schema_dict[chave]["campos"].append({
-                "campo": str(row.get("X3_CAMPO", "")).strip(),
-                "descricao": str(row.get("X3_DESCRIC", "")).strip(),
-                "tipo": str(row.get("X3_TIPO", "")).strip(),
-                "tamanho": row.get("X3_TAMANHO", 0)
-            })
+            campo_nome = get_field_val(row, "X3_CAMPO")
+            if campo_nome:
+                tam_str = get_field_val(row, "X3_TAMANHO", "0")
+                try:
+                    tam_val = int(float(tam_str))
+                except Exception:
+                    tam_val = 0
+                    
+                schema_dict[chave]["campos"].append({
+                    "campo": campo_nome,
+                    "descricao": get_field_val(row, "X3_DESCRIC"),
+                    "tipo": get_field_val(row, "X3_TIPO"),
+                    "tamanho": tam_val
+                })
 
         if not schema_dict:
             raise Exception("Nenhuma tabela foi retornada pelo Protheus durante a sincronização.")
