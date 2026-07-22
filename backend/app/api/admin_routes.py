@@ -228,8 +228,8 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     
     query_str = query_str.replace('\n', ' ').strip()
     
-    # Bypassa o parser problemático do DBAccess/TCGenQry
-    query_str = "%notparser% " + query_str
+    # Bypassa o parser problemático do DBAccess/TCGenQry mantendo sintaxe válida no Oracle
+    query_str = "/* %notparser% */ " + query_str
 
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
