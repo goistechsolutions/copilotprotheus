@@ -47,7 +47,7 @@ async def ask(
     from app.models.knowledge import Company
     from app.services.license_service import verify_license
     tenant_id = ctx.get("tenant_id", "default")
-    company = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
+    company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
     if company:
         try:
             verify_license(company.licenca_uso, expected_cnpj=company.cnpj)
@@ -150,7 +150,7 @@ async def ask_stream(
     from app.models.knowledge import Company
     from app.services.license_service import verify_license
     tenant_id = ctx.get("tenant_id", "default")
-    company = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
+    company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
     
     blocked_message = None
     if company:
@@ -201,7 +201,7 @@ def launch(request: Request):
     launch_url = None
     db = SessionLocal()
     try:
-        company = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
+        company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
         if company and company.protheus_webapp_url:
             launch_url = company.protheus_webapp_url
             
@@ -236,7 +236,7 @@ from fastapi import HTTPException
 def validate_session(payload: SessionValidateRequest, db: Session = Depends(get_db)):
     from app.models.knowledge import Company
     # 1. Procurar empresa/grupo
-    company = db.query(Company).filter(Company.protheus_grupo == payload.tenant_id).first()
+    company = db.query(Company).filter((Company.tenant_id == payload.tenant_id) | (Company.protheus_grupo == payload.tenant_id)).first()
     if not company:
         raise HTTPException(
             status_code=403, 

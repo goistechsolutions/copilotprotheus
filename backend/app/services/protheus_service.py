@@ -22,7 +22,7 @@ def get_tenant_config(tenant_id: str) -> dict:
     from app.models.knowledge import Company
     db = SessionLocal()
     try:
-        company = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
+        company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
         if company and company.protheus_rest_url:
             pwd = ""
             if company.protheus_password:
