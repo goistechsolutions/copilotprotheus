@@ -206,7 +206,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     query_str = f"""
     SELECT DISTINCT
-    MOD.USR_CODMOD, X2.X2_CHAVE, X2.X2_ARQUIVO, X2.X2_NOME, 
+    X2.X2_MODULO AS USR_CODMOD, X2.X2_CHAVE, X2.X2_ARQUIVO, X2.X2_NOME, 
     X2.X2_TAMFIL, X2.X2_MODO, X2.X2_TAMUN, X2.X2_MODOUN, 
     X2.X2_TAMEMP, X2.X2_MODOEMP, X2.X2_UNICO, 
     X3.X3_CAMPO, X3.X3_DESCRIC, X3.X3_TIPO, X3.X3_TAMANHO, 
@@ -216,15 +216,14 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL 
     FROM SX2010 X2 
     INNER JOIN SX3010 X3 ON X2.X2_CHAVE = X3.X3_ARQUIVO AND X3.D_E_L_E_T_ <> '*' 
-    INNER JOIN SYS_USR_MODULE MOD ON X2.X2_MODULO = MOD.USR_MODULO AND MOD.D_E_L_E_T_<>'*'
     LEFT JOIN SXG010 XG ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*' 
     WHERE X2.D_E_L_E_T_ <> '*' 
     """
     if modulos:
         mods_str = ",".join([f"'{m}'" for m in modulos])
-        query_str += f" AND MOD.USR_CODMOD IN ({mods_str})"
+        query_str += f" AND X2.X2_MODULO IN ({mods_str})"
         
-    query_str += " ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
+    query_str += " ORDER BY X2.X2_MODULO, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
     
     query_str = query_str.replace('\n', ' ').strip()
     
