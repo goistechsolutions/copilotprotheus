@@ -318,7 +318,13 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             raise Exception("Nenhuma tabela foi retornada pelo Protheus durante a sincronização.")
 
         # Salvar no banco
-        db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).delete()
+        if modulos:
+            db.query(TenantSchema).filter(
+                TenantSchema.tenant_id == tenant_id,
+                TenantSchema.modulo.in_(target_modulos)
+            ).delete(synchronize_session=False)
+        else:
+            db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).delete(synchronize_session=False)
         
         for chave, meta in schema_dict.items():
             db.add(TenantSchema(
