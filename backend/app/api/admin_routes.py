@@ -429,6 +429,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
         for row in tables_data:
             chave = get_field_val(row, "X2_CHAVE")
             if not chave: continue
+            chaves_list.append(chave)
             x2_mod = get_field_val(row, "X2_MODULO")
             codmod_name = code_to_codmod.get(x2_mod, get_field_val(row, "USR_CODMOD", clean_modulos[0] if clean_modulos else ""))
             schema_dict[chave] = {
