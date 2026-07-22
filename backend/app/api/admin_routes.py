@@ -278,9 +278,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             WHERE X2.D_E_L_E_T_ <> '*' 
               AND (
                 UPPER(TRIM(MOD.USR_CODMOD)) = '{mod_clean}' 
-                OR UPPER(TRIM(MOD.USR_CODMOD)) LIKE '%{mod_short}%'
                 OR UPPER(TRIM(X2.X2_MODULO)) = '{mod_clean}'
-                OR UPPER(TRIM(X2.X2_MODULO)) = '{mod_short}'
               )
             ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO
             """
