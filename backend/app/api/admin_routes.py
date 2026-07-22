@@ -225,6 +225,8 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
         query_str += f" AND MOD.USR_CODMOD IN ({mods_str})"
         
     query_str += " ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
+    
+    query_str = query_str.strip()
 
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)

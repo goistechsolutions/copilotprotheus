@@ -6,7 +6,7 @@ export default function CompanyDictionary({ company }) {
   const [schemas, setSchemas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [modulosInput, setModulosInput] = useState('SIGAFAT, SIGAFIN');
+  const [modulosInput, setModulosInput] = useState(['SIGAFAT', 'SIGAFIN']);
   const [syncResult, setSyncResult] = useState(null);
 
   const axiosConfig = {
@@ -43,11 +43,7 @@ export default function CompanyDictionary({ company }) {
     setSyncing(true);
     setSyncResult(null);
     
-    const modulosArray = modulosInput
-      .split(',')
-      .map(m => m.trim().toUpperCase())
-      .filter(m => m.length > 0);
-
+    const modulosArray = modulosInput.length > 0 ? modulosInput : [];
     try {
       const res = await axios.post('/api/admin/sync-schema', { 
         tenant_id: company.tenant_id,
@@ -81,15 +77,27 @@ export default function CompanyDictionary({ company }) {
         <h3 className="text-lg font-bold text-slate-800 mb-4">Sincronizar Estrutura do ERP</h3>
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex-1 w-full">
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Módulos Permitidos (separados por vírgula):</label>
-            <input 
-              type="text" 
-              value={modulosInput} 
-              onChange={(e) => setModulosInput(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none uppercase font-mono transition-all text-slate-800"
-              placeholder="Ex: SIGAFAT, SIGAFIN, SIGAEST"
-            />
-            <p className="text-xs text-slate-500 mt-1">Deixe em branco para sincronizar TODOS os módulos.</p>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Módulos Permitidos (Múltipla Seleção):</label>
+            <div className="flex flex-wrap gap-2 mb-1">
+              {['SIGAFAT', 'SIGAFIN', 'SIGACOM', 'SIGAEST', 'SIGAPCP', 'SIGACONT', 'SIGAFIS', 'SIGATMS', 'SIGAGPE', 'SIGAATF'].map(mod => (
+                <label key={mod} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium cursor-pointer transition-colors ${modulosInput.includes(mod) ? 'bg-brand-50 border-brand-200 text-brand-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={modulosInput.includes(mod)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setModulosInput([...modulosInput, mod]);
+                      } else {
+                        setModulosInput(modulosInput.filter(m => m !== mod));
+                      }
+                    }}
+                  />
+                  {mod}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">Deixe todos desmarcados para sincronizar TODOS os módulos.</p>
           </div>
           <button 
             onClick={handleSync}

@@ -66,6 +66,26 @@ export default function Companies() {
     }
   };
 
+  const handleGenerateLicense = async () => {
+    if (!formData.cnpj) {
+      alert("É necessário preencher o CNPJ para gerar a licença.");
+      return;
+    }
+    if (!confirm("Isso irá gerar uma nova licença JWT para esta empresa válida até 2030. Continuar?")) return;
+    
+    try {
+      const res = await axios.post('/api/companies/license/generate', {
+        cnpj: formData.cnpj,
+        expiration_date: '2030-12-31',
+        plan_level: 'enterprise'
+      });
+      setFormData({...formData, licenca_uso: res.data.license_token});
+      alert("Licença gerada com sucesso! Não se esqueça de Salvar a empresa.");
+    } catch (error) {
+      alert("Erro ao gerar licença: " + (error.response?.data?.detail || error.message));
+    }
+  };
+
   const handleDelete = async (id) => {
     if (confirm("Tem certeza que deseja excluir esta empresa?")) {
       try {
@@ -170,8 +190,13 @@ export default function Companies() {
                 <input type="text" placeholder="http://ip:porta/webapp" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_webapp_url || ''} onChange={e => setFormData({...formData, protheus_webapp_url: e.target.value})} />
               </div>
               <div className="col-span-1 md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Licença de Uso (JWT JWT)</label>
-                <textarea className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-mono h-20 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.licenca_uso || ''} onChange={e => setFormData({...formData, licenca_uso: e.target.value})} />
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Licença de Uso (JWT)</label>
+                  <button onClick={handleGenerateLicense} className="text-[10px] uppercase font-bold tracking-wider bg-brand-50 hover:bg-brand-100 text-brand-700 px-3 py-1.5 rounded-md transition-colors border border-brand-200">
+                    Gerar Nova Licença
+                  </button>
+                </div>
+                <textarea className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-mono h-24 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.licenca_uso || ''} onChange={e => setFormData({...formData, licenca_uso: e.target.value})} placeholder="Cole a licença JWT aqui ou clique no botão acima para gerar uma nova..." />
               </div>
             </div>
             <div className="flex gap-3">
