@@ -208,12 +208,8 @@ async def sync_modules(payload: dict = Body(...), db: Session = Depends(get_db),
 
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
     if clean_tenant != "public":
-        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
-        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-        db.commit()
-        import app.models.knowledge
-        Base.metadata.create_all(bind=db.connection())
-        db.commit()
+        from app.db.database import ensure_tenant_tables
+        ensure_tenant_tables(db, clean_tenant)
 
     modules_query = "/* %notparser% */ SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*' ORDER BY USR_MODULO"
 
@@ -269,11 +265,8 @@ def get_protheus_modules(tenant_id: str, db: Session = Depends(get_db), admin: s
 
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
     if clean_tenant != "public":
-        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
-        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-        db.commit()
-        Base.metadata.create_all(bind=db.connection())
-        db.commit()
+        from app.db.database import ensure_tenant_tables
+        ensure_tenant_tables(db, clean_tenant)
 
     modules = db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).order_by(ProtheusModule.usr_codmod).all()
     return {
@@ -298,17 +291,11 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     import re
     from sqlalchemy import text
-    from app.db.database import Base
+    from app.db.database import Base, ensure_tenant_tables
     
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
     if clean_tenant != "public":
-        db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
-        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-        db.commit()
-        import app.models.knowledge
-        Base.metadata.create_all(bind=db.connection())
-        db.commit()
+        ensure_tenant_tables(db, clean_tenant)
 
     clean_modulos = [m.strip().upper() for m in modulos if m and isinstance(m, str) and m.strip()]
     if not clean_modulos:
