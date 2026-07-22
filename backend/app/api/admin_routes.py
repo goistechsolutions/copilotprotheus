@@ -223,8 +223,10 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     mods_str = ", ".join([f"'{m}'" for m in clean_modulos])
 
-    base_query = f"""
-    SELECT        
+    # 1. Consulta metadados das tabelas (SX2010)
+    tables_query = f"""
+    /* %notparser% */
+    SELECT DISTINCT        
      MOD.USR_CODMOD,         
      X2.X2_CHAVE,         
      X2.X2_ARQUIVO,         
@@ -236,56 +238,27 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
      X2.X2_TAMEMP,         
      X2.X2_MODOEMP,         
      X2.X2_UNICO,         
-     X3.X3_ORDEM,
-     X3.X3_CAMPO,         
-     X3.X3_DESCRIC,         
-     X3.X3_TIPO,         
-     X3.X3_TAMANHO,         
-     X3.X3_GRPSXG,   
-     XG.XG_SIZE,         
-     CASE         
-       WHEN X2.X2_MODOEMP='E'         
-        AND NVL(X2.X2_TAMEMP,0)>0         
-       THEN 'S'         
-       ELSE 'N'         
-     END AS USA_EMPRESA,         
-     CASE         
-       WHEN X2.X2_MODOUN='E'         
-        AND NVL(X2.X2_TAMUN,0)>0         
-       THEN 'S'         
-       ELSE 'N'         
-     END AS USA_UNIDADE,         
-     CASE         
-       WHEN X2.X2_MODO='E'         
-        AND NVL(X2.X2_TAMFIL,0)>0         
-       THEN 'S'         
-       ELSE 'N'         
-     END AS USA_FILIAL         
+     CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,         
+     CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,         
+     CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
     FROM SX2010 X2         
-    INNER JOIN SX3010 X3         
-     ON X2.X2_CHAVE = X3.X3_ARQUIVO         
-    AND X3.D_E_L_E_T_ <> '*'        
     INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD        
      ON X2.X2_MODULO = MOD.USR_MODULO 
-    LEFT JOIN SXG010 XG   
-     ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*'                                                                                                                       
     WHERE X2.D_E_L_E_T_ <> '*'
       AND MOD.USR_CODMOD IN ({mods_str})
-    ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO
-    """
-
-    query_str = "/* %notparser% */ " + base_query.replace('\n', ' ').strip()
+    ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE
+    """.replace('\n', ' ').strip()
 
     try:
-        response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
-        result_data = json.loads(response_str)
-        if isinstance(result_data, dict) and "items" in result_data:
-            result_data = result_data["items"]
-        elif isinstance(result_data, dict) and "data" in result_data:
-            result_data = result_data["data"]
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
+        tables_data = json.loads(response_str)
+        if isinstance(tables_data, dict) and "items" in tables_data:
+            tables_data = tables_data["items"]
+        elif isinstance(tables_data, dict) and "data" in tables_data:
+            tables_data = tables_data["data"]
             
-        if not isinstance(result_data, list):
-            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
+        if not isinstance(tables_data, list) or len(tables_data) == 0:
+            raise Exception(f"Nenhuma tabela encontrada no Protheus para os módulos: {', '.join(clean_modulos)}")
 
         def get_field_val(row: dict, key: str, default: str = "") -> str:
             if not isinstance(row, dict): return default
@@ -298,38 +271,69 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             return default
 
         schema_dict = {}
-        for row in result_data:
+        chaves_list = []
+        for row in tables_data:
             chave = get_field_val(row, "X2_CHAVE")
             if not chave: continue
+            chaves_list.append(chave)
+            schema_dict[chave] = {
+                "modulo": get_field_val(row, "USR_CODMOD"),
+                "tabela": get_field_val(row, "X2_ARQUIVO"),
+                "nome": get_field_val(row, "X2_NOME"),
+                "compartilhamento": {
+                    "empresa": get_field_val(row, "USA_EMPRESA", "N"),
+                    "unidade": get_field_val(row, "USA_UNIDADE", "N"),
+                    "filial": get_field_val(row, "USA_FILIAL", "N")
+                },
+                "indice_principal": get_field_val(row, "X2_UNICO"),
+                "campos": []
+            }
+
+        # 2. Busca os campos (SX3010) em lotes leves de 15 tabelas por requisição HTTP
+        chunk_size = 15
+        for i in range(0, len(chaves_list), chunk_size):
+            chunk_chaves = chaves_list[i:i + chunk_size]
+            chaves_in_str = ", ".join([f"'{c}'" for c in chunk_chaves])
             
-            if chave not in schema_dict:
-                schema_dict[chave] = {
-                    "modulo": get_field_val(row, "USR_CODMOD"),
-                    "tabela": get_field_val(row, "X2_ARQUIVO"),
-                    "nome": get_field_val(row, "X2_NOME"),
-                    "compartilhamento": {
-                        "empresa": get_field_val(row, "USA_EMPRESA", "N"),
-                        "unidade": get_field_val(row, "USA_UNIDADE", "N"),
-                        "filial": get_field_val(row, "USA_FILIAL", "N")
-                    },
-                    "indice_principal": get_field_val(row, "X2_UNICO"),
-                    "campos": []
-                }
-            
-            campo_nome = get_field_val(row, "X3_CAMPO")
-            if campo_nome:
-                tam_str = get_field_val(row, "X3_TAMANHO", "0")
-                try:
-                    tam_val = int(float(tam_str))
-                except Exception:
-                    tam_val = 0
-                    
-                schema_dict[chave]["campos"].append({
-                    "campo": campo_nome,
-                    "descricao": get_field_val(row, "X3_DESCRIC"),
-                    "tipo": get_field_val(row, "X3_TIPO"),
-                    "tamanho": tam_val
-                })
+            fields_query = f"""
+            /* %notparser% */
+            SELECT 
+             X3.X3_ARQUIVO,
+             X3.X3_CAMPO,
+             X3.X3_DESCRIC,
+             X3.X3_TIPO,
+             X3.X3_TAMANHO,
+             X3.X3_ORDEM
+            FROM SX3010 X3
+            WHERE X3.D_E_L_E_T_ <> '*'
+              AND X3.X3_ARQUIVO IN ({chaves_in_str})
+            ORDER BY X3.X3_ARQUIVO, X3.X3_ORDEM, X3.X3_CAMPO
+            """.replace('\n', ' ').strip()
+
+            fields_resp_str = await execute_protheus_tool("QueryRest", {"cQuery": fields_query}, tenant_id=tenant_id)
+            fields_data = json.loads(fields_resp_str)
+            if isinstance(fields_data, dict) and "items" in fields_data:
+                fields_data = fields_data["items"]
+            elif isinstance(fields_data, dict) and "data" in fields_data:
+                fields_data = fields_data["data"]
+
+            if isinstance(fields_data, list):
+                for row in fields_data:
+                    arq = get_field_val(row, "X3_ARQUIVO")
+                    campo_nome = get_field_val(row, "X3_CAMPO")
+                    if arq in schema_dict and campo_nome:
+                        tam_str = get_field_val(row, "X3_TAMANHO", "0")
+                        try:
+                            tam_val = int(float(tam_str))
+                        except Exception:
+                            tam_val = 0
+                            
+                        schema_dict[arq]["campos"].append({
+                            "campo": campo_nome,
+                            "descricao": get_field_val(row, "X3_DESCRIC"),
+                            "tipo": get_field_val(row, "X3_TIPO"),
+                            "tamanho": tam_val
+                        })
 
         if not schema_dict:
             raise Exception("Nenhuma tabela foi retornada pelo Protheus durante a sincronização.")
