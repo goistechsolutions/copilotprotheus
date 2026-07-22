@@ -281,6 +281,11 @@ def get_protheus_modules(tenant_id: str, db: Session = Depends(get_db), admin: s
 
 @router.post("/sync-schema")
 async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    def fix_json_escapes(raw_str: str) -> str:
+        s = raw_str.replace('\\', '\\\\')
+        s = s.replace('\\\\"', '\\"')
+        return s
+        
     from app.services.protheus_service import execute_protheus_tool
     import json
     from app.models.knowledge import TenantSchema
