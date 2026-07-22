@@ -458,7 +458,6 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             print(f"[SYNC-SCHEMA] Processando lote {chunk_num}/{total_chunks} ({len(chunk_chaves)} tabelas: {', '.join(chunk_chaves)})...")
             
             fields_query = f"""
-            /* %notparser% */
             SELECT 
              X3.X3_ARQUIVO,
              X3.X3_CAMPO,
