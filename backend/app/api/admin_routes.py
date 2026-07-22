@@ -318,6 +318,9 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             res_data = json.loads(resp_str)
             if isinstance(res_data, dict) and "items" in res_data: res_data = res_data["items"]
             elif isinstance(res_data, dict) and "data" in res_data: res_data = res_data["data"]
+            if isinstance(res_data, dict) and "error" in res_data:
+                raise Exception(f"Erro reportado pela API: {res_data['error']}")
+                
             if isinstance(res_data, list):
                 def get_v(row: dict, k: str) -> str:
                     if not isinstance(row, dict): return ""
@@ -411,9 +414,11 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
         elif isinstance(tables_data, dict) and "data" in tables_data:
             tables_data = tables_data["data"]
             
+        if isinstance(tables_data, dict) and "error" in tables_data:
+            raise Exception(f"Erro reportado pela API do Protheus: {tables_data['error']}")
+            
         if not isinstance(tables_data, list) or len(tables_data) == 0:
             raise Exception(f"Nenhuma tabela encontrada no Protheus para os módulos: {', '.join(clean_modulos)}")
-
         def get_field_val(row: dict, key: str, default: str = "") -> str:
             if not isinstance(row, dict): return default
             if key in row and row[key] is not None:
@@ -477,6 +482,9 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
                 fields_data = fields_data["items"]
             elif isinstance(fields_data, dict) and "data" in fields_data:
                 fields_data = fields_data["data"]
+
+            if isinstance(fields_data, dict) and "error" in fields_data:
+                raise Exception(f"Erro reportado pela API do Protheus ao buscar campos: {fields_data['error']}")
 
             if isinstance(fields_data, list):
                 for row in fields_data:
