@@ -193,6 +193,99 @@ def update_tables(tables: list = Body(...), tenant_id: str = Body(..., embed=Tru
     db.commit()
     return {"success": True, "message": "Tabelas atualizadas com sucesso."}
 
+@router.post("/sync-modules")
+async def sync_modules(payload: dict = Body(...), db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    from app.services.protheus_service import execute_protheus_tool
+    import json
+    from app.models.knowledge import ProtheusModule
+    import re
+    from sqlalchemy import text
+    from app.db.database import Base
+
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
+
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+        import app.models.knowledge
+        Base.metadata.create_all(bind=db.connection())
+        db.commit()
+
+    modules_query = "/* %notparser% */ SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*' ORDER BY USR_MODULO"
+
+    try:
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
+        result_data = json.loads(response_str)
+        if isinstance(result_data, dict) and "items" in result_data:
+            result_data = result_data["items"]
+        elif isinstance(result_data, dict) and "data" in result_data:
+            result_data = result_data["data"]
+
+        if not isinstance(result_data, list):
+            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
+
+        def get_val(row: dict, key: str, default: str = "") -> str:
+            if not isinstance(row, dict): return default
+            if key in row and row[key] is not None:
+                return str(row[key]).strip()
+            key_upper = key.strip().upper()
+            for k, v in row.items():
+                if k.strip().upper() == key_upper:
+                    return "" if v is None else str(v).strip()
+            return default
+
+        db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).delete(synchronize_session=False)
+
+        count = 0
+        for row in result_data:
+            usr_mod = get_val(row, "USR_MODULO")
+            usr_cod = get_val(row, "USR_CODMOD")
+            if usr_cod:
+                db.add(ProtheusModule(
+                    tenant_id=tenant_id,
+                    usr_modulo=usr_mod,
+                    usr_codmod=usr_cod
+                ))
+                count += 1
+
+        db.commit()
+        print(f"[SYNC-MODULES] Tabela protheus_modules atualizada para o tenant '{clean_tenant}' com {count} módulos.")
+        return {"success": True, "message": f"Tabela de referência dos módulos atualizada com sucesso! {count} módulos salvos no schema '{clean_tenant}'."}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/protheus-modules")
+def get_protheus_modules(tenant_id: str, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    from app.models.knowledge import ProtheusModule
+    from app.db.database import Base
+    import re
+    from sqlalchemy import text
+
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+        Base.metadata.create_all(bind=db.connection())
+        db.commit()
+
+    modules = db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).order_by(ProtheusModule.usr_codmod).all()
+    return {
+        "modules": [
+            {
+                "usr_modulo": m.usr_modulo,
+                "usr_codmod": m.usr_codmod
+            }
+            for m in modules
+        ]
+    }
+
 @router.post("/sync-schema")
 async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
     from app.services.protheus_service import execute_protheus_tool

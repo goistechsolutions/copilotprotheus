@@ -149,6 +149,14 @@ class TenantSchema(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+class ProtheusModule(Base):
+    __tablename__ = 'protheus_modules'
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    usr_modulo = Column(String(50), nullable=False)  # Ex: 05, 06, 5
+    usr_codmod = Column(String(50), index=True, nullable=False)  # Ex: SIGAFAT, SIGAFIN
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 class CompanyLicense(Base):
     __tablename__ = 'company_licenses'
     __table_args__ = {"schema": "public"}

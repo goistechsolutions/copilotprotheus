@@ -6,6 +6,8 @@ export default function CompanyDictionary({ company }) {
   const [schemas, setSchemas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncingModules, setSyncingModules] = useState(false);
+  const [protheusModules, setProtheusModules] = useState([]);
   const [modulosInput, setModulosInput] = useState(['SIGAFAT', 'SIGAFIN']);
   const [syncResult, setSyncResult] = useState(null);
 
@@ -16,8 +18,34 @@ export default function CompanyDictionary({ company }) {
   useEffect(() => {
     if (company?.tenant_id) {
       fetchSchemas(company.tenant_id);
+      fetchProtheusModules(company.tenant_id);
     }
   }, [company]);
+
+  const fetchProtheusModules = async (tenantId) => {
+    try {
+      const res = await axios.get(`/api/admin/protheus-modules?tenant_id=${tenantId}`, axiosConfig);
+      setProtheusModules(res.data.modules || []);
+    } catch (error) {
+      console.error("Erro ao buscar módulos:", error);
+    }
+  };
+
+  const handleSyncModules = async () => {
+    if (!company?.tenant_id) return;
+    setSyncingModules(true);
+    setSyncResult(null);
+    try {
+      const res = await axios.post('/api/admin/sync-modules', { tenant_id: company.tenant_id }, axiosConfig);
+      setSyncResult({ type: 'success', message: res.data.message });
+      fetchProtheusModules(company.tenant_id);
+    } catch (error) {
+      const detail = error.response?.data?.detail || error.message;
+      setSyncResult({ type: 'error', message: `Erro ao atualizar referência de módulos: ${detail}` });
+    } finally {
+      setSyncingModules(false);
+    }
+  };
 
   const fetchSchemas = async (tenantId) => {
     setLoading(true);
@@ -75,16 +103,32 @@ export default function CompanyDictionary({ company }) {
     );
   }
 
+  const moduleList = protheusModules.length > 0 
+    ? protheusModules.map(m => m.usr_codmod) 
+    : ['SIGAFAT', 'SIGAFIN', 'SIGACOM', 'SIGAEST', 'SIGAPCP', 'SIGACONT', 'SIGAFIS', 'SIGATMS', 'SIGAGPE', 'SIGAATF'];
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Sincronizar Estrutura do ERP</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-slate-800">Sincronizar Estrutura do ERP</h3>
+          <button
+            onClick={handleSyncModules}
+            disabled={syncingModules}
+            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+            title="Consulta SYS_USR_MODULE no Protheus e salva protheus_modules no banco"
+          >
+            <RefreshCw size={14} className={syncingModules ? "animate-spin" : ""} />
+            {syncingModules ? "Buscando Módulos..." : "Sincronizar Lista de Módulos (SYS_USR_MODULE)"}
+          </button>
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex-1 w-full">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Módulos Permitidos (Múltipla Seleção):</label>
-            <div className="flex flex-wrap gap-2 mb-1">
-              {['SIGAFAT', 'SIGAFIN', 'SIGACOM', 'SIGAEST', 'SIGAPCP', 'SIGACONT', 'SIGAFIS', 'SIGATMS', 'SIGAGPE', 'SIGAATF'].map(mod => (
-                <label key={mod} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium cursor-pointer transition-colors ${modulosInput.includes(mod) ? 'bg-brand-50 border-brand-200 text-brand-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Módulos do Sistema (SYS_USR_MODULE):</label>
+            <div className="flex flex-wrap gap-2 mb-1 max-h-36 overflow-y-auto p-1 border rounded-lg bg-slate-50">
+              {moduleList.map(mod => (
+                <label key={mod} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium cursor-pointer transition-colors ${modulosInput.includes(mod) ? 'bg-brand-50 border-brand-200 text-brand-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
                   <input 
                     type="checkbox" 
                     className="hidden"
