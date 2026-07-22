@@ -25,6 +25,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
             );
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_tenant ON "{clean_tenant}".protheus_modules (tenant_id);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_codmod ON "{clean_tenant}".protheus_modules (usr_codmod);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_modulo ON "{clean_tenant}".protheus_modules (usr_modulo);
         """))
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (

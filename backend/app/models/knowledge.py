@@ -153,7 +153,7 @@ class ProtheusModule(Base):
     __tablename__ = 'protheus_modules'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False)
-    usr_modulo = Column(String(50), nullable=False)  # Ex: 05, 06, 5
+    usr_modulo = Column(String(50), index=True, nullable=False)  # Ex: 05, 06, 5
     usr_codmod = Column(String(50), index=True, nullable=False)  # Ex: SIGAFAT, SIGAFIN
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
