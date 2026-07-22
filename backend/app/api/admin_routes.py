@@ -223,7 +223,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     mods_str = ", ".join([f"'{m}'" for m in clean_modulos])
 
-    query_str = f"""
+    base_query = f"""
     SELECT        
      MOD.USR_CODMOD,         
      X2.X2_CHAVE,         
@@ -272,19 +272,39 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
       AND MOD.USR_CODMOD IN ({mods_str})
     ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO
     """
-    query_str = query_str.replace('\n', ' ').strip()
-    query_str = "/* %notparser% */ " + query_str
 
     try:
-        response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
-        result_data = json.loads(response_str)
-        if isinstance(result_data, dict) and "items" in result_data:
-            result_data = result_data["items"]
-        elif isinstance(result_data, dict) and "data" in result_data:
-            result_data = result_data["data"]
+        page_size = 1500
+        offset = 0
+        result_data = []
+
+        # Paginação via ROWNUM (Oracle) em lotes leves de 1.500 registros para evitar o erro 500 do Protheus
+        while True:
+            paged_query = f"""
+            /* %notparser% */
+            SELECT * FROM (
+                SELECT ROWNUM AS RNUM, T.* FROM (
+                    {base_query}
+                ) T WHERE ROWNUM <= {offset + page_size}
+            ) WHERE RNUM > {offset}
+            """
+            paged_query = paged_query.replace('\n', ' ').strip()
             
-        if not isinstance(result_data, list):
-            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
+            response_str = await execute_protheus_tool("QueryRest", {"cQuery": paged_query}, tenant_id=tenant_id)
+            chunk = json.loads(response_str)
+            if isinstance(chunk, dict) and "items" in chunk:
+                chunk = chunk["items"]
+            elif isinstance(chunk, dict) and "data" in chunk:
+                chunk = chunk["data"]
+                
+            if not isinstance(chunk, list) or len(chunk) == 0:
+                break
+                
+            result_data.extend(chunk)
+            if len(chunk) < page_size:
+                break
+                
+            offset += page_size
             
         schema_dict = {}
         for row in result_data:
