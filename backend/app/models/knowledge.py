@@ -139,7 +139,6 @@ class AllowedTable(Base):
 
 class TenantSchema(Base):
     __tablename__ = 'tenant_schemas'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False)
     modulo = Column(String(50), index=True, nullable=True)

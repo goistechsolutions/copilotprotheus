@@ -198,11 +198,24 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     from app.services.protheus_service import execute_protheus_tool
     import json
     from app.models.knowledge import TenantSchema
-
     tenant_id = payload.get("tenant_id")
     modulos = payload.get("modulos", [])
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
+
+    import re
+    from sqlalchemy import text
+    from app.db.database import Base
+    
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
+        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+        import app.models.knowledge
+        Base.metadata.create_all(bind=db.connection())
+        db.commit()
 
     clean_modulos = [m.strip().upper() for m in modulos if m and isinstance(m, str) and m.strip()]
     if not clean_modulos:
@@ -318,14 +331,27 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
                 schema_json=meta
             ))
         db.commit()
-        return {"success": True, "message": f"Schema atualizado com sucesso! {len(schema_dict)} tabelas sincronizadas."}
+        return {"success": True, "message": f"Schema atualizado com sucesso no schema '{clean_tenant}'! {len(schema_dict)} tabelas sincronizadas."}
 
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/schemas")
 def get_schemas(tenant_id: str, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
     from app.models.knowledge import TenantSchema
+    from app.db.database import Base
+    import re
+    from sqlalchemy import text
+
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {clean_tenant}"))
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+        Base.metadata.create_all(bind=db.connection())
+        db.commit()
+
     schemas = db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).all()
     result = []
     for s in schemas:
