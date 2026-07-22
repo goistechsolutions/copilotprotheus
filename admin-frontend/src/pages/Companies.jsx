@@ -96,16 +96,36 @@ export default function Companies() {
           <div className="p-6 bg-slate-50/50 border-b border-slate-200">
             <h3 className="text-lg font-bold text-slate-900 mb-4">{editing === 'new' ? 'Nova Empresa' : 'Editar Empresa'}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+              <div className="col-span-1 md:col-span-2 text-sm font-semibold text-slate-800 mt-2 mb-1 border-b border-slate-100 pb-2">Dados Cadastrais</div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">CNPJ</label>
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.cnpj || ''} onChange={e => setFormData({...formData, cnpj: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Inscrição Estadual (IE)</label>
+                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.ie || ''} onChange={e => setFormData({...formData, ie: e.target.value})} />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Razão Social</label>
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.razao_social || ''} onChange={e => setFormData({...formData, razao_social: e.target.value})} />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tenant Vinculado</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">E-mail</label>
+                <input type="email" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Telefone</label>
+                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.telefone || ''} onChange={e => setFormData({...formData, telefone: e.target.value})} />
+              </div>
+              <div className="col-span-1 md:col-span-2">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Endereço Completo</label>
+                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.endereco || ''} onChange={e => setFormData({...formData, endereco: e.target.value})} />
+              </div>
+
+              <div className="col-span-1 md:col-span-2 text-sm font-semibold text-slate-800 mt-4 mb-1 border-b border-slate-100 pb-2">Configurações Protheus & Integração</div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tenant Vinculado (Obrigatório)</label>
                 <select className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.tenant_id || ''} onChange={e => setFormData({...formData, tenant_id: e.target.value})}>
                   <option value="">Selecione um Tenant...</option>
                   {tenants.map(t => (
@@ -114,28 +134,44 @@ export default function Companies() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Grupo Protheus (Legado)</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Grupo (Legado)</label>
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_grupo || ''} onChange={e => setFormData({...formData, protheus_grupo: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Empresa</label>
+                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_empresa || ''} onChange={e => setFormData({...formData, protheus_empresa: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Unidade</label>
+                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_unidade || ''} onChange={e => setFormData({...formData, protheus_unidade: e.target.value})} />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Filial</label>
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_filial || ''} onChange={e => setFormData({...formData, protheus_filial: e.target.value})} />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuário Protheus</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Ambientes (ex: producao,hml)</label>
+                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_ambientes || ''} onChange={e => setFormData({...formData, protheus_ambientes: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuário REST Protheus</label>
                 <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_usuario || ''} onChange={e => setFormData({...formData, protheus_usuario: e.target.value})} />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Senha Protheus (Nova)</label>
-                <input type="password" placeholder={editing === 'new' ? "Obrigatório" : "Deixe em branco para manter a atual"} className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_password || ''} onChange={e => setFormData({...formData, protheus_password: e.target.value})} />
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Senha REST Protheus</label>
+                <input type="password" placeholder={editing === 'new' ? "Obrigatório" : "Deixe em branco p/ manter a atual"} className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_password || ''} onChange={e => setFormData({...formData, protheus_password: e.target.value})} />
               </div>
               <div className="col-span-1 md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">URL Portal REST</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_rest_url || ''} onChange={e => setFormData({...formData, protheus_rest_url: e.target.value})} />
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">URL Portal REST (API)</label>
+                <input type="text" placeholder="http://ip:porta/rest" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_rest_url || ''} onChange={e => setFormData({...formData, protheus_rest_url: e.target.value})} />
               </div>
               <div className="col-span-1 md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Licença de Uso (JWT)</label>
-                <textarea className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-mono h-24 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.licenca_uso || ''} onChange={e => setFormData({...formData, licenca_uso: e.target.value})} />
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">URL WebApp (Opcional - p/ Atalhos)</label>
+                <input type="text" placeholder="http://ip:porta/webapp" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_webapp_url || ''} onChange={e => setFormData({...formData, protheus_webapp_url: e.target.value})} />
+              </div>
+              <div className="col-span-1 md:col-span-2">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Licença de Uso (JWT JWT)</label>
+                <textarea className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-mono h-20 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.licenca_uso || ''} onChange={e => setFormData({...formData, licenca_uso: e.target.value})} />
               </div>
             </div>
             <div className="flex gap-3">
@@ -187,7 +223,25 @@ export default function Companies() {
                       Inativo
                     </span>
                   )}
-                  <div className="text-slate-300 group-hover:text-brand-600 transition-colors">
+                  
+                  <div className="flex items-center gap-1 ml-3 border-l border-slate-200 pl-3">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleEdit(c); }}
+                      className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                      title="Editar Empresa"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Excluir Empresa"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+
+                  <div className="text-slate-300 group-hover:text-brand-600 transition-colors ml-1">
                     <ChevronRight size={20} />
                   </div>
                 </div>

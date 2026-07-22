@@ -80,9 +80,9 @@ export default function CompanyDashboard() {
           <div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{company.razao_social}</h2>
             <div className="flex gap-3 text-sm text-slate-500 mt-1">
-              <span>CNPJ: {company.cnpj}</span>
+              <span>CNPJ: {company.cnpj || 'Não informado'}</span>
               <span>•</span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-mono text-xs">Tenant: {company.tenant_id}</span>
+              <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-mono text-xs">Tenant: {company.tenant_id || company.protheus_grupo || 'N/A'}</span>
               <span>•</span>
               <span className={`px-2 py-0.5 rounded text-xs font-bold ${company.status === 'ativa' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                 {company.status.toUpperCase()}
