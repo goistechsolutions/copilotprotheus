@@ -40,3 +40,8 @@
 - Ao consultar notas de entrada, faça JOIN entre **SF1** (Cabeçalho da Nota de Entrada) e **SD1** (Itens da Nota de Entrada) via `F1_FILIAL = D1_FILIAL`, `F1_DOC = D1_DOC`, `F1_SERIE = D1_SERIE`, `F1_FORNECE = D1_FORNECE` e `F1_LOJA = D1_LOJA`.
 - Para notas de entrada, o cruzamento com **SF4** (TES) é feito via `D1_TES = F4_CODIGO`.
 - Filtros úteis para Notas de Entrada Normais: `F1_TIPO = 'N'`.
+
+---
+
+## 6. Desenvolvimento em AdvPL
+- Em AdvPL, as variáveis `Local` devem **obrigatoriamente** ser declaradas no início da função/método. Não declare variáveis locais dentro de blocos lógicos (`If`, `While`, `For`) ou após comandos de execução.

@@ -134,11 +134,25 @@ async def get_protheus_token(tenant_id: str, user: str = None, password: str = N
     reraise=True
 )
 async def _execute_http_get_with_retry(url: str, params: dict, headers: dict) -> str:
-    logger.info(f"Chamando endpoint Protheus com retry: {url}")
+    logger.info(f"Chamando endpoint Protheus (GET) com retry: {url}")
     async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
         resp = await client.get(url, params=params, headers=headers)
         resp.raise_for_status()
         return resp.text
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=6),
+    retry=retry_if_exception_type(httpx.HTTPError),
+    reraise=True
+)
+async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict) -> str:
+    logger.info(f"Chamando endpoint Protheus (POST) com retry: {url}")
+    async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
+        resp = await client.post(url, json=json_data, headers=headers)
+        resp.raise_for_status()
+        return resp.text
+
 
 async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None) -> str:
     config = get_tenant_config(tenant_id)
@@ -182,7 +196,10 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     urllib3.disable_warnings()
     
     try:
-        return await _execute_http_get_with_retry(url, query_params, headers)
+        if endpoint.lower() == "queryrest" or endpoint.lower().endswith("/queryrest"):
+            return await _execute_http_post_with_retry(url, query_params, headers)
+        else:
+            return await _execute_http_get_with_retry(url, query_params, headers)
     except Exception as e:
         logger.error(f"Falha após retries ao chamar Protheus ({url}) para o tenant {tenant_id}: {e}")
         return json.dumps({"error": f"Falha persistente ao chamar Protheus ({url}): {str(e)}"})
