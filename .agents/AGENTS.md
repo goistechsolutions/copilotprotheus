@@ -45,3 +45,10 @@
 
 ## 6. Desenvolvimento em AdvPL
 - Em AdvPL, as variáveis `Local` devem **obrigatoriamente** ser declaradas no início da função/método. Não declare variáveis locais dentro de blocos lógicos (`If`, `While`, `For`) ou após comandos de execução.
+
+---
+
+## 7. Diretrizes de Desenvolvimento de APIs REST TOTVS (Guia de Implementação)
+- **Não misturar modelos de recebimento**: Ao criar um método `POST`, `PUT` ou `PATCH` que espera receber um payload JSON no corpo (body) da requisição, **não utilize** a cláusula `WSRECEIVE` na assinatura do método. A cláusula `WSRECEIVE` força o Framework Rest a aguardar os parâmetros via *Query String* (URL) ou *Form-UrlEncoded*, e pode invalidar ou esvaziar a leitura de `::GetContent()`. Use `WSRECEIVE` apenas em `GET` e `DELETE`.
+- **Documentação e Swagger**: Sempre inclua as cláusulas `DESCRIPTION` e, em especial, `WSSYNTAX "/rota"` tanto na definição da classe `WSRESTFUL` quanto nos métodos `WSMETHOD`. Isso é obrigatório para que a API seja documentada corretamente no Swagger e para que o AppServer crie a rota HTTP sem ambiguidades.
+- **Tratamento de Erros HTTP**: Utilize sempre o padrão nativo `SetRestFault(nStatusCode, cMensagem)` para devolver erros formatados corretamente pelo framework REST (que vai gerar a estrutura `{"errorCode": ..., "errorMessage": ...}`). Para devolver sucesso com JSON, utilize `::SetResponse(cJsonData)`.
