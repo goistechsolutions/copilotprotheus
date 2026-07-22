@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.knowledge import AgentUser
 from pydantic import BaseModel
+from typing import List, Optional
 import hashlib
 
 router = APIRouter(tags=["Auth"])
@@ -10,32 +11,64 @@ router = APIRouter(tags=["Auth"])
 class RegisterRequest(BaseModel):
     tenant_id: str
     username: str
-    password: str
+    password: Optional[str] = None
+    role: Optional[str] = 'user'
+
+class UserResponse(BaseModel):
+    id: int
+    tenant_id: str
+    username: str
+    role: str
+
+    class Config:
+        from_attributes = True
 
 def hash_password(password: str) -> str:
     # Simples hash SHA-256
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-@router.post("/register")
-def register_agent(req: RegisterRequest, db: Session = Depends(get_db)):
-    # Check se o usuário já existe
+@router.get("/users/{tenant_id}", response_model=List[UserResponse])
+def get_users_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
+    users = db.query(AgentUser).filter(AgentUser.tenant_id == tenant_id).order_by(AgentUser.id.desc()).all()
+    return users
+
+@router.post("/register", response_model=UserResponse)
+def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)):
+    # Check se o usuário já existe no tenant
     existing = db.query(AgentUser).filter(
         AgentUser.tenant_id == req.tenant_id,
         AgentUser.username == req.username
     ).first()
     
-    hashed = hash_password(req.password)
-    
     if existing:
-        existing.password_hash = hashed
+        if req.password:
+            existing.password_hash = hash_password(req.password)
+        if req.role:
+            existing.role = req.role
         db.commit()
-        return {"message": "Senha atualizada com sucesso"}
+        db.refresh(existing)
+        return existing
     else:
+        if not req.password:
+            raise HTTPException(status_code=400, detail="Senha é obrigatória para novos usuários.")
+        
         new_user = AgentUser(
             tenant_id=req.tenant_id,
             username=req.username,
-            password_hash=hashed
+            password_hash=hash_password(req.password),
+            role=req.role or 'user'
         )
         db.add(new_user)
         db.commit()
-        return {"message": "Usuário registrado com sucesso"}
+        db.refresh(new_user)
+        return new_user
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(AgentUser).filter(AgentUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    db.delete(user)
+    db.commit()
+    return {"message": "Usuário excluído com sucesso"}

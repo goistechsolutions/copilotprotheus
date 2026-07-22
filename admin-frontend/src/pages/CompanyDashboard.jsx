@@ -18,10 +18,7 @@ function CompanyConfig({ company }) {
 
 import CompanyDictionary from './company/Dictionary';
 import CompanyBilling from './company/Billing';
-
-function CompanyUsers({ company }) {
-  return <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200"><h3 className="font-bold mb-4">Usuários do Copilot</h3><p>Gerencie quem tem acesso na {company?.razao_social}</p></div>;
-}
+import CompanyUsers from './company/Users';
 
 function CompanyHealth({ company }) {
   return <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200"><h3 className="font-bold mb-4">Logs & Disponibilidade</h3><p>Status do Protheus REST URL: {company?.protheus_rest_url}</p></div>;
