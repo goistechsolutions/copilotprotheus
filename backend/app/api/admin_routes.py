@@ -223,7 +223,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
 
     mods_str = ", ".join([f"'{m}'" for m in clean_modulos])
 
-    # 1. Consulta metadados das tabelas (SX2010)
+    # 1. Consulta metadados das tabelas (SX2010 + SX3010)
     tables_query = f"""
     /* %notparser% */
     SELECT DISTINCT        
@@ -242,6 +242,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
      CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,         
      CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
     FROM SX2010 X2         
+    INNER JOIN SX3010 X3 ON X2.X2_CHAVE = X3.X3_ARQUIVO AND X3.D_E_L_E_T_ <> '*'
     INNER JOIN (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*') MOD        
      ON X2.X2_MODULO = MOD.USR_MODULO 
     WHERE X2.D_E_L_E_T_ <> '*'
