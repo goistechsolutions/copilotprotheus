@@ -200,6 +200,10 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
             return await _execute_http_post_with_retry(url, query_params, headers)
         else:
             return await _execute_http_get_with_retry(url, query_params, headers)
+    except httpx.HTTPStatusError as e:
+        error_body = e.response.text
+        logger.error(f"Falha HTTP {e.response.status_code} ao chamar Protheus ({url}): {error_body}")
+        return json.dumps({"error": f"Erro {e.response.status_code} do Protheus: {error_body}"})
     except Exception as e:
         logger.error(f"Falha após retries ao chamar Protheus ({url}) para o tenant {tenant_id}: {e}")
         return json.dumps({"error": f"Falha persistente ao chamar Protheus ({url}): {str(e)}"})
