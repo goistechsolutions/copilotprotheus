@@ -312,7 +312,7 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     # Se a tabela de referência protheus_modules ainda estiver vazia no PostgreSQL, auto-sincroniza a referência primeiro
     if not db_mods:
         print(f"[SYNC-SCHEMA] Tabela protheus_modules vazia para {clean_modulos}. Auto-sincronizando referência SYS_USR_MODULE...")
-        modules_query = "/* %notparser% */ SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
+        modules_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
         try:
             resp_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
             res_data = json.loads(resp_str)
