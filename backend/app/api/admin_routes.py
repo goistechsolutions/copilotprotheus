@@ -204,6 +204,12 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
 
+    clean_modulos = [m.strip().upper() for m in modulos if m and isinstance(m, str) and m.strip()]
+    if not clean_modulos:
+        raise HTTPException(status_code=400, detail="Selecione ao menos um módulo para sincronizar.")
+
+    mods_str = ", ".join([f"'{m}'" for m in clean_modulos])
+
     query_str = f"""
     SELECT        
      MOD.USR_CODMOD,         
@@ -250,14 +256,9 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
     LEFT JOIN SXG010 XG   
      ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*'                                                                                                                       
     WHERE X2.D_E_L_E_T_ <> '*'
+      AND MOD.USR_CODMOD IN ({mods_str})
+    ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO
     """
-    
-    if modulos:
-        mods_str = ", ".join([f"'{m.strip().upper()}'" for m in modulos if m.strip()])
-        if mods_str:
-            query_str += f" AND MOD.USR_CODMOD IN ({mods_str})"
-            
-    query_str += " ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
     query_str = query_str.replace('\n', ' ').strip()
     query_str = "/* %notparser% */ " + query_str
 
@@ -302,14 +303,10 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
             raise Exception("Nenhuma tabela foi retornada pelo Protheus durante a sincronização.")
 
         # Salvar no banco
-        if modulos:
-            target_mods = [m.strip().upper() for m in modulos if m.strip()]
-            db.query(TenantSchema).filter(
-                TenantSchema.tenant_id == tenant_id,
-                TenantSchema.modulo.in_(target_mods)
-            ).delete(synchronize_session=False)
-        else:
-            db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(TenantSchema).filter(
+            TenantSchema.tenant_id == tenant_id,
+            TenantSchema.modulo.in_(clean_modulos)
+        ).delete(synchronize_session=False)
         
         for chave, meta in schema_dict.items():
             db.add(TenantSchema(

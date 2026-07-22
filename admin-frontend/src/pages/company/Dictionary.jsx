@@ -43,7 +43,11 @@ export default function CompanyDictionary({ company }) {
     setSyncing(true);
     setSyncResult(null);
     
-    const modulosArray = modulosInput.length > 0 ? modulosInput : [];
+    if (modulosInput.length === 0) {
+      setSyncResult({ type: 'error', message: 'Selecione ao menos um módulo para iniciar a sincronização.' });
+      return;
+    }
+    const modulosArray = modulosInput;
     try {
       const res = await axios.post('/api/admin/sync-schema', { 
         tenant_id: company.tenant_id,
@@ -97,7 +101,7 @@ export default function CompanyDictionary({ company }) {
                 </label>
               ))}
             </div>
-            <p className="text-xs text-slate-500 mt-2">Deixe todos desmarcados para sincronizar TODOS os módulos.</p>
+            <p className="text-xs text-slate-500 mt-2">Selecione os módulos que deseja sincronizar.</p>
           </div>
           <button 
             onClick={handleSync}
