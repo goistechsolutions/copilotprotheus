@@ -74,7 +74,7 @@ export default function Companies() {
     if (!confirm("Isso irá gerar uma nova licença JWT para esta empresa válida até 2030. Continuar?")) return;
     
     try {
-      const res = await axios.post('/api/companies/license/generate', {
+      const res = await axios.post('/api/license/generate', {
         cnpj: formData.cnpj,
         expiration_date: '2030-12-31',
         plan_level: 'enterprise'
