@@ -57,16 +57,25 @@ export default function AgentWorkspace(){
     setLoading(false)
   }
 
-  return <div className="shell">
+  return <div className="flex h-screen w-full bg-slate-900 text-slate-100 overflow-hidden font-sans">
     <HistoryRail items={history} onSelect={setSelected} onNew={() => { setMessages([{ role: 'assistant', text: 'Nova conversa iniciada.' }]); setResult(null); setSelected(null) }} />
-    <main className="workspace">
+    <main className="flex-1 flex flex-col bg-slate-800 shadow-xl z-10 overflow-hidden relative">
       <ContextBanner state={state} />
-      <header className="hero"><h1>Workspace Analítico</h1><p>Aqui aparecem os resultados gráficos e tabulares das suas requisições.</p></header>
-      <SuggestionCards items={suggestions} disabled={!state.ready || loading} onPick={(it) => send(it.title)} />
-      <Conversation messages={messages} />
-      <Composer disabled={!state.ready || loading} onSend={send} placeholder={state.ready ? 'Faça sua pergunta sobre o Protheus...' : 'Aguardando contexto do Protheus...'} />
-      {selected && <div className="selected">Histórico selecionado: {selected.title}</div>}
+      <header className="px-8 py-6 text-center border-b border-slate-700/50 bg-slate-800/80 backdrop-blur-sm z-10">
+         <h1 className="text-2xl font-semibold text-slate-100">Workspace Analítico</h1>
+         <p className="text-slate-400 mt-2 text-sm">Aqui aparecem os resultados gráficos e tabulares das suas requisições.</p>
+      </header>
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 scroll-smooth">
+          <SuggestionCards items={suggestions} disabled={!state.ready || loading} onPick={(it) => send(it.title)} />
+          <Conversation messages={messages} />
+          {selected && <div className="p-4 mx-auto w-full max-w-3xl bg-blue-500/10 text-blue-400 rounded-lg text-sm border border-blue-500/20">Histórico selecionado: {selected.title}</div>}
+      </div>
+      <div className="p-4 border-t border-slate-700 bg-slate-800 shrink-0">
+          <Composer disabled={!state.ready || loading} onSend={send} placeholder={state.ready ? 'Faça sua pergunta sobre o Protheus...' : 'Aguardando contexto do Protheus...'} />
+      </div>
     </main>
-    <aside className="results"><ResultPane result={result} /></aside>
+    <aside className="w-[450px] shrink-0 bg-slate-900 border-l border-slate-700 overflow-y-auto flex-col hidden lg:flex">
+       <ResultPane result={result} />
+    </aside>
   </div>
 }
