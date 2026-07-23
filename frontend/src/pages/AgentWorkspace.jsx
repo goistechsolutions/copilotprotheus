@@ -5,6 +5,8 @@ import TopContextStrip from '../components/TopContextStrip';
 import QuickSuggestions from '../components/QuickSuggestions';
 import ConversationList from '../components/ConversationList';
 import ResultsArea from '../components/ResultsArea';
+import LoadingOverlay from '../components/LoadingOverlay';
+import ContextStatus from '../components/ContextStatus';
 import { Send, Loader2 } from 'lucide-react';
 
 const suggestions = [
@@ -15,38 +17,67 @@ const suggestions = [
 ];
 
 export default function AgentWorkspace() {
-  const [context, setContext] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return {
-      tenant: params.get('tenant') || 'Tenant Default',
-      company: params.get('company') || 'Matriz',
-      branch: params.get('branch') || '0101',
-      user: params.get('user') || 'admin'
-    };
+  const [context, setContext] = useState({
+    tenant: 'Buscando Tenant...',
+    company: 'Buscando Empresa...',
+    branch: 'Buscando Filial...',
+    user: 'Buscando Usuário...',
+    profile: 'Negócio'
   });
 
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: 'Olá! Sou o seu Copilot integrado ao Protheus. Posso gerar análises, relatórios ou responder dúvidas sobre os dados do ERP.' }
+    { role: 'assistant', text: 'Aguardando sincronização de contexto com o ERP...' }
   ]);
   const [history, setHistory] = useState([]);
   const [result, setResult] = useState(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeConversation, setActiveConversation] = useState(null);
+  
+  // v1.3 Lifecycle states
+  const [contextReady, setContextReady] = useState(false);
+  const [contextMessage, setContextMessage] = useState('Montando ambiente...');
 
   const conversationEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Escuta contexto da extensão (se houver)
+  // Escuta contexto da extensão (Real & Mock)
   useEffect(() => {
+    // Escuta real do Content Script
     const handleMessage = (event) => {
       if (event.data && event.data.type === 'cprot-context-update') {
         setContext(prev => ({ ...prev, ...event.data.payload }));
+        setContextReady(true);
+        setContextMessage('Sessão validada');
+        setMessages([{ role: 'assistant', text: 'Pronto! Contexto sincronizado com sucesso. Como posso ajudar?' }]);
       }
     };
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
+
+    // Mock para testes locais (fallback)
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    let mockTimer;
+    if (isLocalhost) {
+      mockTimer = setTimeout(() => {
+        if (!contextReady) { // Se a extensão real não respondeu (provavelmente pq não estamos no iframe do Protheus)
+          setContext({
+            tenant: 'Grupo Alpha (Dev)',
+            company: 'Matriz',
+            branch: '0101',
+            user: 'admin_dev'
+          });
+          setContextReady(true);
+          setContextMessage('Sessão simulada (Dev)');
+          setMessages([{ role: 'assistant', text: 'Pronto! Ambiente simulado carregado. Como posso ajudar com os dados?' }]);
+        }
+      }, 1500); // 1.5s de fake loading para testes
+    }
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      if (mockTimer) clearTimeout(mockTimer);
+    };
+  }, [contextReady]);
 
   // Mock histórico
   useEffect(() => {
@@ -71,7 +102,7 @@ export default function AgentWorkspace() {
   }, [messages, loading]);
 
   const send = async (text) => {
-    if (!text?.trim() || loading) return;
+    if (!contextReady || !text?.trim() || loading) return;
     
     setMessages(m => [...m, { role: 'user', text }]);
     setLoading(true);
@@ -93,7 +124,7 @@ export default function AgentWorkspace() {
       const formattedResult = {
         ...res,
         rows: res.table || res.rows || [],
-        title: text, // Usa a pergunta como título do resultado
+        title: text,
       };
       
       setResult(formattedResult);
@@ -120,6 +151,7 @@ export default function AgentWorkspace() {
   };
 
   const newChat = () => {
+    if (!contextReady) return;
     setMessages([{ role: 'assistant', text: 'Nova conversa iniciada. Como posso ajudar?' }]);
     setResult(null);
     setInput('');
@@ -129,8 +161,10 @@ export default function AgentWorkspace() {
   const pickSuggestion = (item) => send(item.title);
 
   return (
-    <div className="flex h-screen w-full bg-slate-100 font-sans overflow-hidden">
+    <div className="flex h-screen w-full bg-slate-100 font-sans overflow-hidden relative">
       
+      <LoadingOverlay visible={!contextReady} text="Sincronizando com ERP..." />
+
       {/* Coluna 1: SideRail (Left Sidebar) */}
       <SideRail 
         history={history} 
@@ -140,7 +174,14 @@ export default function AgentWorkspace() {
 
       {/* Coluna 2: Main Panel (Center) */}
       <main className="flex-1 flex flex-col relative z-10 shadow-2xl min-w-[300px]">
-        <TopContextStrip context={context} />
+        
+        {/* Top Context com ContextStatus injetado */}
+        <div className="flex flex-col">
+           <TopContextStrip context={context} />
+           <div className="absolute top-[14px] left-1/2 -translate-x-1/2 z-20">
+              <ContextStatus status={contextReady ? 'ok' : 'loading'} message={contextMessage} />
+           </div>
+        </div>
         
         {messages.length === 1 && !loading && !result ? (
           <div className="flex-1 flex flex-col justify-center pb-20 custom-scrollbar overflow-y-auto">
@@ -148,10 +189,10 @@ export default function AgentWorkspace() {
                 <div className="w-16 h-16 mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center mb-6">
                   <span className="text-3xl font-bold bg-gradient-to-br from-brand-500 to-brand-700 bg-clip-text text-transparent">P</span>
                 </div>
-                <h1 className="text-2xl font-bold text-slate-800 mb-2">Bem-vindo ao Copilot</h1>
+                <h1 className="text-2xl font-bold text-slate-800 mb-2">Workspace Analítico</h1>
                 <p className="text-slate-500 max-w-md mx-auto">Explore seus dados de forma conversacional.</p>
              </div>
-             <QuickSuggestions items={suggestions} onPick={pickSuggestion} />
+             <QuickSuggestions items={suggestions} onPick={pickSuggestion} disabled={!contextReady || loading} />
           </div>
         ) : (
           <ConversationList messages={messages} loading={loading} ref={conversationEndRef} />
@@ -165,16 +206,16 @@ export default function AgentWorkspace() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Pergunte ao Protheus..."
-                disabled={loading}
+                placeholder={contextReady ? 'Pergunte ao Protheus...' : 'Aguardando sincronização de contexto...'}
+                disabled={!contextReady || loading}
                 rows={1}
-                className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-2xl pl-5 pr-14 py-3.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white focus:border-brand-500 transition-all resize-none shadow-inner custom-scrollbar"
+                className={`w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-2xl pl-5 pr-14 py-3.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white focus:border-brand-500 transition-all resize-none shadow-inner custom-scrollbar ${!contextReady ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
               <button
                 onClick={() => { send(input); setInput(''); }}
-                disabled={!input.trim() || loading}
+                disabled={!contextReady || !input.trim() || loading}
                 className={`absolute right-2 bottom-2 p-2 rounded-xl flex items-center justify-center transition-all ${
-                  input.trim() && !loading 
+                  input.trim() && !loading && contextReady
                     ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-md transform hover:-translate-y-0.5' 
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 }`}
@@ -186,7 +227,9 @@ export default function AgentWorkspace() {
       </main>
 
       {/* Coluna 3: Results Panel (Right Sidebar) */}
-      <aside className="w-[45%] max-w-[600px] min-w-[400px] hidden md:flex flex-col bg-white border-l border-slate-200 z-0">
+      <aside className="w-[45%] max-w-[600px] min-w-[400px] hidden md:flex flex-col bg-white border-l border-slate-200 z-0 relative">
+        {/* Adiciona um overlay sutil na direita enquanto nao tiver contexto */}
+        {!contextReady && <div className="absolute inset-0 bg-slate-50/50 backdrop-blur-sm z-10" />}
         <ResultsArea result={result} />
       </aside>
 
