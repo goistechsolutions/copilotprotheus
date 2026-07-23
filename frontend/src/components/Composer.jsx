@@ -17,6 +17,8 @@ export default function Composer({ disabled, onSend, placeholder }) {
     return (
         <div className="w-full max-w-3xl mx-auto relative group">
             <textarea 
+                id="composer-input"
+                name="composer-input"
                 rows={2} 
                 disabled={disabled} 
                 value={value} 
