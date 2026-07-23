@@ -73,13 +73,18 @@ export default function Companies() {
     }
     if (!confirm("Isso irá gerar uma nova licença JWT para esta empresa válida até 2030. Continuar?")) return;
     
+    const adminKey = window.prompt("Por favor, informe a Chave Admin (X-Admin-Key) para gerar a licença:");
+    if (!adminKey) return; // cancelou
+
     try {
       const res = await axios.post('/api/license/generate', {
         cnpj: formData.cnpj,
         expiration_date: '2030-12-31',
         plan_level: 'enterprise'
+      }, {
+        headers: { 'X-Admin-Key': adminKey }
       });
-      setFormData({...formData, licenca_uso: res.data.license_token});
+      setFormData({...formData, licenca_uso: res.data.token});
       alert("Licença gerada com sucesso! Não se esqueça de Salvar a empresa.");
     } catch (error) {
       alert("Erro ao gerar licença: " + (error.response?.data?.detail || error.message));
