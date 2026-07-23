@@ -83,10 +83,10 @@ function Sidebar({ isOpen, setIsOpen }) {
                       key={item.path}
                       to={item.path}
                       onClick={() => setIsOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 border ${
                         isActive 
-                          ? 'bg-brand-50 text-brand-700 font-semibold' 
-                          : 'hover:bg-slate-50 hover:text-slate-900 text-sm font-medium text-slate-600'
+                          ? 'border-slate-300 bg-white shadow-sm text-slate-900 font-semibold' 
+                          : 'border-transparent hover:bg-slate-100 hover:text-slate-900 text-sm font-medium text-slate-600'
                       }`}
                     >
                       <span className={isActive ? 'text-brand-600' : 'text-slate-400'}>{item.icon}</span>

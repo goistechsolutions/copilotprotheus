@@ -27,8 +27,8 @@ export default function Tables() {
 
   const fetchTenants = async () => {
     try {
-      const res = await axios.get('/api/admin/tenants', axiosConfig);
-      setTenants(res.data.tenants || []);
+      const res = await axios.get('/api/companies', axiosConfig);
+      setTenants(res.data || []);
     } catch (error) {
       console.error("Erro ao carregar tenants:", error);
     }
@@ -98,8 +98,8 @@ export default function Tables() {
           >
             <option value="default">Default (Padrão Global)</option>
             {tenants.map(t => (
-              <option key={t.id} value={t.tenant_id}>
-                {t.name} ({t.tenant_id})
+              <option key={t.id} value={t.tenant_id || t.protheus_grupo}>
+                {t.razao_social || t.name} ({t.tenant_id || t.protheus_grupo})
               </option>
             ))}
           </select>

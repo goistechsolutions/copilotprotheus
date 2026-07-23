@@ -193,79 +193,330 @@ def update_tables(tables: list = Body(...), tenant_id: str = Body(..., embed=Tru
     db.commit()
     return {"success": True, "message": "Tabelas atualizadas com sucesso."}
 
+@router.post("/sync-modules")
+async def sync_modules(payload: dict = Body(...), db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    from app.services.protheus_service import execute_protheus_tool
+    import json
+    from app.models.knowledge import ProtheusModule
+    import re
+    from sqlalchemy import text
+    from app.db.database import Base
+
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
+
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        from app.db.database import ensure_tenant_tables
+        ensure_tenant_tables(db, clean_tenant)
+
+    modules_query = "/* %notparser% */ SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*' ORDER BY USR_MODULO"
+
+    try:
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
+        result_data = json.loads(response_str)
+        if isinstance(result_data, dict) and "items" in result_data:
+            result_data = result_data["items"]
+        elif isinstance(result_data, dict) and "data" in result_data:
+            result_data = result_data["data"]
+
+        if not isinstance(result_data, list):
+            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
+
+        def get_val(row: dict, key: str, default: str = "") -> str:
+            if not isinstance(row, dict): return default
+            if key in row and row[key] is not None:
+                return str(row[key]).strip()
+            key_upper = key.strip().upper()
+            for k, v in row.items():
+                if k.strip().upper() == key_upper:
+                    return "" if v is None else str(v).strip()
+            return default
+
+        db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).delete(synchronize_session=False)
+
+        count = 0
+        for row in result_data:
+            usr_mod = get_val(row, "USR_MODULO")
+            usr_cod = get_val(row, "USR_CODMOD")
+            if usr_cod:
+                db.add(ProtheusModule(
+                    tenant_id=tenant_id,
+                    usr_modulo=usr_mod,
+                    usr_codmod=usr_cod
+                ))
+                count += 1
+
+        db.commit()
+        print(f"[SYNC-MODULES] Tabela protheus_modules atualizada para o tenant '{clean_tenant}' com {count} módulos.")
+        return {"success": True, "message": f"Tabela de referência dos módulos atualizada com sucesso! {count} módulos salvos no schema '{clean_tenant}'."}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/protheus-modules")
+def get_protheus_modules(tenant_id: str, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    from app.models.knowledge import ProtheusModule
+    from app.db.database import Base
+    import re
+    from sqlalchemy import text
+
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        from app.db.database import ensure_tenant_tables
+        ensure_tenant_tables(db, clean_tenant)
+
+    modules = db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).order_by(ProtheusModule.usr_codmod).all()
+    return {
+        "modules": [
+            {
+                "usr_modulo": m.usr_modulo,
+                "usr_codmod": m.usr_codmod
+            }
+            for m in modules
+        ]
+    }
+
 @router.post("/sync-schema")
 async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    def fix_json_escapes(raw_str: str) -> str:
+        s = raw_str.replace('\\', '\\\\')
+        s = s.replace('\\\\"', '\\"')
+        return s
+        
     from app.services.protheus_service import execute_protheus_tool
     import json
     from app.models.knowledge import TenantSchema
-
     tenant_id = payload.get("tenant_id")
     modulos = payload.get("modulos", [])
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
 
-    query_str = """
-    SELECT 
-    MOD.USR_CODMOD, X2.X2_CHAVE, X2.X2_ARQUIVO, X2.X2_NOME, 
-    X2.X2_TAMFIL, X2.X2_MODO, X2.X2_TAMUN, X2.X2_MODOUN, 
-    X2.X2_TAMEMP, X2.X2_MODOEMP, X2.X2_UNICO, 
-    X3.X3_CAMPO, X3.X3_DESCRIC, X3.X3_TIPO, X3.X3_TAMANHO, 
-    X3.X3_GRPSXG, XG.XG_SIZE, 
-    CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA, 
-    CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE, 
-    CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL 
-    FROM SX2010 X2 
-    INNER JOIN SX3010 X3 ON X2.X2_CHAVE = X3.X3_ARQUIVO AND X3.D_E_L_E_T_ <> '*' 
-    INNER JOIN SYS_USR_MODULE MOD ON X2.X2_MODULO = MOD.USR_MODULO AND MOD.D_E_L_E_T_<>'*' 
-    LEFT JOIN SXG010 XG ON X3.X3_GRPSXG = XG.XG_GRUPO AND XG.D_E_L_E_T_<>'*' 
-    WHERE X2.D_E_L_E_T_ <> '*' 
-    """
-    if modulos:
-        mods_str = ",".join([f"'{m}'" for m in modulos])
-        query_str += f" AND MOD.USR_CODMOD IN ({mods_str})"
-        
-    query_str += " ORDER BY MOD.USR_CODMOD, X2.X2_CHAVE, X3.X3_ORDEM, X3.X3_CAMPO"
+    import re
+    from sqlalchemy import text
+    from app.db.database import Base, ensure_tenant_tables
+    
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        ensure_tenant_tables(db, clean_tenant)
+
+    clean_modulos = [m.strip().upper() for m in modulos if m and isinstance(m, str) and m.strip()]
+    if not clean_modulos:
+        raise HTTPException(status_code=400, detail="Selecione ao menos um módulo para sincronizar.")
+
+    from app.models.knowledge import ProtheusModule, TenantSchema
+    
+    # 1. Verifica/Busca os códigos numéricos X2_MODULO na tabela de referência protheus_modules
+    db_mods = db.query(ProtheusModule).filter(
+        ProtheusModule.tenant_id == tenant_id,
+        ProtheusModule.usr_codmod.in_(clean_modulos)
+    ).all()
+
+    # Se a tabela de referência protheus_modules ainda estiver vazia no PostgreSQL, auto-sincroniza a referência primeiro
+    if not db_mods:
+        print(f"[SYNC-SCHEMA] Tabela protheus_modules vazia para {clean_modulos}. Auto-sincronizando referência SYS_USR_MODULE...")
+        modules_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
+        try:
+            resp_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
+            res_data = json.loads(fix_json_escapes(resp_str))
+            if isinstance(res_data, dict) and "items" in res_data: res_data = res_data["items"]
+            elif isinstance(res_data, dict) and "data" in res_data: res_data = res_data["data"]
+            if isinstance(res_data, dict) and "error" in res_data:
+                raise Exception(f"Erro reportado pela API: {res_data['error']}")
+                
+            if isinstance(res_data, list):
+                def get_v(row: dict, k: str) -> str:
+                    if not isinstance(row, dict): return ""
+                    if k in row and row[k] is not None: return str(row[k]).strip()
+                    for rk, rv in row.items():
+                        if rk.strip().upper() == k.upper(): return "" if rv is None else str(rv).strip()
+                    return ""
+                db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).delete(synchronize_session=False)
+                for r in res_data:
+                    um, uc = get_v(r, "USR_MODULO"), get_v(r, "USR_CODMOD")
+                    if uc: db.add(ProtheusModule(tenant_id=tenant_id, usr_modulo=um, usr_codmod=uc))
+                db.commit()
+                db_mods = db.query(ProtheusModule).filter(
+                    ProtheusModule.tenant_id == tenant_id,
+                    ProtheusModule.usr_codmod.in_(clean_modulos)
+                ).all()
+        except Exception as ex_mod:
+            print(f"[SYNC-SCHEMA] Aviso ao auto-sincronizar protheus_modules: {ex_mod}")
+
+        # Se ainda assim estiver vazio (a query retornou sucesso 201 mas a tabela tava vazia ou não achou colunas)
+        # Vamos adicionar o mapeamento padrão e inquestionável da TOTVS
+        if not db_mods:
+            print(f"[SYNC-SCHEMA] SYS_USR_MODULE não retornou dados úteis. Aplicando fallback hardcoded para módulos clássicos TOTVS...")
+            fallback_map = {
+                "SIGAATF": "01", "SIGACOM": "02", "SIGAEST": "04", "SIGAFAT": "05", 
+                "SIGAFIN": "06", "SIGAGPE": "07", "SIGAFIS": "09", "SIGAPON": "16", 
+                "SIGATMK": "31", "SIGACTB": "34", "SIGAADV": "34", "SIGAMNT": "43", "SIGAJURI": "76"
+            }
+            try:
+                # Remove se existir lixo para este tenant e insere
+                db.query(ProtheusModule).filter(ProtheusModule.tenant_id == tenant_id).delete(synchronize_session=False)
+                for nome_mod, num_cod in fallback_map.items():
+                    db.add(ProtheusModule(tenant_id=tenant_id, usr_modulo=num_cod, usr_codmod=nome_mod))
+                db.commit()
+                db_mods = db.query(ProtheusModule).filter(
+                    ProtheusModule.tenant_id == tenant_id,
+                    ProtheusModule.usr_codmod.in_(clean_modulos)
+                ).all()
+            except Exception as e_fallback:
+                print(f"[SYNC-SCHEMA] Erro ao aplicar fallback de módulos: {e_fallback}")
+
+    # Monta conjunto estritamente numérico de códigos de módulo (ex: '05', '5', '06', '6')
+    mod_codes_list = set()
+    code_to_codmod = {}
+    for m in db_mods:
+        code = m.usr_modulo.strip()
+        if code:
+            mod_codes_list.add(code)
+            code_to_codmod[code] = m.usr_codmod
+            if code.isdigit():
+                val = int(code)
+                code_str = str(val)
+                code_padded = f"{val:02d}"
+                mod_codes_list.add(code_str)
+                mod_codes_list.add(code_padded)
+                code_to_codmod[code_str] = m.usr_codmod
+                code_to_codmod[code_padded] = m.usr_codmod
+
+    if not mod_codes_list:
+        raise HTTPException(status_code=400, detail=f"Não foi possível obter os códigos numéricos para os módulos: {', '.join(clean_modulos)}. Verifique se a tabela de módulos SYS_USR_MODULE está acessível.")
+
+    numeric_codes_in_str = ", ".join([f"'{c}'" for c in mod_codes_list])
+    tables_query = f"""
+    SELECT DISTINCT        
+     X2.X2_MODULO,
+     X2.X2_CHAVE,         
+     X2.X2_ARQUIVO,         
+     X2.X2_NOME,         
+     X2.X2_TAMFIL,         
+     X2.X2_MODO,         
+     X2.X2_TAMUN,         
+     X2.X2_MODOUN,         
+     X2.X2_TAMEMP,         
+     X2.X2_MODOEMP,         
+     X2.X2_UNICO,         
+     CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,         
+     CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,         
+     CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL         
+    FROM SX2010 X2         
+    INNER JOIN SX3010 X3 ON TRIM(X2.X2_CHAVE) = TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_ <> '*'
+    WHERE X2.D_E_L_E_T_ <> '*'
+      AND TRIM(X2.X2_MODULO) IN ({numeric_codes_in_str})
+    ORDER BY X2.X2_MODULO, X2.X2_CHAVE
+    """.replace('\n', ' ').strip()
 
     try:
-        response_str = await execute_protheus_tool("QueryRest", {"cQuery": query_str}, tenant_id=tenant_id)
-        result_data = json.loads(response_str)
-        # Se vier formatado pelo ProtheusService (Pode ser array direto ou { "items": [...] })
-        if isinstance(result_data, dict) and "items" in result_data:
-            result_data = result_data["items"]
-        elif isinstance(result_data, dict) and "data" in result_data:
-            result_data = result_data["data"]
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
+        tables_data = json.loads(fix_json_escapes(response_str))
+        if isinstance(tables_data, dict) and "items" in tables_data:
+            tables_data = tables_data["items"]
+        elif isinstance(tables_data, dict) and "data" in tables_data:
+            tables_data = tables_data["data"]
             
-        if not isinstance(result_data, list):
-            raise Exception(f"Retorno inesperado da query: {str(result_data)[:200]}")
+        if isinstance(tables_data, dict) and "error" in tables_data:
+            raise Exception(f"Erro reportado pela API do Protheus: {tables_data['error']}")
             
+        if not isinstance(tables_data, list) or len(tables_data) == 0:
+            raise Exception(f"Nenhuma tabela encontrada no Protheus para os módulos: {', '.join(clean_modulos)}")
+        def get_field_val(row: dict, key: str, default: str = "") -> str:
+            if not isinstance(row, dict): return default
+            if key in row and row[key] is not None:
+                return str(row[key]).strip()
+            key_upper = key.strip().upper()
+            for k, v in row.items():
+                if k.strip().upper() == key_upper:
+                    return "" if v is None else str(v).strip()
+            return default
+
         schema_dict = {}
-        for row in result_data:
-            chave = str(row.get("X2_CHAVE", "")).strip()
+        chaves_list = []
+        for row in tables_data:
+            chave = get_field_val(row, "X2_CHAVE")
             if not chave: continue
+            chaves_list.append(chave)
+            x2_mod = get_field_val(row, "X2_MODULO")
+            codmod_name = code_to_codmod.get(x2_mod, get_field_val(row, "USR_CODMOD", clean_modulos[0] if clean_modulos else ""))
+            schema_dict[chave] = {
+                "modulo": codmod_name,
+                "tabela": get_field_val(row, "X2_ARQUIVO"),
+                "nome": get_field_val(row, "X2_NOME"),
+                "compartilhamento": {
+                    "empresa": get_field_val(row, "USA_EMPRESA", "N"),
+                    "unidade": get_field_val(row, "USA_UNIDADE", "N"),
+                    "filial": get_field_val(row, "USA_FILIAL", "N")
+                },
+                "indice_principal": get_field_val(row, "X2_UNICO"),
+                "campos": []
+            }
+
+        print(f"[SYNC-SCHEMA] Encontradas {len(tables_data)} tabelas para os módulos {clean_modulos} no tenant '{clean_tenant}'.")
+
+        # 2. Busca os campos (SX3010) em lotes leves de 15 tabelas por requisição HTTP
+        chunk_size = 15
+        total_chunks = (len(chaves_list) + chunk_size - 1) // chunk_size
+
+        for i in range(0, len(chaves_list), chunk_size):
+            chunk_chaves = chaves_list[i:i + chunk_size]
+            chaves_in_str = ", ".join([f"'{c}'" for c in chunk_chaves])
+            chunk_num = (i // chunk_size) + 1
+            print(f"[SYNC-SCHEMA] Processando lote {chunk_num}/{total_chunks} ({len(chunk_chaves)} tabelas: {', '.join(chunk_chaves)})...")
             
-            if chave not in schema_dict:
-                schema_dict[chave] = {
-                    "modulo": str(row.get("USR_CODMOD", "")).strip(),
-                    "tabela": str(row.get("X2_ARQUIVO", "")).strip(),
-                    "nome": str(row.get("X2_NOME", "")).strip(),
-                    "compartilhamento": {
-                        "empresa": str(row.get("USA_EMPRESA", "N")).strip(),
-                        "unidade": str(row.get("USA_UNIDADE", "N")).strip(),
-                        "filial": str(row.get("USA_FILIAL", "N")).strip()
-                    },
-                    "indice_principal": str(row.get("X2_UNICO", "")).strip(),
-                    "campos": []
-                }
-            
-            schema_dict[chave]["campos"].append({
-                "campo": str(row.get("X3_CAMPO", "")).strip(),
-                "descricao": str(row.get("X3_DESCRIC", "")).strip(),
-                "tipo": str(row.get("X3_TIPO", "")).strip(),
-                "tamanho": row.get("X3_TAMANHO", 0)
-            })
+            fields_query = f"""
+            SELECT 
+             X3.X3_ARQUIVO,
+             X3.X3_CAMPO,
+             X3.X3_DESCRIC,
+             X3.X3_TIPO,
+             X3.X3_TAMANHO,
+             X3.X3_ORDEM
+            FROM SX3010 X3
+            WHERE X3.D_E_L_E_T_ <> '*'
+              AND X3.X3_ARQUIVO IN ({chaves_in_str})
+            ORDER BY X3.X3_ARQUIVO, X3.X3_ORDEM, X3.X3_CAMPO
+            """.replace('\n', ' ').strip()
+
+            fields_resp_str = await execute_protheus_tool("QueryRest", {"cQuery": fields_query}, tenant_id=tenant_id)
+            fields_data = json.loads(fix_json_escapes(fields_resp_str))
+            if isinstance(fields_data, dict) and "items" in fields_data:
+                fields_data = fields_data["items"]
+            elif isinstance(fields_data, dict) and "data" in fields_data:
+                fields_data = fields_data["data"]
+
+            if isinstance(fields_data, dict) and "error" in fields_data:
+                raise Exception(f"Erro reportado pela API do Protheus ao buscar campos: {fields_data['error']}")
+
+            if isinstance(fields_data, list):
+                for row in fields_data:
+                    arq = get_field_val(row, "X3_ARQUIVO")
+                    campo_nome = get_field_val(row, "X3_CAMPO")
+                    if arq in schema_dict and campo_nome:
+                        tam_str = get_field_val(row, "X3_TAMANHO", "0")
+                        try:
+                            tam_val = int(float(tam_str))
+                        except Exception:
+                            tam_val = 0
+                            
+                        schema_dict[arq]["campos"].append({
+                            "campo": campo_nome,
+                            "descricao": get_field_val(row, "X3_DESCRIC"),
+                            "tipo": get_field_val(row, "X3_TIPO"),
+                            "tamanho": tam_val
+                        })
+
+        if not schema_dict:
+            raise Exception("Nenhuma tabela foi retornada pelo Protheus durante a sincronização.")
 
         # Salvar no banco
-        db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).delete()
+        db.query(TenantSchema).filter(
+            TenantSchema.tenant_id == tenant_id,
+            TenantSchema.modulo.in_(clean_modulos)
+        ).delete(synchronize_session=False)
         
         for chave, meta in schema_dict.items():
             db.add(TenantSchema(
@@ -277,14 +528,27 @@ async def sync_schema(payload: dict = Body(...), db: Session = Depends(get_db), 
                 schema_json=meta
             ))
         db.commit()
-        return {"success": True, "message": f"Schema atualizado. {len(schema_dict)} tabelas sincronizadas."}
+        return {"success": True, "message": f"Schema atualizado com sucesso no schema '{clean_tenant}'! {len(schema_dict)} tabelas sincronizadas."}
 
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/schemas")
 def get_schemas(tenant_id: str, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
     from app.models.knowledge import TenantSchema
+    from app.db.database import Base
+    import re
+    from sqlalchemy import text
+
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id) if tenant_id else "default"
+    if clean_tenant != "public":
+        db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+        Base.metadata.create_all(bind=db.connection())
+        db.commit()
+
     schemas = db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).all()
     result = []
     for s in schemas:

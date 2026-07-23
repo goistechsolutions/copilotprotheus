@@ -22,7 +22,7 @@ def get_tenant_config(tenant_id: str) -> dict:
     from app.models.knowledge import Company
     db = SessionLocal()
     try:
-        company = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
+        company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
         if company and company.protheus_rest_url:
             pwd = ""
             if company.protheus_password:
@@ -134,11 +134,25 @@ async def get_protheus_token(tenant_id: str, user: str = None, password: str = N
     reraise=True
 )
 async def _execute_http_get_with_retry(url: str, params: dict, headers: dict) -> str:
-    logger.info(f"Chamando endpoint Protheus com retry: {url}")
+    logger.info(f"Chamando endpoint Protheus (GET) com retry: {url}")
     async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
         resp = await client.get(url, params=params, headers=headers)
         resp.raise_for_status()
         return resp.text
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=6),
+    retry=retry_if_exception_type(httpx.HTTPError),
+    reraise=True
+)
+async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict) -> str:
+    logger.info(f"Chamando endpoint Protheus (POST) com retry: {url}")
+    async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
+        resp = await client.post(url, json=json_data, headers=headers)
+        resp.raise_for_status()
+        return resp.text
+
 
 async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None) -> str:
     config = get_tenant_config(tenant_id)
@@ -153,28 +167,43 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     password = context.get("password") if context else None
     protheus_token = context.get("protheus_token") if context else None
     
-    token = None
+    auth_mode = config.get("auth_mode", "basic")
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
     if protheus_token:
         # Se o token da sessão ativa do Protheus foi fornecido, usa diretamente!
-        token = protheus_token
+        headers["Authorization"] = f"Bearer {protheus_token}"
         logger.info(f"Usando token de sessao Protheus fornecido dinamicamente para {user} no tenant {tenant_id}")
+    elif auth_mode == "basic":
+        import base64
+        u = user if user else config['user']
+        p = password if password else config['password']
+        cred = f"{u}:{p}".encode("utf-8")
+        b64_cred = base64.b64encode(cred).decode("utf-8")
+        headers["Authorization"] = f"Basic {b64_cred}"
+        logger.info(f"Usando autenticacao Basic para {u} no tenant {tenant_id}")
     else:
         try:
             token = await get_protheus_token(tenant_id, user=user, password=password)
+            headers["Authorization"] = f"Bearer {token}"
         except Exception as e:
             logger.error(f"Falha na autenticacao OAuth2 do tenant {tenant_id} (user={user}): {e}")
             return json.dumps({"error": f"Falha na autenticacao OAuth2: {str(e)}"})
-        
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
     
     import urllib3
     urllib3.disable_warnings()
     
     try:
-        return await _execute_http_get_with_retry(url, query_params, headers)
+        if endpoint.lower() == "queryrest" or endpoint.lower().endswith("/queryrest"):
+            return await _execute_http_post_with_retry(url, query_params, headers)
+        else:
+            return await _execute_http_get_with_retry(url, query_params, headers)
+    except httpx.HTTPStatusError as e:
+        error_body = e.response.text
+        logger.error(f"Falha HTTP {e.response.status_code} ao chamar Protheus ({url}): {error_body}")
+        return json.dumps({"error": f"Erro {e.response.status_code} do Protheus: {error_body}"})
     except Exception as e:
         logger.error(f"Falha após retries ao chamar Protheus ({url}) para o tenant {tenant_id}: {e}")
         return json.dumps({"error": f"Falha persistente ao chamar Protheus ({url}): {str(e)}"})

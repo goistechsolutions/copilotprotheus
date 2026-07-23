@@ -15,10 +15,14 @@ function generateToken(payload = {}) {
  * Rejeita com 401 se token ausente, expirado ou inválido.
  */
 function jwtAuth(req, res, next) {
-  // Permite acesso irrestrito se o X-Admin-Key estiver correto (usado pelo AdminDashboard)
+  // Permite acesso irrestrito se o X-Admin-Key estiver correto (usado pelo AdminDashboard ou Server-to-Server)
   const adminKey = req.headers['x-admin-key']
   if (adminKey && adminKey === JWT_SECRET) {
-    req.jwtPayload = { user: 'admin', role: 'admin' }
+    req.jwtPayload = { 
+      user: req.headers['x-admin-user'] || 'system', 
+      role: req.headers['x-admin-role'] || 'admin',
+      tenantId: req.headers['x-tenant-id'] || 'default'
+    }
     return next()
   }
 

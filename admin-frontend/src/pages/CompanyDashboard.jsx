@@ -18,10 +18,7 @@ function CompanyConfig({ company }) {
 
 import CompanyDictionary from './company/Dictionary';
 import CompanyBilling from './company/Billing';
-
-function CompanyUsers({ company }) {
-  return <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200"><h3 className="font-bold mb-4">Usuários do Copilot</h3><p>Gerencie quem tem acesso na {company?.razao_social}</p></div>;
-}
+import CompanyUsers from './company/Users';
 
 function CompanyHealth({ company }) {
   return <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200"><h3 className="font-bold mb-4">Logs & Disponibilidade</h3><p>Status do Protheus REST URL: {company?.protheus_rest_url}</p></div>;
@@ -43,7 +40,7 @@ export default function CompanyDashboard() {
       // Temporary logic: fetch all companies and find this one.
       // Ideally, add a GET /api/companies/:id endpoint in the backend.
       const res = await axios.get('/api/companies');
-      const found = res.data.find(c => c.id === id);
+      const found = res.data.find(c => String(c.id) === String(id));
       setCompany(found);
     } catch (error) {
       console.error("Erro ao carregar empresa:", error);
@@ -80,9 +77,9 @@ export default function CompanyDashboard() {
           <div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{company.razao_social}</h2>
             <div className="flex gap-3 text-sm text-slate-500 mt-1">
-              <span>CNPJ: {company.cnpj}</span>
+              <span>CNPJ: {company.cnpj || 'Não informado'}</span>
               <span>•</span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-mono text-xs">Tenant: {company.tenant_id}</span>
+              <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-mono text-xs">Tenant: {company.tenant_id || company.protheus_grupo || 'N/A'}</span>
               <span>•</span>
               <span className={`px-2 py-0.5 rounded text-xs font-bold ${company.status === 'ativa' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                 {company.status.toUpperCase()}
