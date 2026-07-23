@@ -3,12 +3,13 @@ import json
 import time
 import httpx
 import logging
+import uuid
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.config import settings
 
 logger = logging.getLogger("app.protheus")
 
-from app.models.knowledge import Tenant
+from app.models.knowledge import Tenant, Company, Environment, Connector
 from app.core.security import decrypt_password
 from app.db.database import SessionLocal
 
@@ -17,57 +18,61 @@ _OAUTH2_TOKENS = {} # cache: {tenant_id: (token, expiry)}
 def get_tenant_config(tenant_id: str) -> dict:
     """
     Busca as credenciais do Protheus do tenant_id no banco de dados e as decodifica.
-    Prioriza TenantConnector, com fallback para Company ou Tenant.
+    Prioriza Connector + Environment da Fase 3/4.
     """
-    from app.models.knowledge import Company, TenantConnector
     db = SessionLocal()
     try:
-        # 1. Tenta buscar no conector especifico
-        connector = db.query(TenantConnector).filter(
-            TenantConnector.tenant_id == tenant_id,
-            TenantConnector.is_active == True
+        tenant_uuid = None
+        try:
+            tenant_uuid = uuid.UUID(tenant_id)
+            tenant = db.query(Tenant).filter(Tenant.id == tenant_uuid).first()
+        except ValueError:
+            tenant = db.query(Tenant).filter(Tenant.tenant_code == tenant_id).first()
+            if tenant:
+                tenant_uuid = tenant.id
+
+        if not tenant:
+            raise ValueError(f"Tenant não encontrado para a chave: {tenant_id}")
+
+        # Busca Conector
+        connector = db.query(Connector).filter(
+            Connector.tenant_id == tenant_uuid,
+            Connector.connector_type == 'protheus',
+            Connector.status == 'active'
         ).first()
-        
-        if connector and connector.rest_url:
+
+        if connector:
+            rest_url = connector.base_url
+            if not rest_url and connector.env_id:
+                env = db.query(Environment).filter(Environment.id == connector.env_id).first()
+                if env:
+                    rest_url = env.api_base_url
+            
+            # Decodificando secret_ref (esperado formato user:encrypted_pass ou JSON)
+            user = ""
             pwd = ""
-            if connector.password_hash:
-                pwd = decrypt_password(connector.password_hash)
+            if connector.secret_ref:
+                if connector.secret_ref.startswith("{"):
+                    try:
+                        sec = json.loads(connector.secret_ref)
+                        user = sec.get("user", "")
+                        pwd = decrypt_password(sec.get("password", ""))
+                    except:
+                        pass
+                elif ":" in connector.secret_ref:
+                    parts = connector.secret_ref.split(":", 1)
+                    user = parts[0]
+                    pwd = decrypt_password(parts[1])
+
             return {
-                "rest_url": connector.rest_url,
+                "rest_url": rest_url or "",
                 "webapp_url": "",
                 "vscode_server_url": "",
-                "user": connector.username or "",
+                "user": user,
                 "password": pwd,
-                "auth_mode": connector.auth_mode or "basic"
-            }
-
-        # 2. Fallback para Company
-        company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
-        if company and company.protheus_rest_url:
-            pwd = ""
-            if company.protheus_password:
-                pwd = decrypt_password(company.protheus_password)
-                
-            return {
-                "rest_url": company.protheus_rest_url,
-                "webapp_url": company.protheus_webapp_url,
-                "vscode_server_url": "",
-                "user": company.protheus_usuario or "",
-                "password": pwd,
-                "auth_mode": "basic"
+                "auth_mode": connector.auth_type or "basic"
             }
             
-        # 3. Fallback para Tenant original
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-        if tenant:
-            return {
-                "rest_url": tenant.protheus_rest_url,
-                "webapp_url": tenant.webapp_url if hasattr(tenant, "webapp_url") else "",
-                "vscode_server_url": tenant.vscode_server_url if hasattr(tenant, "vscode_server_url") else "",
-                "user": tenant.protheus_user,
-                "password": decrypt_password(tenant.encrypted_protheus_password),
-                "auth_mode": tenant.auth_mode or "basic"
-            }
     except Exception as e:
         logger.error(f"Erro ao buscar configuracoes do tenant {tenant_id}: {e}")
     finally:
@@ -113,7 +118,6 @@ async def get_protheus_token(tenant_id: str, user: str = None, password: str = N
     global _OAUTH2_TOKENS
     now = time.time()
     
-    # Se recebermos usuário e senha do contexto logado, usamos como chave de cache
     if user and password:
         cache_key = f"{tenant_id}:{user}:{password}"
     else:
@@ -183,7 +187,6 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
         
     url = f"{rest_url.rstrip('/')}/{endpoint.lstrip('/')}"
     
-    # Extrai credenciais dinâmicas do contexto do usuário
     user = context.get("user") if context else None
     password = context.get("password") if context else None
     protheus_token = context.get("protheus_token") if context else None
@@ -194,7 +197,6 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     }
     
     if protheus_token:
-        # Se o token da sessão ativa do Protheus foi fornecido, usa diretamente!
         headers["Authorization"] = f"Bearer {protheus_token}"
         logger.info(f"Usando token de sessao Protheus fornecido dinamicamente para {user} no tenant {tenant_id}")
     elif auth_mode == "basic":
@@ -228,4 +230,3 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     except Exception as e:
         logger.error(f"Falha após retries ao chamar Protheus ({url}) para o tenant {tenant_id}: {e}")
         return json.dumps({"error": f"Falha persistente ao chamar Protheus ({url}): {str(e)}"})
-

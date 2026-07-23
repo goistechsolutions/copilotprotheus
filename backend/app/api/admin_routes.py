@@ -575,7 +575,7 @@ def get_schemas(tenant_id: str, db: Session = Depends(get_db), admin: str = Depe
 
 @router.get("/dashboard-stats")
 def get_dashboard_stats(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
-    from app.models.knowledge import AuditLog, Company, AgentUser, Memory
+    from app.models.knowledge import AuditLog, Company, User as AgentUser, Memory
     from datetime import datetime, timedelta, timezone
     
     # Cálculos
@@ -604,9 +604,10 @@ def get_logs(limit: int = 50, skip: int = 0, db: Session = Depends(get_db), admi
     return {"logs": logs}
 
 # --- Endpoints de AgentUsers ---
-from app.models.knowledge import AgentUser, AgentRole
+from app.models.knowledge import User as AgentUser, Role as AgentRole, user_roles
 from typing import List, Optional
 import hashlib
+import uuid
 
 @router.get("/agent-users")
 def get_agent_users(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
@@ -614,10 +615,10 @@ def get_agent_users(db: Session = Depends(get_db), admin: str = Depends(verify_a
     # Mask passwords
     return [
         {
-            "id": u.id, 
-            "tenant_id": u.tenant_id, 
-            "username": u.username, 
-            "role": u.role, 
+            "id": str(u.id), 
+            "tenant_id": str(u.tenant_id), 
+            "username": u.email, 
+            "role": "admin", 
             "created_at": u.created_at
         } 
         for u in users
@@ -640,10 +641,10 @@ def create_agent_user(req: AgentUserCreate, db: Session = Depends(get_db), admin
         
     hashed = hashlib.sha256(req.password.encode('utf-8')).hexdigest()
     new_user = AgentUser(
-        tenant_id=req.tenant_id,
-        username=req.username,
-        password_hash=hashed,
-        role=req.role
+        tenant_id=uuid.UUID(req.tenant_id),
+        email=req.username,
+        full_name=req.username,
+        password_hash=hashed
     )
     db.add(new_user)
     db.commit()
@@ -656,14 +657,13 @@ class AgentUserUpdate(BaseModel):
     role: str
 
 @router.put("/agent-users/{user_id}")
-def update_agent_user(user_id: int, req: AgentUserUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
-    user = db.query(AgentUser).filter(AgentUser.id == user_id).first()
+def update_agent_user(user_id: str, req: AgentUserUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    user = db.query(AgentUser).filter(AgentUser.id == uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     
-    user.tenant_id = req.tenant_id
-    user.username = req.username
-    user.role = req.role
+    user.tenant_id = uuid.UUID(req.tenant_id)
+    user.email = req.username
     if req.password:
         user.password_hash = hashlib.sha256(req.password.encode('utf-8')).hexdigest()
     
@@ -671,8 +671,8 @@ def update_agent_user(user_id: int, req: AgentUserUpdate, db: Session = Depends(
     return {"success": True, "message": "Usuário atualizado com sucesso."}
 
 @router.delete("/agent-users/{user_id}")
-def delete_agent_user(user_id: int, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
-    user = db.query(AgentUser).filter(AgentUser.id == user_id).first()
+def delete_agent_user(user_id: str, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    user = db.query(AgentUser).filter(AgentUser.id == uuid.UUID(user_id)).first()
     if user:
         db.delete(user)
         db.commit()
@@ -687,29 +687,28 @@ class AgentRoleCreateUpdate(BaseModel):
 
 @router.get("/agent-roles")
 def get_agent_roles(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
-    roles = db.query(AgentRole).order_by(AgentRole.name.asc()).all()
-    return [{"id": r.id, "tenant_id": r.tenant_id, "name": r.name, "permissions": r.permissions} for r in roles]
+    roles = db.query(AgentRole).order_by(AgentRole.role_name.asc()).all()
+    return [{"id": str(r.id), "name": r.role_name} for r in roles]
 
 @router.post("/agent-roles")
 def create_agent_role(req: AgentRoleCreateUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
-    new_role = AgentRole(tenant_id=req.tenant_id, name=req.name, permissions=req.permissions)
+    new_role = AgentRole(role_code=req.name, role_name=req.name, scope_level='tenant')
     db.add(new_role)
     db.commit()
     return {"success": True}
 
 @router.put("/agent-roles/{role_id}")
-def update_agent_role(role_id: int, req: AgentRoleCreateUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
-    role = db.query(AgentRole).filter(AgentRole.id == role_id).first()
+def update_agent_role(role_id: str, req: AgentRoleCreateUpdate, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    role = db.query(AgentRole).filter(AgentRole.id == uuid.UUID(role_id)).first()
     if role:
-        role.tenant_id = req.tenant_id
-        role.name = req.name
-        role.permissions = req.permissions
+        role.role_code = req.name
+        role.role_name = req.name
         db.commit()
     return {"success": True}
 
 @router.delete("/agent-roles/{role_id}")
-def delete_agent_role(role_id: int, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
-    role = db.query(AgentRole).filter(AgentRole.id == role_id).first()
+def delete_agent_role(role_id: str, db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
+    role = db.query(AgentRole).filter(AgentRole.id == uuid.UUID(role_id)).first()
     if role:
         db.delete(role)
         db.commit()
