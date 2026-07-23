@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Server, Settings, RefreshCw, Key, Cpu, HardDrive, Cloud, Globe, AlertCircle, CheckCircle2 } from 'lucide-react';
+import axios from '../api/axios';
+import { Server, Settings, RefreshCw, Key, Cpu, HardDrive, Cloud, Globe, AlertCircle, CheckCircle2, BrainCircuit, XCircle, Box } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 function Infra() {
@@ -7,9 +8,13 @@ function Infra() {
   const [loadingHetzner, setLoadingHetzner] = useState(false);
   const [hetznerError, setHetznerError] = useState(null);
   const [hasHetznerKey, setHasHetznerKey] = useState(true);
+  
   const [cloudflareStatus, setCloudflareStatus] = useState({ r2_active: false, cdn_active: false });
   const [loadingCloudflare, setLoadingCloudflare] = useState(false);
   const [purgingCache, setPurgingCache] = useState(false);
+
+  const [ollamaStatus, setOllamaStatus] = useState(null);
+  const [loadingOllama, setLoadingOllama] = useState(false);
 
   const fetchServers = async () => {
     setLoadingHetzner(true);
@@ -52,6 +57,19 @@ function Infra() {
     }
   };
 
+  const fetchOllamaStatus = async () => {
+    setLoadingOllama(true);
+    try {
+      const response = await axios.get('/api/infra/ollama/status');
+      setOllamaStatus(response.data);
+    } catch (error) {
+      console.error("Erro ao buscar status do Ollama:", error);
+      setOllamaStatus({ status: 'offline', detail: error.message });
+    } finally {
+      setLoadingOllama(false);
+    }
+  };
+
   const handlePurgeCache = async () => {
     if (!confirm("Tem certeza que deseja purgar o cache global da CDN? Isso pode aumentar a carga no servidor temporariamente.")) return;
     setPurgingCache(true);
@@ -60,8 +78,7 @@ function Infra() {
       if (response.status === 200) {
         alert("Cache global do Cloudflare purgado com sucesso!");
       } else {
-        const err = await response.json();
-        alert("Erro ao purgar cache: " + err.detail);
+        alert("Erro ao purgar cache: " + response.data?.detail);
       }
     } catch (error) {
       alert("Erro de conexão ao tentar purgar cache: " + error.message);
@@ -73,13 +90,14 @@ function Infra() {
   useEffect(() => {
     fetchServers();
     fetchCloudflareStatus();
+    fetchOllamaStatus();
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       <div>
         <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Infraestrutura em Nuvem</h2>
-        <p className="text-slate-500">Gerencie seus servidores na Hetzner e gerencie a propagação de cache via Cloudflare.</p>
+        <p className="text-slate-500">Gerencie seus servidores na Hetzner, propague cache via Cloudflare e monitore o motor de IA Local.</p>
       </div>
 
       {/* Alerta de chave ausente (Hetzner) */}
@@ -104,6 +122,83 @@ function Infra() {
           </div>
         </div>
       )}
+
+      {/* Ollama Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
+              <BrainCircuit size={24} />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-lg">Servidor Ollama (IA Local)</h3>
+              <p className="text-sm text-slate-500">Monitoramento do Motor de Inferência On-Premise</p>
+            </div>
+          </div>
+          <button 
+            onClick={fetchOllamaStatus}
+            disabled={loadingOllama}
+            className={`p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors border border-transparent hover:border-brand-100 ${loadingOllama ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title="Atualizar Status"
+          >
+            <RefreshCw size={20} className={loadingOllama ? 'animate-spin' : ''} />
+          </button>
+        </div>
+        
+        <div className="p-6 bg-slate-50">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col items-center text-center">
+              {ollamaStatus?.status === 'online' ? (
+                <>
+                  <CheckCircle2 size={40} className="text-emerald-500 mb-4" />
+                  <h4 className="font-bold text-slate-900 text-lg mb-1">Ollama Online</h4>
+                  <p className="text-sm text-slate-500 mb-4">Conexão com a API estabelecida com sucesso.</p>
+                  <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-lg text-sm font-semibold w-full">
+                    {ollamaStatus.models?.length || 0} Modelos carregados
+                  </div>
+                </>
+              ) : ollamaStatus?.status === 'offline' || ollamaStatus?.status === 'error' ? (
+                <>
+                  <XCircle size={40} className="text-rose-500 mb-4" />
+                  <h4 className="font-bold text-slate-900 text-lg mb-1">Servidor Inacessível</h4>
+                  <p className="text-sm text-slate-500 mb-4">
+                    {ollamaStatus.detail || 'Não foi possível conectar na URL do Ollama configurada.'}
+                  </p>
+                  <Link to="/config" className="px-4 py-2 bg-white text-slate-700 rounded-lg text-sm font-medium border border-slate-200 hover:bg-slate-50 transition-colors w-full">
+                    Verificar URL Configurada
+                  </Link>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6">
+                  <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-slate-500 font-medium">Verificando...</p>
+                </div>
+              )}
+            </div>
+
+            {ollamaStatus?.status === 'online' && (
+              <div className="bg-white border border-slate-200 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Box size={18} className="text-slate-500" />
+                  <h4 className="font-bold text-slate-800">Modelos Baixados</h4>
+                </div>
+                {ollamaStatus.models?.length > 0 ? (
+                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+                    {ollamaStatus.models.map((model, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="font-medium text-slate-700 text-sm">{model}</span>
+                        <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded">Pronto</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 italic text-center py-6">Nenhum modelo baixado no Ollama.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Hetzner Section */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-6">

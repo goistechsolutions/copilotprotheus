@@ -118,3 +118,28 @@ async def purge_cloudflare_cache():
             raise HTTPException(status_code=response.status_code, detail=f"Erro Cloudflare: {response.text}")
         
         return {"message": "Cache do Cloudflare limpo com sucesso! (Purge Everything)"}
+
+# ----------------- MOTOR DE IA (OLLAMA) -----------------
+
+@router.get("/ollama/status", dependencies=[Depends(verify_admin)])
+async def get_ollama_status():
+    from pathlib import Path
+    import dotenv
+    env_config = dotenv.dotenv_values(Path(".env"))
+    
+    ollama_url = env_config.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(f"{ollama_url}/api/tags")
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "status": "online",
+                    "models": [m.get("name") for m in data.get("models", [])]
+                }
+            else:
+                return {"status": "error", "detail": f"Erro do Ollama: {response.status_code}"}
+    except Exception as e:
+        return {"status": "offline", "detail": str(e)}
