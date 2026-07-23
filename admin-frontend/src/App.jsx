@@ -15,6 +15,12 @@ import Adminer from './pages/Adminer';
 import Infra from './pages/Infra';
 import CompanyDashboard from './pages/CompanyDashboard';
 
+import DictionarySyncPage from './pages/DictionarySyncPage';
+import SnapshotsPage from './pages/SnapshotsPage';
+import PermissionEditorPage from './pages/PermissionEditorPage';
+import QueryGuardPage from './pages/QueryGuardPage';
+import AuditUsagePage from './pages/AuditUsagePage';
+
 function Sidebar({ isOpen, setIsOpen }) {
   const location = useLocation();
   
@@ -38,6 +44,16 @@ function Sidebar({ isOpen, setIsOpen }) {
       items: [
         { path: '/rag', label: 'RAG & Memórias', icon: <Brain size={18} /> },
         { path: '/tables', label: 'Dic. de Dados Global', icon: <Database size={18} /> },
+      ]
+    },
+    {
+      title: 'Governança & API',
+      items: [
+        { path: '/sync', label: 'Sincronização', icon: <Database size={18} /> },
+        { path: '/snapshots', label: 'Snapshots', icon: <Database size={18} /> },
+        { path: '/permissions', label: 'Permissões (Escopo)', icon: <ShieldAlert size={18} /> },
+        { path: '/guard', label: 'Query Guard', icon: <Activity size={18} /> },
+        { path: '/audit', label: 'Auditoria e Consumo', icon: <Settings size={18} /> },
       ]
     },
     {
@@ -181,6 +197,12 @@ function App() {
                 <Route path="/adminer" element={<Adminer />} />
                 <Route path="/infra" element={<Infra />} />
                 <Route path="/config" element={<Config />} />
+                
+                <Route path="/sync" element={<DictionarySyncPage />} />
+                <Route path="/snapshots" element={<SnapshotsPage />} />
+                <Route path="/permissions" element={<PermissionEditorPage />} />
+                <Route path="/guard" element={<QueryGuardPage />} />
+                <Route path="/audit" element={<AuditUsagePage />} />
               </Routes>
             </div>
           </main>
