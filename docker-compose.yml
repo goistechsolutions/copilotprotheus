@@ -99,16 +99,6 @@ services:
     depends_on:
       - frontend
       - backend
-  # Servidor Local de IA (Ollama)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: copilot-protheus-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: always
 
 volumes:
   pgdata:
-  ollama_data:
