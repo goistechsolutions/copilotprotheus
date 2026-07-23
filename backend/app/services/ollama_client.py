@@ -65,19 +65,37 @@ DICIONARIO DE DADOS (TENANT ATUAL):
 """
     try:
         from app.db.database import SessionLocal
-        from app.models.knowledge import TenantSchema
+        from app.models.knowledge import TenantDictionaryTable, V4TenantAllowedTable, DictionarySnapshot
         
         db = SessionLocal()
-        schemas = db.query(TenantSchema).filter(TenantSchema.tenant_id == tenant_id).all()
-        if schemas:
-            for s in schemas:
-                meta = s.schema_json
-                campos_list = ", ".join([f"{c['campo']} ({c['tipo']})" for c in meta.get("campos", [])])
-                comp = meta.get("compartilhamento", {})
-                share_str = f"Empresa={comp.get('empresa', 'N')}, Unidade={comp.get('unidade', 'N')}, Filial={comp.get('filial', 'N')}"
-                base_prompt += f"- Tabela: {s.tabela} (Chave: {s.chave}) - {s.nome}\n"
-                base_prompt += f"  Compartilhamento: {share_str} | Indice Princ: {meta.get('indice_principal', '')}\n"
-                base_prompt += f"  Campos: {campos_list}\n\n"
+        import uuid
+        try:
+            tid = uuid.UUID(tenant_id)
+        except:
+            tid = None
+            
+        if tid:
+            # Pega o snapshot mais recente
+            latest_snap = db.query(DictionarySnapshot).filter(DictionarySnapshot.tenant_id == tid, DictionarySnapshot.sync_status == 'completed').order_by(DictionarySnapshot.started_at.desc()).first()
+            if latest_snap:
+                allowed_tables = db.query(V4TenantAllowedTable, TenantDictionaryTable).join(
+                    TenantDictionaryTable, V4TenantAllowedTable.table_id == TenantDictionaryTable.id
+                ).filter(
+                    V4TenantAllowedTable.tenant_id == tid,
+                    V4TenantAllowedTable.snapshot_id == latest_snap.id,
+                    V4TenantAllowedTable.allowed == True
+                ).all()
+                
+                if allowed_tables:
+                    for allowed, table in allowed_tables:
+                        # Para simplificar na V4, mostramos os dados básicos mapeados
+                        base_prompt += f"- Tabela: {table.physical_name} (Chave: {table.table_key}) - {table.table_name}\n"
+                        share_str = f"Empresa={table.usa_empresa}, Unidade={table.usa_unidade}, Filial={table.usa_filial}"
+                        base_prompt += f"  Compartilhamento: {share_str} | Indice Princ: {table.unique_index_expr}\n\n"
+                else:
+                    base_prompt += "Nenhuma tabela liberada pelo administrador para consulta.\n"
+            else:
+                base_prompt += "Nenhum dicionario sincronizado para este tenant.\n"
         else:
             base_prompt += "Nenhum dicionario sincronizado para este tenant.\n"
         db.close()

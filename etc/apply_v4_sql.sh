@@ -9,11 +9,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SQL_DIR="$SCRIPT_DIR/sql"
 
 for file in \
-  "$SQL_DIR/001_multitenant_core.sql" \
-  "$SQL_DIR/002_rbac_initial.sql" \
-  "$SQL_DIR/003_audit_onboarding.sql"; do
+  "$SQL_DIR/004_product_governance_dictionary.sql" \
+  "$SQL_DIR/005_product_governance_seed.sql" \
+  "$SQL_DIR/006_dictionary_sync_support.sql"; do
   echo "[INFO] Aplicando $(basename "$file")"
   $COMPOSE_CMD exec -T "$DB_SERVICE" psql -U "$DB_USER" -d "$DB_NAME" < "$file"
 done
 
-echo "[INFO] Scripts SQL v3 aplicados com sucesso."
+echo "[INFO] SQL v4 aplicado com sucesso."

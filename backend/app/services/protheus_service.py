@@ -179,6 +179,103 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
         return resp.text
 
 
+def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
+    from app.db.database import SessionLocal
+    from app.models.knowledge import TenantDictionaryTable, V4TenantAllowedTable, DictionarySnapshot, QueryUsageCounter, TenantContract, Company
+    import uuid
+    import re
+    
+    db = SessionLocal()
+    try:
+        try:
+            tid = uuid.UUID(tenant_id)
+        except:
+            tenant = db.query(Tenant).filter(Tenant.tenant_code == tenant_id).first()
+            if not tenant:
+                return # Can't enforce if no tenant
+            tid = tenant.id
+            
+        # 1. Verifica quota
+        company_id = context.get("company_id") if context else None
+        if company_id:
+            try:
+                cid = uuid.UUID(company_id)
+                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.company_id == cid).first()
+                if usage and usage.current_queries >= usage.max_queries:
+                    raise Exception(f"Quota de consultas atingida ({usage.current_queries}/{usage.max_queries}).")
+            except Exception as e:
+                if "Quota" in str(e): raise e
+        
+        # 2. Verifica tabelas
+        latest_snap = db.query(DictionarySnapshot).filter(
+            DictionarySnapshot.tenant_id == tid, 
+            DictionarySnapshot.sync_status == 'completed'
+        ).order_by(DictionarySnapshot.started_at.desc()).first()
+        
+        if latest_snap:
+            blocked_tables = db.query(TenantDictionaryTable.physical_name).outerjoin(
+                V4TenantAllowedTable, 
+                (V4TenantAllowedTable.table_id == TenantDictionaryTable.id) & 
+                (V4TenantAllowedTable.snapshot_id == latest_snap.id)
+            ).filter(
+                TenantDictionaryTable.snapshot_id == latest_snap.id,
+                (V4TenantAllowedTable.allowed == False) | (V4TenantAllowedTable.allowed == None)
+            ).all()
+            
+            upper_query = cQuery.upper()
+            # Simple check: if any blocked table name is exactly in the query
+            for (ptable,) in blocked_tables:
+                if ptable and len(ptable) >= 3:
+                    # Regex para garantir que seja palavra inteira
+                    if re.search(r'\b' + re.escape(ptable.upper()) + r'\b', upper_query):
+                        raise Exception(f"Acesso negado: A tabela {ptable} nao esta liberada para este tenant.")
+        
+    finally:
+        db.close()
+
+
+def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, records_returned: int, response_time_ms: int, error_msg: str = None):
+    from app.db.database import SessionLocal
+    from app.models.knowledge import AgentQueryAudit, QueryUsageCounter
+    import uuid
+    
+    db = SessionLocal()
+    try:
+        try:
+            tid = uuid.UUID(tenant_id)
+        except:
+            tid = None
+            
+        company_id = context.get("company_id") if context else None
+        cid = None
+        if company_id:
+            try: cid = uuid.UUID(company_id)
+            except: pass
+            
+        if tid:
+            audit = AgentQueryAudit(
+                tenant_id=tid,
+                company_id=cid,
+                user_id=None,
+                query_sql=query,
+                status=status,
+                records_returned=records_returned,
+                response_time_ms=response_time_ms,
+                error_message=error_msg
+            )
+            db.add(audit)
+            
+            if status == "success" and cid:
+                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.company_id == cid).first()
+                if usage:
+                    usage.current_queries += 1
+            
+            db.commit()
+    except Exception as e:
+        logger.error(f"Erro ao registrar auditoria de query: {e}")
+    finally:
+        db.close()
+
 async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None) -> str:
     config = get_tenant_config(tenant_id)
     rest_url = config['rest_url'].strip()
@@ -220,7 +317,36 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     
     try:
         if endpoint.lower() == "queryrest" or endpoint.lower().endswith("/queryrest"):
-            return await _execute_http_post_with_retry(url, query_params, headers)
+            cQuery = query_params.get("cQuery", "")
+            if cQuery:
+                try:
+                    _enforce_query_rules(cQuery, tenant_id, context)
+                except Exception as enforce_err:
+                    _log_query_audit(tenant_id, context or {}, cQuery, "blocked", 0, 0, str(enforce_err))
+                    return json.dumps({"error": str(enforce_err)})
+            
+            start_t = time.time()
+            try:
+                res_text = await _execute_http_post_with_retry(url, query_params, headers)
+                elapsed = int((time.time() - start_t) * 1000)
+                
+                # Check records
+                records = 0
+                try:
+                    parsed = json.loads(res_text)
+                    if isinstance(parsed, dict) and "items" in parsed:
+                        records = len(parsed["items"])
+                    elif isinstance(parsed, list):
+                        records = len(parsed)
+                except:
+                    pass
+                
+                _log_query_audit(tenant_id, context or {}, cQuery, "success", records, elapsed)
+                return res_text
+            except Exception as req_err:
+                elapsed = int((time.time() - start_t) * 1000)
+                _log_query_audit(tenant_id, context or {}, cQuery, "error", 0, elapsed, str(req_err))
+                raise req_err
         else:
             return await _execute_http_get_with_retry(url, query_params, headers)
     except httpx.HTTPStatusError as e:

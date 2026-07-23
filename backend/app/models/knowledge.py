@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Float, Boolean, Date, Table
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Float, Boolean, Date, Table, Numeric
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
 from pgvector.sqlalchemy import Vector
@@ -271,4 +271,194 @@ class ApiUsageLog(Base):
     completion_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
     model_name = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# ======== NOVOS MODELOS V4 (GOVERNANÇA) ========
+
+class LicensePlan(Base):
+    __tablename__ = 'license_plans'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_code = Column(String(60), nullable=False, unique=True)
+    plan_name = Column(String(150), nullable=False)
+    billing_cycle = Column(String(20), nullable=False, default='monthly')
+    query_limit = Column(Integer)
+    concurrent_sessions_limit = Column(Integer)
+    overage_mode = Column(String(20), nullable=False, default='block')
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class TenantContract(Base):
+    __tablename__ = 'tenant_contracts'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    plan_id = Column(UUID(as_uuid=True), ForeignKey('license_plans.id'))
+    contract_code = Column(String(80), nullable=False, unique=True)
+    contract_status = Column(String(20), nullable=False, default='active')
+    starts_at = Column(Date, nullable=False)
+    ends_at = Column(Date)
+    query_limit_override = Column(Integer)
+    concurrent_sessions_override = Column(Integer)
+    overage_mode_override = Column(String(20))
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class ProtheusModuleMaster(Base):
+    __tablename__ = 'protheus_modules_master'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    module_code = Column(String(30), nullable=False, unique=True)
+    module_name = Column(String(150), nullable=False)
+    source_name = Column(String(60), nullable=False, default='SYS_USR_MODULE')
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class TenantModuleContract(Base):
+    __tablename__ = 'tenant_module_contracts'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id', ondelete='CASCADE'), nullable=False)
+    module_id = Column(UUID(as_uuid=True), ForeignKey('protheus_modules_master.id'), nullable=False)
+    status = Column(String(20), nullable=False, default='allowed')
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class DictionarySnapshot(Base):
+    __tablename__ = 'dictionary_snapshots'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
+    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'))
+    snapshot_code = Column(String(80), nullable=False)
+    source_db_type = Column(String(30), nullable=False, default='oracle')
+    source_label = Column(String(150))
+    sync_mode = Column(String(20), nullable=False, default='full')
+    sync_status = Column(String(20), nullable=False, default='completed')
+    requested_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    finished_at = Column(DateTime(timezone=True))
+    total_modules = Column(Integer, default=0)
+    total_tables = Column(Integer, default=0)
+    total_fields = Column(Integer, default=0)
+    total_indexes = Column(Integer, default=0)
+    notes = Column(Text)
+
+class TenantDictionaryTable(Base):
+    __tablename__ = 'tenant_dictionary_tables'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False, index=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
+    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'))
+    module_code = Column(String(30))
+    table_key = Column(String(20), nullable=False)
+    physical_name = Column(String(30), nullable=False)
+    table_name = Column(String(255))
+    unique_index_expr = Column(Text)
+    x2_tamfil = Column(Numeric(10,2))
+    x2_modo = Column(String(5))
+    x2_tamun = Column(Numeric(10,2))
+    x2_modoun = Column(String(5))
+    x2_tamemp = Column(Numeric(10,2))
+    x2_modoemp = Column(String(5))
+    usa_empresa = Column(String(1), nullable=False, default='N')
+    usa_unidade = Column(String(1), nullable=False, default='N')
+    usa_filial = Column(String(1), nullable=False, default='N')
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class TenantDictionaryField(Base):
+    __tablename__ = 'tenant_dictionary_fields'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False, index=True)
+    field_name = Column(String(40), nullable=False)
+    field_description = Column(String(255))
+    field_type = Column(String(5))
+    field_length = Column(Numeric(10,2))
+    field_order = Column(Integer)
+    sxg_group = Column(String(20))
+    sxg_size = Column(Numeric(10,2))
+    is_sensitive = Column(Boolean, nullable=False, default=False)
+    mask_rule = Column(String(50))
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class TenantDictionaryIndex(Base):
+    __tablename__ = 'tenant_dictionary_indexes'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False, index=True)
+    index_order = Column(Integer)
+    index_nickname = Column(String(80))
+    index_expression = Column(Text, nullable=False)
+    is_unique = Column(Boolean, nullable=False, default=False)
+    is_primary_hint = Column(Boolean, nullable=False, default=False)
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class V4TenantAllowedTable(Base):
+    __tablename__ = 'tenant_allowed_tables'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id', ondelete='CASCADE'), nullable=False)
+    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
+    table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False)
+    access_level = Column(String(20), nullable=False, default='query')
+    allowed = Column(Boolean, nullable=False, default=True)
+    rationale = Column(String(255))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class V4TenantAllowedField(Base):
+    __tablename__ = 'tenant_allowed_fields'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    allowed_table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_allowed_tables.id', ondelete='CASCADE'), nullable=False)
+    field_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_fields.id', ondelete='CASCADE'), nullable=False)
+    allowed = Column(Boolean, nullable=False, default=True)
+    masking_required = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class QueryUsageCounter(Base):
+    __tablename__ = 'query_usage_counters'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id', ondelete='CASCADE'), nullable=False)
+    period_ref = Column(String(20), nullable=False)
+    total_queries = Column(Integer, nullable=False, default=0)
+    blocked_queries = Column(Integer, nullable=False, default=0)
+    overage_queries = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class ConcurrentSession(Base):
+    __tablename__ = 'concurrent_sessions'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    session_key = Column(String(120), nullable=False, unique=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True))
+    session_status = Column(String(20), nullable=False, default='active')
+
+class AgentQueryAudit(Base):
+    __tablename__ = 'agent_query_audit'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
+    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'))
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id'))
+    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id'))
+    request_id = Column(String(120))
+    natural_language_prompt = Column(Text)
+    generated_sql = Column(Text)
+    sql_hash = Column(String(128))
+    execution_status = Column(String(20), nullable=False, default='planned')
+    rows_returned = Column(Integer)
+    response_time_ms = Column(Integer)
+    blocked_reason = Column(String(255))
+    tables_used = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
