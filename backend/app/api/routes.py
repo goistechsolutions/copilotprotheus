@@ -220,6 +220,10 @@ def launch(request: Request):
         db.close()
         
     if not launch_url:
+        import os
+        launch_url = os.getenv("PROTHEUS_URL")
+        
+    if not launch_url:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"URL do WebApp não configurada para o tenant {tenant_id}")
         
