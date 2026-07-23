@@ -17,11 +17,7 @@ class DictionaryService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def sync_dictionary(self, tenant_id: str, company_id: str = None, env_id: str = None, user_id: str = None):
-        """
-        Orquestra a sincronização das tabelas de dicionário do Protheus.
-        Idealmente executado como task em background (Celery/BackgroundTasks).
-        """
+    def init_snapshot(self, tenant_id: str, company_id: str = None, env_id: str = None, user_id: str = None, snapshot_code: str = None):
         try:
             tid = uuid.UUID(tenant_id)
         except Exception:
@@ -30,7 +26,8 @@ class DictionaryService:
                 raise ValueError("Tenant não encontrado")
             tid = tenant.id
 
-        snapshot_code = f"SYNC_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        if not snapshot_code:
+            snapshot_code = f"SYNC_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
         
         snapshot = DictionarySnapshot(
             tenant_id=tid,
@@ -44,7 +41,21 @@ class DictionaryService:
         self.db.commit()
         self.db.refresh(snapshot)
         
+        return snapshot
+
+    async def run_sync_task(self, snapshot_id, tenant_id: str, modules: list = None):
+        """
+        Executa a extração em background. Usa uma nova sessão de banco de dados
+        para evitar problemas com o fechamento da sessão da requisição HTTP original.
+        """
+        db = SessionLocal()
         try:
+            snapshot = db.query(DictionarySnapshot).filter(DictionarySnapshot.id == snapshot_id).first()
+            if not snapshot:
+                return
+            
+            tid = snapshot.tenant_id
+
             # 1. Fetch SX2 (Tabelas)
             sx2_query = "SELECT X2_CHAVE, X2_NOME, X2_ARQUIVO, X2_TAMFIL, X2_MODO, X2_TAMUN, X2_MODOUN, X2_TAMEMP, X2_MODOEMP FROM SX2010 WHERE D_E_L_E_T_ = ' '"
             sx2_resp_str = await execute_protheus_tool("QueryRest", {"query": sx2_query}, tenant_id=tenant_id)
@@ -73,9 +84,9 @@ class DictionaryService:
                         x2_tamemp=self._safe_num(row.get("X2_TAMEMP")),
                         x2_modoemp=row.get("X2_MODOEMP", "").strip()
                     )
-                    self.db.add(t)
-                    self.db.commit()
-                    self.db.refresh(t)
+                    db.add(t)
+                    db.commit()
+                    db.refresh(t)
                     tables_map[phys_name] = t.id
                     total_tables += 1
 
@@ -101,9 +112,9 @@ class DictionaryService:
                         field_length=self._safe_num(row.get("X3_TAMANHO")),
                         sxg_group=row.get("X3_AGRUP", "").strip()
                     )
-                    self.db.add(f)
+                    db.add(f)
                     total_fields += 1
-                self.db.commit()
+                db.commit()
 
             # 3. Fetch SIX (Índices)
             six_query = "SELECT X6_ARQUIVO, X6_ORDEM, X6_NOME, X6_CONTEUD FROM SIX010 WHERE D_E_L_E_T_ = ' '"
@@ -124,26 +135,26 @@ class DictionaryService:
                         index_nickname=row.get("X6_NOME", "").strip(),
                         index_expression=row.get("X6_CONTEUD", "").strip()
                     )
-                    self.db.add(idx)
+                    db.add(idx)
                     total_indexes += 1
-                self.db.commit()
+                db.commit()
 
             snapshot.sync_status = 'completed'
             snapshot.finished_at = datetime.now(timezone.utc)
             snapshot.total_tables = total_tables
             snapshot.total_fields = total_fields
             snapshot.total_indexes = total_indexes
-            self.db.commit()
-            
-            return snapshot
+            db.commit()
             
         except Exception as e:
             logger.error(f"Erro na sincronização de dicionário: {str(e)}")
-            snapshot.sync_status = 'error'
-            snapshot.notes = str(e)
-            snapshot.finished_at = datetime.now(timezone.utc)
-            self.db.commit()
-            raise e
+            if 'snapshot' in locals() and snapshot:
+                snapshot.sync_status = 'error'
+                snapshot.notes = str(e)
+                snapshot.finished_at = datetime.now(timezone.utc)
+                db.commit()
+        finally:
+            db.close()
             
     def _parse_response(self, resp_str: str):
         try:
