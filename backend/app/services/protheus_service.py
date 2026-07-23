@@ -17,11 +17,31 @@ _OAUTH2_TOKENS = {} # cache: {tenant_id: (token, expiry)}
 def get_tenant_config(tenant_id: str) -> dict:
     """
     Busca as credenciais do Protheus do tenant_id no banco de dados e as decodifica.
-    Caso não encontre, faz fallback para as configurações globais do .env.
+    Prioriza TenantConnector, com fallback para Company ou Tenant.
     """
-    from app.models.knowledge import Company
+    from app.models.knowledge import Company, TenantConnector
     db = SessionLocal()
     try:
+        # 1. Tenta buscar no conector especifico
+        connector = db.query(TenantConnector).filter(
+            TenantConnector.tenant_id == tenant_id,
+            TenantConnector.is_active == True
+        ).first()
+        
+        if connector and connector.rest_url:
+            pwd = ""
+            if connector.password_hash:
+                pwd = decrypt_password(connector.password_hash)
+            return {
+                "rest_url": connector.rest_url,
+                "webapp_url": "",
+                "vscode_server_url": "",
+                "user": connector.username or "",
+                "password": pwd,
+                "auth_mode": connector.auth_mode or "basic"
+            }
+
+        # 2. Fallback para Company
         company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
         if company and company.protheus_rest_url:
             pwd = ""
@@ -37,6 +57,7 @@ def get_tenant_config(tenant_id: str) -> dict:
                 "auth_mode": "basic"
             }
             
+        # 3. Fallback para Tenant original
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if tenant:
             return {
@@ -52,7 +73,7 @@ def get_tenant_config(tenant_id: str) -> dict:
     finally:
         db.close()
         
-    raise ValueError(f"Configurações do Protheus não encontradas no Banco de Dados para o tenant_id: {tenant_id}. Por favor, configure a URL e a Senha no painel administrativo.")
+    raise ValueError(f"Configurações do Protheus não encontradas no Banco de Dados para o tenant_id: {tenant_id}.")
 
 async def descobrir_apis_protheus(palavra_chave: str) -> str:
     cache_path = os.path.join(os.path.dirname(__file__), "endpoints_cache.json")

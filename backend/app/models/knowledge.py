@@ -157,6 +157,22 @@ class ProtheusModule(Base):
     usr_codmod = Column(String(50), index=True, nullable=False)  # Ex: SIGAFAT, SIGAFIN
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class TenantConnector(Base):
+    """Armazena as configurações de conectividade com o Protheus (REST, VPN) por tenant e ambiente."""
+    __tablename__ = 'tenant_connectors'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), ForeignKey('public.tenants.id', ondelete='CASCADE'), index=True, nullable=False)
+    environment = Column(String(100), nullable=False, server_default='producao') # ex: producao, homologacao
+    rest_url = Column(String(1024), nullable=False)
+    auth_mode = Column(String(50), server_default='basic') # basic, oauth2
+    username = Column(String(255), nullable=True)
+    password_hash = Column(Text, nullable=True) # encrypted password
+    token = Column(Text, nullable=True) # optional JWT/Bearer
+    is_active = Column(Boolean, server_default='true')
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 class CompanyLicense(Base):
     __tablename__ = 'company_licenses'
     __table_args__ = {"schema": "public"}

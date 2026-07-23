@@ -72,3 +72,43 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": "Usuário excluído com sucesso"}
+
+import jwt
+from datetime import datetime, timedelta
+import os
+
+JWT_SECRET = os.getenv("JWT_SECRET", "super_seguro")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # 24 horas
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    tenant_id: str
+
+@router.post("/login")
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(AgentUser).filter(
+        AgentUser.tenant_id == req.tenant_id,
+        AgentUser.username == req.username
+    ).first()
+    
+    if not user or user.password_hash != hash_password(req.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciais inválidas",
+        )
+        
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.utcnow() + access_token_expires
+    
+    to_encode = {
+        "sub": user.username,
+        "tenant_id": user.tenant_id,
+        "role": user.role,
+        "exp": expire
+    }
+    
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
+    
+    return {"access_token": encoded_jwt, "token_type": "bearer", "role": user.role}

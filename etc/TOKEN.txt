@@ -1,0 +1,67 @@
+MCP:
+C:\Users\muril\.gemini\config
+
+root
+EW3umwcgUuFT
+
+Key
+
+g0mF5Y3ZnQ4hI4VIjIorN8lD4pSEvL4O8Zn9u3WoTZy9So5/fWbPTRLagy7TuoqU
+
+
+TOKEN
+
+HETZNER
+
+API_KEY
+
+5NHeHhAQIw6CS6IuXjvBOlhQ1mafplHBXs8DtdaiJSED9aWOaCy4D24XoFIex5xz
+
+CLOUDFLARE
+
+Copilot-Backend
+
+Token
+cfat_z1PJyMWaiUvEeWYLNniQ7ra4fgnZMpXM7LuEt5C8ae0d0d86
+
+id da chave
+0b179efcf6bb901364184f024963c040
+
+chave secreta
+10cee740a291ed1b2a38a3b9dd0fbe48d556d6a7076faae5db936f282f21336d
+
+Use endpoints específicos de jurisdição para clientes S3:
+Padrão
+https://6c3688b19f3b7a74a4e5e6145ac15593.r2.cloudflarestorage.com
+
+API
+
+cfk_9w3y0Iqsnaqp0IKvrfNP8rTfej00C20COXGPc8057d0daca6
+
+cfat-WXAWqAdMtnuVMeM6sIphmlRL6vcKYX6SMT1SiFiwb2fc14f5
+
+cfat_tef8tXwDD7k7fYnlVYfCcovjYcfmpdozp0GjnzqS66c11a6b
+
+ID da Zona
+1bbd39ae14c3cc3b409364540dcfd2c0
+
+ID da Conta
+6c3688b19f3b7a74a4e5e6145ac15593
+
+
+ID da conta
+6c3688b19f3b7a74a4e5e6145ac15593
+Importante: copie seu token agora
+Esta é a única vez que você verá este token. Certifique-se de copiá-lo e armazená-lo com segurança. Você não poderá recuperá-lo posteriormente.
+Seu token de API
+cfat_HaQdiPIWlpViHiEljTZ4ojyIHd4A2CxCesX3UFOO77bd7c9b
+Use these S3-compatible credentials with the R2 API or any S3 client.
+Access Key ID
+f2cde75c4e404aa4362aa5a6962cf395
+Secret Access Key
+7bcc7764605707613c8b5587086163d6affe79cf44b37a08ee3fbbb2193a4861
+S3 API endpoint
+https://6c3688b19f3b7a74a4e5e6145ac15593.r2.cloudflarestorage.com
+Exemplo de uso
+curl -X GET "https://api.cloudflare.com/client/v4/accounts/6c3688b19f3b7a74a4e5e6145ac15593/tokens/verify" \
+     -H "Authorization: Bearer cfat_HaQdiPIWlpViHiEljTZ4ojyIHd4A2CxCesX3UFOO77bd7c9b"
