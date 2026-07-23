@@ -123,7 +123,7 @@ def get_config(admin: str = Depends(verify_admin)):
     # Chaves padrão que devem estar visíveis no painel (para Integração Cloudflare/R2 e Motor de IA)
     default_keys = [
         "R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME",
-        "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_API_TOKEN", "HETZNER_API_TOKEN",
         "LLM_BACKEND", "GEMINI_MODEL", "GEMINI_API_KEY", 
         "OLLAMA_MODEL", "OLLAMA_BASE_URL"
     ]
