@@ -1,0 +1,2 @@
+import React from 'react'
+export default function Conversation({ messages }) { return <div className="conversation">{messages.map((m, idx) => <div key={idx} className={`msg ${m.role}`}>{m.text}</div>)}</div> }

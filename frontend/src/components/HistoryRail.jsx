@@ -1,0 +1,2 @@
+import React from 'react'
+export default function HistoryRail({ items, onSelect, onNew }) { return <aside className="history-rail"><button onClick={onNew}>Nova conversa</button>{items.map((it, idx) => <button key={idx} onClick={() => onSelect(it)}>{it.title}<small>{it.date}</small></button>)}</aside> }

@@ -1,0 +1,2 @@
+import React, { useState } from 'react'
+export default function Composer({ disabled, onSend, placeholder }) { const [value, setValue] = useState(''); return <div className="composer"><textarea rows={3} disabled={disabled} value={value} onChange={e=>setValue(e.target.value)} placeholder={placeholder} /><button disabled={disabled} onClick={() => { onSend(value); setValue('') }}>Enviar</button></div> }

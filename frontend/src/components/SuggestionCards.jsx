@@ -1,0 +1,2 @@
+import React from 'react'
+export default function SuggestionCards({ items, disabled, onPick }) { return <div className="suggestion-cards">{items.map((it, idx) => <button key={idx} disabled={disabled} onClick={() => onPick(it)}><strong>{it.title}</strong><span>{it.subtitle}</span></button>)}</div> }

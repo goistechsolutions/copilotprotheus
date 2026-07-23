@@ -24,6 +24,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  validateContext: (payload) => request('/agent/validate-context', { method: 'POST', body: JSON.stringify(payload) }),
   askAgent: (payload) => request('/agent/ask', { method: 'POST', body: JSON.stringify(payload) }),
   validateQuery: (payload) => request('/agent/validate-query', { method: 'POST', body: JSON.stringify(payload) })
 };

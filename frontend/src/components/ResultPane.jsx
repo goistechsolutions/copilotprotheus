@@ -1,0 +1,2 @@
+import React from 'react'
+export default function ResultPane({ result }) { if (!result) return <div className="result-pane empty">Aguardando primeira consulta.</div>; return <div className="result-pane"><div><strong>{result.title || 'Resultado'}</strong></div><div>{result.summary || ''}</div><div className="metrics"><span>{result.rows?.length || 0} linhas</span><span>{result.response_time_ms || 0} ms</span></div></div> }
