@@ -41,7 +41,7 @@ export default function AgentWorkspace() {
   const conversationEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Escuta contexto da extensão (Real & Mock)
+  // Escuta contexto da extensão (Real)
   useEffect(() => {
     // Escuta real do Content Script
     const handleMessage = (event) => {
@@ -54,28 +54,8 @@ export default function AgentWorkspace() {
     };
     window.addEventListener('message', handleMessage);
 
-    // Mock para testes locais (fallback)
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    let mockTimer;
-    if (isLocalhost) {
-      mockTimer = setTimeout(() => {
-        if (!contextReady) { // Se a extensão real não respondeu (provavelmente pq não estamos no iframe do Protheus)
-          setContext({
-            tenant: 'Grupo Alpha (Dev)',
-            company: 'Matriz',
-            branch: '0101',
-            user: 'admin_dev'
-          });
-          setContextReady(true);
-          setContextMessage('Sessão simulada (Dev)');
-          setMessages([{ role: 'assistant', text: 'Pronto! Ambiente simulado carregado. Como posso ajudar com os dados?' }]);
-        }
-      }, 1500); // 1.5s de fake loading para testes
-    }
-
     return () => {
       window.removeEventListener('message', handleMessage);
-      if (mockTimer) clearTimeout(mockTimer);
     };
   }, [contextReady]);
 
