@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../../api/axios';
 import { CreditCard, Zap, Server, AlertTriangle } from 'lucide-react';
 
 export default function CompanyBilling({ company }) {
@@ -15,9 +15,7 @@ export default function CompanyBilling({ company }) {
   const fetchBilling = async (companyId) => {
     try {
       // Usamos a nova rota administrativa (sem admin_key por enquanto ou se precisar configuramos o header)
-      const res = await axios.get(`/api/companies/${companyId}/billing`, {
-        auth: { username: 'admin', password: 'admin123' }
-      });
+      const res = await axios.get(`/api/companies/${companyId}/billing`);
       setBilling(res.data);
     } catch (error) {
       console.error("Erro ao carregar billing:", error);

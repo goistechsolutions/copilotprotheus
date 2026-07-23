@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 import { Database, Brain, Play, FileText, UploadCloud, Search, RefreshCw, XCircle } from 'lucide-react';
 
 export default function RagMemories() {
@@ -29,7 +29,7 @@ export default function RagMemories() {
 
   const fetchTenants = async () => {
     try {
-      const res = await axios.get('/api/tenants', { auth: { username: 'admin', password: 'admin123' } });
+      const res = await axios.get('/api/tenants');
       setTenants(res.data || []);
     } catch (error) {
       console.error("Erro ao carregar tenants:", error);
@@ -41,10 +41,10 @@ export default function RagMemories() {
     try {
       if (activeTab === 'rag') {
         const endpoint = visibility === 'shared' ? '/api/knowledge/documents/shared' : '/api/knowledge/documents';
-        const res = await axios.get(endpoint, axiosConfig);
+        const res = await axios.get(endpoint);
         setDocs(res.data.items || []);
       } else {
-        const res = await axios.get('/api/knowledge/memories', axiosConfig);
+        const res = await axios.get('/api/knowledge/memories');
         let mems = res.data.items || [];
         if (visibility === 'shared') {
           mems = mems.filter(m => m.visibility === 'shared');
@@ -63,7 +63,7 @@ export default function RagMemories() {
   const handleIngest = async () => {
     setIngesting(true);
     try {
-      await axios.post(`/api/knowledge/ingest?visibility=${visibility}`, {}, axiosConfig);
+      await axios.post(`/api/knowledge/ingest?visibility=${visibility}`, {});
       alert("Ingestão concluída com sucesso! Os vetores foram atualizados.");
       fetchData();
     } catch (error) {
@@ -116,7 +116,7 @@ export default function RagMemories() {
   const handleDeleteMemory = async (id) => {
     if (!window.confirm("Tem certeza que deseja excluir esta memória permanentemente?")) return;
     try {
-      await axios.delete(`/api/knowledge/memories/${id}`, axiosConfig);
+      await axios.delete(`/api/knowledge/memories/${id}`);
       alert("Memória excluída com sucesso.");
       fetchData();
     } catch (error) {
@@ -127,7 +127,7 @@ export default function RagMemories() {
   const handleDeleteDocument = async (id) => {
     if (!window.confirm("Tem certeza que deseja excluir este documento (e seus vetores) permanentemente?")) return;
     try {
-      await axios.delete(`/api/knowledge/documents/${id}`, axiosConfig);
+      await axios.delete(`/api/knowledge/documents/${id}`);
       alert("Documento excluído com sucesso.");
       fetchData();
     } catch (error) {

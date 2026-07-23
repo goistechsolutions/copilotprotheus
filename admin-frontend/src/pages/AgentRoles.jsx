@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 import { ShieldCheck, Plus, Trash2, Save, X, Edit2, ShieldAlert } from 'lucide-react';
 
 const AVAILABLE_PERMISSIONS = [
@@ -21,9 +21,7 @@ export default function AgentRoles() {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({});
 
-  const axiosConfig = {
-    auth: { username: 'admin', password: 'admin123' }
-  };
+  
 
   useEffect(() => {
     fetchRoles();
@@ -32,8 +30,8 @@ export default function AgentRoles() {
   const fetchRoles = async () => {
     try {
       const [resRoles, resTenants] = await Promise.all([
-        axios.get('/api/admin/agent-roles', axiosConfig),
-        axios.get('/api/tenants', axiosConfig)
+        axios.get('/api/admin/agent-roles'),
+        axios.get('/api/tenants')
       ]);
       setRoles(resRoles.data || []);
       setTenants(resTenants.data || []);
@@ -79,9 +77,9 @@ export default function AgentRoles() {
     
     try {
       if (editing === 'new') {
-        await axios.post('/api/admin/agent-roles', formData, axiosConfig);
+        await axios.post('/api/admin/agent-roles', formData);
       } else {
-        await axios.put(`/api/admin/agent-roles/${editing}`, formData, axiosConfig);
+        await axios.put(`/api/admin/agent-roles/${editing}`, formData);
       }
       setEditing(null);
       fetchRoles();
@@ -93,7 +91,7 @@ export default function AgentRoles() {
   const handleDelete = async (id) => {
     if (confirm("Tem certeza que deseja remover este cargo? Usuários vinculados poderão perder acesso ou herdar regras antigas.")) {
       try {
-        await axios.delete(`/api/admin/agent-roles/${id}`, axiosConfig);
+        await axios.delete(`/api/admin/agent-roles/${id}`);
         fetchRoles();
       } catch (error) {
         alert("Erro ao excluir cargo.");

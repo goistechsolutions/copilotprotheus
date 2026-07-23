@@ -16,21 +16,13 @@ function Logs() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
         const [logsRes, statsRes] = await Promise.all([
-          fetch('/api/admin/logs?limit=50', { headers: authHeader }),
-          fetch('/api/admin/dashboard-stats', { headers: authHeader })
+          axios.get('/api/admin/logs?limit=50'),
+          axios.get('/api/admin/dashboard-stats')
         ]);
         
-        if (logsRes.ok) {
-          const logsData = await logsRes.json();
-          setLogs(logsData.logs || []);
-        }
-        
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
-        }
+        setLogs(logsRes.data?.logs || []);
+        setStats(statsRes.data || {});
       } catch (error) {
         console.error('Erro ao buscar dados do dashboard:', error);
       } finally {

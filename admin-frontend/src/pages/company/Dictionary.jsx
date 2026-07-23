@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../../api/axios';
 import { Database, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function CompanyDictionary({ company }) {
@@ -11,9 +11,7 @@ export default function CompanyDictionary({ company }) {
   const [modulosInput, setModulosInput] = useState(['SIGAFAT', 'SIGAFIN']);
   const [syncResult, setSyncResult] = useState(null);
 
-  const axiosConfig = {
-    auth: { username: 'admin', password: 'admin123' }
-  };
+  
 
   useEffect(() => {
     if (company?.tenant_id) {
@@ -24,7 +22,7 @@ export default function CompanyDictionary({ company }) {
 
   const fetchProtheusModules = async (tenantId) => {
     try {
-      const res = await axios.get(`/api/admin/protheus-modules?tenant_id=${tenantId}`, axiosConfig);
+      const res = await axios.get(`/api/admin/protheus-modules?tenant_id=${tenantId}`);
       setProtheusModules(res.data.modules || []);
     } catch (error) {
       console.error("Erro ao buscar módulos:", error);
@@ -36,7 +34,7 @@ export default function CompanyDictionary({ company }) {
     setSyncingModules(true);
     setSyncResult(null);
     try {
-      const res = await axios.post('/api/admin/sync-modules', { tenant_id: company.tenant_id }, axiosConfig);
+      const res = await axios.post('/api/admin/sync-modules', { tenant_id: company.tenant_id });
       setSyncResult({ type: 'success', message: res.data.message });
       fetchProtheusModules(company.tenant_id);
     } catch (error) {
@@ -51,7 +49,7 @@ export default function CompanyDictionary({ company }) {
     setLoading(true);
     setSyncResult(null);
     try {
-      const res = await axios.get(`/api/admin/schemas?tenant_id=${tenantId}`, axiosConfig);
+      const res = await axios.get(`/api/admin/schemas?tenant_id=${tenantId}`);
       setSchemas(res.data.schemas || []);
     } catch (error) {
       console.error("Erro ao carregar schemas:", error);
@@ -80,7 +78,7 @@ export default function CompanyDictionary({ company }) {
       const res = await axios.post('/api/admin/sync-schema', { 
         tenant_id: company.tenant_id,
         modulos: modulosArray
-      }, axiosConfig);
+      });
       
       setSyncResult({ type: 'success', message: res.data.message });
       fetchSchemas(company.tenant_id);

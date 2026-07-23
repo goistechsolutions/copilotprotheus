@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 import { User, Plus, Trash2, Save, X, Edit2, Users } from 'lucide-react';
 
 export default function AgentUsers() {
@@ -10,9 +10,7 @@ export default function AgentUsers() {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({});
 
-  const axiosConfig = {
-    auth: { username: 'admin', password: 'admin123' }
-  };
+  
 
   useEffect(() => {
     fetchUsersAndRoles();
@@ -21,9 +19,9 @@ export default function AgentUsers() {
   const fetchUsersAndRoles = async () => {
     try {
       const [resUsers, resRoles, resTenants] = await Promise.all([
-        axios.get('/api/admin/agent-users', axiosConfig),
-        axios.get('/api/admin/agent-roles', axiosConfig),
-        axios.get('/api/tenants', axiosConfig)
+        axios.get('/api/admin/agent-users'),
+        axios.get('/api/admin/agent-roles'),
+        axios.get('/api/tenants')
       ]);
       setUsers(resUsers.data || []);
       setRoles(resRoles.data || []);
@@ -67,9 +65,9 @@ export default function AgentUsers() {
     
     try {
       if (editing === 'new') {
-        await axios.post('/api/admin/agent-users', formData, axiosConfig);
+        await axios.post('/api/admin/agent-users', formData);
       } else {
-        await axios.put(`/api/admin/agent-users/${editing}`, formData, axiosConfig);
+        await axios.put(`/api/admin/agent-users/${editing}`, formData);
       }
       setEditing(null);
       fetchUsersAndRoles();
@@ -81,7 +79,7 @@ export default function AgentUsers() {
   const handleDelete = async (id) => {
     if (confirm("Tem certeza que deseja remover o acesso deste usuário?")) {
       try {
-        await axios.delete(`/api/admin/agent-users/${id}`, axiosConfig);
+        await axios.delete(`/api/admin/agent-users/${id}`);
         fetchUsersAndRoles();
       } catch (error) {
         alert("Erro ao excluir usuário.");

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 import { Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
 
 export default function Config() {
@@ -21,7 +21,7 @@ export default function Config() {
   const fetchConfigs = async () => {
     try {
       // Endpoint is /api/admin/config because proxy will be set, but let's use relative path since it's served on same origin
-      const res = await axios.get('/api/admin/config', axiosConfig);
+      const res = await axios.get('/api/admin/config');
       setConfigs(res.data.configs || {});
     } catch (error) {
       console.error("Erro ao carregar configs:", error);
@@ -33,7 +33,7 @@ export default function Config() {
   const handleUpdate = async (key, value) => {
     setSaving(true);
     try {
-      await axios.post('/api/admin/config', { key, value }, axiosConfig);
+      await axios.post('/api/admin/config', { key, value });
       setSavedKey(key);
       setTimeout(() => setSavedKey(null), 2000);
       setConfigs(prev => ({ ...prev, [key]: value }));

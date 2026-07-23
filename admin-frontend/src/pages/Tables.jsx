@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 import { Database, Building2, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function Tables() {
@@ -11,9 +11,7 @@ export default function Tables() {
   const [modulosInput, setModulosInput] = useState('SIGAFAT, SIGAFIN');
   const [syncResult, setSyncResult] = useState(null);
 
-  const axiosConfig = {
-    auth: { username: 'admin', password: 'admin123' }
-  };
+  
 
   useEffect(() => {
     fetchTenants();
@@ -27,7 +25,7 @@ export default function Tables() {
 
   const fetchTenants = async () => {
     try {
-      const res = await axios.get('/api/companies', axiosConfig);
+      const res = await axios.get('/api/companies');
       setTenants(res.data || []);
     } catch (error) {
       console.error("Erro ao carregar tenants:", error);
@@ -38,7 +36,7 @@ export default function Tables() {
     setLoading(true);
     setSyncResult(null);
     try {
-      const res = await axios.get(`/api/admin/schemas?tenant_id=${tenantId}`, axiosConfig);
+      const res = await axios.get(`/api/admin/schemas?tenant_id=${tenantId}`);
       setSchemas(res.data.schemas || []);
     } catch (error) {
       console.error("Erro ao carregar schemas:", error);
@@ -63,7 +61,7 @@ export default function Tables() {
       const res = await axios.post('/api/admin/sync-schema', { 
         tenant_id: selectedTenant,
         modulos: modulosArray
-      }, axiosConfig);
+      });
       
       setSyncResult({ type: 'success', message: res.data.message });
       fetchSchemas(selectedTenant);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 import { Server, Plus, Edit2, Trash2, Save, X, Search } from 'lucide-react';
 
 export default function Tenants() {
@@ -8,9 +8,7 @@ export default function Tenants() {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({});
 
-  const axiosConfig = {
-    auth: { username: 'admin', password: 'admin123' }
-  };
+  
 
   useEffect(() => {
     fetchTenants();
@@ -18,7 +16,7 @@ export default function Tenants() {
 
   const fetchTenants = async () => {
     try {
-      const res = await axios.get('/api/tenants', axiosConfig);
+      const res = await axios.get('/api/tenants');
       setTenants(res.data || []);
     } catch (error) {
       console.error("Erro ao carregar tenants:", error);
@@ -49,9 +47,9 @@ export default function Tenants() {
   const handleSave = async () => {
     try {
       if (editing === 'new') {
-        await axios.post('/api/tenants', formData, axiosConfig);
+        await axios.post('/api/tenants', formData);
       } else {
-        await axios.put(`/api/tenants/${editing}`, formData, axiosConfig);
+        await axios.put(`/api/tenants/${editing}`, formData);
       }
       setEditing(null);
       fetchTenants();
@@ -63,7 +61,7 @@ export default function Tenants() {
   const handleDelete = async (id) => {
     if (confirm("ATENÇÃO! Tem certeza que deseja excluir este Tenant? Todos os dados associados poderão ficar inacessíveis.")) {
       try {
-        await axios.delete(`/api/tenants/${id}`, axiosConfig);
+        await axios.delete(`/api/tenants/${id}`);
         fetchTenants();
       } catch (error) {
         alert("Erro ao excluir.");

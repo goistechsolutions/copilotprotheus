@@ -15,16 +15,15 @@ function Infra() {
     setLoadingHetzner(true);
     setHetznerError(null);
     try {
-      const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
-      const response = await fetch('/api/infra/hetzner/servers', { headers: authHeader });
+      const response = await axios.get('/api/infra/hetzner/servers');
       if (response.status === 400) {
         setHasHetznerKey(false);
         setServers([]);
         return;
       }
       
-      const data = await response.json();
-      if (!response.ok) {
+      const data = response.data;
+      if (response.status !== 200) {
         throw new Error(data.detail || 'Erro ao buscar servidores Hetzner');
       }
       
@@ -41,10 +40,9 @@ function Infra() {
   const fetchCloudflareStatus = async () => {
     setLoadingCloudflare(true);
     try {
-      const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
-      const response = await fetch('/api/infra/cloudflare/status', { headers: authHeader });
-      if (response.ok) {
-        const data = await response.json();
+      const response = await axios.get('/api/infra/cloudflare/status');
+      if (response.status === 200) {
+        const data = response.data;
         setCloudflareStatus(data);
       }
     } catch (error) {
@@ -58,12 +56,8 @@ function Infra() {
     if (!confirm("Tem certeza que deseja purgar o cache global da CDN? Isso pode aumentar a carga no servidor temporariamente.")) return;
     setPurgingCache(true);
     try {
-      const authHeader = { 'Authorization': 'Basic ' + btoa('admin:admin123') };
-      const response = await fetch('/api/infra/cloudflare/purge-cache', { 
-        method: 'POST',
-        headers: authHeader 
-      });
-      if (response.ok) {
+      const response = await axios.post('/api/infra/cloudflare/purge-cache');
+      if (response.status === 200) {
         alert("Cache global do Cloudflare purgado com sucesso!");
       } else {
         const err = await response.json();

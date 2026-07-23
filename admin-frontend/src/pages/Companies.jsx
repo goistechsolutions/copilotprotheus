@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../api/axios';
 import { Building, Plus, Edit2, Trash2, Save, X, Search, Filter, ArrowRight, ChevronRight } from 'lucide-react';
 
 export default function Companies() {
@@ -19,7 +19,7 @@ export default function Companies() {
     try {
       const [compRes, tenRes] = await Promise.all([
         axios.get('/api/companies'),
-        axios.get('/api/tenants', { auth: { username: 'admin', password: 'admin123' } })
+        axios.get('/api/tenants')
       ]);
       setCompanies(compRes.data || []);
       setTenants(tenRes.data || []);
