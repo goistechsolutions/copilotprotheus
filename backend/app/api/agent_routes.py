@@ -170,3 +170,61 @@ def get_usage(tenant_id: str, period_ref: str, db: Session = Depends(get_db)):
         return {"period": period_ref, "current_queries": 0, "max_queries": 1000, "status": "within_limits"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class ValidateContextRequest(BaseModel):
+    tenant_id: str
+    company: str
+    branch: str
+    user: str
+    profile: Optional[str] = None
+    session_id: Optional[str] = None
+
+@router.post("/validate-context")
+async def proxy_validate_context(req: ValidateContextRequest, db: Session = Depends(get_db)):
+    try:
+        config = get_tenant_config(req.tenant_id)
+        rest_url = config['rest_url'].strip()
+        if rest_url.endswith('/'): rest_url = rest_url[:-1]
+        
+        # Endpoint AdvPL
+        url = f"{rest_url}/copilot/validate-context"
+        
+        headers = {
+            "Authorization": f"Bearer {config['token']}",
+            "Content-Type": "application/json"
+        }
+        
+        res_text = await _execute_http_post_with_retry(url, req.dict(), headers)
+        return json.loads(res_text)
+    except Exception as e:
+        return {"ready": False, "message": f"Erro de integração (Cloud -> Protheus): {str(e)}"}
+
+class AskAgentRequest(BaseModel):
+    tenant_id: str
+    company: str
+    branch: str
+    user: str
+    request_id: str
+    prompt: str
+
+@router.post("/ask")
+async def proxy_ask_agent(req: AskAgentRequest, db: Session = Depends(get_db)):
+    try:
+        config = get_tenant_config(req.tenant_id)
+        rest_url = config['rest_url'].strip()
+        if rest_url.endswith('/'): rest_url = rest_url[:-1]
+        
+        # Endpoint AdvPL
+        url = f"{rest_url}/copilot/ask"
+        
+        headers = {
+            "Authorization": f"Bearer {config['token']}",
+            "Content-Type": "application/json"
+        }
+        
+        res_text = await _execute_http_post_with_retry(url, req.dict(), headers)
+        return json.loads(res_text)
+    except Exception as e:
+        return {"summary": f"Erro na requisição ao ERP: {str(e)}"}
+
