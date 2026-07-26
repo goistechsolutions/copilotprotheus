@@ -1,6 +1,6 @@
 import os
 import logging
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.api.agent_routes import router as agent_router
 from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
 from app.core.config import settings
+from app.core.auth import get_current_user
 import app.models.knowledge
 import app.models.catalog_v52
 import sentry_sdk
@@ -164,9 +165,16 @@ import httpx
 from fastapi import Request
 from fastapi.responses import Response
 
-# Proxy for Adminer
+# Proxy for Adminer — protegido por JWT (somente role 'admin')
 @app.api_route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
-async def adminer_proxy(request: Request, path: str):
+async def adminer_proxy(request: Request, path: str, current_user: dict = Depends(get_current_user)):
+    # Garante que apenas administradores acessem o Adminer
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: apenas administradores podem acessar o Adminer."
+        )
+
     adminer_url = f"http://adminer:8080/{path}"
     async with httpx.AsyncClient() as client:
         # Pega query params

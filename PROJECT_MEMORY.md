@@ -134,8 +134,13 @@ Todas as chaves estrangeiras (`tenant_id`, `company_id`, `environment_id`) são 
 | **`dictionary_fields`** | Campos individuais mapeados do SX3010 (`field_name`, `table_name`, título do campo, tipo de dado `X3_TIPO`, precisão decimal, máscara de visualização e regras de validação/contexto). |
 | **`dictionary_indexes`** | Índices físicos da tabela no ERP (mapeados a partir do SX1/SIX) para permitir à IA estruturar JOINs e pesquisas impulsionados por índices de alta perfomance. |
 | **`dictionary_groups`** | Grupos de dados (SXG) utilizados em máscaras e padronizações de largura para campos de mesmo contexto funcional. |
-| **`tenant_table_permissions`** | Conceder ou bloquear em nível de Role (papéis de usuário, ex: 'Vendas', 'Financeiro') a habilidade de consultar a tabela de nível primário (`can_select`, `can_insert`). |
-| **`tenant_field_permissions`** | Bloqueio atômico de segurança. Define por campo se a role pode ler (`can_select = false` esconde o campo do Prompt do LLM) e qual o modo de exibição (`field_mode`: `'full'`, `'hidden'`, `'masked'`, `'anonymized'`). |
+| **`tenant_table_permissions`** | Conceder ou bloquear em nível de Role (papéis de usuário, ex: 'Vendas', 'Financeiro') 3 permissões granulares: `can_list` (listar tabelas disponíveis), `can_describe` (ver estrutura/campos da tabela), `can_query` (executar consultas SQL na tabela). |
+| **`tenant_field_permissions`** | Bloqueio atômico de segurança por campo. Define por campo se a role pode ler (`can_select`), filtrar (`can_filter`) e se o valor deve ser mascarado na resposta (`masked_flag = true` oculta ou anonimiza o conteúdo do campo no contexto do LLM). |
+
+> **⚠️ Nota de Integridade (atualizado 26/07/2026):**  
+> A tabela `tenant_table_permissions` usa **`can_list` + `can_describe` + `can_query`** (3 flags booleanos separados).  
+> A tabela `tenant_field_permissions` usa **`can_select` + `can_filter` + `masked_flag`** (3 flags booleanos separados).  
+> **Não existem** os campos `can_insert` nem `field_mode` nessas tabelas — qualquer referência a esses nomes em documentações anteriores está incorreta e deve ser ignorada.
 
 ### 4.2. Resolução de Configurações ERP do Tenant (`protheus_service.py`)
 Para garantir estabilidade ao realizar chamadas às APIs REST do Protheus para clientes em qualquer estágio de cadastro, a função `get_tenant_config(tenant_id: str)` opera em sistema de prioridades em **5 camadas**:
@@ -146,6 +151,9 @@ Para garantir estabilidade ao realizar chamadas às APIs REST do Protheus para c
 5. **Fallback Global (`.env`):** Caso o cliente requisitado seja o ambiente `"default"`, `"admin"` ou de homologação local, reverte suavemente para as credenciais definidas em variáveis de ambiente globais `PROTHEUS_REST_URL`.
 
 *Nota:* O módulo de criptografia (`security.py -> decrypt_password`) possui blindagem de resiliência: caso tente ler do banco uma senha armazenada temporariamente em texto claro sem enfileirar erro `InvalidToken` da biblioteca Fernet, processará a autenticação em modo tolerante e evitará travamentos ou erros 500 no Uvicorn.
+
+### 4.3. Segurança da Rota `/adminer` (atualizado 26/07/2026)
+A rota `/adminer/{path}` que age como proxy reverso para o contêiner Adminer (acesso visual ao PostgreSQL) está **protegida por autenticação JWT** via `Depends(get_current_user)`. Somente tokens com `role = 'admin'` são aceitos — qualquer outro perfil recebe **HTTP 403 Forbidden**. Nunca remover ou comentar essa dependência.
 
 ---
 
@@ -173,7 +181,7 @@ c:\projeto\copilotprotheus\
  ├── docs/                       # Documentações manuais, referências da TOTVS e artefatos em PDF/HTML
  ├── frontend/                   # Interface Externa / Chatbot Final Hospedada na Cloudflare Pages (Vite/React)
  ├── middleware/                 # Node.js Express Server: Rota intermediária e blindagem externa contra o TOTVS AppServer
- ├── docker-compose.yml          # Manifesto orquestrador central Hetzner (Backend + DB + Tunnel + Admin)
+ ├── docker-compose.yml          # Manifesto orquestrador central Hetzner (Backend + Admin + DB + Tunnel)
  └── PROJECT_MEMORY.md           # Este documento: A referência técnica imutável e autoritativa de projeto
 ```
 
