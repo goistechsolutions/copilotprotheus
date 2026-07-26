@@ -3,17 +3,18 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard, Building2, Users, BookOpen,
-  ScrollText, Server, ChevronLeft, ChevronRight,
+  ScrollText, Server, Plug, ChevronLeft, ChevronRight,
   LogOut, Bell, Settings, Menu
 } from 'lucide-react';
 
 const navItems = [
-  { to: '/admin/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/admin/tenants', icon: Building2, label: 'Tenants & Empresas' },
-  { to: '/admin/users', icon: Users, label: 'Usuários & Permissões' },
-  { to: '/admin/knowledge', icon: BookOpen, label: 'Base de Conhecimento' },
-  { to: '/admin/logs', icon: ScrollText, label: 'Logs & Auditoria' },
-  { to: '/admin/platform', icon: Server, label: 'Plataforma' },
+  { to: '/',             icon: LayoutDashboard, label: 'Dashboard',              end: true },
+  { to: '/tenants',      icon: Building2,       label: 'Tenants & Empresas' },
+  { to: '/users',        icon: Users,           label: 'Usuários & Permissões' },
+  { to: '/knowledge',    icon: BookOpen,        label: 'Base de Conhecimento' },
+  { to: '/logs',         icon: ScrollText,      label: 'Logs & Auditoria' },
+  { to: '/platform',     icon: Server,          label: 'Plataforma' },
+  { to: '/integrations', icon: Plug,            label: 'Integrações' },
 ];
 
 export default function AppShell() {
