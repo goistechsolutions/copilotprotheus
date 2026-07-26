@@ -35,7 +35,6 @@ user_roles = Table(
 
 class Tenant(Base):
     __tablename__ = 'tenants'
-    __table_args__ = {"schema": "public"}
     id = Column(String(100), primary_key=True, index=True) # ex: 'default' ou 'cliente_alpha'
     name = Column(String(255), nullable=True)
     tenant_code = Column(String(100), nullable=True, index=True)
@@ -53,7 +52,6 @@ class Tenant(Base):
 
 class Company(Base):
     __tablename__ = 'companies'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=True)
     cnpj = Column(String(30), index=True, nullable=True)
@@ -82,7 +80,6 @@ class Company(Base):
 
 class AgentUser(Base):
     __tablename__ = 'agent_users'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
     username = Column(String(100), nullable=False, index=True)
@@ -92,7 +89,6 @@ class AgentUser(Base):
 
 class AgentRole(Base):
     __tablename__ = 'agent_roles'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
     name = Column(String(50), nullable=False)
@@ -101,7 +97,6 @@ class AgentRole(Base):
 
 class TenantConnector(Base):
     __tablename__ = 'tenant_connectors'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False)
     environment = Column(String(100), nullable=False, server_default='producao')
@@ -274,7 +269,6 @@ class Memory(Base):
 
 class AllowedTable(Base):
     __tablename__ = 'allowed_tables'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
     alias = Column(String(50), nullable=False)
@@ -305,7 +299,6 @@ class ProtheusModule(Base):
 
 class CompanyLicense(Base):
     __tablename__ = 'company_licenses'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     company_id = Column(Integer, index=True, nullable=False, unique=True)
     max_tokens_monthly = Column(Integer, server_default='1000000')
@@ -319,7 +312,6 @@ class CompanyLicense(Base):
 
 class ApiUsageLog(Base):
     __tablename__ = 'api_usage_logs'
-    __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     company_id = Column(Integer, index=True, nullable=True)
     session_id = Column(String(100), index=True, nullable=True)

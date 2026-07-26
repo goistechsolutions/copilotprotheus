@@ -62,8 +62,13 @@ def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
             # Clonar o MetaData para forçar a criação das tabelas no novo schema
             tenant_metadata = MetaData(schema=clean_tenant)
             for table_name, table in Base.metadata.tables.items():
-                # Ignorar tabelas globais que já estão no schema public
-                if table.schema == "public" or table_name in ["tenants", "companies"]:
+                # Ignorar tabelas globais que devem permanecer apenas no schema public
+                if table.schema == "public" or table_name in [
+                    "tenants", "companies", "agent_users", "agent_roles",
+                    "tenant_connectors", "allowed_tables", "company_licenses",
+                    "api_usage_logs", "role_permissions", "user_company_access",
+                    "user_roles"
+                ]:
                     continue
                 table.tometadata(tenant_metadata)
                 
