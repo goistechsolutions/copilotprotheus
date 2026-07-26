@@ -178,13 +178,7 @@ def fetch_curated_by_modules(
     modules: List[str],
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Busca dicionário CURADO pelos módulos selecionados.
-    Executa duas queries na QueryRest:
-    1. SX2+SX3+SXG filtrados por módulo (tabelas + campos + grupos)
-    2. SIX filtrado pelas mesmas tabelas
-
-    Returns:
-        {"dict_rows": [...], "six_rows": [...]}
+    Busca dicionário CURADO pelos módulos selecionados via QueryRest direta.
     """
     modules_in = _build_modules_in(modules)
     if not modules_in:
@@ -202,10 +196,6 @@ def fetch_curated_by_modules(
     return {"dict_rows": dict_rows, "six_rows": six_rows}
 
 
-# ---------------------------------------------------------------------------
-# run_snapshot — versão unificada com suporte a module_filter
-# ---------------------------------------------------------------------------
-
 def run_snapshot(
     tenant_id: str,
     environment_id: str = "producao",
@@ -218,14 +208,9 @@ def run_snapshot(
     encrypted_password: Optional[str] = None,
 ):
     """
-    Sincroniza o dicionário Protheus no PostgreSQL.
-
-    Parâmetros novos (v5.3):
-        module_filter: lista de códigos de módulo (ex: ['FAT','EST']).
-                       Se informado, executa snapshot CURADO — apenas as tabelas
-                       dos módulos selecionados são gravadas no schema da empresa.
-        rest_url / protheus_user / encrypted_password:
-                       credenciais da empresa (necessários quando module_filter informado).
+    Executa a sincronização do dicionário estrutural (SX2, SX3, SXG, SIX)
+    do ERP Protheus, registrando apenas metadados sem dados operacionais/transacionais.
+    Suporta filtragem opcional por module_filter (módulos contratados da empresa).
     """
     snapshot_code = snapshot_code or datetime.utcnow().strftime("%Y%m%d%H%M%S")
     own_session   = False
@@ -235,16 +220,11 @@ def run_snapshot(
         session      = SessionLocal()
         own_session  = True
 
+    allowed_snapshot_tables = set()
     try:
-        # ── MODO CURADO: snapshot filtrado por módulos ────────────────────────
-        if module_filter:
-            if not rest_url or not protheus_user or not encrypted_password:
-                raise ValueError(
-                    "rest_url, protheus_user e encrypted_password são obrigatórios "
-                    "quando module_filter é informado."
-                )
-
-            logger.info(f"[Snapshot Curado] tenant={tenant_id} módulos={module_filter}")
+        # ── MODO CURADO DIRETO: snapshot filtrado por módulos via credenciais REST informadas ────────────────────────
+        if module_filter and rest_url and protheus_user and encrypted_password:
+            logger.info(f"[Snapshot Curado via REST Direto] tenant={tenant_id} módulos={module_filter}")
 
             data = fetch_curated_by_modules(
                 rest_url, protheus_user, encrypted_password, module_filter
@@ -278,6 +258,11 @@ def run_snapshot(
 
             if source_type == "SX2":
                 for r in rows:
+                    t_name = str(r.get("X2_CHAVE") or r.get("table_name") or "").strip().upper()
+                    mod_code = str(r.get("X2_MODULO") or r.get("module_code") or "").strip()
+                    if module_filter and len(module_filter) > 0 and mod_code not in module_filter:
+                        continue
+                    allowed_snapshot_tables.add(t_name)
                     session.execute(text("""
                         INSERT INTO dictionary_tables
                         (tenant_id, company_id, environment_id, snapshot_code,
@@ -291,19 +276,19 @@ def run_snapshot(
                             description=EXCLUDED.description, physical_name=EXCLUDED.physical_name,
                             raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
                     """), {
-                        "tenant_id": str(tenant_id),
-                        "company_id": str(company_id) if company_id else None,
-                        "environment_id": str(environment_id),
-                        "snapshot_code": snapshot_code,
-                        "table_name": str(r.get("X2_CHAVE") or "").strip().upper(),
-                        "table_alias": str(r.get("X2_ARQUIVO") or "").strip(),
-                        "module_code": str(r.get("X2_MODULO") or "").strip(),
-                        "description": str(r.get("X2_NOME") or "").strip(),
-                        "physical_name": str(r.get("X2_ARQFIS") or "").strip(),
-                        "raw_payload": json.dumps(r),
+                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id), "snapshot_code": snapshot_code,
+                        "table_name": t_name,
+                        "table_alias": str(r.get("X2_ARQUIVO") or r.get("table_alias") or "").strip(),
+                        "module_code": mod_code,
+                        "description": str(r.get("X2_NOME") or r.get("description") or "").strip(),
+                        "physical_name": str(r.get("X2_ARQFIS") or r.get("physical_name") or "").strip(),
+                        "raw_payload": json.dumps(r)
                     })
             elif source_type == "SX3":
                 for r in rows:
+                    table_name = str(r.get("X3_ARQUIVO") or r.get("table_name") or "").strip().upper()
+                    if module_filter and len(module_filter) > 0 and allowed_snapshot_tables and table_name not in allowed_snapshot_tables:
+                        continue
                     session.execute(text("""
                         INSERT INTO dictionary_fields
                         (tenant_id, company_id, environment_id, snapshot_code,
@@ -324,18 +309,15 @@ def run_snapshot(
                             relation_rule=EXCLUDED.relation_rule, when_rule=EXCLUDED.when_rule,
                             raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
                     """), {
-                        "tenant_id": str(tenant_id),
-                        "company_id": str(company_id) if company_id else None,
-                        "environment_id": str(environment_id),
-                        "snapshot_code": snapshot_code,
-                        "table_name": str(r.get("X3_ARQUIVO") or "").strip().upper(),
-                        "field_name": str(r.get("X3_CAMPO") or "").strip().upper(),
-                        "title": str(r.get("X3_TITULO") or "").strip(),
-                        "field_type": str(r.get("X3_TIPO") or "").strip(),
-                        "length_num": int(r.get("X3_TAMANHO") or 0) or None,
-                        "decimal_num": int(r.get("X3_DECIMAL") or 0) or None,
-                        "required_flag": str(r.get("X3_OBRIGAT", "")).strip().upper() in ("S","1","T","TRUE"),
-                        "browse_flag": str(r.get("X3_VISUAL", "")).strip().upper() in ("S","1","T","TRUE","V"),
+                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id), "snapshot_code": snapshot_code,
+                        "table_name": table_name,
+                        "field_name": str(r.get("X3_CAMPO") or r.get("field_name") or "").strip().upper(),
+                        "title": str(r.get("X3_TITULO") or r.get("title") or "").strip(),
+                        "field_type": str(r.get("X3_TIPO") or r.get("field_type") or "").strip(),
+                        "length_num": int(r.get("X3_TAMANHO") or r.get("length_num") or 0) or None,
+                        "decimal_num": int(r.get("X3_DECIMAL") or r.get("decimal_num") or 0) or None,
+                        "required_flag": str(r.get("X3_OBRIGAT", "")).strip().upper() in ("S", "1", "T", "TRUE"),
+                        "browse_flag": str(r.get("X3_VISUAL", "")).strip().upper() in ("S", "1", "T", "TRUE", "V"),
                         "virtual_flag": str(r.get("X3_CONTEXT", "")).strip().upper() == "V",
                         "validation_rule": str(r.get("X3_VALID") or "").strip(),
                         "relation_rule": str(r.get("X3_RELACAO") or "").strip(),
@@ -344,6 +326,9 @@ def run_snapshot(
                     })
             elif source_type == "SIX":
                 for r in rows:
+                    table_name = str(r.get("SIX_ARQUIVO") or r.get("table_name") or "").strip().upper()
+                    if module_filter and len(module_filter) > 0 and allowed_snapshot_tables and table_name not in allowed_snapshot_tables:
+                        continue
                     session.execute(text("""
                         INSERT INTO dictionary_indexes
                         (tenant_id, company_id, environment_id, snapshot_code,
@@ -356,15 +341,12 @@ def run_snapshot(
                             nickname=EXCLUDED.nickname, expression=EXCLUDED.expression,
                             raw_payload=EXCLUDED.raw_payload
                     """), {
-                        "tenant_id": str(tenant_id),
-                        "company_id": str(company_id) if company_id else None,
-                        "environment_id": str(environment_id),
-                        "snapshot_code": snapshot_code,
-                        "table_name": str(r.get("SIX_ARQUIVO") or "").strip().upper(),
-                        "index_order": str(r.get("SIX_ORDEM") or "").strip(),
-                        "nickname": str(r.get("SIX_DESCRIC") or "").strip(),
-                        "expression": str(r.get("SIX_CHAVE") or "").strip(),
-                        "raw_payload": json.dumps(r),
+                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id), "snapshot_code": snapshot_code,
+                        "table_name": table_name,
+                        "index_order": str(r.get("SIX_ORDEM") or r.get("index_order") or "").strip(),
+                        "nickname": str(r.get("SIX_DESCRIC") or r.get("nickname") or "").strip(),
+                        "expression": str(r.get("SIX_CHAVE") or r.get("expression") or "").strip(),
+                        "raw_payload": json.dumps(r)
                     })
             elif source_type == "SXG":
                 for r in rows:

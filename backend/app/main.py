@@ -18,6 +18,7 @@ from app.api.admin_auth import router as admin_auth_router
 from app.api.powerbi_routes import router as powerbi_router
 from app.api.leonardo_routes import router as leonardo_router
 from app.core.admin_security import require_admin
+from app.api.agent_sql_routes import router as agent_sql_router
 from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
 from app.core.config import settings
@@ -161,6 +162,7 @@ app.include_router(admin_router, prefix="/api/admin")
 app.include_router(admin_auth_router)
 app.include_router(governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
+app.include_router(agent_sql_router, prefix="/api")
 app.include_router(catalog_v52_router)
 app.include_router(infra_router)
 # --- Fase 4: Power BI + Leonardo AI ---

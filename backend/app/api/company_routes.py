@@ -1,28 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Header, status, BackgroundTasks, Query, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import text, func
+from typing import Dict, Any, List, Optional
+import logging
+from datetime import datetime
+import uuid
+import json
+import jwt
+from pydantic import BaseModel
+
 from app.db.database import get_db
 from app.models.knowledge import (
     Company, LicensePlan, AgentQueryAudit,
     ProtheusModuleMaster, TenantModuleContract, TenantContract
 )
-from sqlalchemy import func
-from app.schemas.company import CompanyCreate, CompanyUpdate, CompanyResponse, LicenseGenerateRequest, LicenseVerifyRequest, SessionValidateRequest
+from app.schemas.company import (
+    CompanyCreate, CompanyUpdate, CompanyResponse,
+    LicenseGenerateRequest, LicenseVerifyRequest, SessionValidateRequest
+)
 from app.services.license_service import generate_license, verify_license
 from app.services.queryrest_service import queryrest_exec
 from app.services.sync_dictionary_v52 import run_snapshot
 from app.core.config import settings
-from typing import List, Optional
-from datetime import datetime
-import uuid
-import jwt
 from app.core.security import encrypt_password
-from pydantic import BaseModel
+
+logger = logging.getLogger("app.api.company_routes")
 
 router = APIRouter(tags=["companies"])
 
 
 class SaveModulesRequest(BaseModel):
-    modules: List[dict]           # [{"USR_CODMOD": "FAT", "USR_MODULO": "SIGAFAT"}, ...]
+    modules: List[dict]
     contract_id: Optional[str] = None
     trigger_snapshot: bool = True
 
@@ -36,8 +44,59 @@ def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
     return x_admin_key
 
 
+def preload_allowed_tables(db: Session, tenant_id: str, company_id: int):
+    """
+    Deriva o escopo técnico permitido e as permissões granulares no catálogo v5.2
+    com base na lista de módulos contratados pela empresa (RBAC e Escopo Curado).
+    """
+    try:
+        db.execute(
+            text("""
+                INSERT INTO tenant_table_permissions
+                    (tenant_id, company_id, environment_id, role_id, table_name, can_list, can_describe, can_query, approved_by, created_at, updated_at)
+                SELECT
+                    dt.tenant_id,
+                    :company_id_str,
+                    dt.environment_id,
+                    'default',
+                    dt.table_name,
+                    TRUE,
+                    TRUE,
+                    TRUE,
+                    'module_contract_sync',
+                    NOW(),
+                    NOW()
+                FROM dictionary_tables dt
+                INNER JOIN protheus_modules_master pmm
+                    ON pmm.module_code = dt.module_code
+                INNER JOIN tenant_module_contracts tmc
+                    ON tmc.module_id = pmm.id
+                   AND tmc.tenant_id = dt.tenant_id
+                   AND tmc.status = 'allowed'
+                WHERE dt.tenant_id = :tenant_id
+                ON CONFLICT (tenant_id, environment_id, role_id, table_name)
+                DO UPDATE SET 
+                    can_list = TRUE,
+                    can_describe = TRUE,
+                    can_query = TRUE,
+                    updated_at = NOW()
+            """),
+            {
+                "tenant_id": tenant_id,
+                "company_id_str": str(company_id)
+            }
+        )
+        db.commit()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.warning(f"Aviso ao derivar tabelas permitidas no escopo v5.2: {e}")
+
+
 # ─────────────────────────────────────────────────────────────
-# CRUD Empresas (existente — sem alteração)
+# CRUD Empresas & Billing & Licenciamento
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/companies", response_model=List[CompanyResponse])
@@ -64,13 +123,9 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         payload.protheus_password = encrypt_password(payload.protheus_password)
     comp = Company(**payload.model_dump())
     db.add(comp)
-    try:
-        db.commit()
-        db.refresh(comp)
-        return comp
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Erro no Banco de Dados: {str(e)}")
+    db.commit()
+    db.refresh(comp)
+    return comp
 
 
 @router.put("/companies/{company_id}", response_model=CompanyResponse)
@@ -151,14 +206,14 @@ def get_company_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
 
 
 # ─────────────────────────────────────────────────────────────
-# MÓDULOS DA EMPRESA (novo — v5.3)
+# MÓDULOS DA EMPRESA (Multi-Tenant, RBAC & Snapshot)
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/companies/{company_id}/modules/available")
 def get_available_modules(company_id: int, db: Session = Depends(get_db)):
     """
     Busca módulos instalados no Protheus da empresa via SYS_USR_MODULE.
-    Executa a consulta diretamente na QueryRest da empresa.
+    Executa a consulta diretamente no endpoint /QueryRest da empresa.
     """
     comp = _get_company_or_404(company_id, db)
     _check_rest_config(comp)
@@ -166,7 +221,7 @@ def get_available_modules(company_id: int, db: Session = Depends(get_db)):
     sql = (
         "SELECT ROW_NUMBER() OVER (ORDER BY USR_MODULO) AS ID, "
         "USR_MODULO, USR_CODMOD "
-        "FROM (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE)"
+        "FROM (SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE WHERE D_E_L_E_T_ <> '*')"
     )
 
     try:
@@ -226,13 +281,6 @@ def save_company_modules(
     """
     Salva os módulos selecionados para a empresa e,
     opcionalmente, dispara snapshot curado do dicionário.
-
-    Body:
-    {
-        "modules": [{"USR_CODMOD": "FAT", "USR_MODULO": "SIGAFAT"}, ...],
-        "contract_id": "uuid-do-contrato",   // opcional
-        "trigger_snapshot": true              // default true
-    }
     """
     comp = _get_company_or_404(company_id, db)
 
@@ -262,8 +310,8 @@ def save_company_modules(
     saved_codes = []
 
     for mod in payload.modules:
-        mod_code = str(mod.get("USR_CODMOD") or "").strip().upper()
-        mod_name = str(mod.get("USR_MODULO") or mod_code).strip()
+        mod_code = str(mod.get("USR_CODMOD") or mod.get("module_code") or "").strip().upper()
+        mod_name = str(mod.get("USR_MODULO") or mod.get("module_name") or mod_code).strip()
 
         if not mod_code:
             continue
@@ -303,8 +351,7 @@ def save_company_modules(
     db.commit()
 
     # Dispara snapshot curado em background
-    if payload.trigger_snapshot and saved_codes:
-        _check_rest_config(comp)
+    if payload.trigger_snapshot and saved_codes and comp.protheus_rest_url:
         background_tasks.add_task(
             run_snapshot,
             tenant_id=comp.tenant_id,
@@ -316,17 +363,66 @@ def save_company_modules(
             encrypted_password=comp.encrypted_protheus_password,
         )
 
+    # Deriva escopo no catálogo RBAC
+    if comp.tenant_id:
+        preload_allowed_tables(db, comp.tenant_id, company_id)
+
     return {
         "status": "success",
         "company_id": company_id,
         "tenant_id": comp.tenant_id,
         "modules_saved": saved_codes,
-        "snapshot_triggered": payload.trigger_snapshot and bool(saved_codes),
+        "snapshot_triggered": payload.trigger_snapshot and bool(saved_codes) and bool(comp.protheus_rest_url),
         "message": (
             "Módulos salvos. Snapshot curado do dicionário disparado em background."
-            if payload.trigger_snapshot
+            if (payload.trigger_snapshot and comp.protheus_rest_url)
             else "Módulos salvos. Execute o snapshot manualmente quando desejar."
         ),
+    }
+
+
+@router.post("/companies/{company_id}/modules/sync")
+def sync_company_modules_dictionary(
+    company_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    comp = _get_company_or_404(company_id, db)
+    _check_rest_config(comp)
+
+    rows = (
+        db.query(ProtheusModuleMaster.module_code)
+        .join(TenantModuleContract, TenantModuleContract.module_id == ProtheusModuleMaster.id)
+        .filter(
+            TenantModuleContract.tenant_id == comp.tenant_id,
+            TenantModuleContract.status == "allowed"
+        )
+        .all()
+    )
+    module_filter = [r[0] for r in rows]
+
+    if not module_filter:
+        raise HTTPException(status_code=400, detail="Nenhum módulo habilitado para sincronizar para esta empresa.")
+
+    background_tasks.add_task(
+        run_snapshot,
+        tenant_id=comp.tenant_id,
+        environment_id=comp.protheus_ambientes or "producao",
+        company_id=str(comp.id),
+        module_filter=module_filter,
+        rest_url=comp.protheus_rest_url,
+        protheus_user=comp.protheus_usuario,
+        encrypted_password=comp.encrypted_protheus_password,
+    )
+
+    preload_allowed_tables(db, comp.tenant_id, company_id)
+
+    return {
+        "status": "success",
+        "company_id": company_id,
+        "tenant_id": comp.tenant_id,
+        "module_filter": module_filter,
+        "message": "Snapshot curado do dicionário disparado em background."
     }
 
 
@@ -345,5 +441,5 @@ def _check_rest_config(comp: Company):
     if not comp.protheus_rest_url or not comp.protheus_usuario or not comp.encrypted_protheus_password:
         raise HTTPException(
             status_code=400,
-            detail="Empresa sem REST URL, usuário ou senha configurados. Configure antes de buscar módulos."
+            detail="Empresa sem REST URL, usuário ou senha configurados. Configure antes de buscar/sincronizar módulos."
         )
