@@ -25,4 +25,8 @@ def encrypt_password(password: str) -> str:
 def decrypt_password(encrypted_password: str) -> str:
     if not encrypted_password:
         return ""
-    return fernet.decrypt(encrypted_password.encode("utf-8")).decode("utf-8")
+    try:
+        return fernet.decrypt(encrypted_password.encode("utf-8")).decode("utf-8")
+    except Exception:
+        # Se falhar ao descriptografar, retorna o valor original no caso de ter sido salvo em texto claro
+        return encrypted_password

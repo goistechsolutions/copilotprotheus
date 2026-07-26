@@ -9,7 +9,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("app.protheus")
 
-from app.models.knowledge import Tenant, Company, Environment, Connector
+from app.models.knowledge import Tenant, Company, Environment, Connector, TenantConnector
 from app.core.security import decrypt_password
 from app.db.database import SessionLocal
 
@@ -18,26 +18,25 @@ _OAUTH2_TOKENS = {} # cache: {tenant_id: (token, expiry)}
 def get_tenant_config(tenant_id: str) -> dict:
     """
     Busca as credenciais do Protheus do tenant_id no banco de dados e as decodifica.
-    Prioriza Connector + Environment da Fase 3/4.
+    Consulta na seguinte ordem de prioridade:
+    1. Connector (table connectors) / Environment
+    2. TenantConnector (table tenant_connectors)
+    3. Tenant (table tenants) - protheus_rest_url configurado no cadastro de Clientes
+    4. Company (table companies) - protheus_rest_url configurada na Empresa vinculada
+    5. Fallback nas variáveis de ambiente globais se tenant for default ou em fallback
     """
     db = SessionLocal()
     try:
-        tenant_uuid = None
-        try:
-            tenant_uuid = uuid.UUID(tenant_id)
-            tenant = db.query(Tenant).filter(Tenant.id == tenant_uuid).first()
-        except ValueError:
-            tenant = db.query(Tenant).filter(Tenant.tenant_code == tenant_id).first()
-            if tenant:
-                tenant_uuid = tenant.id
-
+        tenant = db.query(Tenant).filter(Tenant.id == str(tenant_id)).first()
         if not tenant:
-            raise ValueError(f"Tenant não encontrado para a chave: {tenant_id}")
+            tenant = db.query(Tenant).filter(Tenant.tenant_code == str(tenant_id)).first()
+            
+        tenant_key = str(tenant.id if tenant else tenant_id)
 
-        # Busca Conector
+        # 1. Busca na tabela Connector (Fase 3/4)
         connector = db.query(Connector).filter(
-            Connector.tenant_id == tenant_uuid,
-            Connector.connector_type == 'protheus',
+            (Connector.tenant_id == tenant_key) | (Connector.tenant_id == str(tenant_id)),
+            Connector.connector_type.ilike('%protheus%'),
             Connector.status == 'active'
         ).first()
 
@@ -48,7 +47,6 @@ def get_tenant_config(tenant_id: str) -> dict:
                 if env:
                     rest_url = env.api_base_url
             
-            # Decodificando secret_ref (esperado formato user:encrypted_pass ou JSON)
             user = ""
             pwd = ""
             if connector.secret_ref:
@@ -64,21 +62,86 @@ def get_tenant_config(tenant_id: str) -> dict:
                     user = parts[0]
                     pwd = decrypt_password(parts[1])
 
+            if rest_url:
+                return {
+                    "rest_url": rest_url.rstrip("/"),
+                    "webapp_url": "",
+                    "vscode_server_url": "",
+                    "user": user,
+                    "password": pwd,
+                    "auth_mode": connector.auth_type or "basic"
+                }
+
+        # 2. Busca na tabela TenantConnector
+        t_conn = db.query(TenantConnector).filter(
+            (TenantConnector.tenant_id == tenant_key) | (TenantConnector.tenant_id == str(tenant_id)),
+            TenantConnector.is_active == True
+        ).first()
+        
+        if t_conn and t_conn.rest_url:
+            pwd = ""
+            if t_conn.password_hash:
+                pwd = decrypt_password(t_conn.password_hash)
             return {
-                "rest_url": rest_url or "",
+                "rest_url": t_conn.rest_url.rstrip("/"),
                 "webapp_url": "",
                 "vscode_server_url": "",
-                "user": user,
+                "user": t_conn.username or "",
                 "password": pwd,
-                "auth_mode": connector.auth_type or "basic"
+                "auth_mode": t_conn.auth_mode or "basic"
             }
-            
+
+        # 3. Busca nas configurações diretas no cadastro do Cliente (tabela tenants)
+        if tenant and tenant.protheus_rest_url:
+            pwd = ""
+            if tenant.encrypted_protheus_password:
+                pwd = decrypt_password(tenant.encrypted_protheus_password)
+            return {
+                "rest_url": tenant.protheus_rest_url.rstrip("/"),
+                "webapp_url": "",
+                "vscode_server_url": "",
+                "user": tenant.protheus_user or "",
+                "password": pwd,
+                "auth_mode": tenant.auth_mode or "basic"
+            }
+
+        # 4. Busca nas configurações da Empresa associada (tabela companies)
+        company = db.query(Company).filter(
+            (Company.tenant_id == tenant_key) | (Company.tenant_id == str(tenant_id)),
+            Company.protheus_rest_url != None,
+            Company.protheus_rest_url != ""
+        ).first()
+        
+        if company and company.protheus_rest_url:
+            pwd = ""
+            if company.protheus_password:
+                pwd = decrypt_password(company.protheus_password)
+            return {
+                "rest_url": company.protheus_rest_url.rstrip("/"),
+                "webapp_url": company.protheus_webapp_url or "",
+                "vscode_server_url": "",
+                "user": company.protheus_usuario or "",
+                "password": pwd,
+                "auth_mode": "basic"
+            }
+
+        # 5. Fallback nas variáveis de ambiente (.env / Globais)
+        if str(tenant_id).lower() in ["default", "admin", "1", tenant_key.lower()] and settings.protheus_rest_url:
+            return {
+                "rest_url": settings.protheus_rest_url.rstrip("/"),
+                "webapp_url": getattr(settings, "protheus_webapp_url", ""),
+                "vscode_server_url": "",
+                "user": getattr(settings, "protheus_user", "") or "admin",
+                "password": getattr(settings, "protheus_password", "") or "",
+                "auth_mode": "basic"
+            }
+
     except Exception as e:
         logger.error(f"Erro ao buscar configuracoes do tenant {tenant_id}: {e}")
     finally:
         db.close()
         
-    raise ValueError(f"Configurações do Protheus não encontradas no Banco de Dados para o tenant_id: {tenant_id}.")
+    raise ValueError(f"Configurações do Protheus (URL REST e credenciais) não encontradas no Banco de Dados para o cliente (tenant_id): {tenant_id}. Por favor, verifique se no cadastro do Cliente ({tenant_id}) ou Conector a URL REST do Protheus foi preenchida.")
 
 async def descobrir_apis_protheus(palavra_chave: str) -> str:
     cache_path = os.path.join(os.path.dirname(__file__), "endpoints_cache.json")
