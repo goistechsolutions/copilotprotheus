@@ -10,7 +10,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (user) { navigate('/admin/'); return null; }
+  // basename=/admin já cuida do prefixo — usar paths relativos
+  if (user) { navigate('/'); return null; }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,7 +19,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(form.username, form.password);
-      navigate('/admin/');
+      navigate('/');
     } catch (err) {
       setError(err.message);
     } finally {

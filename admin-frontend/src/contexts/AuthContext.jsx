@@ -43,6 +43,7 @@ export function AuthProvider({ children }) {
       await fetch('/api/admin/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {}
     setUser(null);
+    // basename=/admin já é o prefixo — usar path relativo ao basename
     window.location.href = '/admin/login';
   };
 
