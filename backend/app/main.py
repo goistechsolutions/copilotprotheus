@@ -18,6 +18,7 @@ from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
 from app.core.config import settings
 import app.models.knowledge
+import app.models.catalog_v52
 import sentry_sdk
 
 # Inicializa logging JSON estruturado
@@ -91,7 +92,20 @@ try:
             "ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
             "ALTER TABLE documents ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
             "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
-            "ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"
+            "ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
+            
+            # --- Tabelas v5.2 (Catálogo Protheus, Snapshots e Permissões Granulares RBAC) ---
+            "CREATE TABLE IF NOT EXISTS tenant_dictionary_sources (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', source_type VARCHAR(20) NOT NULL, snapshot_code VARCHAR(60) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), started_at TIMESTAMPTZ NULL, finished_at TIMESTAMPTZ NULL, error_message TEXT NULL);",
+            "CREATE TABLE IF NOT EXISTS dictionary_tables (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, table_alias VARCHAR(80) NULL, module_code VARCHAR(10) NULL, description TEXT NULL, physical_name VARCHAR(80) NULL, active_flag BOOLEAN NOT NULL DEFAULT TRUE, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name));",
+            "CREATE TABLE IF NOT EXISTS dictionary_fields (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, title VARCHAR(120) NULL, field_type VARCHAR(5) NULL, length_num INTEGER NULL, decimal_num INTEGER NULL, required_flag BOOLEAN NOT NULL DEFAULT FALSE, browse_flag BOOLEAN NOT NULL DEFAULT FALSE, virtual_flag BOOLEAN NOT NULL DEFAULT FALSE, validation_rule TEXT NULL, relation_rule TEXT NULL, when_rule TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, field_name));",
+            "CREATE TABLE IF NOT EXISTS dictionary_indexes (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, index_order VARCHAR(10) NOT NULL, nickname VARCHAR(80) NULL, expression TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, index_order));",
+            "CREATE TABLE IF NOT EXISTS dictionary_groups (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, group_name VARCHAR(80) NOT NULL, description TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, group_name));",
+            "CREATE TABLE IF NOT EXISTS tenant_table_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, can_list BOOLEAN NOT NULL DEFAULT FALSE, can_describe BOOLEAN NOT NULL DEFAULT FALSE, can_query BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name));",
+            "CREATE TABLE IF NOT EXISTS tenant_field_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, can_select BOOLEAN NOT NULL DEFAULT FALSE, can_filter BOOLEAN NOT NULL DEFAULT FALSE, masked_flag BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name, field_name));",
+            "CREATE INDEX IF NOT EXISTS idx_dictionary_tables_lookup ON dictionary_tables (tenant_id, environment_id, table_name);",
+            "CREATE INDEX IF NOT EXISTS idx_dictionary_fields_lookup ON dictionary_fields (tenant_id, environment_id, table_name, field_name);",
+            "CREATE INDEX IF NOT EXISTS idx_perm_table_lookup ON tenant_table_permissions (tenant_id, environment_id, role_id, table_name);",
+            "CREATE INDEX IF NOT EXISTS idx_perm_field_lookup ON tenant_field_permissions (tenant_id, environment_id, role_id, table_name, field_name);"
         ]
         for query in migrations:
             try:
@@ -130,6 +144,7 @@ app.add_middleware(
 from app.api.admin_routes import router as admin_router
 from app.api.auth_routes import router as auth_router
 from app.api.governance_routes import router as governance_router
+from app.api.catalog_v52_routes import router as catalog_v52_router
 from fastapi.staticfiles import StaticFiles
 
 app.include_router(router)
@@ -142,6 +157,7 @@ app.include_router(auth_router, prefix="/api/auth")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
+app.include_router(catalog_v52_router)
 app.include_router(infra_router)
 
 import httpx
