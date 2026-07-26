@@ -1,17 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import api from '../api/axios';
 import { Database, Play, AlertCircle, CheckCircle2, Loader2, Info } from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader';
 
 export default function DictionarySyncPage() {
-  const [tenantId, setTenantId] = useState('00000000-0000-0000-0000-000000000000');
-  const [companyId, setCompanyId] = useState('');
-  const [envId, setEnvId] = useState('');
-  const [modules, setModules] = useState('');
+  const [tenantId, setTenantId]       = useState('00000000-0000-0000-0000-000000000000');
+  const [companyId, setCompanyId]     = useState('');
+  const [envId, setEnvId]             = useState('');
+  const [modules, setModules]         = useState('');
   const [snapshotCode, setSnapshotCode] = useState('');
-  
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [status, setStatus]           = useState(null);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState('');
 
   const payload = useMemo(() => ({
     tenant_id: tenantId,
@@ -23,132 +23,75 @@ export default function DictionarySyncPage() {
   }), [tenantId, companyId, envId, modules, snapshotCode]);
 
   const startSync = async () => {
-    setLoading(true); 
-    setError('');
-    setStatus(null);
+    setLoading(true); setError(''); setStatus(null);
     try {
       const { data } = await api.post('/api/admin/sync/dictionary/start', payload);
       setStatus(data);
-      if (data.snapshot_code) {
-        setSnapshotCode(data.snapshot_code);
-      }
+      if (data.snapshot_code) setSnapshotCode(data.snapshot_code);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || String(e));
     }
     setLoading(false);
   };
 
+  const Field = ({ label, value, onChange, placeholder, span }) => (
+    <div className={span ? 'md:col-span-2' : ''}>
+      <label className="block text-xs font-medium text-[#8892A4] uppercase tracking-wider mb-1.5">{label}</label>
+      <input
+        type="text" value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-4 py-2.5 text-white text-sm placeholder-[#8892A4]/50 focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/30 transition-all font-mono"
+      />
+    </div>
+  );
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center">
-            <Database className="w-6 h-6 mr-3 text-brand-600" />
-            Sincronização de Dicionário
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Inicie a extração de metadados do Protheus para criação de um novo Snapshot de governança.
-          </p>
+    <div>
+      <PageHeader
+        title="Sincronizar Dicionário"
+        description="Dispara a extração de metadados do Protheus e cria um novo Snapshot de governança."
+      />
+
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-6 space-y-6 max-w-3xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Tenant ID *"      value={tenantId}     onChange={setTenantId}     placeholder="UUID do Cliente" />
+          <Field label="Company ID"        value={companyId}    onChange={setCompanyId}    placeholder="UUID da Empresa (opcional)" />
+          <Field label="Environment ID"    value={envId}        onChange={setEnvId}        placeholder="UUID do Ambiente (opcional)" />
+          <Field label="Módulos"           value={modules}      onChange={setModules}      placeholder="Ex: SIGAFAT, SIGAFIN" />
+          <Field label="Snapshot Code"     value={snapshotCode} onChange={setSnapshotCode} placeholder="Ex: v1.0.0-fat (opcional)" span />
         </div>
-      </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tenant ID (Obrigatório)</label>
-              <input 
-                type="text" 
-                value={tenantId} 
-                onChange={e => setTenantId(e.target.value)} 
-                className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-4 py-2 border"
-                placeholder="UUID do Cliente"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Company ID (Opcional)</label>
-              <input 
-                type="text" 
-                value={companyId} 
-                onChange={e => setCompanyId(e.target.value)} 
-                className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-4 py-2 border"
-                placeholder="UUID da Empresa"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Environment ID (Opcional)</label>
-              <input 
-                type="text" 
-                value={envId} 
-                onChange={e => setEnvId(e.target.value)} 
-                className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-4 py-2 border"
-                placeholder="UUID do Ambiente"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Módulos (Vírgula)</label>
-              <input 
-                type="text" 
-                value={modules} 
-                onChange={e => setModules(e.target.value)} 
-                className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-4 py-2 border"
-                placeholder="Ex: SIGAFAT, SIGAFIN"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Snapshot Code Personalizado (Opcional)</label>
-              <input 
-                type="text" 
-                value={snapshotCode} 
-                onChange={e => setSnapshotCode(e.target.value)} 
-                className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-4 py-2 border"
-                placeholder="Ex: v1.0.0-fat"
-              />
-            </div>
-          </div>
-
-          <div className="pt-4 flex justify-end border-t border-slate-100">
-            <button 
-              disabled={loading || !tenantId} 
-              onClick={startSync}
-              className="inline-flex items-center justify-center px-6 py-2.5 border border-transparent text-sm font-medium rounded-lg text-white bg-brand-600 hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50 transition-colors"
-            >
-              {loading ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Iniciando Worker...</>
-              ) : (
-                <><Play className="w-4 h-4 mr-2" /> Iniciar Sincronização</>
-              )}
-            </button>
-          </div>
+        <div className="pt-4 border-t border-[#1E2535] flex justify-end">
+          <button
+            disabled={loading || !tenantId}
+            onClick={startSync}
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-[#1565C0] to-[#2196F3] hover:from-[#1976D2] hover:to-[#42A5F5] text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-all shadow-lg shadow-[#1565C0]/20"
+          >
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Iniciando Worker...</> : <><Play className="w-4 h-4" /> Iniciar Sincronização</>}
+          </button>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl bg-red-50 p-4 border border-red-200 shadow-sm animate-in fade-in">
-          <div className="flex">
-            <AlertCircle className="h-5 w-5 text-red-400 mr-3" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Falha ao iniciar</h3>
-              <p className="mt-2 text-sm text-red-700">{error}</p>
-            </div>
+        <div className="mt-4 max-w-3xl flex items-start gap-3 bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-red-400 text-sm font-medium">Falha ao iniciar</p>
+            <p className="text-red-400/80 text-sm mt-1">{error}</p>
           </div>
         </div>
       )}
 
       {status && (
-        <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-200 shadow-sm animate-in fade-in">
-          <div className="flex">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3" />
-            <div>
-              <h3 className="text-sm font-medium text-emerald-800">Job Aceito (Background)</h3>
-              <div className="mt-2 text-sm text-emerald-700 space-y-1">
-                <p>Status: <strong>{status.status}</strong></p>
-                <p>Código: <strong className="font-mono bg-emerald-100 px-1 py-0.5 rounded">{status.snapshot_code}</strong></p>
-                <p className="text-xs mt-2 flex items-center">
-                  <Info className="w-4 h-4 mr-1" /> Processo rodando de forma assíncrona. Verifique Snapshots.
-                </p>
-              </div>
-            </div>
+        <div className="mt-4 max-w-3xl flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-emerald-400 text-sm font-medium">Job aceito — rodando em background</p>
+            <p className="text-[#8892A4] text-sm">Status: <span className="text-white font-mono">{status.status}</span></p>
+            <p className="text-[#8892A4] text-sm">Código: <span className="text-white font-mono bg-[#0F1117] px-2 py-0.5 rounded">{status.snapshot_code}</span></p>
+            <p className="text-[#8892A4]/70 text-xs flex items-center gap-1 mt-1">
+              <Info className="w-3.5 h-3.5" /> Acompanhe o progresso em <strong className="text-[#2196F3]">Catálogo → Snapshots</strong>
+            </p>
           </div>
         </div>
       )}

@@ -1,118 +1,130 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { ShieldCheck, Save, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Lock, ShieldCheck, AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader';
 
 export default function PermissionEditorPage() {
-  const [snapshotId, setSnapshotId] = useState('33333333-3333-3333-3333-333333333333');
-  const [contractId, setContractId] = useState('00000000-0000-0000-0000-000000000000');
-  
-  const [json, setJson] = useState(`{
-  "allowed_tables": [
-    {
-      "table_id": "11111111-1111-1111-1111-111111111111",
-      "access_level": "query",
-      "rationale": "Permissão consulta NF"
-    }
-  ],
-  "allowed_fields": []
-}`);
+  const [tenants, setTenants]       = useState([]);
+  const [selectedTenant, setSelectedTenant] = useState('');
+  const [tables, setTables]         = useState([]);
+  const [perms, setPerms]           = useState({});
+  const [loading, setLoading]       = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [toast, setToast]           = useState(null);
 
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
+  useEffect(() => {
+    api.get('/api/admin/tenants').then(r => setTenants(r.data || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTenant) return;
+    setLoading(true);
+    Promise.all([
+      api.get(`/api/admin/schemas?tenant_id=${selectedTenant}`),
+      api.get(`/api/admin/permissions?tenant_id=${selectedTenant}`),
+    ]).then(([schRes, permRes]) => {
+      setTables(schRes.data.schemas || []);
+      const map = {};
+      (permRes.data || []).forEach(p => { map[p.table_name] = p.allowed; });
+      setPerms(map);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [selectedTenant]);
+
+  const toggle = (table) => setPerms(p => ({ ...p, [table]: !p[table] }));
 
   const save = async () => {
-    setLoading(true);
-    setError('');
-    setResult(null);
+    setSaving(true);
     try {
-      const parsed = JSON.parse(json);
-      const payload = { contract_id: contractId, ...parsed };
-      const { data } = await api.post(`/api/admin/dictionary/${snapshotId}/permit`, payload);
-      setResult(data);
-    } catch (e) {
-      setError(e.response?.data?.detail || e.message || String(e));
+      await api.post('/api/admin/permissions', { tenant_id: selectedTenant, permissions: perms });
+      showToast('success', 'Permissões salvas com sucesso.');
+    } catch {
+      showToast('error', 'Erro ao salvar permissões.');
     }
-    setLoading(false);
+    setSaving(false);
+  };
+
+  const showToast = (type, msg) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 3500);
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center">
-            <ShieldCheck className="w-6 h-6 mr-3 text-brand-600" />
-            Editor de Permissões
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Defina as políticas de acesso a um Snapshot para um Contrato específico.
-          </p>
+    <div>
+      <PageHeader title="Permissões de Tabelas" description="Controle quais tabelas do dicionário cada tenant pode consultar." />
+
+      <div className="flex items-end gap-3 mb-5">
+        <div className="relative">
+          <select
+            value={selectedTenant} onChange={e => setSelectedTenant(e.target.value)}
+            className="appearance-none bg-[#161B27] border border-[#1E2535] text-white text-sm rounded-lg pl-3 pr-8 py-2 focus:outline-none focus:border-[#2196F3] transition-all cursor-pointer min-w-[220px]"
+          >
+            <option value="">Selecione um Tenant</option>
+            {tenants.map(t => (
+              <option key={t.id} value={t.tenant_id}>{t.razao_social || t.name}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8892A4] pointer-events-none" />
         </div>
+        {selectedTenant && (
+          <button onClick={save} disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-all">
+            <ShieldCheck className="w-4 h-4" />
+            {saving ? 'Salvando...' : 'Salvar Permissões'}
+          </button>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-slate-200">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Snapshot ID</label>
-            <input 
-              type="text" 
-              value={snapshotId} 
-              onChange={e => setSnapshotId(e.target.value)} 
-              className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-4 py-2 border"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Contract ID</label>
-            <input 
-              type="text" 
-              value={contractId} 
-              onChange={e => setContractId(e.target.value)} 
-              className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-4 py-2 border"
-            />
-          </div>
+      {toast && (
+        <div className={`mb-4 flex items-center gap-2 text-sm rounded-xl px-4 py-3 border ${
+          toast.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.msg}
         </div>
+      )}
 
-        <div className="flex flex-col md:flex-row">
-          <div className="flex-1 p-6 border-r border-slate-200 bg-slate-50">
-            <textarea 
-              rows="12" 
-              value={json} 
-              onChange={e => setJson(e.target.value)} 
-              className="w-full font-mono text-sm rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 p-4 border bg-slate-900 text-green-400"
-              spellCheck="false"
-            />
-            <div className="mt-4 flex justify-end">
-              <button 
-                onClick={save}
-                disabled={loading}
-                className="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-brand-600 hover:bg-brand-700 shadow-sm disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                Salvar
-              </button>
+      {selectedTenant && (
+        <div className="bg-[#161B27] border border-[#1E2535] rounded-xl overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-[#1E2535] flex items-center gap-2">
+            <Lock className="w-4 h-4 text-[#2196F3]" />
+            <span className="text-white text-sm font-semibold">Tabelas ({tables.length})</span>
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
             </div>
-          </div>
-
-          <div className="w-full md:w-1/3 p-6 flex flex-col">
-            <h3 className="text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Status</h3>
-            {error && (
-              <div className="rounded-xl bg-red-50 p-4 border border-red-200 shadow-sm">
-                <AlertTriangle className="w-5 h-5 text-red-400 mb-2" />
-                <div className="text-sm text-red-700 break-all">{error}</div>
-              </div>
-            )}
-            {result && (
-              <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-200 shadow-sm">
-                <CheckCircle className="w-5 h-5 text-emerald-500 mb-2" />
-                <div className="text-sm text-emerald-700 space-y-1">
-                  <p>Tabelas: <strong>{result.tables_permitted}</strong></p>
-                  <p>Campos: <strong>{result.fields_permitted}</strong></p>
-                </div>
-              </div>
-            )}
-          </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b border-[#1E2535]">
+                <tr>
+                  {['Tabela','Módulo','Descrição','Acesso'].map(h => (
+                    <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-[#8892A4] uppercase tracking-widest">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1E2535]">
+                {tables.map(t => (
+                  <tr key={t.id} className="hover:bg-[#1E2535]/50 transition-colors">
+                    <td className="px-5 py-3 font-mono text-white text-xs">{t.tabela}</td>
+                    <td className="px-5 py-3 text-[#8892A4] text-xs font-mono">{t.modulo}</td>
+                    <td className="px-5 py-3 text-[#8892A4] text-xs truncate max-w-xs">{t.nome}</td>
+                    <td className="px-5 py-3">
+                      <button onClick={() => toggle(t.tabela)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          perms[t.tabela] ? 'bg-[#1565C0]' : 'bg-[#1E2535]'
+                        }`}>
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          perms[t.tabela] ? 'translate-x-4' : 'translate-x-1'
+                        }`} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
