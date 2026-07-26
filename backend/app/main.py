@@ -14,6 +14,8 @@ from app.api.company_routes import router as company_router
 from app.api.tenant_routes import router as tenant_router
 from app.api.infra_routes import router as infra_router
 from app.api.agent_routes import router as agent_router
+from app.api.admin_auth import router as admin_auth_router
+from app.core.admin_security import require_admin
 from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
 from app.core.config import settings
@@ -156,6 +158,7 @@ app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(admin_router, prefix="/api/admin")
+app.include_router(admin_auth_router)   # expõe /api/admin/auth/login|logout|me
 app.include_router(governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(catalog_v52_router)
@@ -164,13 +167,48 @@ app.include_router(infra_router)
 import httpx
 from fastapi import Request
 from fastapi.responses import Response
+from datetime import datetime
+
+# ─── Dashboard Stats ──────────────────────────────────────────────────────────
+@app.get("/api/admin/dashboard/stats")
+async def dashboard_stats(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Métricas gerais do painel admin EliteCorp"""
+    try:
+        tenants = db.execute(text("SELECT COUNT(*) FROM tenants")).scalar() or 0
+    except Exception:
+        tenants = 0
+    try:
+        users = db.execute(text("SELECT COUNT(*) FROM agent_users")).scalar() or 0
+    except Exception:
+        users = 0
+    try:
+        rag_docs = db.execute(text("SELECT COUNT(*) FROM documents")).scalar() or 0
+    except Exception:
+        rag_docs = 0
+    try:
+        today = datetime.utcnow().date()
+        conversations = db.execute(
+            text("SELECT COUNT(DISTINCT session_id) FROM memories WHERE DATE(created_at) = :today"),
+            {"today": today}
+        ).scalar() or 0
+    except Exception:
+        conversations = 0
+
+    return {
+        "tenants": tenants,
+        "users": users,
+        "rag_documents": rag_docs,
+        "conversations_today": conversations,
+        "avg_response_ms": None,
+        "uptime": "100%",
+    }
 
 # Proxy for Adminer — protegido por JWT via Bearer header OU cookie 'access_token'
-# O cookie é setado automaticamente no login e permite que o iframe do painel admin
-# autentique sem precisar injetar o header Authorization manualmente.
 @app.api_route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
 async def adminer_proxy(request: Request, path: str, current_user: dict = Depends(get_current_user_flexible)):
-    # Garante que apenas administradores acessem o Adminer
     if current_user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -191,20 +229,15 @@ async def adminer_proxy(request: Request, path: str, current_user: dict = Depend
         try:
             proxy_res = await client.send(proxy_req, stream=True)
             headers = dict(proxy_res.headers)
-            
-            # Remove security headers to allow iframe embedding
             headers.pop("x-frame-options", None)
             headers.pop("content-security-policy", None)
             headers.pop("X-Frame-Options", None)
             headers.pop("Content-Security-Policy", None)
-            
-            # Remove hop-by-hop headers
             headers.pop("transfer-encoding", None)
             headers.pop("content-encoding", None)
             headers.pop("content-length", None)
             headers.pop("connection", None)
             headers.pop("keep-alive", None)
-            
             return Response(
                 content=await proxy_res.aread(),
                 status_code=proxy_res.status_code,
