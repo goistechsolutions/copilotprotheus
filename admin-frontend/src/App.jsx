@@ -148,6 +148,25 @@ function Sidebar({ isOpen, setIsOpen }) {
 
 function Topbar({ toggleSidebar }) {
   const location = useLocation();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (_) {
+      // ignora erro de rede — prossegue com logout local
+    } finally {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/admin';
+    }
+  };
+
   const getPageTitle = () => {
     if (location.pathname.startsWith('/companies/')) return 'Dashboard da Empresa';
     switch (location.pathname) {
@@ -198,8 +217,13 @@ function Topbar({ toggleSidebar }) {
           <Cpu size={14} className="text-indigo-400 animate-pulse" />
           <span>Oracle ROWNUM Protected</span>
         </div>
-        <button className="text-sm font-medium text-slate-300 hover:text-red-400 flex items-center gap-2 transition-all duration-200 px-3.5 py-2 rounded-xl bg-slate-800/70 hover:bg-red-500/15 border border-slate-700/70 hover:border-red-500/30 ml-2 shadow-sm">
-          <LogOut size={16} className="text-red-400" /> Encerrar Sessão
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="text-sm font-medium text-slate-300 hover:text-red-400 flex items-center gap-2 transition-all duration-200 px-3.5 py-2 rounded-xl bg-slate-800/70 hover:bg-red-500/15 border border-slate-700/70 hover:border-red-500/30 ml-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <LogOut size={16} className="text-red-400" />
+          {isLoggingOut ? 'Saindo...' : 'Encerrar Sessão'}
         </button>
       </div>
     </header>

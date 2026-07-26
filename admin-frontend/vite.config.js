@@ -11,5 +11,12 @@ export default defineConfig({
   ],
   server: {
     port: 3000,
-  }
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    // Garante que o bundle final fique em admin-frontend/dist/
+    // O Dockerfile copia de /app/dist para /usr/share/nginx/html
+    emptyOutDir: true,
+  },
 })
