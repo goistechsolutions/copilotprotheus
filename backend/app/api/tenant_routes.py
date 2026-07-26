@@ -15,7 +15,8 @@ from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
 from typing import List, Optional
 
-router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
+# prefix só com /tenants — main.py já adiciona /api
+router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
 # ── Criptografia da senha REST Protheus ──────────────────────
 _FERNET_KEY = os.getenv("FERNET_KEY", "").encode()
@@ -33,7 +34,6 @@ def encrypt_password(plaintext: str) -> str:
     f = _fernet()
     if f:
         return f.encrypt(plaintext.encode()).decode()
-    # Fallback seguro: não armazena em claro — lança erro
     raise RuntimeError("FERNET_KEY não configurada. Defina a variável de ambiente antes de armazenar senhas.")
 
 
@@ -95,7 +95,6 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
     for field, value in update_data.items():
         setattr(tenant, field, value)
 
-    # Senha: atualiza somente se fornecida
     _apply_password(tenant, body.protheus_password)
 
     db.commit()
