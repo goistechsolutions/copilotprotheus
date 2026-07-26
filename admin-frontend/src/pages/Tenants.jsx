@@ -10,21 +10,32 @@ import Badge from '../components/ui/Badge';
 
 // Campos padrão alinhados ao schema real da tabela `tenant`
 const EMPTY = {
-  tenant_code: '',
-  tenant_name: '',
-  name: '',                        // nome de exibição / slug
-  protheus_rest_url: '',
-  protheus_user: '',
-  protheus_password: '',           // senha em claro — backend criptografa em encrypted_protheus_password
-  auth_mode: 'basic',              // basic | token | oauth
-  system_prompt: '',
-  temperature: 0.2,
-  plan_code: '',
-  status: 'active',
+  id:                   '',           // slug único — obrigatório pelo backend
+  tenant_code:          '',
+  tenant_name:          '',
+  name:                 '',
+  protheus_rest_url:    '',
+  protheus_user:        '',
+  protheus_password:    '',
+  auth_mode:            'basic',
+  system_prompt:        '',
+  temperature:          0.2,
+  plan_code:            '',
+  status:               'active',
 };
 
+// Converte qualquer string em slug válido (minúsculas, só a-z 0-9 _ -)
+function toSlug(v) {
+  return v
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove acentos
+    .replace(/[^a-z0-9_\-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 // ─── Field helpers ────────────────────────────────────────────────────────────
-function F({ label, name, form, set, type = 'text', placeholder = '', mono = false, span = false }) {
+function F({ label, name, form, set, type = 'text', placeholder = '', mono = false, span = false, readOnly = false }) {
   return (
     <div className={span ? 'md:col-span-2' : ''}>
       <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
@@ -33,11 +44,13 @@ function F({ label, name, form, set, type = 'text', placeholder = '', mono = fal
       <input
         type={type}
         value={form[name] ?? ''}
-        onChange={e => set(p => ({ ...p, [name]: e.target.value }))}
+        onChange={e => !readOnly && set(p => ({ ...p, [name]: e.target.value }))}
         placeholder={placeholder}
+        readOnly={readOnly}
         className={`w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm
           placeholder-[#8892A4]/40 focus:outline-none focus:border-[#2196F3] focus:ring-1
-          focus:ring-[#2196F3]/20 transition-all ${mono ? 'font-mono' : ''}`}
+          focus:ring-[#2196F3]/20 transition-all ${mono ? 'font-mono' : ''}
+          ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
       />
     </div>
   );
@@ -77,17 +90,26 @@ function TenantModal({ tenant, onClose, onSaved }) {
   const isEdit = !!tenant?.id;
   const [form, setForm] = useState(
     isEdit
-      ? { ...tenant, protheus_password: '' }  // nunca pré-preencher senha
+      ? { ...tenant, protheus_password: '' }
       : { ...EMPTY }
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
+  // Ao digitar tenant_code, deriva o id automaticamente (somente no modo criação)
+  const handleTenantCode = (e) => {
+    const raw = e.target.value;
+    setForm(p => ({
+      ...p,
+      tenant_code: raw,
+      ...(!isEdit ? { id: toSlug(raw) } : {}),
+    }));
+  };
+
   const save = async (e) => {
     e.preventDefault();
     setSaving(true); setErr('');
 
-    // Remove senha vazia no edit (não sobrescreve encrypted_protheus_password)
     const payload = { ...form };
     if (isEdit && !payload.protheus_password) delete payload.protheus_password;
 
@@ -125,7 +147,41 @@ function TenantModal({ tenant, onClose, onSaved }) {
 
             {/* ── Identificação ── */}
             <SectionDivider>Identificação</SectionDivider>
-            {f({ label: 'Código (tenant_code)', name: 'tenant_code', placeholder: 'elitecorp', mono: true })}
+
+            {/* tenant_code: digitado pelo usuário; id: derivado automaticamente */}
+            <div>
+              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
+                Código (tenant_code)
+              </label>
+              <input
+                type="text"
+                value={form.tenant_code}
+                onChange={handleTenantCode}
+                placeholder="elitecorp"
+                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5
+                  text-white text-sm font-mono placeholder-[#8892A4]/40
+                  focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/20 transition-all"
+              />
+            </div>
+
+            {/* ID (slug) — editável manualmente se necessário, readonly no edit */}
+            <div>
+              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
+                ID (slug único) {!isEdit && <span className="text-[#2196F3] ml-1">— auto</span>}
+              </label>
+              <input
+                type="text"
+                value={form.id}
+                onChange={e => !isEdit && setForm(p => ({ ...p, id: toSlug(e.target.value) }))}
+                placeholder="elitecorp"
+                readOnly={isEdit}
+                className={`w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5
+                  text-white text-sm font-mono placeholder-[#8892A4]/40
+                  focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/20 transition-all
+                  ${isEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+            </div>
+
             {f({ label: 'Nome de Exibição (name)', name: 'name', placeholder: 'EliteCorp Ltda' })}
             {f({ label: 'Nome Interno (tenant_name)', name: 'tenant_name', placeholder: 'elitecorp-prod', mono: true })}
 
@@ -134,10 +190,10 @@ function TenantModal({ tenant, onClose, onSaved }) {
             {f({ label: 'URL REST Protheus', name: 'protheus_rest_url', placeholder: 'http://ip:porta/rest', mono: true, span: true })}
             {f({ label: 'Usuário REST (protheus_user)', name: 'protheus_user', placeholder: 'admin' })}
             {f({
-              label: isEdit ? 'Senha REST (em branco = manter)' : 'Senha REST *',
+              label: isEdit ? 'Senha REST (em branco = manter)' : 'Senha REST',
               name: 'protheus_password',
               type: 'password',
-              placeholder: isEdit ? '••••••••' : 'Obrigatória',
+              placeholder: isEdit ? '••••••••' : 'Senha opcional',
             })}
             <Sel
               label="Modo de Autenticação (auth_mode)"
@@ -247,7 +303,7 @@ const statusLabel   = { active: 'Ativo', inactive: 'Inativo', suspended: 'Suspen
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Tenants() {
   const { data, loading, refetch } = useApi('/api/tenants/');
-  const [modal, setModal] = useState(null); // null | 'new' | tenantObj
+  const [modal, setModal] = useState(null);
 
   const tenants   = Array.isArray(data) ? data : (data?.items ?? data?.tenants ?? []);
   const total     = tenants.length;
@@ -363,5 +419,6 @@ export default function Tenants() {
         />
       )}
     </div>
+
   );
 }
