@@ -26,8 +26,9 @@ jobs:
           script: |
             set -e
             cd /opt/copilotprotheus
-            git pull origin main
-            docker compose pull backend
-            docker compose up -d --build backend
+            git fetch origin main || true
+            git reset --hard origin/main || git pull origin main --rebase || true
+            docker compose pull --ignore-pull-failures || true
+            docker compose up -d --build --force-recreate backend
             docker compose exec -T backend alembic upgrade head || true
             echo "✅ Backend atualizado em $(date)"
