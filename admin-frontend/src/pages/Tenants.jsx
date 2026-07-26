@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, RefreshCw, Edit2, Trash2, Building2, X, Save, Loader2, Globe } from 'lucide-react';
+import { Plus, RefreshCw, Edit2, Globe, X, Save, Loader2, Building2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useApi, apiCall } from '../hooks/useApi';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
@@ -14,14 +14,10 @@ function TenantModal({ tenant, onClose, onSaved }) {
   const isEdit = !!tenant?.id;
 
   const save = async (e) => {
-    e.preventDefault();
-    setSaving(true); setErr('');
+    e.preventDefault(); setSaving(true); setErr('');
     try {
-      if (isEdit) {
-        await apiCall(`/api/tenants/${form.id}`, 'PUT', form);
-      } else {
-        await apiCall('/api/tenants/', 'POST', form);
-      }
+      if (isEdit) await apiCall(`/api/tenants/${form.id}`, 'PUT', form);
+      else        await apiCall('/api/tenants/', 'POST', form);
       onSaved();
     } catch (e) { setErr(e.message); }
     finally { setSaving(false); }
@@ -29,13 +25,12 @@ function TenantModal({ tenant, onClose, onSaved }) {
 
   const F = ({ label, name, placeholder, type = 'text' }) => (
     <div>
-      <label className="block text-[#8892A4] text-xs font-medium mb-1.5 uppercase tracking-wider">{label}</label>
+      <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">{label}</label>
       <input
-        type={type}
-        value={form[name] || ''}
+        type={type} value={form[name] || ''}
         onChange={e => setForm(p => ({ ...p, [name]: e.target.value }))}
         placeholder={placeholder}
-        className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm placeholder-[#8892A4] focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/30 transition-all"
+        className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm placeholder-[#8892A4]/40 focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/20 transition-all"
       />
     </div>
   );
@@ -45,18 +40,18 @@ function TenantModal({ tenant, onClose, onSaved }) {
       <div className="bg-[#161B27] border border-[#1E2535] rounded-2xl w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2535]">
           <h2 className="text-white font-semibold">{isEdit ? 'Editar Tenant' : 'Novo Tenant'}</h2>
-          <button onClick={onClose} className="text-[#8892A4] hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-[#8892A4] hover:text-white"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={save} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <F label="Código" name="tenant_code" placeholder="elitecorp" />
-            <F label="Nome" name="tenant_name" placeholder="EliteCorp" />
+            <F label="Nome"   name="tenant_name" placeholder="EliteCorp" />
           </div>
           <F label="URL REST Protheus" name="protheus_rest_url" placeholder="https://erp.empresa.com.br:8080" />
           <div className="grid grid-cols-2 gap-4">
             <F label="Plano" name="plan_code" placeholder="pro" />
             <div>
-              <label className="block text-[#8892A4] text-xs font-medium mb-1.5 uppercase tracking-wider">Status</label>
+              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Status</label>
               <select
                 value={form.status || 'active'}
                 onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
@@ -70,8 +65,12 @@ function TenantModal({ tenant, onClose, onSaved }) {
           </div>
           {err && <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{err}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#8892A4] hover:text-white border border-[#1E2535] rounded-lg hover:border-[#2196F3]/40 transition-all">Cancelar</button>
-            <button type="submit" disabled={saving} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#1565C0] hover:bg-[#1976D2] text-white rounded-lg font-medium transition-all disabled:opacity-60">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-[#8892A4] hover:text-white border border-[#1E2535] hover:border-[#2196F3]/40 rounded-lg transition-all">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white font-semibold rounded-lg disabled:opacity-50 transition-all">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               {saving ? 'Salvando...' : 'Salvar'}
             </button>
@@ -83,16 +82,19 @@ function TenantModal({ tenant, onClose, onSaved }) {
 }
 
 const statusVariant = { active: 'green', inactive: 'default', suspended: 'red' };
-const statusLabel = { active: 'Ativo', inactive: 'Inativo', suspended: 'Suspenso' };
+const statusLabel   = { active: 'Ativo', inactive: 'Inativo', suspended: 'Suspenso' };
 
 export default function Tenants() {
   const { data, loading, refetch } = useApi('/api/tenants/');
-  const [modal, setModal] = useState(null); // null | 'new' | {tenant}
+  const [modal, setModal] = useState(null);
 
   const tenants = Array.isArray(data) ? data : (data?.items ?? data?.tenants ?? []);
+  const total     = tenants.length;
+  const active    = tenants.filter(t => t.status === 'active').length;
+  const suspended = tenants.filter(t => t.status === 'suspended').length;
 
   const columns = [
-    { key: 'tenant_code', label: 'Código' },
+    { key: 'tenant_code', label: 'Código', render: v => <span className="font-mono text-white text-xs">{v}</span> },
     { key: 'tenant_name', label: 'Nome' },
     {
       key: 'protheus_rest_url', label: 'URL REST',
@@ -108,11 +110,10 @@ export default function Tenants() {
     {
       key: 'id', label: 'Ações',
       render: (_, row) => (
-        <div className="flex items-center gap-1">
-          <button onClick={() => setModal(row)} className="p-1.5 text-[#8892A4] hover:text-[#2196F3] hover:bg-[#1565C0]/10 rounded-md transition-all">
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <button onClick={() => setModal(row)}
+          className="p-1.5 text-[#8892A4] hover:text-[#2196F3] hover:bg-[#1565C0]/10 rounded-md transition-all">
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
       )
     },
   ];
@@ -120,22 +121,51 @@ export default function Tenants() {
   return (
     <div>
       <PageHeader
-        title="Tenants & Empresas"
-        description="Gerencie os tenants e suas configurações de conexão Protheus"
+        title="Tenants"
+        description="Gerencie os tenants e suas configurações de conexão Protheus."
         actions={
           <>
             <button onClick={refetch} className="p-2 text-[#8892A4] hover:text-white hover:bg-[#1E2535] rounded-lg transition-all">
               <RefreshCw className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => setModal('new')}
-              className="flex items-center gap-2 px-3 py-2 bg-[#1565C0] hover:bg-[#1976D2] text-white text-sm font-medium rounded-lg transition-all"
-            >
+            <button onClick={() => setModal('new')}
+              className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white text-sm font-medium rounded-lg transition-all shadow-lg shadow-[#1565C0]/20">
               <Plus className="w-4 h-4" /> Novo Tenant
             </button>
           </>
         }
       />
+
+      {/* KPI mini */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="bg-[#161B27] border border-[#1E2535] rounded-xl px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 bg-[#1565C0]/15 ring-1 ring-[#1565C0]/30 rounded-lg flex items-center justify-center">
+            <Building2 className="w-4 h-4 text-[#60A5FA]" />
+          </div>
+          <div>
+            <div className="text-xl font-bold text-white">{loading ? '—' : total}</div>
+            <div className="text-[#8892A4] text-xs">Total</div>
+          </div>
+        </div>
+        <div className="bg-[#161B27] border border-[#1E2535] rounded-xl px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 bg-emerald-500/15 ring-1 ring-emerald-500/30 rounded-lg flex items-center justify-center">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div>
+            <div className="text-xl font-bold text-white">{loading ? '—' : active}</div>
+            <div className="text-[#8892A4] text-xs">Ativos</div>
+          </div>
+        </div>
+        <div className="bg-[#161B27] border border-[#1E2535] rounded-xl px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 bg-amber-500/15 ring-1 ring-amber-500/30 rounded-lg flex items-center justify-center">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+          </div>
+          <div>
+            <div className="text-xl font-bold text-white">{loading ? '—' : suspended}</div>
+            <div className="text-[#8892A4] text-xs">Suspensos</div>
+          </div>
+        </div>
+      </div>
 
       {loading ? (
         <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-12 flex items-center justify-center">
