@@ -14,7 +14,7 @@ router = APIRouter(tags=["Auth"])
 
 class RegisterRequest(BaseModel):
     tenant_id: str
-    username: str # will be stored as email
+    username: str  # will be stored as email
     password: Optional[str] = None
     role: Optional[str] = 'tenant_admin'
     full_name: Optional[str] = 'Usuário do Sistema'
@@ -53,7 +53,7 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
     existing = db.query(User).filter(User.email == req.username).first()
-    
+
     if existing:
         if req.password:
             existing.password_hash = hash_password(req.password)
@@ -65,7 +65,7 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
     else:
         if not req.password:
             raise HTTPException(status_code=400, detail="Senha é obrigatória para novos usuários.")
-        
+
         new_user = User(
             tenant_id=tenant_uuid,
             email=req.username,
@@ -74,7 +74,7 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
         )
         db.add(new_user)
         db.flush()
-        
+
         role = db.query(Role).filter(Role.role_code == req.role).first()
         if role:
             db.execute(user_roles.insert().values(
@@ -83,7 +83,7 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
                 tenant_id=tenant_uuid,
                 company_id=None
             ))
-            
+
         db.commit()
         db.refresh(new_user)
         return new_user
@@ -95,7 +95,7 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
         user = db.query(User).filter(User.id == user_uuid).first()
         if not user:
             raise HTTPException(status_code=404, detail="Usuário não encontrado")
-        
+
         db.delete(user)
         db.commit()
         return {"message": "Usuário excluído com sucesso"}
@@ -122,18 +122,23 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
         User.tenant_id == tenant_uuid,
         User.email == req.username
     ).first()
-    
+
     if not user or user.password_hash != hash_password(req.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciais inválidas",
         )
-        
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = datetime.utcnow() + access_token_expires
-    
+
     # Buscar roles
-    user_roles_list = db.query(Role.role_code).join(user_roles, user_roles.c.role_id == Role.id).filter(user_roles.c.user_id == user.id).all()
+    user_roles_list = (
+        db.query(Role.role_code)
+        .join(user_roles, user_roles.c.role_id == Role.id)
+        .filter(user_roles.c.user_id == user.id)
+        .all()
+    )
     roles = [r[0] for r in user_roles_list]
     primary_role = roles[0] if roles else 'business_user'
 
@@ -142,11 +147,11 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
         "tenant_id": str(user.tenant_id),
         "user_id": str(user.id),
         "role": primary_role,
-        "exp": expire
+        "exp": expire,
     }
-    
+
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
-    
+
     # Seta cookie HttpOnly para suporte a iframes (ex: proxy Adminer no painel admin)
     # SameSite=Lax permite envio em navegação de primeira parte e iframes same-origin
     response.set_cookie(
@@ -156,7 +161,26 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
         secure=True,
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/"
+        path="/",
     )
-    
+
     return {"access_token": encoded_jwt, "token_type": "bearer", "role": primary_role}
+
+
+@router.post("/logout")
+def logout(response: Response):
+    """Expira o cookie 'access_token' no browser.
+    Deve ser chamado pelo frontend ao clicar em Logout.
+    Apos este endpoint, o iframe do Adminer nao consegue mais autenticar via cookie.
+    """
+    response.set_cookie(
+        key="access_token",
+        value="",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=0,      # Expira imediatamente
+        expires=0,      # Compatibilidade com browsers mais antigos
+        path="/",
+    )
+    return {"success": True, "message": "Logout realizado com sucesso."}
