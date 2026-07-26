@@ -17,8 +17,8 @@ user_company_access = Table(
     'user_company_access',
     Base.metadata,
     Column('user_id', UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
-    Column('tenant_id', UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True),
-    Column('company_id', UUID(as_uuid=True), ForeignKey('companies.id', ondelete='CASCADE'), primary_key=True),
+    Column('tenant_id', String(100), ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True),
+    Column('company_id', Integer, ForeignKey('companies.id', ondelete='CASCADE'), primary_key=True),
     Column('env_id', UUID(as_uuid=True), ForeignKey('environments.id', ondelete='CASCADE'))
 )
 
@@ -27,39 +27,98 @@ user_roles = Table(
     Base.metadata,
     Column('user_id', UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
     Column('role_id', UUID(as_uuid=True), ForeignKey('roles.id', ondelete='CASCADE'), primary_key=True),
-    Column('tenant_id', UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True),
-    Column('company_id', UUID(as_uuid=True), ForeignKey('companies.id', ondelete='CASCADE'), primary_key=True)
+    Column('tenant_id', String(100), ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True),
+    Column('company_id', Integer, ForeignKey('companies.id', ondelete='CASCADE'), primary_key=True)
 )
 
-# ======== NOVOS MODELOS V3/V4 ========
+# ======== MODELOS PRINCIPAIS TENANT & COMPANY (V2/V3/V4 UNIFICADOS) ========
 
 class Tenant(Base):
     __tablename__ = 'tenants'
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_code = Column(String(60), nullable=False, unique=True)
-    tenant_name = Column(String(200), nullable=False)
-    status = Column(String(20), nullable=False, default='active')
-    plan_code = Column(String(50))
+    __table_args__ = {"schema": "public"}
+    id = Column(String(100), primary_key=True, index=True) # ex: 'default' ou 'cliente_alpha'
+    name = Column(String(255), nullable=True)
+    tenant_code = Column(String(100), nullable=True, index=True)
+    tenant_name = Column(String(255), nullable=True)
+    protheus_rest_url = Column(String(1024), nullable=True)
+    protheus_user = Column(String(255), nullable=True)
+    encrypted_protheus_password = Column(Text, nullable=True)
+    auth_mode = Column(String(50), server_default='basic')
+    system_prompt = Column(Text, nullable=True)
+    temperature = Column(Float, server_default='0.7')
+    status = Column(String(50), server_default='active')
+    plan_code = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Company(Base):
     __tablename__ = 'companies'
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
-    company_code = Column(String(60), nullable=False)
-    company_name = Column(String(200), nullable=False)
-    protheus_env = Column(String(100))
-    protheus_branch = Column(String(100))
-    status = Column(String(20), nullable=False, default='active')
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=True)
+    cnpj = Column(String(30), index=True, nullable=True)
+    ie = Column(String(30), nullable=True)
+    razao_social = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True)
+    telefone = Column(String(50), nullable=True)
+    endereco = Column(String(500), nullable=True)
+    protheus_grupo = Column(String(20), nullable=True)
+    protheus_empresa = Column(String(20), nullable=True)
+    protheus_unidade = Column(String(20), nullable=True)
+    protheus_filial = Column(String(30), nullable=True)
+    protheus_ambientes = Column(String(100), server_default='producao')
+    protheus_usuario = Column(String(100), nullable=True)
+    protheus_password = Column(String(255), nullable=True)
+    protheus_rest_url = Column(String(1024), nullable=True)
+    protheus_webapp_url = Column(String(1024), nullable=True)
+    licenca_uso = Column(Text, nullable=True)
+    status = Column(String(50), server_default='ativa')
+    company_code = Column(String(60), nullable=True)
+    company_name = Column(String(200), nullable=True)
+    protheus_env = Column(String(100), nullable=True)
+    protheus_branch = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class AgentUser(Base):
+    __tablename__ = 'agent_users'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    username = Column(String(100), nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(50), server_default='user')
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class AgentRole(Base):
+    __tablename__ = 'agent_roles'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=False, server_default='default')
+    name = Column(String(50), nullable=False)
+    permissions = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class TenantConnector(Base):
+    __tablename__ = 'tenant_connectors'
+    __table_args__ = {"schema": "public"}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    environment = Column(String(100), nullable=False, server_default='producao')
+    rest_url = Column(String(1024), nullable=False)
+    auth_mode = Column(String(50), server_default='basic')
+    username = Column(String(255), nullable=True)
+    password_hash = Column(Text, nullable=True)
+    token = Column(Text, nullable=True)
+    is_active = Column(Boolean, server_default='true')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Environment(Base):
     __tablename__ = 'environments'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), nullable=False, index=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
     env_code = Column(String(60), nullable=False)
     env_name = Column(String(120), nullable=False)
     api_base_url = Column(String(500))
@@ -71,9 +130,9 @@ class Environment(Base):
 class Connector(Base):
     __tablename__ = 'connectors'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), index=True)
-    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'), index=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
+    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'), index=True, nullable=True)
     connector_type = Column(String(50), nullable=False)
     connector_name = Column(String(150), nullable=False)
     base_url = Column(String(500))
@@ -86,8 +145,8 @@ class Connector(Base):
 class KnowledgeBase(Base):
     __tablename__ = 'knowledge_bases'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
+    tenant_id = Column(String(100), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
     kb_code = Column(String(60), nullable=False)
     kb_name = Column(String(200), nullable=False)
     storage_type = Column(String(50), nullable=False, default='r2')
@@ -116,7 +175,7 @@ class Permission(Base):
 class User(Base):
     __tablename__ = 'users'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'))
+    tenant_id = Column(String(100), index=True, nullable=True)
     email = Column(String(180), nullable=False, unique=True)
     full_name = Column(String(180), nullable=False)
     password_hash = Column(String(255), nullable=False)
@@ -128,8 +187,8 @@ class User(Base):
 class OnboardingProject(Base):
     __tablename__ = 'onboarding_projects'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
+    tenant_id = Column(String(100), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
     project_code = Column(String(60), nullable=False)
     project_name = Column(String(180), nullable=False)
     onboarding_status = Column(String(30), nullable=False, default='planned')
@@ -156,9 +215,9 @@ class OnboardingTask(Base):
 class AuditLog(Base):
     __tablename__ = 'audit_logs'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True))
-    company_id = Column(UUID(as_uuid=True))
-    user_id = Column(UUID(as_uuid=True))
+    tenant_id = Column(String(100), index=True, nullable=True)
+    company_id = Column(Integer, index=True, nullable=True)
+    user_id = Column(String(100), nullable=True)
     module_name = Column(String(80), nullable=False)
     action_name = Column(String(120), nullable=False)
     target_type = Column(String(80))
@@ -166,8 +225,6 @@ class AuditLog(Base):
     request_id = Column(String(120))
     details_json = Column(JSON)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-# ======== MODELOS EXISTENTES MANTIDOS ========
 
 class Document(Base):
     __tablename__ = 'documents'
@@ -231,10 +288,10 @@ class TenantSchema(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False)
     modulo = Column(String(50), index=True, nullable=True)
-    chave = Column(String(10), index=True, nullable=False) 
-    tabela = Column(String(50), nullable=True) 
-    nome = Column(String(255), nullable=True) 
-    schema_json = Column(JSON, nullable=False) 
+    chave = Column(String(10), index=True, nullable=False)
+    tabela = Column(String(50), nullable=True)
+    nome = Column(String(255), nullable=True)
+    schema_json = Column(JSON, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -242,20 +299,20 @@ class ProtheusModule(Base):
     __tablename__ = 'protheus_modules'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     tenant_id = Column(String(100), index=True, nullable=False)
-    usr_modulo = Column(String(50), index=True, nullable=False)  
-    usr_codmod = Column(String(50), index=True, nullable=False)  
+    usr_modulo = Column(String(50), index=True, nullable=False)
+    usr_codmod = Column(String(50), index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class CompanyLicense(Base):
     __tablename__ = 'company_licenses'
     __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    company_id = Column(UUID(as_uuid=True), index=True, nullable=False, unique=True)
+    company_id = Column(Integer, index=True, nullable=False, unique=True)
     max_tokens_monthly = Column(Integer, server_default='1000000')
     max_concurrent_users = Column(Integer, server_default='1')
     allow_overage = Column(Boolean, server_default='false', nullable=False)
-    allowed_modules = Column(JSON, nullable=True) 
-    access_groups = Column(JSON, nullable=True) 
+    allowed_modules = Column(JSON, nullable=True)
+    access_groups = Column(JSON, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -264,9 +321,9 @@ class ApiUsageLog(Base):
     __tablename__ = 'api_usage_logs'
     __table_args__ = {"schema": "public"}
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    company_id = Column(UUID(as_uuid=True), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
     session_id = Column(String(100), index=True, nullable=True)
-    request_type = Column(String(50), nullable=False) 
+    request_type = Column(String(50), nullable=False)
     prompt_tokens = Column(Integer, nullable=False, default=0)
     completion_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
@@ -291,8 +348,8 @@ class LicensePlan(Base):
 class TenantContract(Base):
     __tablename__ = 'tenant_contracts'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
-    plan_id = Column(UUID(as_uuid=True), ForeignKey('license_plans.id'))
+    tenant_id = Column(String(100), index=True, nullable=False)
+    plan_id = Column(UUID(as_uuid=True), ForeignKey('license_plans.id'), nullable=True)
     contract_code = Column(String(80), nullable=False, unique=True)
     contract_status = Column(String(20), nullable=False, default='active')
     starts_at = Column(Date, nullable=False)
@@ -317,7 +374,7 @@ class ProtheusModuleMaster(Base):
 class TenantModuleContract(Base):
     __tablename__ = 'tenant_module_contracts'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    tenant_id = Column(String(100), index=True, nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id', ondelete='CASCADE'), nullable=False)
     module_id = Column(UUID(as_uuid=True), ForeignKey('protheus_modules_master.id'), nullable=False)
     status = Column(String(20), nullable=False, default='allowed')
@@ -326,15 +383,15 @@ class TenantModuleContract(Base):
 class DictionarySnapshot(Base):
     __tablename__ = 'dictionary_snapshots'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
-    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'))
+    tenant_id = Column(String(100), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
+    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'), nullable=True)
     snapshot_code = Column(String(80), nullable=False)
     source_db_type = Column(String(30), nullable=False, default='oracle')
     source_label = Column(String(150))
     sync_mode = Column(String(20), nullable=False, default='full')
     sync_status = Column(String(20), nullable=False, default='completed')
-    requested_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    requested_by = Column(UUID(as_uuid=True), nullable=True)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     finished_at = Column(DateTime(timezone=True))
     total_modules = Column(Integer, default=0)
@@ -347,9 +404,9 @@ class TenantDictionaryTable(Base):
     __tablename__ = 'tenant_dictionary_tables'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False, index=True)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
-    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'))
+    tenant_id = Column(String(100), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
+    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'), nullable=True)
     module_code = Column(String(30))
     table_key = Column(String(20), nullable=False)
     physical_name = Column(String(30), nullable=False)
@@ -371,7 +428,7 @@ class TenantDictionaryField(Base):
     __tablename__ = 'tenant_dictionary_fields'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    tenant_id = Column(String(100), index=True, nullable=False)
     table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False, index=True)
     field_name = Column(String(40), nullable=False)
     field_description = Column(String(255))
@@ -389,7 +446,7 @@ class TenantDictionaryIndex(Base):
     __tablename__ = 'tenant_dictionary_indexes'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    tenant_id = Column(String(100), index=True, nullable=False)
     table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False, index=True)
     index_order = Column(Integer)
     index_nickname = Column(String(80))
@@ -402,7 +459,7 @@ class TenantDictionaryIndex(Base):
 class V4TenantAllowedTable(Base):
     __tablename__ = 'tenant_allowed_tables'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id', ondelete='CASCADE'), nullable=False)
     snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
     table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False)
@@ -415,7 +472,7 @@ class V4TenantAllowedTable(Base):
 class V4TenantAllowedField(Base):
     __tablename__ = 'tenant_allowed_fields'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    tenant_id = Column(String(100), index=True, nullable=False)
     allowed_table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_allowed_tables.id', ondelete='CASCADE'), nullable=False)
     field_id = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_fields.id', ondelete='CASCADE'), nullable=False)
     allowed = Column(Boolean, nullable=False, default=True)
@@ -425,7 +482,7 @@ class V4TenantAllowedField(Base):
 class QueryUsageCounter(Base):
     __tablename__ = 'query_usage_counters'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id', ondelete='CASCADE'), nullable=False)
     period_ref = Column(String(20), nullable=False)
     total_queries = Column(Integer, nullable=False, default=0)
@@ -436,8 +493,8 @@ class QueryUsageCounter(Base):
 class ConcurrentSession(Base):
     __tablename__ = 'concurrent_sessions'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    tenant_id = Column(String(100), index=True, nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
     session_key = Column(String(120), nullable=False, unique=True)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True))
@@ -446,12 +503,12 @@ class ConcurrentSession(Base):
 class AgentQueryAudit(Base):
     __tablename__ = 'agent_query_audit'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False, index=True)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'))
-    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'))
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'))
-    contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id'))
-    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id'))
+    tenant_id = Column(String(100), index=True, nullable=False)
+    company_id = Column(Integer, index=True, nullable=True)
+    env_id = Column(UUID(as_uuid=True), ForeignKey('environments.id'), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
+    contract_id = Column(UUID(as_uuid=True), ForeignKey('tenant_contracts.id'), nullable=True)
+    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id'), nullable=True)
     request_id = Column(String(120))
     natural_language_prompt = Column(Text)
     generated_sql = Column(Text)

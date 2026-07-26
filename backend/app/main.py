@@ -29,29 +29,78 @@ logger.info("Iniciando a aplicação FastAPI...")
 try:
     from sqlalchemy import text
     with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except: pass
         
-        # Simple migrations for newly added columns
-        try:
-            conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);"))
-        except Exception: pass
-        try:
-            conn.execute(text("ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';"))
-        except Exception: pass
-        try:
-            conn.execute(text("ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';"))
-        except Exception: pass
-        try:
-            conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"))
-        except Exception: pass
-        try:
-            conn.execute(text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"))
-        except Exception: pass
-        try:
-            conn.execute(text("ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"))
-        except Exception: pass
-        
-        conn.commit()
+        # Comprehensive migrations for newly added columns
+        migrations = [
+            "CREATE TABLE IF NOT EXISTS tenants (id VARCHAR(100) PRIMARY KEY, name VARCHAR(255), protheus_rest_url VARCHAR(1024), auth_mode VARCHAR(50) DEFAULT 'basic', system_prompt TEXT, temperature FLOAT DEFAULT 0.7, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
+            "ALTER TABLE tenants ALTER COLUMN id TYPE VARCHAR(100);",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS name VARCHAR(255);",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_code VARCHAR(100);",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_name VARCHAR(255);",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS protheus_rest_url VARCHAR(1024);",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS protheus_user VARCHAR(255);",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS encrypted_protheus_password TEXT;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS auth_mode VARCHAR(50) DEFAULT 'basic';",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS system_prompt TEXT;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS temperature FLOAT DEFAULT 0.7;",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_code VARCHAR(50);",
+            "UPDATE tenants SET tenant_code = id WHERE tenant_code IS NULL;",
+            "UPDATE tenants SET tenant_name = name WHERE tenant_name IS NULL;",
+            "UPDATE tenants SET name = tenant_name WHERE name IS NULL;",
+            
+            "CREATE TABLE IF NOT EXISTS companies (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100), cnpj VARCHAR(30), razao_social VARCHAR(255), status VARCHAR(50) DEFAULT 'ativa', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS cnpj VARCHAR(30);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS ie VARCHAR(30);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS razao_social VARCHAR(255);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS email VARCHAR(255);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS telefone VARCHAR(50);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS endereco VARCHAR(500);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_grupo VARCHAR(20);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_empresa VARCHAR(20);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_unidade VARCHAR(20);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_filial VARCHAR(30);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT 'producao';",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_usuario VARCHAR(100);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_password VARCHAR(255);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_rest_url VARCHAR(1024);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_webapp_url VARCHAR(1024);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS licenca_uso TEXT;",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ativa';",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_code VARCHAR(60);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_name VARCHAR(200);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_env VARCHAR(100);",
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_branch VARCHAR(100);",
+            "UPDATE companies SET company_code = cnpj WHERE company_code IS NULL AND cnpj IS NOT NULL;",
+            "UPDATE companies SET company_name = razao_social WHERE company_name IS NULL AND razao_social IS NOT NULL;",
+            "UPDATE companies SET razao_social = company_name WHERE razao_social IS NULL AND company_name IS NOT NULL;",
+            "UPDATE companies SET cnpj = company_code WHERE cnpj IS NULL AND company_code IS NOT NULL;",
+
+            "CREATE TABLE IF NOT EXISTS agent_users (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, username VARCHAR(100) NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(50) DEFAULT 'user', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
+            "CREATE TABLE IF NOT EXISTS agent_roles (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, name VARCHAR(50) NOT NULL, permissions JSON, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
+            "CREATE TABLE IF NOT EXISTS tenant_connectors (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, environment VARCHAR(100) DEFAULT 'producao' NOT NULL, rest_url VARCHAR(1024) NOT NULL, auth_mode VARCHAR(50) DEFAULT 'basic', username VARCHAR(255), password_hash TEXT, token TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
+
+            "ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
+            "ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
+            "ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;"
+        ]
+        for query in migrations:
+            try:
+                conn.execute(text(query))
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except: pass
+                
     Base.metadata.create_all(bind=engine)
     logger.info("Tabelas do banco de dados verificadas/criadas com sucesso com suporte a pgvector.")
 except Exception as e:
