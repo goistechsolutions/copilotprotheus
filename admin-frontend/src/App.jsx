@@ -4,20 +4,22 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
-
-// Lazy placeholders para as demais seções (serão implementadas na Fase 3)
 import { lazy, Suspense } from 'react';
-const Tenants = lazy(() => import('./pages/Tenants'));
-const AgentUsers = lazy(() => import('./pages/AgentUsers'));
-const RagMemories = lazy(() => import('./pages/RagMemories'));
-const Logs = lazy(() => import('./pages/Logs'));
-const Infra = lazy(() => import('./pages/Infra'));
+
+const Tenants      = lazy(() => import('./pages/Tenants'));
+const AgentUsers   = lazy(() => import('./pages/AgentUsers'));
+const RagMemories  = lazy(() => import('./pages/RagMemories'));
+const Logs         = lazy(() => import('./pages/Logs'));
+const Infra        = lazy(() => import('./pages/Infra'));
+const Integrations = lazy(() => import('./pages/Integrations')); // Fase 4
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-64">
     <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
   </div>
 );
+
+const S = ({ children }) => <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 
 export default function App() {
   return (
@@ -27,11 +29,12 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
-            <Route path="tenants" element={<Suspense fallback={<PageLoader />}><Tenants /></Suspense>} />
-            <Route path="users" element={<Suspense fallback={<PageLoader />}><AgentUsers /></Suspense>} />
-            <Route path="knowledge" element={<Suspense fallback={<PageLoader />}><RagMemories /></Suspense>} />
-            <Route path="logs" element={<Suspense fallback={<PageLoader />}><Logs /></Suspense>} />
-            <Route path="platform" element={<Suspense fallback={<PageLoader />}><Infra /></Suspense>} />
+            <Route path="tenants"      element={<S><Tenants /></S>} />
+            <Route path="users"        element={<S><AgentUsers /></S>} />
+            <Route path="knowledge"    element={<S><RagMemories /></S>} />
+            <Route path="logs"         element={<S><Logs /></S>} />
+            <Route path="platform"     element={<S><Infra /></S>} />
+            <Route path="integrations" element={<S><Integrations /></S>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

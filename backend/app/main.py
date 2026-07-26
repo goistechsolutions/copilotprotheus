@@ -15,6 +15,8 @@ from app.api.tenant_routes import router as tenant_router
 from app.api.infra_routes import router as infra_router
 from app.api.agent_routes import router as agent_router
 from app.api.admin_auth import router as admin_auth_router
+from app.api.powerbi_routes import router as powerbi_router
+from app.api.leonardo_routes import router as leonardo_router
 from app.core.admin_security import require_admin
 from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
@@ -40,7 +42,6 @@ try:
             try: conn.rollback()
             except: pass
         
-        # Comprehensive migrations for newly added columns
         migrations = [
             "CREATE TABLE IF NOT EXISTS tenants (id VARCHAR(100) PRIMARY KEY, name VARCHAR(255), protheus_rest_url VARCHAR(1024), auth_mode VARCHAR(50) DEFAULT 'basic', system_prompt TEXT, temperature FLOAT DEFAULT 0.7, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
             "ALTER TABLE tenants ALTER COLUMN id TYPE VARCHAR(100);",
@@ -97,7 +98,6 @@ try:
             "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
             "ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
             
-            # --- Tabelas v5.2 (Catálogo Protheus, Snapshots e Permissões Granulares RBAC) ---
             "CREATE TABLE IF NOT EXISTS tenant_dictionary_sources (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', source_type VARCHAR(20) NOT NULL, snapshot_code VARCHAR(60) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), started_at TIMESTAMPTZ NULL, finished_at TIMESTAMPTZ NULL, error_message TEXT NULL);",
             "CREATE TABLE IF NOT EXISTS dictionary_tables (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, table_alias VARCHAR(80) NULL, module_code VARCHAR(10) NULL, description TEXT NULL, physical_name VARCHAR(80) NULL, active_flag BOOLEAN NOT NULL DEFAULT TRUE, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name));",
             "CREATE TABLE IF NOT EXISTS dictionary_fields (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, title VARCHAR(120) NULL, field_type VARCHAR(5) NULL, length_num INTEGER NULL, decimal_num INTEGER NULL, required_flag BOOLEAN NOT NULL DEFAULT FALSE, browse_flag BOOLEAN NOT NULL DEFAULT FALSE, virtual_flag BOOLEAN NOT NULL DEFAULT FALSE, validation_rule TEXT NULL, relation_rule TEXT NULL, when_rule TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, field_name));",
@@ -158,11 +158,14 @@ app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(admin_router, prefix="/api/admin")
-app.include_router(admin_auth_router)   # expõe /api/admin/auth/login|logout|me
+app.include_router(admin_auth_router)
 app.include_router(governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(catalog_v52_router)
 app.include_router(infra_router)
+# --- Fase 4: Power BI + Leonardo AI ---
+app.include_router(powerbi_router)   # prefixo já definido em powerbi_routes.py  (/api/powerbi)
+app.include_router(leonardo_router)  # prefixo já definido em leonardo_routes.py (/api/leonardo)
 
 import httpx
 from fastapi import Request
@@ -206,7 +209,7 @@ async def dashboard_stats(
         "uptime": "100%",
     }
 
-# Proxy for Adminer — protegido por JWT via Bearer header OU cookie 'access_token'
+# Proxy for Adminer
 @app.api_route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
 async def adminer_proxy(request: Request, path: str, current_user: dict = Depends(get_current_user_flexible)):
     if current_user.get("role") != "admin":
@@ -229,15 +232,8 @@ async def adminer_proxy(request: Request, path: str, current_user: dict = Depend
         try:
             proxy_res = await client.send(proxy_req, stream=True)
             headers = dict(proxy_res.headers)
-            headers.pop("x-frame-options", None)
-            headers.pop("content-security-policy", None)
-            headers.pop("X-Frame-Options", None)
-            headers.pop("Content-Security-Policy", None)
-            headers.pop("transfer-encoding", None)
-            headers.pop("content-encoding", None)
-            headers.pop("content-length", None)
-            headers.pop("connection", None)
-            headers.pop("keep-alive", None)
+            for h in ["x-frame-options","content-security-policy","X-Frame-Options","Content-Security-Policy","transfer-encoding","content-encoding","content-length","connection","keep-alive"]:
+                headers.pop(h, None)
             return Response(
                 content=await proxy_res.aread(),
                 status_code=proxy_res.status_code,
