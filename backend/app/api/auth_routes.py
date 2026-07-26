@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.knowledge import User, user_roles, Role, Tenant
@@ -30,8 +30,6 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 def hash_password(password: str) -> str:
-    # Para simplificar na transição e não exigir pip install imediato de passlib bcrypt
-    # mantemos o sha256 mas indicamos evolução. O script SQL tem 'password_hash'.
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 @router.get("/users/{tenant_id}", response_model=List[UserResponse])
@@ -50,7 +48,6 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
     except ValueError:
         raise HTTPException(status_code=400, detail="tenant_id deve ser um UUID válido na V3")
 
-    # Check se o tenant existe
     tenant = db.query(Tenant).filter(Tenant.id == tenant_uuid).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
@@ -76,9 +73,8 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
             password_hash=hash_password(req.password)
         )
         db.add(new_user)
-        db.flush() # Para pegar o novo id UUID
+        db.flush()
         
-        # Atribuir Role (RBAC)
         role = db.query(Role).filter(Role.role_code == req.role).first()
         if role:
             db.execute(user_roles.insert().values(
@@ -108,7 +104,7 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
 
 JWT_SECRET = os.getenv("JWT_SECRET", "super_seguro")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # 24 horas
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 horas
 
 class LoginRequest(BaseModel):
     username: str
@@ -116,7 +112,7 @@ class LoginRequest(BaseModel):
     tenant_id: str
 
 @router.post("/login")
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
     try:
         tenant_uuid = uuid.UUID(req.tenant_id)
     except ValueError:
@@ -150,5 +146,17 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     }
     
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
+    
+    # Seta cookie HttpOnly para suporte a iframes (ex: proxy Adminer no painel admin)
+    # SameSite=Lax permite envio em navegação de primeira parte e iframes same-origin
+    response.set_cookie(
+        key="access_token",
+        value=encoded_jwt,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
     
     return {"access_token": encoded_jwt, "token_type": "bearer", "role": primary_role}

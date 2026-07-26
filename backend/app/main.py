@@ -17,7 +17,7 @@ from app.api.agent_routes import router as agent_router
 from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
 from app.core.config import settings
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_current_user_flexible
 import app.models.knowledge
 import app.models.catalog_v52
 import sentry_sdk
@@ -165,9 +165,11 @@ import httpx
 from fastapi import Request
 from fastapi.responses import Response
 
-# Proxy for Adminer — protegido por JWT (somente role 'admin')
+# Proxy for Adminer — protegido por JWT via Bearer header OU cookie 'access_token'
+# O cookie é setado automaticamente no login e permite que o iframe do painel admin
+# autentique sem precisar injetar o header Authorization manualmente.
 @app.api_route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
-async def adminer_proxy(request: Request, path: str, current_user: dict = Depends(get_current_user)):
+async def adminer_proxy(request: Request, path: str, current_user: dict = Depends(get_current_user_flexible)):
     # Garante que apenas administradores acessem o Adminer
     if current_user.get("role") != "admin":
         raise HTTPException(
@@ -177,13 +179,8 @@ async def adminer_proxy(request: Request, path: str, current_user: dict = Depend
 
     adminer_url = f"http://adminer:8080/{path}"
     async with httpx.AsyncClient() as client:
-        # Pega query params
         params = request.query_params
-        
-        # Pega body
         body = await request.body()
-        
-        # Faz a requisição
         proxy_req = client.build_request(
             request.method,
             adminer_url,
@@ -201,7 +198,7 @@ async def adminer_proxy(request: Request, path: str, current_user: dict = Depend
             headers.pop("X-Frame-Options", None)
             headers.pop("Content-Security-Policy", None)
             
-            # Remove hop-by-hop and encoding headers that break the response
+            # Remove hop-by-hop headers
             headers.pop("transfer-encoding", None)
             headers.pop("content-encoding", None)
             headers.pop("content-length", None)
@@ -238,7 +235,6 @@ def read_root():
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
     try:
-        # Executa query rápida de ping no banco
         db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "healthy"}
     except Exception as e:
