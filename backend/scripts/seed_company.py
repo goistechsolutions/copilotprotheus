@@ -15,42 +15,42 @@ def seed_pilot_company():
     
     session = SessionLocal()
     try:
-        # Procurar se a empresa piloto ja existe
-        pilot_grupo = "pilot_rodolltda"
+        # Procurar se a empresa demonstrativa / piloto já existe
+        pilot_grupo = "cliente_alpha"
         cnpj = "12345678000199"
         
-        # Gerar licenca de 10 anos para o piloto
+        # Gerar licenca de 10 anos para demonstração
         exp_date = (datetime.now() + timedelta(days=3650)).strftime("%Y-%m-%d")
         print(f"-> Gerando licenca valida para o CNPJ {cnpj} ate {exp_date}...")
         license_token = generate_license(cnpj=cnpj, expiration_date=exp_date, plan_level="premium")
         
         comp = session.query(Company).filter(Company.protheus_grupo == pilot_grupo).first()
         if not comp:
-            print("-> Cadastrando empresa piloto 'RODOL Ltda'...")
+            print("-> Cadastrando empresa demonstrativa 'Cliente Alpha Tecnologia S/A'...")
             comp = Company(
                 cnpj=cnpj,
                 ie="110220330",
-                razao_social="RODOL Ltda",
-                email="contato@rodol.com.br",
+                razao_social="Cliente Alpha Tecnologia S/A",
+                email="contato@empresa-alpha.com.br",
                 telefone="1133445566",
                 endereco="Av. Paulista, 1000 - Sao Paulo/SP",
                 protheus_grupo=pilot_grupo,
                 protheus_filial="0101",
-                protheus_ambientes="validacao",
-                protheus_rest_url="https://rodolltda195384.protheus.cloudtotvs.com.br:10707/rest",
-                protheus_webapp_url="https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html",
+                protheus_ambientes="producao",
+                protheus_rest_url="https://protheus.alpha.cloudtotvs.com.br:10707/rest",
+                protheus_webapp_url="https://protheus.alpha.cloudtotvs.com.br:10703/webapp/index.html",
                 licenca_uso=license_token
             )
             session.add(comp)
         else:
-            print("-> Empresa piloto encontrada. Atualizando token de licenca e URLs...")
+            print("-> Empresa demonstrativa encontrada. Atualizando token de licenca e URLs...")
             comp.licenca_uso = license_token
             comp.cnpj = cnpj
-            comp.protheus_rest_url = "https://rodolltda195384.protheus.cloudtotvs.com.br:10707/rest"
-            comp.protheus_webapp_url = "https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html"
+            comp.protheus_rest_url = "https://protheus.alpha.cloudtotvs.com.br:10707/rest"
+            comp.protheus_webapp_url = "https://protheus.alpha.cloudtotvs.com.br:10703/webapp/index.html"
             
         session.commit()
-        print(f"[OK] Empresa piloto semeada com sucesso! Código único: {comp.id}")
+        print(f"[OK] Empresa demonstrativa semeada com sucesso! Código único: {comp.id}")
     except Exception as e:
         session.rollback()
         print(f"[ERRO] Falha ao semear empresa piloto: {e}")

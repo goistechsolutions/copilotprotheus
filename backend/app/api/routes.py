@@ -192,7 +192,7 @@ async def ask_stream(
 @router.get("/launch")
 def launch(request: Request):
     params = dict(request.query_params)
-    tenant_id = params.get('tenant_id', 'pilot_rodolltda')
+    tenant_id = params.get('tenant_id', 'default')
     
     # Resolve a URL do WebClient/WebApp do Protheus dinamicamente do banco de dados (SaaS)
     from app.db.database import SessionLocal

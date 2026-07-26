@@ -122,11 +122,12 @@ POST /chat/ask
 ### Variáveis de ambiente
 ```env
 PORT=3001
-PROTHEUS_BASE_URL=https://rodolltda195385.protheus.cloudtotvs.com.br:10753
-PROTHEUS_USER=admin
-PROTHEUS_PASSWORD=admin123
-BACKEND_URL=http://127.0.0.1:8000
-CORS_ORIGIN=http://localhost:5173
+# Em ambiente Cloud / Multiempresa, a conexão ao Protheus é gerenciada dinamicamente via banco por tenant
+PROTHEUS_BASE_URL=https://seutenant.cloud.totvs.com.br:PORTA
+PROTHEUS_USER=usuario_api
+PROTHEUS_PASSWORD=senha_segura
+BACKEND_URL=http://backend:8000
+CORS_ORIGIN=https://copilot.suaempresa.com.br
 ```
 
 ---
