@@ -5,7 +5,8 @@ from typing import List, Optional, Dict, Any
 import logging
 
 from app.db.database import get_db
-from app.api.auth_routes import get_current_user, verify_admin
+from app.core.auth import get_current_user
+from app.api.admin_routes import verify_admin
 from app.models.catalog_v52 import (
     TenantDictionarySource, DictionaryTable, DictionaryField, 
     DictionaryIndex, DictionaryGroup, TenantTablePermission, TenantFieldPermission
