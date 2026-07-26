@@ -378,6 +378,10 @@ class TenantAllowedTable(Base):
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+# Alias para retrocompatibilidade
+V4TenantAllowedTable = TenantAllowedTable
+
+
 class TenantAllowedField(Base):
     __tablename__ = 'tenant_allowed_fields'
 
