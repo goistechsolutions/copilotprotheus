@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Copilot Protheus — Inteligência Artificial para o seu ERP</title>
+  <meta name="description" content="Aumente a produtividade da sua equipe com o Copilot Protheus. Inteligência artificial avançada para consultas, relatórios e automação no ERP TOTVS Protheus.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Background Canvas Grid -->
+  <div class="grid-overlay"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="container header-container">
+      <div class="logo">
+        <span class="sparkle">✦</span> Copilot Protheus
+      </div>
+      <nav class="nav">
+        <a href="#features">Recursos</a>
+        <a href="#demo">Simulador</a>
+        <a href="#pricing">Planos</a>
+        <a href="#docs" class="btn-secondary-sm">Documentação</a>
+        <a href="#contact" class="btn-primary-sm">Experimente Grátis</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container hero-container">
+      <div class="hero-badge">🚀 Nova Fase 4: Streaming SSE & Fine-Tuning</div>
+      <h1 class="hero-title">O Copilot de Inteligência Artificial para o seu <span>ERP Protheus</span></h1>
+      <p class="hero-subtitle">
+        Aumente a velocidade e a precisão das tomadas de decisão. Gere análises, consulte pedidos e extraia relatórios do Protheus através do chat em tempo real de forma 100% blindada e segura.
+      </p>
+      <div class="hero-actions">
+        <a href="#demo" class="btn-primary">Ver em Ação</a>
+        <a href="#pricing" class="btn-secondary">Conhecer Planos</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="features">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Tecnologia Premium de Ponta a Ponta</h2>
+        <p class="section-subtitle">Arquitetura SaaS multi-tenant robusta desenvolvida para as maiores exigências do mercado corporativo.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Blindagem de Segredos</h3>
+          <p>Segurança rigorosa com tokens JWT proprietários e isolamento multi-tenant real no nível do banco de dados PostgreSQL.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Streaming Real-time</h3>
+          <p>Experiência ultra-veloz token-a-token alimentada por Server-Sent Events (SSE) do middleware ao seu navegador.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📂</div>
+          <h3>RAG & Cloud R2</h3>
+          <p>Base de conhecimento integrada ao Cloudflare R2. Respostas contextualizadas com documentos corporativos com custo zero.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌐</div>
+          <h3>Edge Extension</h3>
+          <p>Extensão de navegador oficial injetando o widget de suporte diretamente dentro do WebApp oficial da TOTVS.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3>Fine-Tuning Local</h3>
+          <p>Adaptação completa do modelo Qwen 2.5 7B com QLoRA otimizada para rodar em GPU Intel Arc (IPEX-LLM) local.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Observabilidade Ativa</h3>
+          <p>Monitoramento ativo de conexões de banco de dados, tratamentos de exceções globais e auditoria integrada com Sentry.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Demo Simulator Section -->
+  <section id="demo" class="demo-section">
+    <div class="container demo-container">
+      <div class="demo-info">
+        <h2 class="section-title">Veja como funciona na prática</h2>
+        <p class="section-subtitle">Experimente o simulador de chat interativo do Copilot. Selecione uma pergunta rápida ou digite a sua para ver a resposta ser gerada via streaming token-a-token.</p>
+        <div class="demo-suggestions">
+          <button class="suggest-btn" data-question="Quem é a empresa padrão da conexão?">Quem é a empresa padrão da conexão?</button>
+          <button class="suggest-btn" data-question="Quais as filiais cadastradas?">Quais as filiais cadastradas?</button>
+          <button class="suggest-btn" data-question="Listar últimos pedidos da RODOL Ltda.">Listar últimos pedidos da RODOL Ltda.</button>
+        </div>
+      </div>
+      <div class="demo-widget-wrapper">
+        <div class="widget-header">
+          <div class="widget-title">
+            <strong>Copilot Protheus</strong>
+            <span class="widget-status">Ambiente: Produção • Empresa: 01</span>
+          </div>
+          <div class="widget-theme-toggle" id="demo-theme-toggle">🌙</div>
+        </div>
+        <div class="widget-body" id="demo-chat-body">
+          <div class="widget-msg assistant">
+            <p>Olá! Sou o assistente do Copilot Protheus. Selecione um dos botões ou digite abaixo para experimentar a IA generativa integrada ao ERP.</p>
+          </div>
+        </div>
+        <div class="widget-footer">
+          <input type="text" id="demo-chat-input" placeholder="Digite sua pergunta..." autocomplete="off">
+          <button id="demo-chat-send">Enviar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section -->
+  <section id="pricing" class="pricing">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Preços Claros e Escaláveis</h2>
+        <p class="section-subtitle">Escolha o plano ideal para a sua empresa ou comece a rodar localmente de forma open-source.</p>
+        
+        <!-- Billing Toggle -->
+        <div class="pricing-toggle-wrapper">
+          <span>Mensal</span>
+          <label class="pricing-switch">
+            <input type="checkbox" id="billing-toggle">
+            <span class="pricing-slider"></span>
+          </</label>
+          <span>Anual <span class="discount-badge">Salvar 20%</span></span>
+        </div>
+      </div>
+
+      <div class="pricing-grid">
+        <!-- Starter Plan -->
+        <div class="pricing-card">
+          <div class="plan-name">Starter (Open Source)</div>
+          <div class="plan-price" id="price-starter">R$ 0</div>
+          <div class="plan-period">para sempre (auto-hospedado)</div>
+          <p class="plan-desc">Perfeito para desenvolvedores e validação de conceito local.</p>
+          <ul class="plan-features">
+            <li>✓ Instalação local via Docker Compose</li>
+            <li>✓ Modelo LLM Ollama Local (Qwen/Mistral)</li>
+            <li>✓ Banco PostgreSQL local</li>
+            <li>✓ Extensão de navegador inclusa</li>
+            <li>✓ Suporte da comunidade</li>
+          </ul>
+          <a href="#docs" class="btn-pricing-secondary">Ler Guia de Instalação</a>
+        </div>
+
+        <!-- Professional Plan -->
+        <div class="pricing-card featured">
+          <div class="featured-badge">Mais Popular</div>
+          <div class="plan-name">Professional</div>
+          <div class="plan-price" id="price-professional">R$ 149<span>/mês</span></div>
+          <div class="plan-period">cobrado mensalmente</div>
+          <p class="plan-desc">Ideal para pequenas e médias empresas integrando equipes.</p>
+          <ul class="plan-features">
+            <li>✓ Hospedagem na nuvem inclusa</li>
+            <li>✓ Banco de dados Supabase na nuvem</li>
+            <li>✓ Storage RAG no Cloudflare R2</li>
+            <li>✓ Até 5 tenants (empresas) isoladas</li>
+            <li>✓ Resposta rápida em tempo real (SSE)</li>
+            <li>✓ Suporte prioritário por email</li>
+          </ul>
+          <a href="#contact" class="btn-pricing-primary">Iniciar Teste Grátis</a>
+        </div>
+
+        <!-- Enterprise Plan -->
+        <div class="pricing-card">
+          <div class="plan-name">Enterprise</div>
+          <div class="plan-price" id="price-enterprise">Sob Consulta</div>
+          <div class="plan-period">contrato customizado</div>
+          <p class="plan-desc">Para grandes corporações com demandas exclusivas de governança.</p>
+          <ul class="plan-features">
+            <li>✓ Fine-tuning dedicado do modelo QLoRA</li>
+            <li>✓ Tenants e usuários ilimitados</li>
+            <li>✓ Infraestrutura dedicada de alta performance</li>
+            <li>✓ SLA de disponibilidade de 99.9%</li>
+            <li>✓ Integração com AD/SSO corporativo</li>
+            <li>✓ Gerente de contas dedicado</li>
+          </ul>
+          <a href="#contact" class="btn-pricing-secondary">Falar com Consultor</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-container">
+      <div>
+        <div class="logo"><span class="sparkle">✦</span> Copilot Protheus</div>
+        <p class="footer-desc">Transformando a gestão de dados do ERP TOTVS Protheus com Inteligência Artificial generativa avançada e segura.</p>
+      </div>
+      <div class="footer-links">
+        <div>
+          <h4>Produto</h4>
+          <a href="#features">Recursos</a>
+          <a href="#demo">Simulador</a>
+          <a href="#pricing">Planos</a>
+        </div>
+        <div>
+          <h4>Recursos</h4>
+          <a href="#docs">Documentação</a>
+          <a href="https://github.com/">GitHub</a>
+          <a href="#privacy">Privacidade</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="container">
+        &copy; 2026 Copilot Protheus. Todos os direitos reservados.
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

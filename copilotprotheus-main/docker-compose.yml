@@ -1,0 +1,81 @@
+version: "3.8"
+
+services:
+  # Banco de dados local com suporte a vetores (pgvector)
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: copilot-protheus-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: sap_password_123
+      POSTGRES_DB: copilot_protheus
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  # Backend FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: copilot-protheus-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Sobrescreve URL do banco para apontar ao container db
+      - DATABASE_URL=postgresql+psycopg2://postgres:sap_password_123@db:5432/copilot_protheus
+    depends_on:
+      - db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+  # Middleware Express Node.js
+  middleware:
+    build:
+      context: ./middleware
+      dockerfile: Dockerfile
+    container_name: copilot-protheus-middleware
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./middleware/.env
+    environment:
+      # Sobrescreve URL do backend para apontar ao container backend
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: always
+
+  # Frontend React (Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: copilot-protheus-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - middleware
+    restart: always
+
+  # Gerenciador de Banco de Dados (Adminer)
+  adminer:
+    image: adminer:latest
+    container_name: copilot-protheus-adminer
+    environment:
+      - ADMINER_DEFAULT_DB_DRIVER=pgsql
+      - ADMINER_DEFAULT_DB_HOST=db
+      - ADMINER_DEFAULT_DB_NAME=copilot_protheus
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    restart: always
+
+volumes:
+  pgdata:
