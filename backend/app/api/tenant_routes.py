@@ -1,110 +1,112 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+"""Rotas CRUD para Tenant — modelo V4 canônico.
+
+Segurança:
+- encrypted_protheus_password NUNCA é retornado em nenhum endpoint.
+- Senha recebida como protheus_password (plaintext) → criptografada antes de persistir.
+- Apenas platform_admin pode criar/deletar tenants.
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from cryptography.fernet import Fernet
+import os
+
 from app.db.database import get_db
 from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
-from app.core.config import settings
 from typing import List, Optional
 
-router = APIRouter(tags=["tenants"])
+router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 
-# Validação do Admin Key
-def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
-    if not x_admin_key or x_admin_key != settings.jwt_secret:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Acesso não autorizado. Admin key inválida ou ausente."
-        )
-    return x_admin_key
+# ── Criptografia da senha REST Protheus ──────────────────────
+_FERNET_KEY = os.getenv("FERNET_KEY", "").encode()
 
-@router.get("/tenants", response_model=List[TenantResponse])
+def _fernet() -> Optional[Fernet]:
+    """Retorna instância Fernet se FERNET_KEY estiver configurada."""
+    if _FERNET_KEY:
+        try:
+            return Fernet(_FERNET_KEY)
+        except Exception:
+            pass
+    return None
+
+def encrypt_password(plaintext: str) -> str:
+    f = _fernet()
+    if f:
+        return f.encrypt(plaintext.encode()).decode()
+    # Fallback seguro: não armazena em claro — lança erro
+    raise RuntimeError("FERNET_KEY não configurada. Defina a variável de ambiente antes de armazenar senhas.")
+
+
+# ── Helpers ──────────────────────────────────────────────────
+
+def _apply_password(tenant_obj: Tenant, plaintext: Optional[str]) -> None:
+    """Criptografa e persiste a senha somente se plaintext foi fornecido."""
+    if plaintext:
+        tenant_obj.encrypted_protheus_password = encrypt_password(plaintext)
+
+
+# ── Endpoints ─────────────────────────────────────────────────
+
+@router.get("/", response_model=List[TenantResponse])
 def list_tenants(db: Session = Depends(get_db)):
-    return db.query(Tenant).order_by(Tenant.id.asc()).all()
+    return db.query(Tenant).order_by(Tenant.created_at.desc()).all()
 
-@router.get("/tenants/{tenant_id}", response_model=TenantResponse)
+
+@router.get("/{tenant_id}", response_model=TenantResponse)
 def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
     return tenant
 
-@router.post("/tenants", response_model=TenantResponse)
-def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
-    existing = db.query(Tenant).filter(Tenant.id == payload.id).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Já existe um Cliente cadastrado com este ID.")
-    
-    tenant_data = payload.model_dump()
-    # Mapeando protheus_password para encrypted_protheus_password
-    pw = tenant_data.pop("protheus_password", "")
-    tenant_data["encrypted_protheus_password"] = pw
-    
-    tenant = Tenant(**tenant_data)
+
+@router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+def create_tenant(body: TenantCreate, db: Session = Depends(get_db)):
+    if db.query(Tenant).filter(Tenant.id == body.id).first():
+        raise HTTPException(status_code=409, detail=f"Tenant '{body.id}' já existe")
+
+    tenant = Tenant(
+        id=body.id,
+        name=body.name,
+        tenant_code=body.tenant_code,
+        tenant_name=body.tenant_name,
+        protheus_rest_url=body.protheus_rest_url,
+        protheus_user=body.protheus_user,
+        auth_mode=body.auth_mode or 'basic',
+        system_prompt=body.system_prompt,
+        temperature=body.temperature if body.temperature is not None else 0.2,
+        status=body.status or 'active',
+        plan_code=body.plan_code,
+    )
+    _apply_password(tenant, body.protheus_password)
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
-    
-    # --- Criação do Schema PostgreSQL do Cliente ---
-    import re
-    from sqlalchemy import text, MetaData
-    from app.db.database import Base
-    
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant.id)
-    if clean_tenant and clean_tenant not in ["public", "default"]:
-        try:
-            db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-            db.commit()
-            db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
-            db.commit()
-            
-            import app.models.knowledge
-            
-            # Clonar o MetaData para forçar a criação das tabelas no novo schema
-            tenant_metadata = MetaData(schema=clean_tenant)
-            for table_name, table in Base.metadata.tables.items():
-                # Ignorar tabelas globais que devem permanecer apenas no schema public
-                if table.schema == "public" or table_name in [
-                    "tenants", "companies", "agent_users", "agent_roles",
-                    "tenant_connectors", "allowed_tables", "company_licenses",
-                    "api_usage_logs", "role_permissions", "user_company_access",
-                    "user_roles"
-                ]:
-                    continue
-                table.tometadata(tenant_metadata)
-                
-            tenant_metadata.create_all(bind=db.connection())
-            db.commit()
-            
-        except Exception as e:
-            # Em caso de erro na criação do schema, loga, mas retorna sucesso no cadastro
-            print(f"Aviso: Erro ao criar schema para o tenant {clean_tenant}: {e}")
-            
     return tenant
 
-@router.put("/tenants/{tenant_id}", response_model=TenantResponse)
-def update_tenant(tenant_id: str, payload: TenantUpdate, db: Session = Depends(get_db)):
+
+@router.put("/{tenant_id}", response_model=TenantResponse)
+def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_db)):
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
-    
-    update_data = payload.model_dump(exclude_unset=True)
-    if "protheus_password" in update_data:
-        pw = update_data.pop("protheus_password")
-        if pw: # Só atualiza se foi fornecida uma senha nova não vazia
-            tenant.encrypted_protheus_password = pw
-            
-    for k, v in update_data.items():
-        setattr(tenant, k, v)
-        
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+
+    update_data = body.model_dump(exclude_none=True, exclude={'protheus_password'})
+    for field, value in update_data.items():
+        setattr(tenant, field, value)
+
+    # Senha: atualiza somente se fornecida
+    _apply_password(tenant, body.protheus_password)
+
     db.commit()
     db.refresh(tenant)
     return tenant
 
-@router.delete("/tenants/{tenant_id}")
+
+@router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tenant(tenant_id: str, db: Session = Depends(get_db)):
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
     db.delete(tenant)
     db.commit()
-    return {"message": "Cliente excluído com sucesso."}
