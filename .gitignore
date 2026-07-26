@@ -30,8 +30,10 @@ out/
 .vscode/
 .idea/
 
-# Arquivos gerados grandes
+# Arquivos gerados grandes e temporários
 backend/app/services/endpoints_cache.json
+tmp/
+backend/tmp/
 
 # Arquivos de sistema do Windows
 desktop.ini
