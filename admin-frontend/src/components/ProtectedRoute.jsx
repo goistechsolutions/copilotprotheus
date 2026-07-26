@@ -12,6 +12,7 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  if (!user) return <Navigate to="/admin/login" replace />;
+  // basename=/admin já adiciona o prefixo automaticamente
+  if (!user) return <Navigate to="/login" replace />;
   return children;
 }
