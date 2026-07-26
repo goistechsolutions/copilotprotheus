@@ -1,158 +1,133 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.db.database import get_db
+from app.models.knowledge import (
+    TenantAllowedTable,
+    TenantDictionaryTable,
+    DictionarySnapshot,
+    TenantContract,
+    Company,
+    Tenant,
+)
+from typing import List, Optional
 from pydantic import BaseModel
-from typing import Optional
 import uuid
 
-from app.db.database import get_db
-from app.services.dictionary_service import DictionaryService
+router = APIRouter(prefix="/api/governance", tags=["governance"])
 
-router = APIRouter(tags=["dictionary-admin"])
 
-class SyncStartRequest(BaseModel):
+class AllowTableRequest(BaseModel):
     tenant_id: str
-    company_id: Optional[str] = None
-    env_id: Optional[str] = None
-    modules: Optional[list[str]] = None
-    snapshot_code: Optional[str] = None
-    requested_by: Optional[str] = None
-
-class PermitRequest(BaseModel):
     contract_id: str
-    allowed_tables: list[dict]
-    allowed_fields: list[dict]
+    snapshot_id: str
+    table_id: str
+    access_level: Optional[str] = "query"
+    allowed: Optional[bool] = True
+    rationale: Optional[str] = None
 
-@router.post("/admin/sync/dictionary/start")
-async def start_sync_dictionary(req: SyncStartRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+
+class AllowTableResponse(BaseModel):
+    id: str
+    tenant_id: str
+    contract_id: str
+    snapshot_id: str
+    table_id: str
+    access_level: str
+    allowed: bool
+    rationale: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/allowed-tables")
+def list_allowed_tables(
+    tenant_id: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Lista tabelas permitidas para o tenant/snapshot."""
+    q = db.query(TenantAllowedTable)
+    if tenant_id:
+        q = q.filter(TenantAllowedTable.tenant_id == tenant_id)
+    if snapshot_id:
+        try:
+            sid = uuid.UUID(snapshot_id)
+            q = q.filter(TenantAllowedTable.snapshot_id == sid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="snapshot_id inválido")
+    return q.order_by(TenantAllowedTable.created_at.desc()).all()
+
+
+@router.post("/allowed-tables", status_code=201)
+def allow_table(
+    payload: AllowTableRequest,
+    db: Session = Depends(get_db)
+):
+    """Permite ou bloqueia acesso a uma tabela do dicionário para o tenant."""
     try:
-        service = DictionaryService(db)
-        
-        # Gera o snapshot_code inicial para retornar ao request logo de cara
-        from datetime import datetime, timezone
-        snap_code = req.snapshot_code or f"SYNC_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
-        
-        snapshot = service.init_snapshot(
-            tenant_id=req.tenant_id,
-            company_id=req.company_id,
-            env_id=req.env_id,
-            user_id=req.requested_by,
-            snapshot_code=snap_code
+        entry = TenantAllowedTable(
+            tenant_id=payload.tenant_id,
+            contract_id=uuid.UUID(payload.contract_id),
+            snapshot_id=uuid.UUID(payload.snapshot_id),
+            table_id=uuid.UUID(payload.table_id),
+            access_level=payload.access_level or "query",
+            allowed=payload.allowed if payload.allowed is not None else True,
+            rationale=payload.rationale,
         )
-        
-        # Envia para background (na V5 passamos a rodar no celery/background)
-        # Atenção: Passar a sessão do DB para a thread background precisa de cautela com Sessions, 
-        # mas por simplicidade no MVP usamos o sync wrapper no DictionaryService.
-        background_tasks.add_task(
-            service.run_sync_task, 
-            snapshot_id=snapshot.id,
-            tenant_id=req.tenant_id,
-            modules=req.modules
-        )
-        
-        return {
-            "snapshot_id": str(snapshot.id), 
-            "snapshot_code": snapshot.snapshot_code, 
-            "status": "accepted",
-            "started_at": snapshot.started_at
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao iniciar sincronização: {str(e)}")
-
-@router.get("/admin/sync/dictionary/status/{snapshot_code}")
-def get_sync_status(snapshot_code: str, db: Session = Depends(get_db)):
-    from app.models.knowledge import DictionarySnapshot
-    snap = db.query(DictionarySnapshot).filter(DictionarySnapshot.snapshot_code == snapshot_code).first()
-    if not snap:
-        raise HTTPException(status_code=404, detail="Snapshot não encontrado")
-    return {
-        "snapshot_code": snap.snapshot_code,
-        "status": snap.sync_status,
-        "total_tables": snap.total_tables,
-        "total_fields": snap.total_fields,
-        "total_indexes": snap.total_indexes,
-        "finished_at": snap.finished_at,
-        "notes": snap.notes
-    }
-
-@router.get("/admin/dictionary/{tenant_id}/snapshots")
-def list_snapshots(tenant_id: str, db: Session = Depends(get_db)):
-    from app.models.knowledge import DictionarySnapshot
-    try:
-        tid = uuid.UUID(tenant_id)
-        snaps = db.query(DictionarySnapshot).filter(DictionarySnapshot.tenant_id == tid).order_by(DictionarySnapshot.started_at.desc()).all()
-        return {"items": [{"id": str(s.id), "code": s.snapshot_code, "status": s.sync_status, "tables": s.total_tables, "started_at": s.started_at} for s in snaps]}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/admin/dictionary/{snapshot_id}/tables")
-def list_snapshot_tables(snapshot_id: str, db: Session = Depends(get_db)):
-    from app.models.knowledge import TenantDictionaryTable
-    try:
-        sid = uuid.UUID(snapshot_id)
-        tables = db.query(TenantDictionaryTable).filter(TenantDictionaryTable.snapshot_id == sid).all()
-        return {"items": [{"id": str(t.id), "physical_name": t.physical_name, "table_name": t.table_name, "table_key": t.table_key} for t in tables]}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/admin/dictionary/{table_id}/fields")
-def list_snapshot_fields(table_id: str, db: Session = Depends(get_db)):
-    from app.models.knowledge import TenantDictionaryField
-    try:
-        tid = uuid.UUID(table_id)
-        fields = db.query(TenantDictionaryField).filter(TenantDictionaryField.table_id == tid).all()
-        return {"items": [{"id": str(f.id), "field_name": f.field_name, "description": f.field_description, "type": f.field_type} for f in fields]}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.post("/admin/dictionary/{snapshot_id}/permit")
-def permit_snapshot(snapshot_id: str, req: PermitRequest, db: Session = Depends(get_db)):
-    from app.models.knowledge import V4TenantAllowedTable, V4TenantAllowedField
-    try:
-        sid = uuid.UUID(snapshot_id)
-        cid = uuid.UUID(req.contract_id)
-        
-        # Process tables
-        for t in req.allowed_tables:
-            table_id = uuid.UUID(t["table_id"])
-            existing_table = db.query(V4TenantAllowedTable).filter(
-                V4TenantAllowedTable.snapshot_id == sid,
-                V4TenantAllowedTable.table_id == table_id
-            ).first()
-            if existing_table:
-                existing_table.allowed = True
-                existing_table.access_level = t.get("access_level", "query")
-                existing_table.rationale = t.get("rationale", "")
-            else:
-                db.add(V4TenantAllowedTable(
-                    snapshot_id=sid,
-                    table_id=table_id,
-                    contract_id=cid,
-                    tenant_id=None, # Idealmente pegaria da tabela
-                    allowed=True,
-                    access_level=t.get("access_level", "query"),
-                    rationale=t.get("rationale", "")
-                ))
-        
-        # Process fields
-        for f in req.allowed_fields:
-            field_id = uuid.UUID(f["field_id"])
-            table_id = uuid.UUID(f["table_id"])
-            existing_field = db.query(V4TenantAllowedField).filter(
-                V4TenantAllowedField.field_id == field_id
-            ).first()
-            if existing_field:
-                existing_field.allowed = f.get("allowed", True)
-                existing_field.masking_required = f.get("masking_required", False)
-            else:
-                db.add(V4TenantAllowedField(
-                    table_id=table_id,
-                    field_id=field_id,
-                    allowed=f.get("allowed", True),
-                    masking_required=f.get("masking_required", False)
-                ))
-                
+        db.add(entry)
         db.commit()
-        return {"status": "success", "message": f"{len(req.allowed_tables)} tables and {len(req.allowed_fields)} fields permitted."}
+        db.refresh(entry)
+        return {"id": str(entry.id), "allowed": entry.allowed, "access_level": entry.access_level}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Erro ao salvar permissão: {str(e)}")
+
+
+@router.delete("/allowed-tables/{entry_id}")
+def revoke_table_access(entry_id: str, db: Session = Depends(get_db)):
+    """Remove permissão de acesso a uma tabela."""
+    try:
+        eid = uuid.UUID(entry_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="entry_id inválido")
+    entry = db.query(TenantAllowedTable).filter(TenantAllowedTable.id == eid).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Permissão não encontrada")
+    db.delete(entry)
+    db.commit()
+    return {"message": "Permissão revogada com sucesso"}
+
+
+@router.get("/dictionary-tables")
+def list_dictionary_tables(
+    tenant_id: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
+    module_code: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Lista tabelas do dicionário Protheus sincronizadas."""
+    q = db.query(TenantDictionaryTable)
+    if tenant_id:
+        q = q.filter(TenantDictionaryTable.tenant_id == tenant_id)
+    if snapshot_id:
+        try:
+            sid = uuid.UUID(snapshot_id)
+            q = q.filter(TenantDictionaryTable.snapshot_id == sid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="snapshot_id inválido")
+    if module_code:
+        q = q.filter(TenantDictionaryTable.module_code == module_code.upper())
+    return q.order_by(TenantDictionaryTable.physical_name.asc()).limit(200).all()
+
+
+@router.get("/snapshots")
+def list_snapshots(
+    tenant_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Lista snapshots de dicionário disponíveis."""
+    q = db.query(DictionarySnapshot)
+    if tenant_id:
+        q = q.filter(DictionarySnapshot.tenant_id == tenant_id)
+    return q.order_by(DictionarySnapshot.started_at.desc()).limit(50).all()

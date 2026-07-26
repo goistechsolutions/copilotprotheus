@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.knowledge import Company, CompanyLicense, ApiUsageLog
+from app.models.knowledge import Company, LicensePlan, AgentQueryAudit
 from sqlalchemy import func
 from app.schemas.company import CompanyCreate, CompanyUpdate, CompanyResponse, LicenseGenerateRequest, LicenseVerifyRequest, SessionValidateRequest
 from app.services.license_service import generate_license, verify_license
@@ -13,7 +13,6 @@ from app.core.security import encrypt_password
 
 router = APIRouter(tags=["companies"])
 
-# Validação do Admin Key
 def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
     if not x_admin_key or x_admin_key != settings.jwt_secret:
         raise HTTPException(
@@ -35,17 +34,13 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
 
 @router.post("/companies", response_model=CompanyResponse)
 def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
-    # Evitar duplicar CNPJ
     existing = db.query(Company).filter(Company.cnpj == payload.cnpj).first()
     if existing:
         raise HTTPException(status_code=400, detail="Já existe uma empresa cadastrada com este CNPJ.")
-    
     if payload.tenant_id == "":
         payload.tenant_id = None
-        
     if payload.protheus_password:
         payload.protheus_password = encrypt_password(payload.protheus_password)
-        
     comp = Company(**payload.model_dump())
     db.add(comp)
     try:
@@ -61,18 +56,13 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa não encontrada.")
-    
     if payload.tenant_id == "":
         payload.tenant_id = None
-        
     update_data = payload.model_dump(exclude_unset=True)
-    
     if "protheus_password" in update_data and update_data["protheus_password"]:
         update_data["protheus_password"] = encrypt_password(update_data["protheus_password"])
-        
     for k, v in update_data.items():
         setattr(comp, k, v)
-        
     db.commit()
     db.refresh(comp)
     return comp
@@ -100,36 +90,26 @@ def api_generate_license(payload: LicenseGenerateRequest, admin_key: str = Depen
 
 @router.get("/companies/{company_id}/billing")
 def get_company_billing(company_id: int, db: Session = Depends(get_db)):
-    # 1. Fetch license or use defaults
-    license_data = db.query(CompanyLicense).filter(CompanyLicense.company_id == company_id).first()
-    limit = license_data.max_tokens_monthly if license_data else 1000000
-    allow_overage = license_data.allow_overage if license_data else False
-    
-    # 2. Sum current month usage
-    # Simplified logic: sum all tokens. In production, filter by current month.
+    """Retorna resumo de uso de queries do agente para a empresa (V4)."""
     usage = db.query(
-        func.sum(ApiUsageLog.prompt_tokens).label("prompt"),
-        func.sum(ApiUsageLog.completion_tokens).label("completion"),
-        func.sum(ApiUsageLog.total_tokens).label("total")
-    ).filter(ApiUsageLog.company_id == company_id).first()
-    
-    total_tokens = usage.total or 0
-    
+        func.count(AgentQueryAudit.id).label("total_queries"),
+        func.sum(
+            (AgentQueryAudit.execution_status == 'success').cast(db.bind.dialect.name == 'postgresql' and __import__('sqlalchemy').Integer or __import__('sqlalchemy').Integer)
+        ).label("success_queries")
+    ).filter(AgentQueryAudit.company_id == company_id).first()
+
+    total_q = usage.total_queries or 0
+
     return {
         "company_id": company_id,
-        "current_usage": total_tokens,
-        "prompt_tokens": usage.prompt or 0,
-        "completion_tokens": usage.completion or 0,
-        "limit": limit,
-        "allow_overage": allow_overage,
-        "percentage": round((total_tokens / limit * 100), 2) if limit > 0 else 0
+        "total_queries": total_q,
+        "note": "Billing V4: baseado em AgentQueryAudit. CompanyLicense removido no schema V4."
     }
 
 @router.post("/license/verify")
 def api_verify_license(payload: LicenseVerifyRequest):
     try:
         info = verify_license(payload.token, expected_cnpj=payload.cnpj)
-        # Formatar expiração legível
         exp_dt = datetime.fromtimestamp(info["exp"])
         info["expiration_date_formatted"] = exp_dt.strftime("%Y-%m-%d %H:%M:%S")
         info["is_expired"] = exp_dt < datetime.now()
@@ -140,11 +120,8 @@ def api_verify_license(payload: LicenseVerifyRequest):
     except Exception as e:
         return {"valid": False, "error": f"Licença inválida: {str(e)}", "is_expired": False}
 
-# Validação movida para routes.py sob o prefixo /api/auth/validate-session
-
 @router.get("/companies/by-tenant/{tenant_id}", response_model=CompanyResponse)
 def get_company_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
-    # Busca pela FK direta tenant_id (preferencial) ou fallback para protheus_grupo
     comp = db.query(Company).filter(Company.tenant_id == tenant_id).first()
     if not comp:
         comp = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
