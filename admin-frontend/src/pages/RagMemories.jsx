@@ -1,393 +1,178 @@
-import { useState, useEffect, useRef } from 'react';
-import axios from '../api/axios';
-import { Database, Brain, Play, FileText, UploadCloud, Search, RefreshCw, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { RefreshCw, Upload, Trash2, FileText, BookOpen, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useApi, apiCall } from '../hooks/useApi';
+import PageHeader from '../components/ui/PageHeader';
+import Badge from '../components/ui/Badge';
+import DataTable from '../components/ui/DataTable';
 
-export default function RagMemories() {
-  const [activeTab, setActiveTab] = useState('rag');
-  const [docs, setDocs] = useState([]);
-  const [memories, setMemories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [ingesting, setIngesting] = useState(false);
+function UploadModal({ onClose, onSaved }) {
+  const [file, setFile] = useState(null);
+  const [tenantId, setTenantId] = useState('default');
   const [uploading, setUploading] = useState(false);
-  const [tenants, setTenants] = useState([]);
-  const [selectedTenant, setSelectedTenant] = useState('default');
-  const [visibility, setVisibility] = useState('tenant');
-  const fileInputRef = useRef(null);
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState(false);
 
-  const axiosConfig = {
-    auth: { username: 'admin', password: 'admin123' },
-    headers: { 'X-Tenant-Id': selectedTenant }
-  };
-
-  useEffect(() => {
-    fetchTenants();
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [activeTab, selectedTenant, visibility]);
-
-  const fetchTenants = async () => {
-    try {
-      const res = await axios.get('/api/tenants');
-      setTenants(res.data || []);
-    } catch (error) {
-      console.error("Erro ao carregar tenants:", error);
-    }
-  };
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      if (activeTab === 'rag') {
-        const endpoint = visibility === 'shared' ? '/api/knowledge/documents/shared' : '/api/knowledge/documents';
-        const res = await axios.get(endpoint);
-        setDocs(res.data.items || []);
-      } else {
-        const res = await axios.get('/api/knowledge/memories');
-        let mems = res.data.items || [];
-        if (visibility === 'shared') {
-          mems = mems.filter(m => m.visibility === 'shared');
-        } else {
-          mems = mems.filter(m => m.visibility === 'tenant');
-        }
-        setMemories(mems);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar dados:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleIngest = async () => {
-    setIngesting(true);
-    try {
-      await axios.post(`/api/knowledge/ingest?visibility=${visibility}`, {});
-      alert("Ingestão concluída com sucesso! Os vetores foram atualizados.");
-      fetchData();
-    } catch (error) {
-      alert("Erro durante ingestão.");
-    } finally {
-      setIngesting(false);
-    }
-  };
-
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
+  const upload = async (e) => {
+    e.preventDefault();
     if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    setUploading(true);
+    setUploading(true); setErr(''); setOk(false);
     try {
-      await axios.post(`/api/knowledge/upload?visibility=${visibility}`, formData, {
-        ...axiosConfig,
-        headers: { ...axiosConfig.headers, 'Content-Type': 'multipart/form-data' }
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('tenant_id', tenantId);
+      const res = await fetch('/api/knowledge/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
       });
-      alert(`Arquivo ${file.name} processado e ingerido na base RAG!`);
-      fetchData();
-    } catch (error) {
-      alert(`Falha no upload do arquivo ${file.name}.`);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const triggerFileSelect = () => fileInputRef.current?.click();
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      const syntheticEvent = { target: { files: [files[0]] } };
-      handleFileUpload(syntheticEvent);
-    }
-  };
-
-  const handleDeleteMemory = async (id) => {
-    if (!window.confirm("Tem certeza que deseja excluir esta memória permanentemente?")) return;
-    try {
-      await axios.delete(`/api/knowledge/memories/${id}`);
-      alert("Memória excluída com sucesso.");
-      fetchData();
-    } catch (error) {
-      alert("Erro ao excluir memória. " + (error.response?.data?.detail || ""));
-    }
-  };
-
-  const handleDeleteDocument = async (id) => {
-    if (!window.confirm("Tem certeza que deseja excluir este documento (e seus vetores) permanentemente?")) return;
-    try {
-      await axios.delete(`/api/knowledge/documents/${id}`);
-      alert("Documento excluído com sucesso.");
-      fetchData();
-    } catch (error) {
-      alert("Erro ao excluir documento. " + (error.response?.data?.detail || ""));
-    }
+      if (!res.ok) { const j = await res.json(); throw new Error(j.detail || 'Erro no upload'); }
+      setOk(true);
+      setTimeout(() => { onSaved(); }, 1200);
+    } catch (e) { setErr(e.message); }
+    finally { setUploading(false); }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">RAG & Inteligência</h2>
-          <p className="text-slate-500">Gerencie a base de conhecimento (PDF/TXT) e os fatos persistentes aprendidos pelo LLM.</p>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2535]">
+          <h2 className="text-white font-semibold">Upload de Documento</h2>
+          <button onClick={onClose} className="text-[#8892A4] hover:text-white">
+            <span className="text-lg leading-none">×</span>
+          </button>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <form onSubmit={upload} className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Visibilidade</label>
-            <select 
-              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 shadow-sm"
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value)}
+            <label className="block text-[#8892A4] text-xs font-medium mb-1.5 uppercase tracking-wider">Tenant ID</label>
+            <input value={tenantId} onChange={e => setTenantId(e.target.value)}
+              className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#2196F3] transition-all"
+              placeholder="default" />
+          </div>
+          <div>
+            <label className="block text-[#8892A4] text-xs font-medium mb-1.5 uppercase tracking-wider">Arquivo</label>
+            <div
+              className="border-2 border-dashed border-[#1E2535] rounded-xl p-6 text-center cursor-pointer hover:border-[#2196F3]/50 transition-all"
+              onClick={() => document.getElementById('rag-file').click()}
             >
-              <option value="tenant">Exclusiva (Tenant)</option>
-              <option value="shared">Compartilhada (Global)</option>
-            </select>
-          </div>
-          {visibility === 'tenant' && (
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Tenant Atual</label>
-              <select 
-                className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 shadow-sm min-w-[200px]"
-                value={selectedTenant}
-                onChange={(e) => setSelectedTenant(e.target.value)}
-              >
-                <option value="default">Default</option>
-                {tenants.map(t => (
-                  <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
-                ))}
-              </select>
+              {file ? (
+                <div className="flex items-center justify-center gap-2 text-[#2196F3]">
+                  <FileText className="w-5 h-5" />
+                  <span className="text-sm font-medium">{file.name}</span>
+                </div>
+              ) : (
+                <div className="text-[#8892A4]">
+                  <Upload className="w-6 h-6 mx-auto mb-2" />
+                  <p className="text-sm">Clique para selecionar</p>
+                  <p className="text-xs mt-1">.pdf, .txt, .docx, .md</p>
+                </div>
+              )}
+              <input id="rag-file" type="file" className="hidden" accept=".pdf,.txt,.docx,.md"
+                onChange={e => setFile(e.target.files[0])} />
             </div>
-          )}
+          </div>
+          {err && <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />{err}
+          </div>}
+          {ok && <div className="flex items-center gap-2 text-emerald-400 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />Documento indexado com sucesso!
+          </div>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#8892A4] hover:text-white border border-[#1E2535] rounded-lg transition-all">Cancelar</button>
+            <button type="submit" disabled={uploading || !file} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#1565C0] hover:bg-[#1976D2] text-white rounded-lg font-medium transition-all disabled:opacity-60">
+              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {uploading ? 'Enviando...' : 'Fazer Upload'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function RagMemories() {
+  const { data, loading, refetch } = useApi('/api/knowledge/documents');
+  const [modal, setModal] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+
+  const docs = Array.isArray(data) ? data : (data?.documents ?? data?.items ?? []);
+
+  const deleteDoc = async (id) => {
+    if (!confirm('Remover este documento da base RAG?')) return;
+    setDeleting(id);
+    try { await apiCall(`/api/knowledge/documents/${id}`, 'DELETE'); refetch(); }
+    catch (e) { alert(e.message); }
+    finally { setDeleting(null); }
+  };
+
+  const columns = [
+    {
+      key: 'filename', label: 'Arquivo',
+      render: (v, row) => (
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 bg-[#1565C0]/10 rounded-lg flex items-center justify-center">
+            <FileText className="w-3.5 h-3.5 text-[#2196F3]" />
+          </div>
+          <span className="text-white text-sm font-medium">{v || row.title || row.name || '—'}</span>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-200">
-        <button 
-          onClick={() => setActiveTab('rag')}
-          className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-all relative ${activeTab === 'rag' ? 'text-brand-600' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-t-lg'}`}
+      )
+    },
+    { key: 'tenant_id', label: 'Tenant', render: v => <Badge variant="default">{v || 'default'}</Badge> },
+    { key: 'visibility', label: 'Visibilidade', render: v => <Badge variant={v === 'global' ? 'green' : 'blue'}>{v || 'tenant'}</Badge> },
+    {
+      key: 'chunk_count', label: 'Chunks',
+      render: v => <span className="text-[#8892A4] text-sm">{v ?? '—'}</span>
+    },
+    {
+      key: 'created_at', label: 'Indexado em',
+      render: v => v ? <span className="text-[#8892A4] text-xs">{new Date(v).toLocaleDateString('pt-BR')}</span> : '—'
+    },
+    {
+      key: 'id', label: 'Ações',
+      render: (id) => (
+        <button
+          onClick={() => deleteDoc(id)}
+          disabled={deleting === id}
+          className="p-1.5 text-[#8892A4] hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all disabled:opacity-40"
         >
-          <Database size={16} /> Base RAG (Documentos)
-          {activeTab === 'rag' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-600 rounded-t-full"></span>}
+          {deleting === id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
         </button>
-        <button 
-          onClick={() => setActiveTab('memories')}
-          className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-all relative ${activeTab === 'memories' ? 'text-purple-600' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-t-lg'}`}
-        >
-          <Brain size={16} /> Memórias (Aprendizado Contínuo)
-          {activeTab === 'memories' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></span>}
-        </button>
-      </div>
+      )
+    },
+  ];
 
-      {activeTab === 'rag' && (
-        <div className="space-y-6">
-          {/* Upload Area */}
-          <div 
-            className="border-2 border-dashed border-slate-300 rounded-2xl bg-white p-8 text-center hover:bg-slate-50 hover:border-brand-400 transition-colors cursor-pointer relative shadow-sm"
-            onClick={triggerFileSelect}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-          >
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileUpload} 
-              className="hidden" 
-              accept=".pdf,.txt,.md,.csv,.doc,.docx" 
-            />
-            
-            <div className="flex justify-center mb-3">
-              <div className="p-4 bg-brand-50 shadow-sm rounded-full text-brand-600 border border-brand-100">
-                {uploading ? <RefreshCw className="animate-spin" size={32} /> : <UploadCloud size={32} />}
-              </div>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">
-              {uploading ? 'Enviando e Ingerindo Arquivo...' : 'Clique ou Arraste arquivos aqui'}
-            </h3>
-            <p className="text-sm text-slate-500">Suporta arquivos PDF, TXT, MD e CSV.</p>
-            <p className="text-xs font-bold text-brand-700 mt-4 px-4 py-1.5 bg-brand-50 inline-block rounded-full border border-brand-200">
-              Os arquivos enviados são automaticamente adicionados à base vetorial.
-            </p>
-          </div>
+  return (
+    <div>
+      <PageHeader
+        title="Base de Conhecimento"
+        description="Documentos indexados no RAG vector store"
+        actions={
+          <>
+            <button onClick={refetch} className="p-2 text-[#8892A4] hover:text-white hover:bg-[#1E2535] rounded-lg transition-all">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <button onClick={() => setModal(true)} className="flex items-center gap-2 px-3 py-2 bg-[#1565C0] hover:bg-[#1976D2] text-white text-sm font-medium rounded-lg transition-all">
+              <Upload className="w-4 h-4" /> Upload Doc
+            </button>
+          </>
+        }
+      />
 
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white">
-              <div>
-                <h3 className="font-bold text-slate-900 text-lg">Documentos Indexados (pgvector)</h3>
-              </div>
-              <button 
-                onClick={handleIngest}
-                disabled={ingesting}
-                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white px-5 py-2.5 rounded-lg font-medium transition-colors text-sm shadow-sm w-full sm:w-auto justify-center"
-              >
-                {ingesting ? <RefreshCw className="animate-spin" size={16} /> : <Play size={16} />}
-                {ingesting ? "Forçando Ingestão..." : "Forçar Ingestão (Resync)"}
-              </button>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">ID</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Arquivo Fonte</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Visibilidade</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Formato</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Status</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Data de Ingestão</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loading ? (
-                    <tr><td colSpan="7" className="p-8 text-center text-slate-500 animate-pulse font-medium">Carregando documentos...</td></tr>
-                  ) : docs.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" className="p-12 text-center flex flex-col items-center">
-                        <FileText size={48} className="text-slate-300 mb-4 opacity-50" />
-                        <p className="text-slate-500 font-medium">Sua base de conhecimento está vazia.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    docs.map(doc => (
-                      <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors group">
-                        <td className="px-6 py-4 text-sm font-mono text-slate-500">#{doc.id}</td>
-                        <td className="px-6 py-4 font-bold text-slate-900 flex items-center gap-3">
-                          <div className="p-2 bg-brand-50 text-brand-600 rounded-lg border border-brand-100"><FileText size={16} /></div>
-                          {doc.title || doc.source_path}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2.5 py-1 text-xs font-bold border rounded-md ${doc.visibility === 'shared' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
-                            {doc.visibility === 'shared' ? 'Global' : 'Tenant'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="px-2.5 py-1 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 rounded-md">
-                            {doc.source_type}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Indexado
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-500 font-medium text-right">
-                          {new Date(doc.created_at).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button 
-                            onClick={() => handleDeleteDocument(doc.id)}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 border border-transparent hover:border-red-100" 
-                            title="Excluir Documento"
-                          >
-                            <XCircle size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      {docs.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-[#2196F3]" />
+          <span className="text-[#8892A4] text-sm">{docs.length} documento{docs.length !== 1 ? 's' : ''} na base</span>
         </div>
       )}
 
-      {activeTab === 'memories' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-5 border-b border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-lg">Fatos e Preferências Extraídas</h3>
-              <p className="text-sm text-slate-500">Memórias persistentes de longo prazo que orientam o Copilot.</p>
-            </div>
-            <div className="relative w-full sm:w-auto">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Buscar memória..." 
-                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 w-full sm:w-64 transition-all"
-              />
-            </div>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Tenant (Empresa)</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Tópico (Chave)</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Fato Aprendido</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Confiança</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr><td colSpan="5" className="p-8 text-center text-slate-500 animate-pulse font-medium">Carregando memórias...</td></tr>
-                ) : memories.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="p-12 text-center flex flex-col items-center">
-                      <Brain size={48} className="text-slate-300 mb-4 opacity-50" />
-                      <p className="text-slate-500 font-medium">Nenhum fato aprendido ainda.</p>
-                      <p className="text-sm text-slate-400 mt-1">O Copilot extrai essas informações dinamicamente das conversas.</p>
-                    </td>
-                  </tr>
-                ) : (
-                  memories.map(m => (
-                    <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
-                      <td className="px-6 py-4">
-                        <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 font-mono">
-                          {m.tenant_id}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-md text-sm border border-purple-200">
-                          {m.memory_key}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-800 font-medium max-w-sm">
-                        {m.memory_value}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full ${m.confidence >= 80 ? 'bg-emerald-500' : 'bg-amber-500'}`} 
-                              style={{ width: `${m.confidence}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-xs font-bold text-slate-700">{m.confidence}%</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button 
-                          onClick={() => handleDeleteMemory(m.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 border border-transparent hover:border-red-100" 
-                          title="Esquecer Fato"
-                        >
-                          <XCircle size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+      {loading ? (
+        <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-12 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : (
+        <DataTable columns={columns} data={docs} />
       )}
 
+      {modal && <UploadModal onClose={() => setModal(false)} onSaved={() => { setModal(false); refetch(); }} />}
     </div>
   );
 }
