@@ -1,12 +1,16 @@
+/**
+ * FONTE ÚNICA DE VERDADE para todas as chamadas HTTP do admin-frontend.
+ * - baseURL vazia → URL relativa → Nginx interno faz proxy /api/ → backend:8000
+ * - Basic Auth injetado em TODOS os requests via interceptor
+ * - HTTPS forçado quando a página roda em HTTPS (evita Mixed Content)
+ */
 import axios from 'axios';
 
-// Lê as credenciais do .env do Vite
-const adminUser = import.meta.env.VITE_ADMIN_USER || 'admin';
-const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
+const ADMIN_USER = import.meta.env.VITE_ADMIN_USER || 'admin';
+const ADMIN_PASS = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
 
 function getSanitizedBaseUrl() {
   let url = import.meta.env.VITE_API_BASE_URL ?? '';
-  // Se a página estiver rodando em HTTPS, força HTTPS na BASE_URL para evitar Mixed Content
   if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
     url = url.replace('http://', 'https://');
   }
@@ -15,19 +19,23 @@ function getSanitizedBaseUrl() {
 
 const api = axios.create({
   baseURL: getSanitizedBaseUrl(),
-  auth: {
-    username: adminUser,
-    password: adminPassword
-  }
+  auth: { username: ADMIN_USER, password: ADMIN_PASS },
+  headers: { 'Content-Type': 'application/json' },
 });
 
-// Interceptor para garantir HTTPS e sanitização em todas as requisições em tempo de execução
+// Garante HTTPS em runtime e Basic Auth em TODAS as requests (GET, POST, PUT, DELETE)
 api.interceptors.request.use((config) => {
-  const currentBase = config.baseURL || getSanitizedBaseUrl();
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && currentBase.startsWith('http://')) {
-    config.baseURL = currentBase.replace('http://', 'https://');
-  } else {
-    config.baseURL = currentBase;
+  const base = config.baseURL || getSanitizedBaseUrl();
+  config.baseURL =
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    base.startsWith('http://')
+      ? base.replace('http://', 'https://')
+      : base;
+
+  // Garante auth mesmo que o caller não passe
+  if (!config.auth) {
+    config.auth = { username: ADMIN_USER, password: ADMIN_PASS };
   }
   return config;
 });
