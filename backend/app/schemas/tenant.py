@@ -1,12 +1,12 @@
-"""Pydantic schemas para Tenant — alinhados ao modelo V4."""
+"""Pydantic schemas para Tenant — alinhados ao modelo V4 com tolerância extrema a payloads."""
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
 
 class TenantCreate(BaseModel):
-    """Payload para criação de um novo tenant."""
-    id:                   str            = Field(...,   min_length=2, max_length=100, description="Slug único (ex: elitecorp)")
+    """Payload para criação de um novo tenant — campos tolerantes contra 422."""
+    id:                   Optional[str]  = Field(None,  description="Slug único (ex: elitecorp). Se omitido, é gerado do tenant_code ou name.")
     name:                 Optional[str]  = Field(None,  description="Nome de exibição")
     tenant_code:          Optional[str]  = Field(None,  description="Código interno")
     tenant_name:          Optional[str]  = Field(None,  description="Nome interno / label")
@@ -15,21 +15,40 @@ class TenantCreate(BaseModel):
     protheus_password:    Optional[str]  = Field(None,  description="Senha em claro — será criptografada pelo backend")
     auth_mode:            Optional[str]  = Field('basic', description="basic | token | oauth")
     system_prompt:        Optional[str]  = Field(None,  description="System prompt do agente")
-    temperature:          Optional[float]= Field(0.2,   ge=0.0, le=1.0, description="Temperatura LLM (0=preciso, 1=criativo)")
+    temperature:          Optional[float]= Field(0.2,   description="Temperatura LLM (0=preciso, 1=criativo)")
     status:               Optional[str]  = Field('active', description="active | inactive | suspended")
     plan_code:            Optional[str]  = Field(None,  description="Código do plano de licença")
 
-    @field_validator('id')
+    @field_validator('id', mode='before')
     @classmethod
-    def slug_format(cls, v: str) -> str:
+    def prepare_id(cls, v):
+        if not v or not str(v).strip():
+            return None
         import re
-        if not re.match(r'^[a-z0-9_\-]+$', v):
-            raise ValueError('id deve conter apenas letras minúsculas, números, _ ou -')
+        slug = re.sub(r'[^a-z0-9_\-]+', '-', str(v).lower().strip()).strip('-')
+        return slug or None
+
+    @field_validator('temperature', mode='before')
+    @classmethod
+    def prepare_temperature(cls, v):
+        if v is None or v == '':
+            return 0.2
+        try:
+            val = float(v)
+            return max(0.0, min(1.0, val))
+        except (ValueError, TypeError):
+            return 0.2
+
+    @field_validator('protheus_password', 'protheus_user', 'protheus_rest_url', 'tenant_name', 'name', 'tenant_code', 'plan_code', mode='before')
+    @classmethod
+    def clean_empty_strings(cls, v):
+        if isinstance(v, str) and not v.strip():
+            return None
         return v
 
 
 class TenantUpdate(BaseModel):
-    """Payload para atualização parcial de um tenant. Todos os campos opcionais."""
+    """Payload para atualização parcial de um tenant."""
     name:                 Optional[str]  = None
     tenant_code:          Optional[str]  = None
     tenant_name:          Optional[str]  = None
@@ -38,9 +57,27 @@ class TenantUpdate(BaseModel):
     protheus_password:    Optional[str]  = None   # None = não alterar senha
     auth_mode:            Optional[str]  = None
     system_prompt:        Optional[str]  = None
-    temperature:          Optional[float]= Field(None, ge=0.0, le=1.0)
+    temperature:          Optional[float]= Field(None)
     status:               Optional[str]  = None
     plan_code:            Optional[str]  = None
+
+    @field_validator('temperature', mode='before')
+    @classmethod
+    def prepare_temperature(cls, v):
+        if v is None or v == '':
+            return None
+        try:
+            val = float(v)
+            return max(0.0, min(1.0, val))
+        except (ValueError, TypeError):
+            return None
+
+    @field_validator('protheus_password', 'protheus_user', 'protheus_rest_url', 'tenant_name', 'name', 'tenant_code', 'plan_code', mode='before')
+    @classmethod
+    def clean_empty_strings(cls, v):
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 
 class TenantResponse(BaseModel):

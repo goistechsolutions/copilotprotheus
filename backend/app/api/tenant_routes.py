@@ -69,14 +69,25 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
 @router.post("", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_tenant(body: TenantCreate, db: Session = Depends(get_db)):
-    if db.query(Tenant).filter(Tenant.id == body.id).first():
-        raise HTTPException(status_code=409, detail=f"Tenant '{body.id}' já existe")
+    import re, uuid
+    tenant_id = body.id
+    if not tenant_id:
+        base = body.tenant_code or body.tenant_name or body.name or "tenant"
+        tenant_id = re.sub(r'[^a-z0-9_\-]+', '-', base.lower().strip()).strip('-')
+        if not tenant_id:
+            tenant_id = f"tenant-{uuid.uuid4().hex[:6]}"
+
+    final_id = tenant_id
+    counter = 1
+    while db.query(Tenant).filter(Tenant.id == final_id).first():
+        final_id = f"{tenant_id}-{counter}"
+        counter += 1
 
     tenant = Tenant(
-        id=body.id,
-        name=body.name,
-        tenant_code=body.tenant_code,
-        tenant_name=body.tenant_name,
+        id=final_id,
+        name=body.name or body.tenant_name or final_id,
+        tenant_code=body.tenant_code or final_id,
+        tenant_name=body.tenant_name or body.name,
         protheus_rest_url=body.protheus_rest_url,
         protheus_user=body.protheus_user,
         auth_mode=body.auth_mode or 'basic',
