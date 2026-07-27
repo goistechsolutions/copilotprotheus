@@ -105,6 +105,16 @@ export default function LoginPage() {
           </form>
         </div>
 
+        {/* Dev credentials hint */}
+        <div className="mt-4 rounded-xl border border-[#1E2535] bg-[#161B27]/60 px-4 py-3 text-center">
+          <p className="text-[#8892A4] text-xs font-medium mb-1">Credenciais de desenvolvimento</p>
+          <p className="text-[#60A5FA] text-xs font-mono">
+            Usuário: <span className="text-white font-semibold">admin</span>
+            {' · '}
+            Senha: <span className="text-white font-semibold">admin123</span>
+          </p>
+        </div>
+
         <p className="text-center text-[#8892A4]/50 text-xs mt-6">
           EliteCorp © {new Date().getFullYear()} · Copilot Protheus Admin
         </p>
