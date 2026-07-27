@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// Em produção, usa VITE_API_BASE_URL; em dev, usa URL relativa (nginx proxy local)
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+function getSanitizedBaseUrl() {
+  let url = import.meta.env.VITE_API_BASE_URL ?? '';
+  // Se o site estiver rodando via HTTPS, impede requisições inseguras via HTTP (Mixed Content)
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
+    url = url.replace('http://', 'https://');
+  }
+  return url;
+}
 
 export function useApi(url, options = {}) {
   const [data, setData] = useState(null);
@@ -12,7 +18,8 @@ export function useApi(url, options = {}) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BASE_URL}${url}`, { credentials: 'include', ...options });
+      const baseUrl = getSanitizedBaseUrl();
+      const res = await fetch(`${baseUrl}${url}`, { credentials: 'include', ...options });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -36,7 +43,8 @@ export async function apiCall(url, method = 'GET', body = null) {
     headers: { 'Content-Type': 'application/json' },
   };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(`${BASE_URL}${url}`, opts);
+  const baseUrl = getSanitizedBaseUrl();
+  const res = await fetch(`${baseUrl}${url}`, opts);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.detail || `HTTP ${res.status}`);
   return json;
