@@ -46,7 +46,7 @@ export default function App() {
             {/* Tenants & Empresas */}
             <Route path="tenants"           element={<S><Tenants /></S>} />
             <Route path="companies"         element={<S><Companies /></S>} />
-            <Route path="companies/:id"     element={<S><CompanyDashboard /></S>} />
+            <Route path="companies/:id/*"   element={<S><CompanyDashboard /></S>} />
 
             {/* Usuários */}
             <Route path="users"             element={<S><AgentUsers /></S>} />
