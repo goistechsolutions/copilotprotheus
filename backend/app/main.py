@@ -136,7 +136,21 @@ if settings.sentry_dsn:
     )
     logger.info("Sentry integrado com sucesso!")
 
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 app = FastAPI(title="Copilot Protheus Integration", version="1.0.0")
+
+# Suporte a Proxy Headers (Nginx / Cloudflare) para manter esquema HTTPS em redirects e URLs
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+
+# Middleware para forçar esquema HTTPS quando acessado via proxy reverso (evita 307 redirect para http://)
+@app.middleware("http")
+async def enforce_https_scheme_middleware(request, call_next):
+    proto = request.headers.get("x-forwarded-proto", "")
+    if proto.lower() == "https":
+        request.scope["scheme"] = "https"
+    response = await call_next(request)
+    return response
 
 # Lê as origens do CORS a partir da env var, padrão é '*'
 allowed_origins = os.getenv("CORS_ORIGIN", "*").split(",")

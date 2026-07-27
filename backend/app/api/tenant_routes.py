@@ -47,7 +47,8 @@ def _apply_password(tenant_obj: Tenant, plaintext: Optional[str]) -> None:
 
 # ── Endpoints ─────────────────────────────────────────────────
 
-@router.get("/", response_model=List[TenantResponse])
+@router.get("", response_model=List[TenantResponse])
+@router.get("/", response_model=List[TenantResponse], include_in_schema=False)
 def list_tenants(db: Session = Depends(get_db)):
     return db.query(Tenant).order_by(Tenant.created_at.desc()).all()
 
@@ -60,7 +61,8 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
     return tenant
 
 
-@router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_tenant(body: TenantCreate, db: Session = Depends(get_db)):
     if db.query(Tenant).filter(Tenant.id == body.id).first():
         raise HTTPException(status_code=409, detail=f"Tenant '{body.id}' já existe")
