@@ -138,7 +138,7 @@ if settings.sentry_dsn:
 
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-app = FastAPI(title="Copilot Protheus Integration", version="1.0.0")
+app = FastAPI(title="Copilot Protheus Integration", version="1.0.0", redirect_slashes=False)
 
 # Suporte a Proxy Headers (Nginx / Cloudflare) para manter esquema HTTPS em redirects e URLs
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
