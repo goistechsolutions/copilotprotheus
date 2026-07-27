@@ -18,23 +18,28 @@ from typing import List, Optional
 # prefix só com /tenants — main.py já adiciona /api
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
-# ── Criptografia da senha REST Protheus ──────────────────────
-_FERNET_KEY = os.getenv("FERNET_KEY", "").encode()
+import base64
+import hashlib
 
-def _fernet() -> Optional[Fernet]:
-    """Retorna instância Fernet se FERNET_KEY estiver configurada."""
-    if _FERNET_KEY:
+# ── Criptografia da senha REST Protheus ──────────────────────
+
+def _get_fernet() -> Fernet:
+    key = os.getenv("FERNET_KEY", "").strip().encode()
+    if key:
         try:
-            return Fernet(_FERNET_KEY)
+            return Fernet(key)
         except Exception:
             pass
-    return None
+    # Derivação determinística de 32 bytes se FERNET_KEY não for configurada no .env
+    secret = os.getenv("JWT_SECRET") or os.getenv("ADMIN_JWT_SECRET") or "copilot-protheus-fernet-fallback-key"
+    key_32bytes = hashlib.sha256(secret.encode()).digest()
+    fallback_key = base64.urlsafe_b64encode(key_32bytes)
+    return Fernet(fallback_key)
 
 def encrypt_password(plaintext: str) -> str:
-    f = _fernet()
-    if f:
-        return f.encrypt(plaintext.encode()).decode()
-    raise RuntimeError("FERNET_KEY não configurada. Defina a variável de ambiente antes de armazenar senhas.")
+    if not plaintext:
+        return ""
+    return _get_fernet().encrypt(plaintext.encode()).decode()
 
 
 # ── Helpers ──────────────────────────────────────────────────
