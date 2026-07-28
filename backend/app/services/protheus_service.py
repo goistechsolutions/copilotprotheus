@@ -74,8 +74,14 @@ def get_tenant_config(tenant_id: str) -> dict:
         # 2. Busca nas configurações diretas no cadastro do Cliente (tabela tenants)
         if tenant and tenant.protheus_rest_url:
             pwd = ""
-            if tenant.encrypted_protheus_password:
-                pwd = decrypt_password(tenant.encrypted_protheus_password)
+            enc_pwd = tenant.encrypted_protheus_password or getattr(tenant, 'protheus_password', None)
+            if enc_pwd:
+                try:
+                    pwd = decrypt_password(enc_pwd)
+                except Exception:
+                    pwd = enc_pwd
+                if not pwd:
+                    pwd = enc_pwd
             return {
                 "rest_url": tenant.protheus_rest_url.rstrip("/"),
                 "webapp_url": "",
@@ -100,6 +106,9 @@ def get_tenant_config(tenant_id: str) -> dict:
                     pwd = decrypt_password(enc_pwd)
                 except Exception as e:
                     logger.error(f"Erro ao decriptar senha da empresa {company.id}: {e}")
+                    pwd = enc_pwd
+                if not pwd:
+                    pwd = enc_pwd
             return {
                 "rest_url": company.protheus_rest_url.rstrip("/"),
                 "webapp_url": company.protheus_webapp_url or "",
