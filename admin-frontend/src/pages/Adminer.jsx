@@ -20,7 +20,7 @@ export default function Adminer() {
       
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
         <iframe 
-          src="/adminer/?pgsql=db&username=postgres&db=copilot_protheus" 
+          src="/adminer/?pgsql=postgres:sap_password_123@db:5432/copilot_protheus" 
           className="absolute inset-0 w-full h-full border-0"
           title="Adminer"
         />
