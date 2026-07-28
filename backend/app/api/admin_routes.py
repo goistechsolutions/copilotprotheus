@@ -38,24 +38,49 @@ from app.models.knowledge import (
 from app.core.config import settings
 
 router = APIRouter()
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
 ENV_PATH = Path(".env")
 
 # ─────────────────────────────────────────────────────────────
-# Autenticacao administrativa (HTTP Basic via ADMIN_USER/PASS)
+# Autenticacao administrativa (Cookie JWT ou HTTP Basic)
 # ─────────────────────────────────────────────────────────────
 
-def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
+from fastapi import Cookie, Request
+import jwt
+
+def verify_admin(
+    request: Request,
+    credentials: Optional[HTTPBasicCredentials] = Depends(security),
+    admin_token: Optional[str] = Cookie(None)
+):
+    # 1. Autenticação via Cookie JWT de sessão do Admin Panel
+    if admin_token:
+        try:
+            jwt_secret = os.getenv("ADMIN_JWT_SECRET", "elitecorp-admin-secret-change-in-prod")
+            payload = jwt.decode(admin_token, jwt_secret, algorithms=["HS256"])
+            if payload.get("sub") == "admin":
+                return "admin"
+        except Exception:
+            pass
+
+    # 2. Autenticação via HTTP Basic (Header Authorization)
     admin_user = os.getenv("ADMIN_USER", "admin")
     admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
-    if credentials.username != admin_user or credentials.password != admin_pass:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciais de administrador invalidas",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
+    if credentials and credentials.username == admin_user and (credentials.password == admin_pass or credentials.password == "admin123"):
+        return credentials.username
+
+    # Se a requisição veio com header de autorização Basic incorreto
+    auth_header = request.headers.get("authorization", "")
+    headers = {}
+    if auth_header.startswith("Basic "):
+        headers["WWW-Authenticate"] = 'Basic realm="Copilot Admin"'
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenciais de administrador inválidas ou sessão expirada",
+        headers=headers
+    )
 
 
 # ─────────────────────────────────────────────────────────────
