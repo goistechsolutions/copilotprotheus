@@ -24,14 +24,24 @@ class LoginResponse(BaseModel):
     message: str
 
 
+def _clean_env(val: str, default: str = "") -> str:
+    if not val:
+        return default
+    val = val.strip()
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        val = val[1:-1].strip()
+    return val or default
+
+
 def get_admin_credentials():
-    user = os.environ.get("ADMIN_USER", "admin").strip()
-    pwd = os.environ.get("ADMIN_PASSWORD", "").strip()
-    secret = os.environ.get("ADMIN_JWT_SECRET", "").strip()
+    user = _clean_env(os.environ.get("ADMIN_USER"), "admin")
+    pwd = _clean_env(os.environ.get("ADMIN_PASSWORD"))
+    secret = _clean_env(os.environ.get("ADMIN_JWT_SECRET"))
     
-    if not pwd or not secret:
-        pwd = pwd or os.environ.get("PROTHEUS_PASSWORD", "admin123").strip()
-        secret = secret or "elitecorp-admin-secret-change-in-prod"
+    if not pwd:
+        pwd = _clean_env(os.environ.get("PROTHEUS_PASSWORD"), "admin123")
+    if not secret:
+        secret = "elitecorp-admin-secret-change-in-prod"
         
     return user, pwd, secret
 
