@@ -358,7 +358,7 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     
     try:
         if endpoint.lower() == "queryrest" or endpoint.lower().endswith("/queryrest"):
-            cQuery = query_params.get("cQuery", "")
+            cQuery = query_params.get("cQuery", "") or query_params.get("query", "") or query_params.get("cquery", "")
             if cQuery:
                 try:
                     _enforce_query_rules(cQuery, tenant_id, context)
@@ -368,7 +368,12 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
             
             start_t = time.time()
             try:
-                res_text = await _execute_http_post_with_retry(url, query_params, headers)
+                # Tenta GET primeiro com cQuery via Query String (padrão canônico do Protheus REST em Cloud)
+                try:
+                    res_text = await _execute_http_get_with_retry(url, {"cQuery": cQuery}, headers)
+                except Exception as get_err:
+                    logger.warning(f"QueryRest GET falhou ({get_err}). Tentando POST fallback...")
+                    res_text = await _execute_http_post_with_retry(url, query_params, headers)
                 elapsed = int((time.time() - start_t) * 1000)
                 
                 records = 0

@@ -410,22 +410,50 @@ async def sync_schema(
     )
 
     # Fallback hardcoded TOTVS classico
-    if not db_mods:
-        fallback_map = {
-            "SIGAATF":"01","SIGACOM":"02","SIGAEST":"04","SIGAFAT":"05",
-            "SIGAFIN":"06","SIGAGPE":"07","SIGAFIS":"09","SIGAPON":"16",
-            "SIGATMK":"31","SIGACTB":"34","SIGAADV":"34","SIGAMNT":"43","SIGAJURI":"76",
-        }
-        for nome, num in fallback_map.items():
+    fallback_details = {
+        "SIGAATF": ("01", "Ativo Fixo"),
+        "SIGACOM": ("02", "Compras"),
+        "SIGAEST": ("04", "Estoque e Custos"),
+        "SIGAFAT": ("05", "Faturamento"),
+        "SIGAFIN": ("06", "Financeiro"),
+        "SIGAGPE": ("07", "Gestão de Pessoal"),
+        "SIGAFIS": ("09", "Livros Fiscais"),
+        "SIGAPON": ("16", "Ponto Eletrônico"),
+        "SIGATMK": ("31", "Telemarketing"),
+        "SIGACTB": ("34", "Contabilidade Gerencial"),
+        "SIGAADV": ("34", "Desenvolvimento AdvPL"),
+        "SIGAMNT": ("43", "Manutenção de Ativos"),
+        "SIGAJURI": ("76", "Jurídico"),
+    }
+
+    existing_all = db.query(ProtheusModuleMaster).all()
+    existing_map = {m.module_code: m for m in existing_all}
+    changed = False
+
+    for code, (num, name) in fallback_details.items():
+        if code not in existing_map:
             db.add(ProtheusModuleMaster(
-                module_code=nome, module_name=num, source_name="fallback_hardcoded"
+                module_code=code,
+                module_name=name,
+                source_name="fallback_hardcoded",
+                active=True
             ))
+            changed = True
+        else:
+            # Se o module_name gravado era apenas número ('01', '05', etc.), atualiza para o nome amigável
+            m = existing_map[code]
+            if m.module_name.isdigit() or len(m.module_name.strip()) <= 2:
+                m.module_name = name
+                changed = True
+
+    if changed:
         db.commit()
-        db_mods = (
-            db.query(ProtheusModuleMaster)
-            .filter(ProtheusModuleMaster.module_code.in_(clean_modulos))
-            .all()
-        )
+
+    db_mods = (
+        db.query(ProtheusModuleMaster)
+        .filter(ProtheusModuleMaster.module_code.in_(clean_modulos))
+        .all()
+    )
 
     mod_codes_list = set()
     code_to_name   = {}
@@ -462,12 +490,14 @@ async def sync_schema(
             response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
         except Exception as exc:
             err_msg = str(exc)
-            if "Name or service not known" in err_msg or "gaierror" in err_msg:
+            if "401" in err_msg or "Unauthorized" in err_msg or "authentication" in err_msg.lower():
+                detail = f"Falha de autenticação (HTTP 401) no servidor REST Protheus ({tenant_id}). Verifique se o Usuário e a Senha REST no cadastro do Tenant/Empresa estão corretos no Protheus."
+            elif "Name or service not known" in err_msg or "gaierror" in err_msg:
                 detail = f"Falha de DNS ao conectar no Protheus REST: Domínio não encontrado. Verifique a URL REST no cadastro da empresa/tenant. Erro: {err_msg}"
             elif "Timeout" in err_msg or "timed out" in err_msg:
                 detail = f"Timeout de conexão com a API REST Protheus. Verifique se a porta e o serviço REST estão online. Erro: {err_msg}"
             else:
-                detail = f"Falha de conexão com a API REST do Protheus ({tenant_id}): {err_msg}"
+                detail = f"Falha ao comunicar com o servidor Protheus REST ({tenant_id}): {err_msg}"
             raise HTTPException(status_code=400, detail=detail)
 
         tables_data = json.loads(fix_json_escapes(response_str))

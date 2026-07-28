@@ -68,10 +68,29 @@ def queryrest_exec(
     base = rest_url.rstrip("/")
     url = f"{base}/QueryRest"
 
-    logger.info(f"[QueryRest Direto] POST {url} — SQL: {sql[:120]}...")
+    logger.info(f"[QueryRest Direto] GET/POST {url} — SQL: {sql[:120]}...")
 
+    resp = None
+    # 1. Tenta GET com cQuery na URL (Método padrão Protheus REST Cloud)
     try:
-        with httpx.Client(timeout=timeout) as client:
+        with httpx.Client(timeout=timeout, verify=False) as client:
+            resp = client.get(
+                url,
+                params={"cQuery": sql},
+                auth=(user, password),
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    return data
+                if isinstance(data, dict):
+                    return data.get("items") or data.get("data") or []
+    except Exception as e:
+        logger.warning(f"[QueryRest Direto] GET falhou ({e}). Tentando POST fallback...")
+
+    # 2. Fallback POST com JSON body
+    try:
+        with httpx.Client(timeout=timeout, verify=False) as client:
             resp = client.post(
                 url,
                 json={"cQuery": sql},
@@ -89,7 +108,9 @@ def queryrest_exec(
     data = resp.json()
     if isinstance(data, list):
         return data
-    return data.get("items") or data.get("result") or []
+    if isinstance(data, dict):
+        return data.get("items") or data.get("data") or data.get("result") or []
+    return []
 
 
 async def queryrest_exec_tenant(db: Session, tenant_id: str, company_id: int | str, query: str) -> List[Dict[str, Any]]:
