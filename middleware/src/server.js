@@ -137,13 +137,16 @@ app.use('/chat', jwtAuth, chatRoutes)
 app.use('/report', jwtAuth, reportRoutes)
 app.use('/api', jwtAuth, apiRoutes)
 
-const { stats: cacheStats } = require('./cache')
-
-app.get('/health', (_, res) => res.json({ 
-  status: 'ok', 
-  ts: new Date().toISOString(),
-  cache: cacheStats()
-}))
+try {
+  const { stats: cacheStats } = require('../cache/cacheService')
+  app.get('/health-cache', (_, res) => res.json({ 
+    status: 'ok', 
+    ts: new Date().toISOString(),
+    cache: cacheStats ? cacheStats() : {}
+  }))
+} catch (e) {
+  console.warn('Modulo de cache nao carregado:', e.message)
+}
 
 // --- Fallback/Proxy para o Frontend React (Nginx) ---
 app.use((req, res, next) => {
