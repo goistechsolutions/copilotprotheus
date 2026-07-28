@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, Cookie
 from pydantic import BaseModel
 import jwt
 import os
+import hmac
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 
@@ -24,9 +25,14 @@ class LoginResponse(BaseModel):
 
 
 def get_admin_credentials():
-    user = os.getenv("ADMIN_USER", "admin").strip()
-    pwd = os.getenv("ADMIN_PASSWORD", "admin123").strip()
-    secret = os.getenv("ADMIN_JWT_SECRET", "elitecorp-admin-secret-change-in-prod").strip()
+    user = os.environ.get("ADMIN_USER", "admin").strip()
+    pwd = os.environ.get("ADMIN_PASSWORD", "").strip()
+    secret = os.environ.get("ADMIN_JWT_SECRET", "").strip()
+    
+    if not pwd or not secret:
+        pwd = pwd or os.environ.get("PROTHEUS_PASSWORD", "admin123").strip()
+        secret = secret or "elitecorp-admin-secret-change-in-prod"
+        
     return user, pwd, secret
 
 
@@ -90,15 +96,19 @@ def _delete_auth_cookie(response: Response, *, is_https: bool):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest, raw_request: Request, response: Response):
-    admin_user, admin_pass, _ = get_admin_credentials()
-    
+    try:
+        admin_user, admin_pass, _ = get_admin_credentials()
+    except KeyError as e:
+        raise HTTPException(status_code=500, detail=f"Variável de ambiente não configurada: {e}")
+
     req_user = (request.username or "").strip()
     req_pass = (request.password or "").strip()
-    
-    user_matches = req_user.lower() == admin_user.lower()
-    pass_matches = (req_pass == admin_pass) or (req_pass == "admin123")
-    
-    if not user_matches or not pass_matches:
+
+    # Comparação de tempo constante para evitar timing attack e remoção de backdoor
+    user_ok = hmac.compare_digest(req_user.lower(), admin_user.lower())
+    pass_ok = hmac.compare_digest(req_pass, admin_pass)
+
+    if not user_ok or not pass_ok:
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
     token = create_admin_token()

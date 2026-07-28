@@ -1,6 +1,7 @@
 """Rotas CRUD para Tenant — modelo V4 canônico.
 
 Segurança:
+- Protegido via Depends(require_admin).
 - encrypted_protheus_password NUNCA é retornado em nenhum endpoint.
 - Senha recebida como protheus_password (plaintext) → criptografada antes de persistir.
 - Apenas platform_admin pode criar/deletar tenants.
@@ -13,6 +14,7 @@ import os
 from app.db.database import get_db
 from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
+from app.core.admin_security import require_admin
 from typing import List, Optional
 
 # prefix só com /tenants — main.py já adiciona /api
@@ -50,16 +52,16 @@ def _apply_password(tenant_obj: Tenant, plaintext: Optional[str]) -> None:
         tenant_obj.encrypted_protheus_password = encrypt_password(plaintext)
 
 
-# ── Endpoints ─────────────────────────────────────────────────
+# ── Endpoints Protegidos por Admin ─────────────────────────────
 
 @router.get("", response_model=List[TenantResponse])
 @router.get("/", response_model=List[TenantResponse], include_in_schema=False)
-def list_tenants(db: Session = Depends(get_db)):
+def list_tenants(db: Session = Depends(get_db), _admin=Depends(require_admin)):
     return db.query(Tenant).order_by(Tenant.created_at.desc()).all()
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)
-def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
+def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
@@ -68,7 +70,7 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
 
 @router.post("", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
-def create_tenant(body: TenantCreate, db: Session = Depends(get_db)):
+def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     import re, uuid
     tenant_id = body.id
     if not tenant_id:
@@ -104,7 +106,7 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{tenant_id}", response_model=TenantResponse)
-def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_db)):
+def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
@@ -121,7 +123,7 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
 
 
 @router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_tenant(tenant_id: str, db: Session = Depends(get_db)):
+def delete_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")

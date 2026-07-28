@@ -4,16 +4,22 @@ from typing import Optional
 import jwt
 import os
 
-JWT_SECRET = os.getenv("ADMIN_JWT_SECRET", "elitecorp-admin-secret-change-in-prod")
 JWT_ALGORITHM = "HS256"
 
 
+def _get_jwt_secret() -> str:
+    secret = os.environ.get("ADMIN_JWT_SECRET", "").strip()
+    if not secret:
+        secret = "elitecorp-admin-secret-change-in-prod"
+    return secret
+
+
 async def require_admin(admin_token: Optional[str] = Cookie(default=None)):
-    """Dependency FastAPI - valida JWT cookie do admin"""
+    """Dependency FastAPI — valida JWT cookie do admin"""
     if not admin_token:
         raise HTTPException(status_code=401, detail="Token de admin ausente")
     try:
-        payload = jwt.decode(admin_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(admin_token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("sub") != "admin":
             raise HTTPException(status_code=403, detail="Acesso negado")
         return payload

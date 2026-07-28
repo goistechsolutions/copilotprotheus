@@ -54,6 +54,7 @@ def verify_admin(
     credentials: Optional[HTTPBasicCredentials] = Depends(security),
     admin_token: Optional[str] = Cookie(None)
 ):
+    import hmac
     # 1. Autenticação via Cookie JWT de sessão do Admin Panel
     if admin_token:
         try:
@@ -65,10 +66,13 @@ def verify_admin(
             pass
 
     # 2. Autenticação via HTTP Basic (Header Authorization)
-    admin_user = os.getenv("ADMIN_USER", "admin")
-    admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
-    if credentials and credentials.username == admin_user and (credentials.password == admin_pass or credentials.password == "admin123"):
-        return credentials.username
+    admin_user = os.getenv("ADMIN_USER", "admin").strip()
+    admin_pass = os.getenv("ADMIN_PASSWORD", "admin123").strip()
+    if credentials:
+        user_ok = hmac.compare_digest(credentials.username.strip().lower(), admin_user.lower())
+        pass_ok = hmac.compare_digest(credentials.password.strip(), admin_pass)
+        if user_ok and pass_ok:
+            return credentials.username
 
     # Se a requisição veio com header de autorização Basic incorreto
     auth_header = request.headers.get("authorization", "")
