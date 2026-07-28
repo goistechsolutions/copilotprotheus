@@ -270,11 +270,16 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     existing = db.query(Company).filter(Company.cnpj == payload.cnpj).first()
     if existing:
         raise HTTPException(status_code=400, detail="Já existe uma empresa cadastrada com este CNPJ.")
-    if payload.tenant_id == "":
-        payload.tenant_id = None
-    if payload.protheus_password:
-        payload.protheus_password = encrypt_password(payload.protheus_password)
-    comp = Company(**payload.model_dump())
+    
+    comp_data = payload.model_dump()
+    if comp_data.get("tenant_id") == "":
+        comp_data["tenant_id"] = None
+
+    raw_password = comp_data.pop("protheus_password", None)
+    if raw_password:
+        comp_data["encrypted_protheus_password"] = encrypt_password(raw_password)
+
+    comp = Company(**comp_data)
     db.add(comp)
     db.commit()
     db.refresh(comp)
@@ -286,13 +291,19 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa não encontrada.")
-    if payload.tenant_id == "":
-        payload.tenant_id = None
+
     update_data = payload.model_dump(exclude_unset=True)
-    if "protheus_password" in update_data and update_data["protheus_password"]:
-        update_data["protheus_password"] = encrypt_password(update_data["protheus_password"])
+    if update_data.get("tenant_id") == "":
+        update_data["tenant_id"] = None
+
+    if "protheus_password" in update_data:
+        raw_password = update_data.pop("protheus_password")
+        if raw_password:
+            update_data["encrypted_protheus_password"] = encrypt_password(raw_password)
+
     for k, v in update_data.items():
         setattr(comp, k, v)
+
     db.commit()
     db.refresh(comp)
     return comp
