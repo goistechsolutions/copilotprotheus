@@ -59,18 +59,24 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
   };
 
   const generateLicense = async () => {
-    if (!form.cnpj) { setErr('Preencha o CNPJ antes de gerar a licença.'); return; }
-    const adminKey = window.prompt('Informe a Chave Admin (X-Admin-Key):');
-    if (!adminKey) return;
+    if (!form.cnpj) { setErr('Preencha o CNPJ da empresa antes de gerar a licença.'); return; }
     setGenLoading(true); setErr('');
     try {
-      const res = await axios.post('/api/license/generate',
-        { cnpj: form.cnpj, expiration_date: '2030-12-31', plan_level: 'enterprise' },
-        { headers: { 'X-Admin-Key': adminKey } }
-      );
+      const exp = new Date();
+      exp.setFullYear(exp.getFullYear() + 5);
+      const expirationDate = exp.toISOString().split('T')[0];
+
+      const res = await axios.post('/api/license/generate', {
+        cnpj: form.cnpj.replace(/[^0-9]/g, '') || form.cnpj,
+        expiration_date: expirationDate,
+        plan_level: 'enterprise'
+      });
       change('licenca_uso', res.data.token);
-    } catch (e) { setErr(e.response?.data?.detail || e.message); }
-    finally { setGenLoading(false); }
+    } catch (e) {
+      setErr(e.response?.data?.detail || e.message || 'Erro ao gerar licença');
+    } finally {
+      setGenLoading(false);
+    }
   };
 
   const f = (props) => <Field form={form} onChange={change} {...props} />;
