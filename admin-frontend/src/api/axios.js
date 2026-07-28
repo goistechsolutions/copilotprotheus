@@ -3,6 +3,7 @@
  * - baseURL vazia → URL relativa → Nginx interno faz proxy /api/ → backend:8000
  * - withCredentials: true para envio automático de cookies JWT (admin_token)
  * - HTTPS forçado quando a página roda em HTTPS (evita Mixed Content)
+ * - Interceptor de resposta 401 para redirecionar automaticamente para a tela de login
  */
 import axios from 'axios';
 
@@ -31,6 +32,19 @@ api.interceptors.request.use((config) => {
       : base;
   return config;
 });
+
+// Intercepta respostas 401 Unauthorized para redirecionar à tela de login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/admin/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export { api, api as axios };
 export default api;
