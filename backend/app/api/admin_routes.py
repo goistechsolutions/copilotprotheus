@@ -458,14 +458,25 @@ async def sync_schema(
     )
 
     try:
-        response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
-        tables_data  = json.loads(fix_json_escapes(response_str))
+        try:
+            response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
+        except Exception as exc:
+            err_msg = str(exc)
+            if "Name or service not known" in err_msg or "gaierror" in err_msg:
+                detail = f"Falha de DNS ao conectar no Protheus REST: Domínio não encontrado. Verifique a URL REST no cadastro da empresa/tenant. Erro: {err_msg}"
+            elif "Timeout" in err_msg or "timed out" in err_msg:
+                detail = f"Timeout de conexão com a API REST Protheus. Verifique se a porta e o serviço REST estão online. Erro: {err_msg}"
+            else:
+                detail = f"Falha de conexão com a API REST do Protheus ({tenant_id}): {err_msg}"
+            raise HTTPException(status_code=400, detail=detail)
+
+        tables_data = json.loads(fix_json_escapes(response_str))
         if isinstance(tables_data, dict):
             tables_data = tables_data.get("items") or tables_data.get("data", [])
         if isinstance(tables_data, dict) and "error" in tables_data:
-            raise Exception(f"Erro Protheus API: {tables_data['error']}")
+            raise HTTPException(status_code=400, detail=f"Erro retornado pela API Protheus: {tables_data['error']}")
         if not isinstance(tables_data, list) or not tables_data:
-            raise Exception(f"Nenhuma tabela encontrada para: {', '.join(clean_modulos)}")
+            raise HTTPException(status_code=400, detail=f"Nenhuma tabela encontrada para os módulos: {', '.join(clean_modulos)}")
 
         def _fv(row: dict, key: str, default: str = "") -> str:
             if not isinstance(row, dict): return default
