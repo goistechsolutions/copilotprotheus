@@ -89,6 +89,8 @@ def trigger_dictionary_snapshot(
 def get_dictionary_tables(
     tenant_id: str = Query(..., description="ID do Tenant"),
     environment_id: str = Query("producao", description="Ambiente"),
+    company_id: Optional[int] = Query(None, description="Filtrar por ID de empresa"),
+    module_filter: Optional[List[str]] = Query(None, description="Filtrar por códigos de módulo Protheus"),
     table_name: Optional[str] = Query(None, description="Filtrar por tabela (ex: SC5, SD2)"),
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin)
@@ -98,10 +100,15 @@ def get_dictionary_tables(
         DictionaryTable.environment_id == environment_id,
         DictionaryTable.active_flag == True
     )
+    if company_id is not None:
+        comp_str = str(company_id)
+        query_tbl = query_tbl.filter((DictionaryTable.company_id == comp_str) | (DictionaryTable.company_id == None) | (DictionaryTable.company_id == ''))
+    if module_filter:
+        query_tbl = query_tbl.filter(DictionaryTable.module_code.in_(module_filter))
     if table_name:
-        query_tbl = query_tbl.filter(DictionaryTable.table_name == table_name.upper())
+        query_tbl = query_tbl.filter(DictionaryTable.table_name.ilike(f"%{table_name.strip().upper()}%"))
     
-    tables = query_tbl.order_by(DictionaryTable.table_name.asc()).all()
+    tables = query_tbl.order_by(DictionaryTable.module_code.asc(), DictionaryTable.table_name.asc()).all()
     
     result = []
     for t in tables:
@@ -130,7 +137,14 @@ def get_dictionary_tables(
                 for f in fields
             ]
         })
-    return {"tenant_id": tenant_id, "environment_id": environment_id, "count": len(result), "tables": result}
+    return {
+        "status": "success",
+        "tenant_id": tenant_id, 
+        "environment_id": environment_id, 
+        "count": len(result), 
+        "tables": result,
+        "items": result
+    }
 
 @router.get("/api/admin/dictionary/permissions", summary="Consulta permissões granulares configuradas para uma Role")
 def list_role_permissions(

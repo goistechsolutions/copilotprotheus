@@ -14,6 +14,11 @@ from app.api.company_routes import router as company_router
 from app.api.tenant_routes import router as tenant_router
 from app.api.infra_routes import router as infra_router
 from app.api.agent_routes import router as agent_router
+from app.api.admin_auth import router as admin_auth_router
+from app.api.powerbi_routes import router as powerbi_router
+from app.api.leonardo_routes import router as leonardo_router
+from app.core.admin_security import require_admin
+from app.api.agent_sql_routes import router as agent_sql_router
 from app.core.logging_config import setup_logging
 from app.db.database import get_db, engine, Base
 from app.core.config import settings
@@ -38,7 +43,6 @@ try:
             try: conn.rollback()
             except: pass
         
-        # Comprehensive migrations for newly added columns
         migrations = [
             "CREATE TABLE IF NOT EXISTS tenants (id VARCHAR(100) PRIMARY KEY, name VARCHAR(255), protheus_rest_url VARCHAR(1024), auth_mode VARCHAR(50) DEFAULT 'basic', system_prompt TEXT, temperature FLOAT DEFAULT 0.7, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
             "ALTER TABLE tenants ALTER COLUMN id TYPE VARCHAR(100);",
@@ -95,7 +99,6 @@ try:
             "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
             "ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
             
-            # --- Tabelas v5.2 (Catálogo Protheus, Snapshots e Permissões Granulares RBAC) ---
             "CREATE TABLE IF NOT EXISTS tenant_dictionary_sources (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', source_type VARCHAR(20) NOT NULL, snapshot_code VARCHAR(60) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), started_at TIMESTAMPTZ NULL, finished_at TIMESTAMPTZ NULL, error_message TEXT NULL);",
             "CREATE TABLE IF NOT EXISTS dictionary_tables (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, table_alias VARCHAR(80) NULL, module_code VARCHAR(10) NULL, description TEXT NULL, physical_name VARCHAR(80) NULL, active_flag BOOLEAN NOT NULL DEFAULT TRUE, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name));",
             "CREATE TABLE IF NOT EXISTS dictionary_fields (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, title VARCHAR(120) NULL, field_type VARCHAR(5) NULL, length_num INTEGER NULL, decimal_num INTEGER NULL, required_flag BOOLEAN NOT NULL DEFAULT FALSE, browse_flag BOOLEAN NOT NULL DEFAULT FALSE, virtual_flag BOOLEAN NOT NULL DEFAULT FALSE, validation_rule TEXT NULL, relation_rule TEXT NULL, when_rule TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, field_name));",
@@ -103,6 +106,9 @@ try:
             "CREATE TABLE IF NOT EXISTS dictionary_groups (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, group_name VARCHAR(80) NOT NULL, description TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, group_name));",
             "CREATE TABLE IF NOT EXISTS tenant_table_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, can_list BOOLEAN NOT NULL DEFAULT FALSE, can_describe BOOLEAN NOT NULL DEFAULT FALSE, can_query BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name));",
             "CREATE TABLE IF NOT EXISTS tenant_field_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, can_select BOOLEAN NOT NULL DEFAULT FALSE, can_filter BOOLEAN NOT NULL DEFAULT FALSE, masked_flag BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name, field_name));",
+            "CREATE TABLE IF NOT EXISTS protheus_modules_master (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), module_code VARCHAR(30) NOT NULL UNIQUE, module_name VARCHAR(120) NOT NULL, source_name VARCHAR(50) NOT NULL DEFAULT 'SYS_USR_MODULE', active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NULL);",
+            "CREATE TABLE IF NOT EXISTS tenant_module_contracts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100) NOT NULL, contract_id UUID NOT NULL, module_id UUID NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'allowed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());",
+            "CREATE TABLE IF NOT EXISTS tenant_allowed_tables (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100) NOT NULL, contract_id UUID NOT NULL, snapshot_id UUID NOT NULL, table_id UUID NOT NULL, access_level VARCHAR(20) NOT NULL DEFAULT 'query', allowed BOOLEAN NOT NULL DEFAULT TRUE, rationale VARCHAR(255) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NULL);",
             "CREATE INDEX IF NOT EXISTS idx_dictionary_tables_lookup ON dictionary_tables (tenant_id, environment_id, table_name);",
             "CREATE INDEX IF NOT EXISTS idx_dictionary_fields_lookup ON dictionary_fields (tenant_id, environment_id, table_name, field_name);",
             "CREATE INDEX IF NOT EXISTS idx_perm_table_lookup ON tenant_table_permissions (tenant_id, environment_id, role_id, table_name);",
@@ -130,7 +136,21 @@ if settings.sentry_dsn:
     )
     logger.info("Sentry integrado com sucesso!")
 
-app = FastAPI(title="Copilot Protheus Integration", version="1.0.0")
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+app = FastAPI(title="Copilot Protheus Integration", version="1.0.0", redirect_slashes=False)
+
+# Suporte a Proxy Headers (Nginx / Cloudflare) para manter esquema HTTPS em redirects e URLs
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+
+# Middleware para forçar esquema HTTPS quando acessado via proxy reverso (evita 307 redirect para http://)
+@app.middleware("http")
+async def enforce_https_scheme_middleware(request, call_next):
+    proto = request.headers.get("x-forwarded-proto", "")
+    if proto.lower() == "https":
+        request.scope["scheme"] = "https"
+    response = await call_next(request)
+    return response
 
 # Lê as origens do CORS a partir da env var, padrão é '*'
 allowed_origins = os.getenv("CORS_ORIGIN", "*").split(",")
@@ -156,21 +176,61 @@ app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(admin_router, prefix="/api/admin")
+app.include_router(admin_auth_router)
 app.include_router(governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
+app.include_router(agent_sql_router, prefix="/api")
 app.include_router(catalog_v52_router)
 app.include_router(infra_router)
+# --- Fase 4: Power BI + Leonardo AI ---
+app.include_router(powerbi_router)   # prefixo já definido em powerbi_routes.py  (/api/powerbi)
+app.include_router(leonardo_router)  # prefixo já definido em leonardo_routes.py (/api/leonardo)
 
 import httpx
 from fastapi import Request
 from fastapi.responses import Response
+from datetime import datetime
 
-# Proxy for Adminer — protegido por JWT via Bearer header OU cookie 'access_token'
-# O cookie é setado automaticamente no login e permite que o iframe do painel admin
-# autentique sem precisar injetar o header Authorization manualmente.
+# ─── Dashboard Stats ──────────────────────────────────────────────────────────
+@app.get("/api/admin/dashboard/stats")
+async def dashboard_stats(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Métricas gerais do painel admin EliteCorp"""
+    try:
+        tenants = db.execute(text("SELECT COUNT(*) FROM tenants")).scalar() or 0
+    except Exception:
+        tenants = 0
+    try:
+        users = db.execute(text("SELECT COUNT(*) FROM agent_users")).scalar() or 0
+    except Exception:
+        users = 0
+    try:
+        rag_docs = db.execute(text("SELECT COUNT(*) FROM documents")).scalar() or 0
+    except Exception:
+        rag_docs = 0
+    try:
+        today = datetime.utcnow().date()
+        conversations = db.execute(
+            text("SELECT COUNT(DISTINCT session_id) FROM memories WHERE DATE(created_at) = :today"),
+            {"today": today}
+        ).scalar() or 0
+    except Exception:
+        conversations = 0
+
+    return {
+        "tenants": tenants,
+        "users": users,
+        "rag_documents": rag_docs,
+        "conversations_today": conversations,
+        "avg_response_ms": None,
+        "uptime": "100%",
+    }
+
+# Proxy for Adminer
 @app.api_route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
 async def adminer_proxy(request: Request, path: str, current_user: dict = Depends(get_current_user_flexible)):
-    # Garante que apenas administradores acessem o Adminer
     if current_user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -191,20 +251,8 @@ async def adminer_proxy(request: Request, path: str, current_user: dict = Depend
         try:
             proxy_res = await client.send(proxy_req, stream=True)
             headers = dict(proxy_res.headers)
-            
-            # Remove security headers to allow iframe embedding
-            headers.pop("x-frame-options", None)
-            headers.pop("content-security-policy", None)
-            headers.pop("X-Frame-Options", None)
-            headers.pop("Content-Security-Policy", None)
-            
-            # Remove hop-by-hop headers
-            headers.pop("transfer-encoding", None)
-            headers.pop("content-encoding", None)
-            headers.pop("content-length", None)
-            headers.pop("connection", None)
-            headers.pop("keep-alive", None)
-            
+            for h in ["x-frame-options","content-security-policy","X-Frame-Options","Content-Security-Policy","transfer-encoding","content-encoding","content-length","connection","keep-alive"]:
+                headers.pop(h, None)
             return Response(
                 content=await proxy_res.aread(),
                 status_code=proxy_res.status_code,

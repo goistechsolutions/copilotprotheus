@@ -18,8 +18,8 @@ from reportlab.lib.pagesizes import letter
 from app.services.protheus_service import execute_protheus_tool
 from app.services import report_templates as tpl
 
-# Diretório para armazenamento temporário dos relatórios gerados
-REPORTS_TMP_DIR = Path(r"C:\projeto\copilotprotheus\backend\tmp\reports")
+# Diretório para armazenamento temporário dos relatórios gerados na nuvem
+REPORTS_TMP_DIR = Path(os.getenv("REPORTS_TMP_DIR", "/tmp/copilot_reports"))
 REPORTS_TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── CONFIGURAÇÃO DE RELATÓRIOS ───────────────────────────────────

@@ -1,14 +1,50 @@
+/**
+ * FONTE ÚNICA DE VERDADE para todas as chamadas HTTP do admin-frontend.
+ * - baseURL vazia → URL relativa → Nginx interno faz proxy /api/ → backend:8000
+ * - withCredentials: true para envio automático de cookies JWT (admin_token)
+ * - HTTPS forçado quando a página roda em HTTPS (evita Mixed Content)
+ * - Interceptor de resposta 401 para redirecionar automaticamente para a tela de login
+ */
 import axios from 'axios';
 
-// Lê as credenciais do .env do Vite
-const adminUser = import.meta.env.VITE_ADMIN_USER || 'admin';
-const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
+function getSanitizedBaseUrl() {
+  let url = import.meta.env.VITE_API_BASE_URL ?? '';
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
+    url = url.replace('http://', 'https://');
+  }
+  return url;
+}
 
 const api = axios.create({
-  auth: {
-    username: adminUser,
-    password: adminPassword
-  }
+  baseURL: getSanitizedBaseUrl(),
+  withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
 });
 
+// Garante HTTPS em runtime nas requisições
+api.interceptors.request.use((config) => {
+  const base = config.baseURL || getSanitizedBaseUrl();
+  config.baseURL =
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    base.startsWith('http://')
+      ? base.replace('http://', 'https://')
+      : base;
+  return config;
+});
+
+// Intercepta respostas 401 Unauthorized para redirecionar à tela de login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/admin/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export { api, api as axios };
 export default api;

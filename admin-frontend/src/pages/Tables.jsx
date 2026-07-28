@@ -1,206 +1,170 @@
 import { useState, useEffect } from 'react';
 import axios from '../api/axios';
-import { Database, Building2, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Database, RefreshCw, CheckCircle2, AlertCircle, Search, ChevronDown } from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader';
 
 export default function Tables() {
-  const [tenants, setTenants] = useState([]);
+  const [tenants, setTenants]         = useState([]);
   const [selectedTenant, setSelectedTenant] = useState('default');
-  const [schemas, setSchemas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [schemas, setSchemas]         = useState([]);
+  const [filtered, setFiltered]       = useState([]);
+  const [search, setSearch]           = useState('');
+  const [loading, setLoading]         = useState(true);
+  const [syncing, setSyncing]         = useState(false);
   const [modulosInput, setModulosInput] = useState('SIGAFAT, SIGAFIN');
-  const [syncResult, setSyncResult] = useState(null);
+  const [syncResult, setSyncResult]   = useState(null);
 
-  
-
+  useEffect(() => { fetchTenants(); }, []);
+  useEffect(() => { if (selectedTenant) fetchSchemas(selectedTenant); }, [selectedTenant]);
   useEffect(() => {
-    fetchTenants();
-  }, []);
-
-  useEffect(() => {
-    if (selectedTenant) {
-      fetchSchemas(selectedTenant);
-    }
-  }, [selectedTenant]);
+    const q = search.toLowerCase();
+    setFiltered(q ? schemas.filter(s =>
+      s.tabela?.toLowerCase().includes(q) ||
+      s.nome?.toLowerCase().includes(q) ||
+      s.modulo?.toLowerCase().includes(q)
+    ) : schemas);
+  }, [search, schemas]);
 
   const fetchTenants = async () => {
-    try {
-      const res = await axios.get('/api/companies');
-      setTenants(res.data || []);
-    } catch (error) {
-      console.error("Erro ao carregar tenants:", error);
-    }
+    try { const res = await axios.get('/api/companies'); setTenants(res.data || []); } catch {}
   };
 
   const fetchSchemas = async (tenantId) => {
-    setLoading(true);
-    setSyncResult(null);
+    setLoading(true); setSyncResult(null);
     try {
       const res = await axios.get(`/api/admin/schemas?tenant_id=${tenantId}`);
       setSchemas(res.data.schemas || []);
-    } catch (error) {
-      console.error("Erro ao carregar schemas:", error);
-    } finally {
-      setLoading(false);
-    }
+    } catch { setSchemas([]); }
+    setLoading(false);
   };
 
   const handleSync = async () => {
-    if (!confirm(`Tem certeza que deseja sincronizar o schema do Protheus para o tenant ${selectedTenant}? Isso pode demorar alguns minutos.`)) {
-      return;
-    }
-    setSyncing(true);
-    setSyncResult(null);
-    
-    const modulosArray = modulosInput
-      .split(',')
-      .map(m => m.trim().toUpperCase())
-      .filter(m => m.length > 0);
-
+    if (!confirm(`Sincronizar schema do tenant ${selectedTenant}?`)) return;
+    setSyncing(true); setSyncResult(null);
+    const modulos = modulosInput.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
     try {
-      const res = await axios.post('/api/admin/sync-schema', { 
-        tenant_id: selectedTenant,
-        modulos: modulosArray
-      });
-      
+      const res = await axios.post('/api/admin/sync-schema', { tenant_id: selectedTenant, modulos });
       setSyncResult({ type: 'success', message: res.data.message });
       fetchSchemas(selectedTenant);
-    } catch (error) {
-      console.error("Erro ao sincronizar:", error);
-      const detail = error.response?.data?.detail || error.message;
-      setSyncResult({ type: 'error', message: `Erro ao sincronizar: ${detail}` });
-    } finally {
-      setSyncing(false);
+    } catch (e) {
+      setSyncResult({ type: 'error', message: e.response?.data?.detail || e.message });
     }
+    setSyncing(false);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Dicionário de Dados</h2>
-          <p className="text-slate-500">Sincronize as tabelas e campos permitidos diretamente do Protheus por Empresa (Tenant).</p>
-        </div>
-      </div>
+    <div>
+      <PageHeader title="Tabelas & Campos" description="Navegue pelo dicionário de dados extraído do Protheus." />
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col sm:flex-row items-center gap-4">
-        <div className="bg-brand-50 w-12 h-12 rounded-xl flex items-center justify-center shrink-0">
-          <Building2 className="text-brand-600" size={24} />
+      {/* Filtros */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8892A4]" />
+          <input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar tabela, módulo..."
+            className="w-full bg-[#161B27] border border-[#1E2535] rounded-lg pl-9 pr-4 py-2 text-white text-sm placeholder-[#8892A4]/50 focus:outline-none focus:border-[#2196F3] transition-all"
+          />
         </div>
-        <div className="flex-1 w-full">
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Selecione o Tenant (Empresa):</label>
-          <select 
-            value={selectedTenant}
-            onChange={(e) => setSelectedTenant(e.target.value)}
-            className="w-full sm:w-80 bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-2.5 transition-all"
+        <div className="relative">
+          <select
+            value={selectedTenant} onChange={e => setSelectedTenant(e.target.value)}
+            className="appearance-none bg-[#161B27] border border-[#1E2535] text-white text-sm rounded-lg pl-3 pr-8 py-2 focus:outline-none focus:border-[#2196F3] transition-all cursor-pointer"
           >
-            <option value="default">Default (Padrão Global)</option>
+            <option value="default">Default (Global)</option>
             {tenants.map(t => (
               <option key={t.id} value={t.tenant_id || t.protheus_grupo}>
-                {t.razao_social || t.name} ({t.tenant_id || t.protheus_grupo})
+                {t.razao_social || t.name}
               </option>
             ))}
           </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8892A4] pointer-events-none" />
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Sincronizar Estrutura do ERP</h3>
-        <div className="flex flex-col sm:flex-row gap-4 items-end">
-          <div className="flex-1 w-full">
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Módulos Permitidos (separados por vírgula):</label>
-            <input 
-              type="text" 
-              value={modulosInput} 
-              onChange={(e) => setModulosInput(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none uppercase font-mono transition-all text-slate-800"
-              placeholder="Ex: SIGAFAT, SIGAFIN, SIGAEST"
-            />
-            <p className="text-xs text-slate-500 mt-1">Deixe em branco para sincronizar TODOS os módulos.</p>
-          </div>
-          <button 
-            onClick={handleSync}
-            disabled={syncing || selectedTenant === 'default'}
-            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw size={18} className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Sincronizando..." : "Iniciar Sincronização"}
-          </button>
+      {/* Sync inline */}
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-4 mb-5 flex flex-col sm:flex-row items-end gap-3">
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-[#8892A4] uppercase tracking-wider mb-1.5">Módulos para sincronizar</label>
+          <input
+            value={modulosInput} onChange={e => setModulosInput(e.target.value)}
+            className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2 text-white text-sm font-mono placeholder-[#8892A4]/50 focus:outline-none focus:border-[#2196F3] transition-all uppercase"
+            placeholder="Ex: SIGAFAT, SIGAFIN, SIGAEST"
+          />
         </div>
-
-        {syncResult && (
-          <div className={`mt-4 p-4 rounded-lg flex items-start gap-3 ${syncResult.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
-            {syncResult.type === 'success' ? <CheckCircle2 size={20} className="mt-0.5 text-green-600" /> : <AlertCircle size={20} className="mt-0.5 text-red-600" />}
-            <div>
-              <h4 className="font-bold">{syncResult.type === 'success' ? 'Sucesso!' : 'Falha na Sincronização'}</h4>
-              <p className="text-sm mt-1">{syncResult.message}</p>
-            </div>
-          </div>
-        )}
+        <button
+          onClick={handleSync} disabled={syncing || selectedTenant === 'default'}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1E2535] hover:bg-[#1565C0]/30 border border-[#1E2535] hover:border-[#1565C0]/50 text-[#8892A4] hover:text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-all"
+        >
+          <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'Sincronizando...' : 'Sincronizar'}
+        </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
-        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            <Database size={18} className="text-brand-600" />
-            Estrutura Atual do Tenant
-          </h3>
-          <span className="text-xs font-semibold bg-white px-2 py-1 rounded border border-slate-200 text-slate-600 shadow-sm">
-            Total: {schemas.length} Tabelas
+      {syncResult && (
+        <div className={`mb-4 flex items-start gap-3 rounded-xl p-3.5 text-sm border ${
+          syncResult.type === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+            : 'bg-red-500/10 border-red-500/20 text-red-400'
+        }`}>
+          {syncResult.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+          <span>{syncResult.message}</span>
+        </div>
+      )}
+
+      {/* Tabela */}
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-[#1E2535] flex items-center justify-between">
+          <div className="flex items-center gap-2 text-white text-sm font-semibold">
+            <Database className="w-4 h-4 text-[#2196F3]" />
+            Estrutura do Tenant
+          </div>
+          <span className="text-xs text-[#8892A4] bg-[#0F1117] border border-[#1E2535] px-2 py-1 rounded">
+            {filtered.length} tabelas
           </span>
         </div>
-
-        {loading && (
-          <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex items-center justify-center">
-            <div className="animate-pulse font-medium text-brand-600">Carregando dicionário do Tenant...</div>
-          </div>
-        )}
-        
-        <div className="overflow-x-auto max-h-[600px]">
-          <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-slate-50 z-10 shadow-sm">
-              <tr>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Módulo</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Tabela (Chave)</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">Descrição</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-center">Campos</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 text-center">Filial?</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {schemas.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-6 py-3 text-sm font-medium text-slate-600">{s.modulo}</td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800">{s.tabela}</span>
-                      <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">{s.chave}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3 text-sm text-slate-600 truncate max-w-xs" title={s.nome}>{s.nome}</td>
-                  <td className="px-6 py-3 text-center">
-                    <span className="inline-flex items-center justify-center bg-brand-50 text-brand-700 text-xs font-bold px-2.5 py-0.5 rounded-full">
-                      {s.campos_count}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 text-center">
-                    {s.compartilhamento?.filial === 'S' 
-                      ? <span className="text-green-600 font-bold text-sm">Sim</span>
-                      : <span className="text-slate-400 text-sm">Não</span>
-                    }
-                  </td>
-                </tr>
-              ))}
-              {schemas.length === 0 && !loading && (
+        <div className="overflow-x-auto max-h-[560px]">
+          {loading ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-[#161B27] border-b border-[#1E2535]">
                 <tr>
-                  <td colSpan="5" className="px-6 py-16 text-center bg-slate-50/50">
-                    <Database size={48} className="mx-auto text-slate-300 mb-3 opacity-50" />
-                    <p className="text-slate-600 font-semibold mb-1">Nenhum dicionário sincronizado.</p>
-                  </td>
+                  {['Módulo','Tabela','Descrição','Campos','Filial'].map(h => (
+                    <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-[#8892A4] uppercase tracking-widest">{h}</th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[#1E2535]">
+                {filtered.map(s => (
+                  <tr key={s.id} className="hover:bg-[#1E2535]/50 transition-colors">
+                    <td className="px-5 py-3 text-[#8892A4] font-mono text-xs">{s.modulo}</td>
+                    <td className="px-5 py-3">
+                      <span className="text-white font-semibold font-mono">{s.tabela}</span>
+                      {s.chave && <span className="ml-2 text-[10px] text-[#8892A4] bg-[#0F1117] border border-[#1E2535] px-1.5 py-0.5 rounded">{s.chave}</span>}
+                    </td>
+                    <td className="px-5 py-3 text-[#8892A4] max-w-xs truncate" title={s.nome}>{s.nome}</td>
+                    <td className="px-5 py-3 text-center">
+                      <span className="text-xs bg-[#1565C0]/20 text-[#2196F3] px-2 py-0.5 rounded-full font-semibold">{s.campos_count}</span>
+                    </td>
+                    <td className="px-5 py-3 text-center text-xs">
+                      {s.compartilhamento?.filial === 'S'
+                        ? <span className="text-emerald-400 font-semibold">Sim</span>
+                        : <span className="text-[#8892A4]">Não</span>}
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={5} className="text-center py-16 text-[#8892A4]">
+                    <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p>Nenhuma tabela sincronizada.</p>
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

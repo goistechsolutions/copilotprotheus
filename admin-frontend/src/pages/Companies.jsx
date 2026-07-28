@@ -1,297 +1,322 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
-import { Building, Plus, Edit2, Trash2, Save, X, Search, Filter, ArrowRight, ChevronRight } from 'lucide-react';
+import {
+  Building, Plus, Edit2, Trash2, Save, X,
+  Search, ChevronRight, Globe, Lock, Loader2, Key
+} from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader';
+
+const EMPTY = {
+  cnpj:'', razao_social:'', ie:'', email:'', telefone:'', endereco:'',
+  protheus_grupo:'', protheus_empresa:'', protheus_unidade:'', protheus_filial:'',
+  protheus_ambientes:'', protheus_usuario:'', protheus_password:'',
+  protheus_rest_url:'', protheus_webapp_url:'', licenca_uso:'', status:'ativa',
+  tenant_id:''
+};
+
+function Field({ label, name, form, onChange, type='text', placeholder='', span=false, mono=false }) {
+  return (
+    <div className={span ? 'md:col-span-2' : ''}>
+      <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">{label}</label>
+      <input
+        type={type} value={form[name] || ''}
+        onChange={e => onChange(name, e.target.value)}
+        placeholder={placeholder}
+        className={`w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm placeholder-[#8892A4]/40 focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/20 transition-all ${
+          mono ? 'font-mono' : ''
+        }`}
+      />
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <div className="md:col-span-2 flex items-center gap-3 mt-2">
+      <span className="text-[#8892A4] text-[10px] font-bold uppercase tracking-[0.15em]">{children}</span>
+      <div className="flex-1 h-px bg-[#1E2535]" />
+    </div>
+  );
+}
+
+function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
+  const [form, setForm] = useState(isNew ? EMPTY : { ...company });
+  const [saving, setSaving] = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const change = (name, val) => setForm(p => ({ ...p, [name]: val }));
+
+  const save = async (e) => {
+    e.preventDefault(); setSaving(true); setErr('');
+    try {
+      if (isNew) await axios.post('/api/companies', form);
+      else       await axios.put(`/api/companies/${form.id}`, form);
+      onSaved();
+    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  const generateLicense = async () => {
+    if (!form.cnpj) { setErr('Preencha o CNPJ da empresa antes de gerar a licença.'); return; }
+    setGenLoading(true); setErr('');
+    try {
+      const exp = new Date();
+      exp.setFullYear(exp.getFullYear() + 5);
+      const expirationDate = exp.toISOString().split('T')[0];
+
+      const res = await axios.post('/api/license/generate', {
+        cnpj: form.cnpj.replace(/[^0-9]/g, '') || form.cnpj,
+        expiration_date: expirationDate,
+        plan_level: 'enterprise'
+      });
+      change('licenca_uso', res.data.token);
+    } catch (e) {
+      setErr(e.response?.data?.detail || e.message || 'Erro ao gerar licença');
+    } finally {
+      setGenLoading(false);
+    }
+  };
+
+  const f = (props) => <Field form={form} onChange={change} {...props} />;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center overflow-y-auto py-8 px-4">
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-2xl w-full max-w-2xl shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2535]">
+          <h2 className="text-white font-semibold">{isNew ? 'Nova Empresa' : 'Editar Empresa'}</h2>
+          <button onClick={onClose} className="text-[#8892A4] hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={save} className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <SectionTitle>Dados Cadastrais</SectionTitle>
+            {f({ label:'CNPJ', name:'cnpj', placeholder:'00.000.000/0001-00', mono:true })}
+            {f({ label:'IE', name:'ie', placeholder:'Inscrição Estadual' })}
+            {f({ label:'Razão Social', name:'razao_social', placeholder:'Empresa Ltda', span:true })}
+            {f({ label:'E-mail', name:'email', type:'email', placeholder:'contato@empresa.com' })}
+            {f({ label:'Telefone', name:'telefone', placeholder:'(11) 99999-9999' })}
+            {f({ label:'Endereço', name:'endereco', span:true })}
+
+            <SectionTitle>Configurações Protheus</SectionTitle>
+            <div className="md:col-span-2">
+              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Tenant Vinculado *</label>
+              <select
+                value={form.tenant_id || ''}
+                onChange={e => change('tenant_id', e.target.value)}
+                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#2196F3] transition-all"
+              >
+                <option value="">Selecione um Tenant...</option>
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>{t.tenant_name || t.name} ({t.tenant_code || t.id})</option>
+                ))}
+              </select>
+            </div>
+            {f({ label:'Grupo', name:'protheus_grupo', placeholder:'T1', mono:true })}
+            {f({ label:'Empresa', name:'protheus_empresa', placeholder:'01', mono:true })}
+            {f({ label:'Unidade', name:'protheus_unidade', placeholder:'01', mono:true })}
+            {f({ label:'Filial', name:'protheus_filial', placeholder:'0101', mono:true })}
+            {f({ label:'Ambientes', name:'protheus_ambientes', placeholder:'producao,hml', mono:true, span:true })}
+            {f({ label:'Usuário REST', name:'protheus_usuario', placeholder:'admin' })}
+            {f({ label:'Senha REST', name:'protheus_password', type:'password', placeholder: isNew ? 'Obrigatória' : 'Em branco = manter' })}
+            {f({ label:'URL REST (API)', name:'protheus_rest_url', placeholder:'http://ip:porta/rest', span:true, mono:true })}
+            {f({ label:'URL WebApp', name:'protheus_webapp_url', placeholder:'http://ip:porta/webapp', span:true, mono:true })}
+
+            <SectionTitle>Licença & Status</SectionTitle>
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider">Licença JWT</label>
+                <button type="button" onClick={generateLicense} disabled={genLoading}
+                  className="flex items-center gap-1.5 text-[10px] font-semibold text-[#2196F3] bg-[#1565C0]/15 hover:bg-[#1565C0]/25 border border-[#1565C0]/30 px-3 py-1.5 rounded-md transition-all disabled:opacity-50">
+                  {genLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
+                  Gerar Nova Licença
+                </button>
+              </div>
+              <textarea
+                value={form.licenca_uso || ''}
+                onChange={e => change('licenca_uso', e.target.value)}
+                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-xs font-mono h-20 resize-none focus:outline-none focus:border-[#2196F3] transition-all placeholder-[#8892A4]/40"
+                placeholder="Cole ou gere a licença JWT..."
+              />
+            </div>
+            <div>
+              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Status</label>
+              <select
+                value={form.status || 'ativa'}
+                onChange={e => change('status', e.target.value)}
+                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#2196F3] transition-all"
+              >
+                <option value="ativa">Ativa</option>
+                <option value="inativa">Inativa</option>
+                <option value="suspensa">Suspensa</option>
+              </select>
+            </div>
+          </div>
+
+          {err && (
+            <p className="mt-4 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2.5">{err}</p>
+          )}
+
+          <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-[#1E2535]">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-[#8892A4] hover:text-white border border-[#1E2535] hover:border-[#2196F3]/40 rounded-lg transition-all">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 text-sm bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white font-semibold rounded-lg disabled:opacity-50 transition-all">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function Companies() {
   const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
-  const [tenants, setTenants] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [formData, setFormData] = useState({});
+  const [tenants, setTenants]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState('');
+  const [modal, setModal]         = useState(null); // null | 'new' | company
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
-      const [compRes, tenRes] = await Promise.all([
+      const [c, t] = await Promise.all([
         axios.get('/api/companies'),
         axios.get('/api/tenants')
       ]);
-      setCompanies(compRes.data || []);
-      setTenants(tenRes.data || []);
-    } catch (error) {
-      console.error("Erro ao carregar dados:", error);
-    } finally {
-      setLoading(false);
-    }
+      setCompanies(Array.isArray(c.data) ? c.data : c.data?.items ?? []);
+      setTenants(Array.isArray(t.data) ? t.data : t.data?.items ?? []);
+    } catch {}
+    setLoading(false);
   };
 
-  const handleEdit = (comp) => {
-    setEditing(comp.id);
-    setFormData(comp);
+  const handleDelete = async (e, id) => {
+    e.stopPropagation();
+    if (!confirm('Excluir esta empresa?')) return;
+    try { await axios.delete(`/api/companies/${id}`); fetchData(); } catch {}
   };
 
-  const handleCreate = () => {
-    setEditing('new');
-    setFormData({
-      cnpj: '',
-      razao_social: '',
-      protheus_grupo: '',
-      tenant_id: '',
-      protheus_filial: '',
-      protheus_usuario: '',
-      protheus_password: '',
-      protheus_rest_url: '',
-      protheus_webapp_url: '',
-      licenca_uso: '',
-      status: 'ativa'
-    });
-  };
+  const filtered = companies.filter(c => {
+    const q = search.toLowerCase();
+    return !q || c.razao_social?.toLowerCase().includes(q) || c.cnpj?.includes(q);
+  });
 
-  const handleSave = async () => {
-    try {
-      if (editing === 'new') {
-        await axios.post('/api/companies', formData);
-      } else {
-        await axios.put(`/api/companies/${editing}`, formData);
-      }
-      setEditing(null);
-      fetchData();
-    } catch (error) {
-      alert("Erro ao salvar: " + (error.response?.data?.detail || error.message));
-    }
-  };
-
-  const handleGenerateLicense = async () => {
-    if (!formData.cnpj) {
-      alert("É necessário preencher o CNPJ para gerar a licença.");
-      return;
-    }
-    if (!confirm("Isso irá gerar uma nova licença JWT para esta empresa válida até 2030. Continuar?")) return;
-    
-    const adminKey = window.prompt("Por favor, informe a Chave Admin (X-Admin-Key) para gerar a licença:");
-    if (!adminKey) return; // cancelou
-
-    try {
-      const res = await axios.post('/api/license/generate', {
-        cnpj: formData.cnpj,
-        expiration_date: '2030-12-31',
-        plan_level: 'enterprise'
-      }, {
-        headers: { 'X-Admin-Key': adminKey }
-      });
-      setFormData({...formData, licenca_uso: res.data.token});
-      alert("Licença gerada com sucesso! Não se esqueça de Salvar a empresa.");
-    } catch (error) {
-      alert("Erro ao gerar licença: " + (error.response?.data?.detail || error.message));
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (confirm("Tem certeza que deseja excluir esta empresa?")) {
-      try {
-        await axios.delete(`/api/companies/${id}`);
-        fetchData();
-      } catch (error) {
-        alert("Erro ao excluir.");
-      }
-    }
-  };
-
-  if (loading) return <div className="p-8 text-slate-500 flex justify-center"><div className="animate-pulse font-medium text-brand-600">Carregando...</div></div>;
+  const initials = (c) => (c.razao_social || c.name || 'CP').slice(0, 2).toUpperCase();
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Empresas SaaS</h2>
-          <p className="text-slate-500">Gerenciamento de empresas (Tenants) conectadas ao ambiente multitenant.</p>
-        </div>
-        <button onClick={handleCreate} className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-2.5 px-5 rounded-lg flex items-center gap-2 transition-colors shadow-sm shrink-0">
-          <Plus size={18} /> Nova Empresa
-        </button>
+    <div>
+      <PageHeader
+        title="Empresas SaaS"
+        description="Empresas conectadas ao ambiente multitenant Protheus."
+        actions={
+          <button onClick={() => setModal('new')}
+            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white text-sm font-medium rounded-lg transition-all shadow-lg shadow-[#1565C0]/20">
+            <Plus className="w-4 h-4" /> Nova Empresa
+          </button>
+        }
+      />
+
+      {/* Search */}
+      <div className="relative mb-4 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8892A4]" />
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por nome ou CNPJ..."
+          className="w-full bg-[#161B27] border border-[#1E2535] rounded-lg pl-9 pr-4 py-2 text-white text-sm placeholder-[#8892A4]/50 focus:outline-none focus:border-[#2196F3] transition-all"
+        />
       </div>
-      
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        {editing ? (
-          <div className="p-6 bg-slate-50/50 border-b border-slate-200">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">{editing === 'new' ? 'Nova Empresa' : 'Editar Empresa'}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-              <div className="col-span-1 md:col-span-2 text-sm font-semibold text-slate-800 mt-2 mb-1 border-b border-slate-100 pb-2">Dados Cadastrais</div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">CNPJ</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.cnpj || ''} onChange={e => setFormData({...formData, cnpj: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Inscrição Estadual (IE)</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.ie || ''} onChange={e => setFormData({...formData, ie: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Razão Social</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.razao_social || ''} onChange={e => setFormData({...formData, razao_social: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">E-mail</label>
-                <input type="email" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Telefone</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.telefone || ''} onChange={e => setFormData({...formData, telefone: e.target.value})} />
-              </div>
-              <div className="col-span-1 md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Endereço Completo</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.endereco || ''} onChange={e => setFormData({...formData, endereco: e.target.value})} />
-              </div>
 
-              <div className="col-span-1 md:col-span-2 text-sm font-semibold text-slate-800 mt-4 mb-1 border-b border-slate-100 pb-2">Configurações Protheus & Integração</div>
-              
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tenant Vinculado (Obrigatório)</label>
-                <select className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.tenant_id || ''} onChange={e => setFormData({...formData, tenant_id: e.target.value})}>
-                  <option value="">Selecione um Tenant...</option>
-                  {tenants.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Grupo (Legado)</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_grupo || ''} onChange={e => setFormData({...formData, protheus_grupo: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Empresa</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_empresa || ''} onChange={e => setFormData({...formData, protheus_empresa: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Unidade</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_unidade || ''} onChange={e => setFormData({...formData, protheus_unidade: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Filial</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_filial || ''} onChange={e => setFormData({...formData, protheus_filial: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Ambientes (ex: producao,hml)</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_ambientes || ''} onChange={e => setFormData({...formData, protheus_ambientes: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuário REST Protheus</label>
-                <input type="text" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_usuario || ''} onChange={e => setFormData({...formData, protheus_usuario: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Senha REST Protheus</label>
-                <input type="password" placeholder={editing === 'new' ? "Obrigatório" : "Deixe em branco p/ manter a atual"} className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_password || ''} onChange={e => setFormData({...formData, protheus_password: e.target.value})} />
-              </div>
-              <div className="col-span-1 md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">URL Portal REST (API)</label>
-                <input type="text" placeholder="http://ip:porta/rest" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_rest_url || ''} onChange={e => setFormData({...formData, protheus_rest_url: e.target.value})} />
-              </div>
-              <div className="col-span-1 md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">URL WebApp (Opcional - p/ Atalhos)</label>
-                <input type="text" placeholder="http://ip:porta/webapp" className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.protheus_webapp_url || ''} onChange={e => setFormData({...formData, protheus_webapp_url: e.target.value})} />
-              </div>
-              <div className="col-span-1 md:col-span-2">
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Licença de Uso (JWT)</label>
-                  <button onClick={handleGenerateLicense} className="text-[10px] uppercase font-bold tracking-wider bg-brand-50 hover:bg-brand-100 text-brand-700 px-3 py-1.5 rounded-md transition-colors border border-brand-200">
-                    Gerar Nova Licença
-                  </button>
-                </div>
-                <textarea className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-mono h-24 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" value={formData.licenca_uso || ''} onChange={e => setFormData({...formData, licenca_uso: e.target.value})} placeholder="Cole a licença JWT aqui ou clique no botão acima para gerar uma nova..." />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={handleSave} className="flex items-center gap-1.5 bg-brand-600 text-white hover:bg-brand-700 px-5 py-2.5 rounded-lg font-medium transition-colors shadow-sm"><Save size={18} /> Salvar</button>
-              <button onClick={() => setEditing(null)} className="flex items-center gap-1.5 bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 px-5 py-2.5 rounded-lg font-medium transition-colors shadow-sm"><X size={18} /> Cancelar</button>
-            </div>
-          </div>
-        ) : (
-          <div className="p-5 border-b border-slate-100 bg-white flex justify-between items-center">
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Buscar por nome ou CNPJ..." 
-                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 w-64 md:w-80 transition-all"
-              />
-            </div>
-            <button className="text-slate-500 hover:text-brand-600 p-2 rounded-lg hover:bg-brand-50 transition-colors border border-transparent hover:border-brand-100">
-              <Filter size={18} />
-            </button>
-          </div>
-        )}
-
-        <div className="p-4">
-          <div className="flex flex-col space-y-2">
-            {companies.map(c => (
-              <div 
-                key={c.id} 
-                onClick={() => navigate(`/companies/${c.id}`)}
-                className="group flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-brand-300 hover:shadow-md cursor-pointer transition-all duration-200"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center font-bold text-sm border border-brand-100 group-hover:bg-brand-600 group-hover:text-white transition-colors">
-                    {c.name ? c.name.substring(0, 2).toUpperCase() : c.razao_social?.substring(0, 2).toUpperCase() || 'CP'}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-800 group-hover:text-brand-700 transition-colors">{c.razao_social}</h3>
-                    <p className="text-sm text-slate-500">Tenant: {c.protheus_grupo} • CNPJ: {c.cnpj || 'Não informado'}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  {c.status === 'ativa' ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
-                      Ativo
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
-                      Inativo
-                    </span>
-                  )}
-                  
-                  <div className="flex items-center gap-1 ml-3 border-l border-slate-200 pl-3">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleEdit(c); }}
-                      className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                      title="Editar Empresa"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Excluir Empresa"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-
-                  <div className="text-slate-300 group-hover:text-brand-600 transition-colors ml-1">
-                    <ChevronRight size={20} />
-                  </div>
-                </div>
-              </div>
-            ))}
-            
-            {companies.length === 0 && (
-              <div className="py-16 flex flex-col items-center justify-center text-center">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                  <Building size={32} className="text-slate-300" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-1">Nenhuma empresa encontrada</h3>
-                <p className="text-slate-500 max-w-sm">
-                  Não há empresas cadastradas no momento. Clique no botão "Nova Empresa" acima para criar o primeiro tenant SaaS.
-                </p>
-              </div>
-            )}
-          </div>
+      {loading ? (
+        <div className="flex items-center justify-center h-40">
+          <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
         </div>
-      </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(c => (
+            <div key={c.id}
+              onClick={() => navigate(`/companies/${c.id}`)}
+              className="group flex items-center justify-between bg-[#161B27] border border-[#1E2535] hover:border-[#2196F3]/40 rounded-xl px-4 py-3 cursor-pointer transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#1565C0]/30 to-[#2196F3]/20 border border-[#1565C0]/30 flex items-center justify-center shrink-0">
+                  <span className="text-[#60A5FA] text-xs font-bold">{initials(c)}</span>
+                </div>
+                <div>
+                  <div className="text-white text-sm font-medium group-hover:text-[#60A5FA] transition-colors">{c.razao_social}</div>
+                  <div className="text-[#8892A4] text-xs">
+                    Grupo: <span className="font-mono">{c.protheus_grupo || '—'}</span>
+                    {c.cnpj && <> · CNPJ: <span className="font-mono">{c.cnpj}</span></>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {c.protheus_rest_url && (
+                  <span className="hidden sm:flex items-center gap-1 text-[#2196F3] text-xs">
+                    <Globe className="w-3 h-3" /> REST
+                  </span>
+                )}
+                {c.licenca_uso && (
+                  <span className="hidden sm:flex items-center gap-1 text-emerald-400 text-xs">
+                    <Lock className="w-3 h-3" /> Licença
+                  </span>
+                )}
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  c.status === 'ativa'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-[#1E2535] text-[#8892A4] border-[#1E2535]'
+                }`}>
+                  {c.status === 'ativa' ? 'Ativa' : c.status || 'Inativa'}
+                </span>
+                <button
+                  onClick={e => { e.stopPropagation(); setModal(c); }}
+                  className="p-1.5 text-[#8892A4] hover:text-[#2196F3] hover:bg-[#1565C0]/10 rounded-md transition-all">
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={e => handleDelete(e, c.id)}
+                  className="p-1.5 text-[#8892A4] hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                <ChevronRight className="w-4 h-4 text-[#8892A4] group-hover:text-[#2196F3] transition-colors" />
+              </div>
+            </div>
+          ))}
+
+          {filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-14 h-14 bg-[#161B27] border border-[#1E2535] rounded-full flex items-center justify-center mb-4">
+                <Building className="w-7 h-7 text-[#1E2535]" />
+              </div>
+              <p className="text-white text-sm font-medium mb-1">Nenhuma empresa encontrada</p>
+              <p className="text-[#8892A4] text-xs max-w-xs">
+                {search ? 'Tente outro termo de busca.' : 'Clique em "Nova Empresa" para começar.'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {modal && (
+        <CompanyModal
+          company={modal === 'new' ? null : modal}
+          isNew={modal === 'new'}
+          tenants={tenants}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); fetchData(); }}
+        />
+      )}
     </div>
   );
 }

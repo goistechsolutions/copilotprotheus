@@ -29,12 +29,33 @@ export default function AgentRoles() {
 
   const fetchRoles = async () => {
     try {
-      const [resRoles, resTenants] = await Promise.all([
+      const [resRoles, resTenants, resCompanies] = await Promise.all([
         axios.get('/api/admin/agent-roles'),
-        axios.get('/api/tenants')
+        axios.get('/api/tenants').catch(() => ({ data: [] })),
+        axios.get('/api/companies').catch(() => ({ data: [] }))
       ]);
       setRoles(resRoles.data || []);
-      setTenants(resTenants.data || []);
+
+      const list = [];
+      const seen = new Set();
+
+      (resTenants.data || []).forEach(t => {
+        const id = t.id || t.tenant_code;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          list.push({ id, label: t.tenant_name || t.name || t.tenant_code || id });
+        }
+      });
+
+      (resCompanies.data || []).forEach(c => {
+        const id = c.tenant_id || String(c.id);
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          list.push({ id, label: c.razao_social || c.company_name || id });
+        }
+      });
+
+      setTenants(list);
     } catch (error) {
       console.error("Erro ao carregar papéis:", error);
     } finally {
@@ -134,7 +155,7 @@ export default function AgentRoles() {
                   <option value="">Selecione uma Empresa...</option>
                   <option value="default">Global (Padrão)</option>
                   {tenants.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
+                    <option key={t.id} value={t.id}>{t.label || t.name || t.id} ({t.id})</option>
                   ))}
                 </select>
               </div>

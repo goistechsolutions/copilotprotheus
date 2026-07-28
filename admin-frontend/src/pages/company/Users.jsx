@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../../api/axios';
 import { Plus, Edit2, Trash2, Shield, User as UserIcon, AlertCircle, X, Check } from 'lucide-react';
 
 export default function CompanyUsers({ company }) {

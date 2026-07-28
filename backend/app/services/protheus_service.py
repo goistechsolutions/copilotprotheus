@@ -9,7 +9,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("app.protheus")
 
-from app.models.knowledge import Tenant, Company, Environment, Connector, TenantConnector
+from app.models.knowledge import Tenant, Company, Environment, Connector
 from app.core.security import decrypt_password
 from app.db.database import SessionLocal
 
@@ -20,10 +20,9 @@ def get_tenant_config(tenant_id: str) -> dict:
     Busca as credenciais do Protheus do tenant_id no banco de dados e as decodifica.
     Consulta na seguinte ordem de prioridade:
     1. Connector (table connectors) / Environment
-    2. TenantConnector (table tenant_connectors)
-    3. Tenant (table tenants) - protheus_rest_url configurado no cadastro de Clientes
-    4. Company (table companies) - protheus_rest_url configurada na Empresa vinculada
-    5. Fallback nas variáveis de ambiente globais se tenant for default ou em fallback
+    2. Tenant (table tenants) - protheus_rest_url configurado no cadastro de Clientes
+    3. Company (table companies) - protheus_rest_url configurada na Empresa vinculada
+    4. Fallback nas variáveis de ambiente globais se tenant for default ou em fallback
     """
     db = SessionLocal()
     try:
@@ -33,7 +32,7 @@ def get_tenant_config(tenant_id: str) -> dict:
             
         tenant_key = str(tenant.id if tenant else tenant_id)
 
-        # 1. Busca na tabela Connector (Fase 3/4)
+        # 1. Busca na tabela Connector (V4)
         connector = db.query(Connector).filter(
             (Connector.tenant_id == tenant_key) | (Connector.tenant_id == str(tenant_id)),
             Connector.connector_type.ilike('%protheus%'),
@@ -72,30 +71,17 @@ def get_tenant_config(tenant_id: str) -> dict:
                     "auth_mode": connector.auth_type or "basic"
                 }
 
-        # 2. Busca na tabela TenantConnector
-        t_conn = db.query(TenantConnector).filter(
-            (TenantConnector.tenant_id == tenant_key) | (TenantConnector.tenant_id == str(tenant_id)),
-            TenantConnector.is_active == True
-        ).first()
-        
-        if t_conn and t_conn.rest_url:
-            pwd = ""
-            if t_conn.password_hash:
-                pwd = decrypt_password(t_conn.password_hash)
-            return {
-                "rest_url": t_conn.rest_url.rstrip("/"),
-                "webapp_url": "",
-                "vscode_server_url": "",
-                "user": t_conn.username or "",
-                "password": pwd,
-                "auth_mode": t_conn.auth_mode or "basic"
-            }
-
-        # 3. Busca nas configurações diretas no cadastro do Cliente (tabela tenants)
+        # 2. Busca nas configurações diretas no cadastro do Cliente (tabela tenants)
         if tenant and tenant.protheus_rest_url:
             pwd = ""
-            if tenant.encrypted_protheus_password:
-                pwd = decrypt_password(tenant.encrypted_protheus_password)
+            enc_pwd = tenant.encrypted_protheus_password or getattr(tenant, 'protheus_password', None)
+            if enc_pwd:
+                try:
+                    pwd = decrypt_password(enc_pwd)
+                except Exception:
+                    pwd = enc_pwd
+                if not pwd:
+                    pwd = enc_pwd
             return {
                 "rest_url": tenant.protheus_rest_url.rstrip("/"),
                 "webapp_url": "",
@@ -105,7 +91,7 @@ def get_tenant_config(tenant_id: str) -> dict:
                 "auth_mode": tenant.auth_mode or "basic"
             }
 
-        # 4. Busca nas configurações da Empresa associada (tabela companies)
+        # 3. Busca nas configurações da Empresa associada (tabela companies)
         company = db.query(Company).filter(
             (Company.tenant_id == tenant_key) | (Company.tenant_id == str(tenant_id)),
             Company.protheus_rest_url != None,
@@ -114,8 +100,15 @@ def get_tenant_config(tenant_id: str) -> dict:
         
         if company and company.protheus_rest_url:
             pwd = ""
-            if company.protheus_password:
-                pwd = decrypt_password(company.protheus_password)
+            enc_pwd = getattr(company, 'encrypted_protheus_password', None) or getattr(company, 'protheus_password', None)
+            if enc_pwd:
+                try:
+                    pwd = decrypt_password(enc_pwd)
+                except Exception as e:
+                    logger.error(f"Erro ao decriptar senha da empresa {company.id}: {e}")
+                    pwd = enc_pwd
+                if not pwd:
+                    pwd = enc_pwd
             return {
                 "rest_url": company.protheus_rest_url.rstrip("/"),
                 "webapp_url": company.protheus_webapp_url or "",
@@ -125,7 +118,7 @@ def get_tenant_config(tenant_id: str) -> dict:
                 "auth_mode": "basic"
             }
 
-        # 5. Fallback nas variáveis de ambiente (.env / Globais)
+        # 4. Fallback nas variáveis de ambiente (.env / Globais)
         if str(tenant_id).lower() in ["default", "admin", "1", tenant_key.lower()] and settings.protheus_rest_url:
             return {
                 "rest_url": settings.protheus_rest_url.rstrip("/"),
@@ -286,10 +279,8 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
             ).all()
             
             upper_query = cQuery.upper()
-            # Simple check: if any blocked table name is exactly in the query
             for (ptable,) in blocked_tables:
                 if ptable and len(ptable) >= 3:
-                    # Regex para garantir que seja palavra inteira
                     if re.search(r'\b' + re.escape(ptable.upper()) + r'\b', upper_query):
                         raise Exception(f"Acesso negado: A tabela {ptable} nao esta liberada para este tenant.")
         
@@ -380,7 +371,7 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     
     try:
         if endpoint.lower() == "queryrest" or endpoint.lower().endswith("/queryrest"):
-            cQuery = query_params.get("cQuery", "")
+            cQuery = query_params.get("cQuery", "") or query_params.get("query", "") or query_params.get("cquery", "")
             if cQuery:
                 try:
                     _enforce_query_rules(cQuery, tenant_id, context)
@@ -390,10 +381,14 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
             
             start_t = time.time()
             try:
-                res_text = await _execute_http_post_with_retry(url, query_params, headers)
+                # Tenta GET primeiro com cQuery via Query String (padrão canônico do Protheus REST em Cloud)
+                try:
+                    res_text = await _execute_http_get_with_retry(url, {"cQuery": cQuery}, headers)
+                except Exception as get_err:
+                    logger.warning(f"QueryRest GET falhou ({get_err}). Tentando POST fallback...")
+                    res_text = await _execute_http_post_with_retry(url, query_params, headers)
                 elapsed = int((time.time() - start_t) * 1000)
                 
-                # Check records
                 records = 0
                 try:
                     parsed = json.loads(res_text)

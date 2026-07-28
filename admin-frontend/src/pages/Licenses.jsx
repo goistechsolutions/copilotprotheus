@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 import { Key, Copy, CheckCircle } from 'lucide-react';
 
 export default function Licenses() {

@@ -1,95 +1,127 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Activity, Play, Terminal, ShieldAlert, ShieldCheck, Loader2 } from 'lucide-react';
+import { ShieldCheck, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader';
 
 export default function QueryGuardPage() {
-  const [json, setJson] = useState(`{
-  "tenant_id": "00000000-0000-0000-0000-000000000000",
-  "contract_id": "00000000-0000-0000-0000-000000000000",
-  "request_id": "REQ-TEST-1",
-  "tables_used": [],
-  "fields_used": [],
-  "sql_preview": "SELECT 1 FROM DUAL WHERE D_E_L_E_T_ = ' '"
-}`);
-  
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [rules, setRules]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+  const [testQuery, setTestQuery] = useState('');
+  const [testResult, setTestResult] = useState(null);
+  const [testing, setTesting] = useState(false);
 
-  const validate = async () => {
-    setLoading(true);
-    setError('');
-    setResult(null);
+  const load = async () => {
+    setLoading(true); setError('');
     try {
-      const { data } = await api.post('/api/agent/validate-query', JSON.parse(json));
-      setResult(data);
+      const { data } = await api.get('/api/admin/query-guard/rules');
+      setRules(data || []);
     } catch (e) {
-      setError(e.response?.data?.detail || e.message || String(e));
+      setError(e.response?.data?.detail || 'Erro ao carregar regras');
     }
     setLoading(false);
   };
 
+  useEffect(() => { load(); }, []);
+
+  const testGuard = async () => {
+    if (!testQuery.trim()) return;
+    setTesting(true); setTestResult(null);
+    try {
+      const { data } = await api.post('/api/admin/query-guard/test', { query: testQuery });
+      setTestResult(data);
+    } catch (e) {
+      setTestResult({ allowed: false, reason: e.response?.data?.detail || 'Erro no teste' });
+    }
+    setTesting(false);
+  };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center">
-            <Activity className="w-6 h-6 mr-3 text-brand-600" />
-            Query Guard (Simulador)
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Valide a segurança e o escopo do SQL gerado pelo Agente.
-          </p>
+    <div>
+      <PageHeader
+        title="Query Guard"
+        description="Regras de validação e bloqueio de queries SQL geradas pelo agente."
+        action={<button onClick={load} className="flex items-center gap-2 px-4 py-2 bg-[#1E2535] hover:bg-[#2196F3]/20 border border-[#1E2535] hover:border-[#2196F3]/40 text-[#8892A4] hover:text-white text-sm rounded-lg transition-all"><RefreshCw className="w-4 h-4" />Atualizar</button>}
+      />
+
+      {/* Tester */}
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-5 mb-5">
+        <p className="text-[#8892A4] text-xs uppercase font-semibold tracking-wider mb-3">Testar uma Query</p>
+        <div className="flex gap-3">
+          <input
+            value={testQuery} onChange={e => setTestQuery(e.target.value)}
+            placeholder="SELECT * FROM SA1010 WHERE ..."
+            className="flex-1 bg-[#0F1117] border border-[#1E2535] rounded-lg px-4 py-2.5 text-white text-sm font-mono placeholder-[#8892A4]/50 focus:outline-none focus:border-[#2196F3] transition-all"
+          />
+          <button onClick={testGuard} disabled={testing || !testQuery.trim()}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#1565C0] hover:bg-[#1976D2] text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-all">
+            <ShieldCheck className="w-4 h-4" />
+            {testing ? 'Testando...' : 'Testar'}
+          </button>
         </div>
+        {testResult && (
+          <div className={`mt-3 flex items-start gap-2 text-sm rounded-lg px-4 py-3 border ${
+            testResult.allowed
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+              : 'bg-red-500/10 border-red-500/20 text-red-400'
+          }`}>
+            {testResult.allowed ? <CheckCircle2 className="w-4 h-4 mt-0.5" /> : <AlertCircle className="w-4 h-4 mt-0.5" />}
+            <div>
+              <p className="font-semibold">{testResult.allowed ? 'Query Permitida' : 'Query Bloqueada'}</p>
+              {testResult.reason && <p className="text-xs mt-0.5 opacity-80">{testResult.reason}</p>}
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col lg:flex-row">
-        <div className="flex-1 p-6 border-r border-slate-200">
-          <div className="flex justify-end mb-4">
-            <button 
-              onClick={validate}
-              disabled={loading}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-brand-600 hover:bg-brand-700 shadow-sm disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
-              Executar Interceptor
-            </button>
+      {/* Regras */}
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-[#1E2535] flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-[#2196F3]" />
+          <span className="text-white text-sm font-semibold">Regras Ativas ({rules.length})</span>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
           </div>
-          <textarea 
-            rows="16" 
-            value={json} 
-            onChange={e => setJson(e.target.value)} 
-            className="w-full font-mono text-sm rounded-lg border-slate-300 shadow-sm p-4 border bg-slate-900 text-blue-300"
-            spellCheck="false"
-          />
-        </div>
-
-        <div className="w-full lg:w-1/3 bg-slate-50 p-6 flex flex-col">
-          <h3 className="text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Relatório</h3>
-          {error && (
-            <div className="rounded-xl bg-red-50 p-4 border border-red-200 shadow-sm text-sm text-red-700">{error}</div>
-          )}
-          {result && (
-            <div className="space-y-4">
-              {result.allowed ? (
-                <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-200 flex items-start">
-                  <ShieldCheck className="w-6 h-6 text-emerald-500 mr-3 flex-shrink-0" />
-                  <div>
-                    <h4 className="text-sm font-bold text-emerald-900">Aprovada</h4>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-xl bg-rose-50 p-4 border border-rose-200 flex items-start">
-                  <ShieldAlert className="w-6 h-6 text-rose-500 mr-3 flex-shrink-0" />
-                  <div>
-                    <h4 className="text-sm font-bold text-rose-900">Bloqueada</h4>
-                    <p className="text-sm text-rose-700 mt-1">{result.blocked_reason}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        ) : error ? (
+          <div className="flex items-center gap-2 text-red-400 text-sm px-5 py-10">
+            <AlertCircle className="w-4 h-4" />{error}
+          </div>
+        ) : rules.length === 0 ? (
+          <div className="text-center py-16 text-[#8892A4]">
+            <ShieldCheck className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p>Nenhuma regra configurada.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="border-b border-[#1E2535]">
+              <tr>
+                {['Tipo','Padrão / Regra','Descrição','Ação'].map(h => (
+                  <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-[#8892A4] uppercase tracking-widest">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1E2535]">
+              {rules.map((r, i) => (
+                <tr key={i} className="hover:bg-[#1E2535]/50 transition-colors">
+                  <td className="px-5 py-3">
+                    <span className="text-xs bg-[#0F1117] border border-[#1E2535] text-[#8892A4] px-2 py-0.5 rounded font-mono">{r.type || r.rule_type}</span>
+                  </td>
+                  <td className="px-5 py-3 font-mono text-white text-xs">{r.pattern || r.value}</td>
+                  <td className="px-5 py-3 text-[#8892A4] text-xs">{r.description || '—'}</td>
+                  <td className="px-5 py-3">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                      r.action === 'block'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    }`}>{r.action || 'warn'}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
