@@ -455,17 +455,25 @@ async def sync_schema(
         .all()
     )
 
+    fallback_num_map = {
+        "SIGAATF": "01", "SIGACOM": "02", "SIGAEST": "04", "SIGAFAT": "05",
+        "SIGAFIN": "06", "SIGAGPE": "07", "SIGAFIS": "09", "SIGAPON": "16",
+        "SIGATMK": "31", "SIGACTB": "34", "SIGAADV": "34", "SIGAMNT": "43", "SIGAJURI": "76",
+    }
+
     mod_codes_list = set()
     code_to_name   = {}
     for m in db_mods:
-        num = m.module_name.strip()
-        mod_codes_list.add(num)
-        code_to_name[num] = m.module_code
+        code_key = m.module_code.strip().upper()
+        num = fallback_num_map.get(code_key) or (m.module_name.strip() if m.module_name and m.module_name.isdigit() else "05")
         if num.isdigit():
             v = int(num)
             mod_codes_list.update([str(v), f"{v:02d}"])
             code_to_name[str(v)] = m.module_code
             code_to_name[f"{v:02d}"] = m.module_code
+        else:
+            mod_codes_list.add(num)
+            code_to_name[num] = m.module_code
 
     if not mod_codes_list:
         raise HTTPException(

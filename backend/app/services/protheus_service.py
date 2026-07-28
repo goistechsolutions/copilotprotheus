@@ -94,8 +94,12 @@ def get_tenant_config(tenant_id: str) -> dict:
         
         if company and company.protheus_rest_url:
             pwd = ""
-            if company.protheus_password:
-                pwd = decrypt_password(company.protheus_password)
+            enc_pwd = getattr(company, 'encrypted_protheus_password', None) or getattr(company, 'protheus_password', None)
+            if enc_pwd:
+                try:
+                    pwd = decrypt_password(enc_pwd)
+                except Exception as e:
+                    logger.error(f"Erro ao decriptar senha da empresa {company.id}: {e}")
             return {
                 "rest_url": company.protheus_rest_url.rstrip("/"),
                 "webapp_url": company.protheus_webapp_url or "",
