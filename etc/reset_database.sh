@@ -53,12 +53,13 @@ run_psql_file() {
 echo "==> 1/5 Backup de segurança do banco atual (pre_reset_${TIMESTAMP}.sql)"
 run_pg_dump "$BACKUP_DIR/pre_reset_${TIMESTAMP}.sql" || true
 
-echo "==> 2/5 Dropando todos os schemas de tenant existentes (tenant_*)"
+echo "==> 2/5 Dropando todos os schemas de tenant existentes"
 SCHEMAS=""
+IF_QUERY="SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('public', 'information_schema', 'pg_catalog', 'pg_toast', 'default') AND schema_name NOT LIKE 'pg_%';"
 if command -v psql >/dev/null 2>&1; then
-  SCHEMAS=$(psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%';" 2>/dev/null || true)
+  SCHEMAS=$(psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -t -c "$IF_QUERY" 2>/dev/null || true)
 elif command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
-  SCHEMAS=$(docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%';" 2>/dev/null || true)
+  SCHEMAS=$(docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "$IF_QUERY" 2>/dev/null || true)
 fi
 
 for schema in $SCHEMAS; do
@@ -69,12 +70,17 @@ for schema in $SCHEMAS; do
   fi
 done
 
-echo "==> 3/5 Limpando schema public (tabelas legadas do modelo antigo)"
+echo "==> 3/5 Limpando schema public (removendo tabelas legadas do modelo antigo)"
 run_psql_cmd "
   DROP TABLE IF EXISTS
-    tenants, companies, tenant_dictionary_tables, tenant_dictionary_fields,
-    tenant_module_contracts, company_modules, agent_users, api_usage_logs,
-    query_usage_counters, agent_query_audit, license_plans, tenant_contracts
+    public.dictionary_tables, public.dictionary_fields, public.dictionary_indexes, public.dictionary_groups,
+    public.tenant_dictionary_sources, public.tenant_table_permissions, public.tenant_field_permissions,
+    public.tenant_allowed_tables, public.tenant_allowed_fields, public.tenant_dictionary_tables,
+    public.tenant_dictionary_fields, public.tenant_dictionary_indexes, public.dictionary_snapshots,
+    public.company_modules, public.agent_roles, public.agent_users, public.api_usage_logs,
+    public.query_usage_counters, public.agent_query_audit, public.license_plans, public.tenant_contracts,
+    public.tenants, public.companies, public.tenant_registry, public.plans, public.platform_admins,
+    public.protheus_modules_master, public.platform_audit_log
   CASCADE;
 "
 

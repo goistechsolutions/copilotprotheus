@@ -74,6 +74,12 @@ def ensure_public_tables(db):
         "CREATE TABLE IF NOT EXISTS public.audit_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100), company_id INT, user_id VARCHAR(100), module_name VARCHAR(80) NOT NULL, action_name VARCHAR(120) NOT NULL, target_type VARCHAR(80), target_id VARCHAR(120), request_id VARCHAR(120), details_json JSONB, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);"
     ]
 
+    try:
+        db.execute(text("DROP TABLE IF EXISTS public.tenant_dictionary_sources, public.dictionary_tables, public.dictionary_fields, public.dictionary_indexes, public.dictionary_groups, public.tenant_table_permissions, public.tenant_field_permissions, public.tenant_allowed_tables, public.tenant_allowed_fields, public.tenant_dictionary_tables, public.tenant_dictionary_fields, public.tenant_dictionary_indexes, public.dictionary_snapshots CASCADE"))
+        if hasattr(db, "commit"): db.commit()
+    except Exception:
+        if hasattr(db, "rollback"): db.rollback()
+
     for q in public_queries:
         try:
             db.execute(text(q))
