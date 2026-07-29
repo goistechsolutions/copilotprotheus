@@ -266,8 +266,11 @@ class ProtheusModuleMaster(Base):
     __table_args__ = {'schema': 'public'}
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    module_code = Column(String(30),  nullable=False, unique=True, index=True)
-    module_name = Column(String(150), nullable=False)
+    module_code = Column(String(30),  nullable=True, unique=True, index=True)
+    module_name = Column(String(150), nullable=True)
+    mod_code    = Column(String(30),  nullable=True, unique=True)
+    mod_name    = Column(String(150), nullable=True)
+    description = Column(Text,        nullable=True)
     source_name = Column(String(60),  nullable=False, default='SYS_USR_MODULE')
     active      = Column(Boolean,     nullable=False, default=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())

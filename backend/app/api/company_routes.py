@@ -291,6 +291,72 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
     return comp
 
 
+def sync_company_into_tenant_schema(db: Session, comp: Company):
+    import re
+    from sqlalchemy import text
+    from app.db.database import ensure_tenant_tables
+    
+    tenant_code = str(comp.tenant_id or comp.company_code or comp.cnpj or "default")
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
+    if not clean_tenant or clean_tenant == "public":
+        return
+
+    try:
+        ensure_tenant_tables(db, clean_tenant)
+        
+        c_code = comp.protheus_empresa or comp.company_code or "01"
+        b_code = comp.protheus_filial or comp.protheus_branch or "0101"
+        c_name = comp.razao_social or comp.company_name or "Empresa"
+        c_env  = comp.protheus_ambientes or comp.protheus_env or "producao"
+        c_rest = comp.protheus_rest_url or ""
+        c_app  = comp.protheus_webapp_url or ""
+        c_user = comp.protheus_usuario or ""
+        c_pass = comp.encrypted_protheus_password or ""
+
+        upsert_company_info = text(f"""
+            INSERT INTO "{clean_tenant}".company_info (
+                company_code, branch_code, company_name, environment,
+                webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
+            ) VALUES (
+                :c_code, :b_code, :c_name, :c_env,
+                :c_app, :c_rest, :c_user, :c_pass, 'basic', 'active'
+            ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
+                company_name = EXCLUDED.company_name,
+                environment = EXCLUDED.environment,
+                webapp_url = EXCLUDED.webapp_url,
+                protheus_rest_url = EXCLUDED.protheus_rest_url,
+                protheus_usuario = EXCLUDED.protheus_usuario,
+                encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
+                updated_at = NOW();
+        """)
+        db.execute(upsert_company_info, {
+            "c_code": c_code, "b_code": b_code, "c_name": c_name, "c_env": c_env,
+            "c_app": c_app, "c_rest": c_rest, "c_user": c_user, "c_pass": c_pass
+        })
+
+        upsert_public_tenant = text("""
+            INSERT INTO public.tenants (
+                id, tenant_code, tenant_name, protheus_rest_url, protheus_user, encrypted_protheus_password, status
+            ) VALUES (
+                :t_code, :t_code, :c_name, :c_rest, :c_user, :c_pass, 'active'
+            ) ON CONFLICT (id) DO UPDATE SET
+                tenant_name = EXCLUDED.tenant_name,
+                protheus_rest_url = EXCLUDED.protheus_rest_url,
+                protheus_user = EXCLUDED.protheus_user,
+                encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
+                updated_at = NOW();
+        """)
+        db.execute(upsert_public_tenant, {
+            "t_code": clean_tenant, "c_name": c_name, "c_rest": c_rest, "c_user": c_user, "c_pass": c_pass
+        })
+
+        db.commit()
+    except Exception as e:
+        logger.error(f"Erro ao provisionar schema/company_info para {clean_tenant}: {e}")
+        try: db.rollback()
+        except: pass
+
+
 @router.post("/companies", response_model=CompanyResponse)
 def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     existing = db.query(Company).filter(Company.cnpj == payload.cnpj).first()
@@ -310,15 +376,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(comp)
 
-    from app.db.database import ensure_tenant_tables
-    import re
-    if comp.tenant_id:
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(comp.tenant_id))
-        if clean_tenant:
-            try:
-                ensure_tenant_tables(db, clean_tenant)
-            except Exception:
-                pass
+    sync_company_into_tenant_schema(db, comp)
 
     return comp
 
@@ -344,15 +402,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     db.commit()
     db.refresh(comp)
 
-    from app.db.database import ensure_tenant_tables
-    import re
-    if comp.tenant_id:
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(comp.tenant_id))
-        if clean_tenant:
-            try:
-                ensure_tenant_tables(db, clean_tenant)
-            except Exception:
-                pass
+    sync_company_into_tenant_schema(db, comp)
 
     return comp
 
