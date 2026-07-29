@@ -130,7 +130,7 @@ try:
                 except: pass
                 
         conn.execute(text("SET search_path TO public"))
-        Base.metadata.create_all(bind=conn)
+        ensure_public_tables(conn)
         conn.commit()
     logger.info("Tabelas do banco de dados verificadas/criadas com sucesso com suporte a pgvector.")
 except Exception as e:
