@@ -80,7 +80,9 @@ run_psql_cmd "
     public.company_modules, public.agent_roles, public.agent_users, public.api_usage_logs,
     public.query_usage_counters, public.agent_query_audit, public.license_plans, public.tenant_contracts,
     public.tenants, public.companies, public.tenant_registry, public.plans, public.platform_admins,
-    public.protheus_modules_master, public.platform_audit_log
+    public.protheus_modules_master, public.platform_audit_log,public.environments,public.license_plans,
+    public.permissions,public.tenant_allowed_tables,public.tenant_connectors,public.tenant_dictionary_sources,
+    public.tenant_table_permissions,public.tenant_field_permissions,tenant_module_contracts,agent_roles,agent_users
   CASCADE;
 "
 
