@@ -9,7 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:sap_password_123@localhost:5432/copilot_protheus")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    db_host = os.getenv("DB_HOST", "localhost")
+    db_port = os.getenv("DB_PORT", "5435")
+    db_user = os.getenv("DB_USER", "postgres")
+    db_pass = os.getenv("DB_PASSWORD", "sap_password_123")
+    db_name = os.getenv("DB_NAME", "copilot_protheus")
+    DATABASE_URL = f"postgresql+asyncpg://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
