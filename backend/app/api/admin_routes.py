@@ -979,16 +979,40 @@ def get_dashboard_stats(
     admin: str  = Depends(verify_admin),
 ):
     from datetime import datetime, timedelta, timezone
+    from app.models.knowledge import PlatformAuditLog, TenantRegistry, PlatformAdmin
 
-    total_logs       = db.query(AuditLog).count()
-    active_companies = db.query(Company).count()
-    total_users      = db.query(User).count()
-    total_memories   = db.query(Memory).count()
-    total_queries    = db.query(AgentQueryAudit).count()
+    total_logs = 0
+    try:
+        total_logs = db.query(PlatformAuditLog).count()
+    except Exception:
+        try: db.rollback()
+        except: pass
+
+    active_companies = 0
+    try:
+        active_companies = db.query(TenantRegistry).filter(TenantRegistry.status == 'active').count()
+    except Exception:
+        try: db.rollback()
+        except: pass
+
+    total_users = 0
+    try:
+        total_users = db.query(PlatformAdmin).count()
+    except Exception:
+        try: db.rollback()
+        except: pass
+
+    total_memories = 0
+    total_queries = 0
+    queries_24h = 0
+    logs_24h = 0
 
     yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-    logs_24h  = db.query(AuditLog).filter(AuditLog.created_at >= yesterday).count()
-    queries_24h = db.query(AgentQueryAudit).filter(AgentQueryAudit.created_at >= yesterday).count()
+    try:
+        logs_24h = db.query(PlatformAuditLog).filter(PlatformAuditLog.created_at >= yesterday).count()
+    except Exception:
+        try: db.rollback()
+        except: pass
 
     return {
         "total_consultas":      total_logs,
@@ -1013,12 +1037,18 @@ def get_logs(
     db: Session = Depends(get_db),
     admin: str  = Depends(verify_admin),
 ):
-    logs = (
-        db.query(AuditLog)
-        .order_by(AuditLog.created_at.desc())
-        .offset(skip).limit(limit)
-        .all()
-    )
+    from app.models.knowledge import PlatformAuditLog
+    logs = []
+    try:
+        logs = (
+            db.query(PlatformAuditLog)
+            .order_by(PlatformAuditLog.created_at.desc())
+            .offset(skip).limit(limit)
+            .all()
+        )
+    except Exception:
+        try: db.rollback()
+        except: pass
     return {"logs": logs}
 
 
@@ -1030,25 +1060,28 @@ def get_query_audit(
     db: Session = Depends(get_db),
     admin: str  = Depends(verify_admin),
 ):
-    """Log detalhado de queries geradas pelo agente (substitui api_usage_logs)."""
-    q = db.query(AgentQueryAudit)
+    """Log detalhado de queries geradas pelo agente."""
+    rows_data = []
     if tenant_id:
-        q = q.filter(AgentQueryAudit.tenant_id == tenant_id)
-    rows = q.order_by(AgentQueryAudit.created_at.desc()).offset(skip).limit(limit).all()
-    return {
-        "query_audit": [
-            {
-                "id":              str(r.id),
-                "tenant_id":       r.tenant_id,
-                "prompt":          r.natural_language_prompt,
-                "sql":             r.generated_sql,
-                "status":          r.execution_status,
-                "rows_returned":   r.rows_returned,
-                "response_ms":     r.response_time_ms,
-                "blocked_reason":  r.blocked_reason,
-                "tables_used":     r.tables_used,
-                "created_at":      r.created_at,
-            }
-            for r in rows
-        ]
-    }
+        import re
+        from sqlalchemy import text
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id)
+        if clean_tenant and clean_tenant != "public":
+            try:
+                sql = text(f'SELECT id, user_email, question, generated_sql, response_time_ms, created_at FROM "{clean_tenant}".query_audit ORDER BY created_at DESC LIMIT :lim OFFSET :skp')
+                res = db.execute(sql, {"lim": limit, "skp": skip}).all()
+                for r in res:
+                    rows_data.append({
+                        "id": str(r[0]),
+                        "tenant_id": tenant_id,
+                        "prompt": r[2],
+                        "sql": r[3],
+                        "status": "completed",
+                        "response_ms": r[4],
+                        "created_at": r[5]
+                    })
+            except Exception:
+                try: db.rollback()
+                except: pass
+
+    return {"query_audit": rows_data}
