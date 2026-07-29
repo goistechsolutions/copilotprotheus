@@ -241,58 +241,12 @@ def ensure_tenant_tables(db, clean_tenant: str):
             );
         """))
 
-        # 5. dictionary_snapshots, tenant_dictionary_tables, fields, indexes, allowed tables & fields
-        db.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_snapshots (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id INT,
-                env_id UUID,
-                snapshot_code VARCHAR(80) NOT NULL,
-                source_db_type VARCHAR(30) NOT NULL DEFAULT 'oracle',
-                source_label VARCHAR(150),
-                sync_mode VARCHAR(20) NOT NULL DEFAULT 'full',
-                sync_status VARCHAR(20) NOT NULL DEFAULT 'completed',
-                requested_by UUID,
-                started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                finished_at TIMESTAMP WITH TIME ZONE,
-                total_modules INT DEFAULT 0,
-                total_tables INT DEFAULT 0,
-                total_fields INT DEFAULT 0,
-                total_indexes INT DEFAULT 0,
-            );
-        """))
-
-        # 5. Limpeza de tabelas operacionais legadas duplicadas no schema do tenant
+        # 5. Limpeza de todas as tabelas operacionais legadas e duplicadas no schema do tenant
         try:
-            db.execute(text(f'DROP TABLE IF EXISTS "{clean_tenant}".tenant_dictionary_tables, "{clean_tenant}".tenant_dictionary_fields, "{clean_tenant}".tenant_dictionary_indexes CASCADE'))
+            db.execute(text(f'DROP TABLE IF EXISTS "{clean_tenant}".tenant_dictionary_tables, "{clean_tenant}".tenant_dictionary_fields, "{clean_tenant}".tenant_dictionary_indexes, "{clean_tenant}".dictionary_snapshots, "{clean_tenant}".tenant_allowed_tables, "{clean_tenant}".tenant_allowed_fields CASCADE'))
             if hasattr(db, "commit"): db.commit()
         except Exception:
             pass
-
-        db.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_allowed_tables (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id VARCHAR(100) NOT NULL,
-                contract_id UUID NOT NULL,
-                snapshot_id UUID NOT NULL,
-                table_id UUID NOT NULL,
-                access_level VARCHAR(20) NOT NULL DEFAULT 'query',
-                allowed BOOLEAN NOT NULL DEFAULT TRUE,
-                rationale VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_allowed_fields (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id VARCHAR(100) NOT NULL,
-                allowed_table_id UUID NOT NULL,
-                field_id UUID NOT NULL,
-                allowed BOOLEAN NOT NULL DEFAULT TRUE,
-                masking_required BOOLEAN NOT NULL DEFAULT FALSE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
 
         # 6. RAG, Memories and Audit
         db.execute(text(f"""
