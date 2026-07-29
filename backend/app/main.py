@@ -262,9 +262,21 @@ async def adminer_proxy(request: Request, path: str, current_user: dict = Depend
             logger.error(f"Erro no proxy do adminer: {e}")
             return JSONResponse(status_code=502, content={"detail": f"Erro de proxy: {e}"})
 
-# Mount admin frontend
+# Mount admin frontend com fallback SPA (evita 404 em subrotas como /admin/login ou /admin/tenants)
+from starlette.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+class SPAStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as ex:
+            if ex.status_code == 404 and not path.endswith(('.js', '.css', '.png', '.jpg', '.svg', '.ico', '.woff2', '.json', '.map')):
+                return await super().get_response("index.html", scope)
+            raise ex
+
 os.makedirs("static/admin", exist_ok=True)
-app.mount("/admin", StaticFiles(directory="static/admin", html=True), name="admin")
+app.mount("/admin", SPAStaticFiles(directory="static/admin", html=True), name="admin")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):

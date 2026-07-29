@@ -9,7 +9,7 @@ export default function Adminer() {
           <p className="text-slate-500">Acesso direto ao PostgreSQL via Adminer embutido.</p>
         </div>
         <a 
-          href="/adminer/?pgsql=db&username=postgres&db=copilot_protheus" 
+          href="/adminer/?pgsql=postgres:sap_password_123@db:5432/copilot_protheus" 
           target="_blank" 
           rel="noopener noreferrer"
           className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-sm shrink-0"
@@ -20,7 +20,7 @@ export default function Adminer() {
       
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
         <iframe 
-          src="/adminer/?pgsql=db&username=postgres&db=copilot_protheus" 
+          src="/adminer/?pgsql=postgres:sap_password_123@db:5432/copilot_protheus" 
           className="absolute inset-0 w-full h-full border-0"
           title="Adminer"
         />

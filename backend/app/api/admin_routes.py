@@ -74,16 +74,9 @@ def verify_admin(
         if user_ok and pass_ok:
             return credentials.username
 
-    # Se a requisição veio com header de autorização Basic incorreto
-    auth_header = request.headers.get("authorization", "")
-    headers = {}
-    if auth_header.startswith("Basic "):
-        headers["WWW-Authenticate"] = 'Basic realm="Copilot Admin"'
-
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciais de administrador inválidas ou sessão expirada",
-        headers=headers
+        detail="Credenciais de administrador inválidas ou sessão expirada"
     )
 
 
