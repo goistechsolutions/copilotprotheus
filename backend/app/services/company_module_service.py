@@ -1,233 +1,247 @@
 import uuid
 import datetime
+import re
+import logging
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from app.schemas.company_modules import CompanyModulesSaveRequest
+from app.db.database import ensure_tenant_tables
+
+logger = logging.getLogger("app.services.company_module_service")
 
 
-def get_company_or_404(db: Session, company_id: int):
-    row = db.execute(
+def get_company_or_404(db: Session, company_id: int | str) -> dict:
+    cid_str = str(company_id)
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', cid_str)
+    
+    # 1. Busca no tenant_registry global
+    reg = db.execute(
         text("""
-            SELECT
-                id,
-                tenant_id,
-                company_code AS code,
-                COALESCE(company_name, razao_social, 'Empresa ' || id) AS name,
-                status,
-                protheus_rest_url,
-                protheus_usuario,
-                encrypted_protheus_password,
-                protheus_ambientes
-            FROM companies
-            WHERE id = :company_id
+            SELECT id, tenant_code, tenant_name, schema_name, status
+            FROM public.tenant_registry
+            WHERE id::text = :cid OR tenant_code = :cid OR schema_name = :cid
+            LIMIT 1
         """),
-        {"company_id": company_id}
+        {"cid": cid_str}
     ).mappings().first()
 
-    if not row:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    if reg:
+        clean_tenant = reg["tenant_code"]
 
-    return dict(row)
+    if not clean_tenant or clean_tenant == "public":
+        clean_tenant = "default"
+
+    # Garante que o schema existe
+    ensure_tenant_tables(db, clean_tenant)
+
+    # 2. Busca na tabela company_info do schema exclusivo do tenant
+    try:
+        row = db.execute(
+            text(f"""
+                SELECT
+                    id,
+                    '{clean_tenant}' AS tenant_id,
+                    company_code AS code,
+                    COALESCE(company_name, razao_social, 'Empresa ' || id) AS name,
+                    status,
+                    protheus_rest_url,
+                    protheus_usuario,
+                    encrypted_protheus_password,
+                    environment AS protheus_ambientes
+                FROM "{clean_tenant}".company_info
+                ORDER BY id ASC
+                LIMIT 1
+            """)
+        ).mappings().first()
+
+        if row:
+            return dict(row)
+    except Exception as e:
+        logger.warning(f"Aviso ao buscar company_info em {clean_tenant}: {e}")
+
+    # Fallback se tenant_registry existe mas company_info ainda está vazia
+    if reg:
+        return {
+            "id": reg["id"],
+            "tenant_id": reg["tenant_code"],
+            "code": reg["tenant_code"],
+            "name": reg["tenant_name"],
+            "status": reg["status"],
+            "protheus_rest_url": None,
+            "protheus_usuario": None,
+            "encrypted_protheus_password": None,
+            "protheus_ambientes": "producao"
+        }
+
+    raise HTTPException(status_code=404, detail=f"Empresa '{company_id}' não encontrada")
 
 
-def list_companies(db: Session, tenant_id: str | None = None):
+def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
     sql = """
         SELECT
             id,
-            tenant_id,
-            company_code AS code,
-            COALESCE(company_name, razao_social, 'Empresa ' || id) AS name,
+            tenant_code AS tenant_id,
+            tenant_code AS code,
+            tenant_name AS name,
             status,
             created_at
-        FROM companies
+        FROM public.tenant_registry
         WHERE 1=1
     """
     params = {}
-
     if tenant_id:
-        sql += " AND tenant_id = :tenant_id"
+        sql += " AND (tenant_code = :tenant_id OR schema_name = :tenant_id)"
         params["tenant_id"] = tenant_id
 
-    sql += " ORDER BY COALESCE(company_name, razao_social, 'Empresa ' || id)"
-
+    sql += " ORDER BY tenant_name"
     rows = db.execute(text(sql), params).mappings().all()
-    return [dict(r) for r in rows]
+    
+    result = []
+    for r in rows:
+        c_dict = dict(r)
+        clean = re.sub(r'[^a-zA-Z0-9_]', '', c_dict["tenant_id"])
+        if clean and clean != "public":
+            try:
+                ensure_tenant_tables(db, clean)
+                info = db.execute(text(f'SELECT protheus_rest_url, protheus_usuario, company_name FROM "{clean}".company_info LIMIT 1')).mappings().first()
+                if info:
+                    if info.get("company_name"): c_dict["name"] = info["company_name"]
+                    c_dict["protheus_rest_url"] = info.get("protheus_rest_url")
+                    c_dict["protheus_usuario"] = info.get("protheus_usuario")
+            except Exception:
+                pass
+        result.append(c_dict)
+
+    return result
 
 
-def list_company_modules(db: Session, company_id: int, tenant_id: str):
-    rows = db.execute(
+def list_company_modules(db: Session, company_id: int | str, tenant_id: str) -> list[dict]:
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if not clean_tenant or clean_tenant == "public":
+        clean_tenant = "default"
+
+    ensure_tenant_tables(db, clean_tenant)
+
+    # 1. Carrega todos os módulos da tabela mestre no public
+    master_rows = db.execute(
         text("""
-            SELECT
-                :company_id AS company_id,
-                tmc.tenant_id,
-                pmm.module_code,
-                COALESCE(pmm.module_name, pmm.module_code) AS module_name,
-                (CASE WHEN tmc.status = 'allowed' THEN TRUE ELSE FALSE END) AS enabled,
-                tmc.created_at
-            FROM tenant_module_contracts tmc
-            INNER JOIN protheus_modules_master pmm
-              ON pmm.id = tmc.module_id
-            WHERE tmc.tenant_id = :tenant_id
-              AND tmc.status = 'allowed'
-            ORDER BY pmm.module_code
-        """),
-        {"company_id": company_id, "tenant_id": tenant_id}
+            SELECT COALESCE(mod_code, module_code) AS module_code, COALESCE(mod_name, module_name) AS module_name
+            FROM public.protheus_modules_master
+            WHERE active = TRUE
+            ORDER BY COALESCE(mod_code, module_code)
+        """)
     ).mappings().all()
 
-    return [dict(r) for r in rows]
+    # 2. Carrega contratos salvos no schema do tenant
+    enabled_map = {}
+    try:
+        contracts = db.execute(
+            text(f'SELECT mod_code, enabled FROM "{clean_tenant}".protheus_modules')
+        ).mappings().all()
+        for c in contracts:
+            if c.get("usr_codmod"):
+                enabled_map[c["usr_codmod"].strip().upper()] = True
+    except Exception:
+        pass
 
+    result = []
+    for m in master_rows:
+        m_code = (m["module_code"] or "").strip().upper()
+        if not m_code:
+            continue
+        is_enabled = enabled_map.get(m_code, True)
+        result.append({
+            "company_id": company_id,
+            "tenant_id": tenant_id,
+            "module_code": m_code,
+            "module_name": m["module_name"] or m_code,
+            "enabled": is_enabled,
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
 
-def _get_or_create_active_contract(db: Session, tenant_id: str) -> str:
-    contract_row = db.execute(
-        text("SELECT id FROM tenant_contracts WHERE tenant_id = :tenant_id AND contract_status = 'active' LIMIT 1"),
-        {"tenant_id": tenant_id}
-    ).mappings().first()
-    if not contract_row:
-        contract_row = db.execute(
-            text("SELECT id FROM tenant_contracts WHERE tenant_id = :tenant_id LIMIT 1"),
-            {"tenant_id": tenant_id}
-        ).mappings().first()
-
-    if not contract_row:
-        new_contract_id = str(uuid.uuid4())
-        contract_code = f"CONTRACT-{tenant_id[:30]}-{int(datetime.datetime.now().timestamp())}"
-        db.execute(
-            text("""
-                INSERT INTO tenant_contracts (id, tenant_id, contract_code, contract_status, starts_at, created_at, updated_at)
-                VALUES (:cid, :tid, :ccode, 'active', CURRENT_DATE, NOW(), NOW())
-            """),
-            {"cid": new_contract_id, "tid": tenant_id, "ccode": contract_code}
-        )
-        return new_contract_id
-    return str(contract_row["id"])
+    return result
 
 
 def replace_company_modules(
     db: Session,
-    company_id: int,
+    company_id: int | str,
     tenant_id: str,
     payload: CompanyModulesSaveRequest,
-):
+) -> int:
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if not clean_tenant or clean_tenant == "public":
+        clean_tenant = "default"
+
+    ensure_tenant_tables(db, clean_tenant)
+
     try:
-        contract_id = _get_or_create_active_contract(db, tenant_id)
-
-        db.execute(
-            text("""
-                DELETE FROM tenant_module_contracts
-                WHERE tenant_id = :tenant_id
-                  AND contract_id = :contract_id
-            """),
-            {"tenant_id": tenant_id, "contract_id": contract_id}
-        )
-
+        db.execute(text(f'DELETE FROM "{clean_tenant}".protheus_modules'))
         for item in payload.modules:
             if not item.enabled:
                 continue
-            mod_code = item.module_code.strip().upper()
-
-            master_row = db.execute(
-                text("SELECT id FROM protheus_modules_master WHERE module_code = :code LIMIT 1"),
-                {"code": mod_code}
-            ).mappings().first()
-
-            if not master_row:
-                mod_id = str(uuid.uuid4())
-                db.execute(
-                    text("""
-                        INSERT INTO protheus_modules_master (id, module_code, module_name, source_name, active, created_at)
-                        VALUES (:id, :code, :name, 'SYS_USR_MODULE', TRUE, NOW())
-                    """),
-                    {"id": mod_id, "code": mod_code, "name": mod_code}
-                )
-            else:
-                mod_id = str(master_row["id"])
-
+            m_code = item.module_code.strip().upper()
+            m_name = (item.module_name or m_code).strip()
+            
             db.execute(
-                text("""
-                    INSERT INTO tenant_module_contracts
-                        (id, tenant_id, contract_id, module_id, status, created_at)
-                    VALUES
-                        (:id, :tenant_id, :contract_id, :module_id, 'allowed', NOW())
+                text(f"""
+                    INSERT INTO "{clean_tenant}".protheus_modules (tenant_id, usr_modulo, usr_codmod)
+                    VALUES (:tid, :mname, :mcode);
                 """),
-                {
-                    "id": str(uuid.uuid4()),
-                    "tenant_id": tenant_id,
-                    "contract_id": contract_id,
-                    "module_id": mod_id,
-                }
+                {"tid": tenant_id, "mname": m_name, "mcode": m_code}
             )
         db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Falha ao salvar módulos da empresa: {str(e)}"
+            detail=f"Falha ao salvar módulos no schema do tenant: {str(e)}"
         )
 
     return len([m for m in payload.modules if m.enabled])
 
 
-def get_enabled_modules(db: Session, company_id: int, tenant_id: str) -> list[str]:
-    rows = db.execute(
-        text("""
-            SELECT pmm.module_code
-            FROM tenant_module_contracts tmc
-            INNER JOIN protheus_modules_master pmm ON pmm.id = tmc.module_id
-            WHERE tmc.tenant_id = :tenant_id
-              AND tmc.status = 'allowed'
-            ORDER BY pmm.module_code
-        """),
-        {"tenant_id": tenant_id}
-    ).mappings().all()
+def get_enabled_modules(db: Session, company_id: int | str, tenant_id: str) -> list[str]:
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if not clean_tenant or clean_tenant == "public":
+        clean_tenant = "default"
 
-    return [r["module_code"] for r in rows]
+    ensure_tenant_tables(db, clean_tenant)
 
-
-def preload_allowed_tables_from_dictionary(db: Session, company_id: int, tenant_id: str):
+    enabled = []
     try:
-        contract_id = _get_or_create_active_contract(db, tenant_id)
+        rows = db.execute(
+            text(f'SELECT usr_codmod FROM "{clean_tenant}".protheus_modules')
+        ).mappings().all()
+        enabled = [r["usr_codmod"].strip().upper() for r in rows if r.get("usr_codmod")]
+    except Exception:
+        pass
 
-        db.execute(
-            text("""
-                DELETE FROM tenant_allowed_tables
-                WHERE tenant_id = :tenant_id
-                  AND contract_id = :contract_id
-            """),
-            {"tenant_id": tenant_id, "contract_id": contract_id}
-        )
+    if not enabled:
+        try:
+            m_rows = db.execute(
+                text("SELECT COALESCE(mod_code, module_code) AS module_code FROM public.protheus_modules_master WHERE active = TRUE")
+            ).mappings().all()
+            enabled = [r["module_code"].strip().upper() for r in m_rows if r.get("module_code")]
+        except Exception:
+            enabled = ["SIGAFAT", "SIGAFIN", "SIGACOM", "SIGAEST", "SIGAPCP", "SIGACONT", "SIGAFIS", "SIGATMS", "SIGAGPE", "SIGAATF"]
 
+    return enabled
+
+
+def preload_allowed_tables_from_dictionary(db: Session, company_id: int | str, tenant_id: str):
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if not clean_tenant or clean_tenant == "public":
+        clean_tenant = "default"
+
+    ensure_tenant_tables(db, clean_tenant)
+
+    try:
         db.execute(
-            text("""
-                INSERT INTO tenant_allowed_tables
-                    (tenant_id, contract_id, snapshot_id, table_id, access_level, allowed, rationale, created_at, updated_at)
-                SELECT
-                    tdt.tenant_id,
-                    :contract_id,
-                    tdt.snapshot_id,
-                    tdt.id,
-                    'query',
-                    TRUE,
-                    'preload_allowed_tables_from_dictionary',
-                    NOW(),
-                    NOW()
-                FROM dictionary_tables dt
-                INNER JOIN protheus_modules_master pmm
-                    ON pmm.module_code = dt.module_code
-                INNER JOIN tenant_module_contracts tmc
-                    ON tmc.tenant_id = dt.tenant_id
-                   AND tmc.contract_id = :contract_id
-                   AND tmc.module_id = pmm.id
-                   AND tmc.status = 'allowed'
-                WHERE dt.tenant_id = :tenant_id
-            """),
-            {"tenant_id": tenant_id, "contract_id": contract_id}
+            text(f'UPDATE "{clean_tenant}".dictionary_tables SET active_flag = TRUE WHERE active_flag IS NULL')
         )
         db.commit()
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Falha ao pré-carregar tabelas permitidas: {str(e)}"
-        )
+        logger.warning(f"Aviso ao atualizar tabelas permitidas no dicionário em {clean_tenant}: {e}")
