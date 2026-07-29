@@ -53,52 +53,5 @@ CREATE TABLE IF NOT EXISTS public.platform_audit_log (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS public.tenants (
-    id                          VARCHAR(100) PRIMARY KEY,
-    name                        VARCHAR(255),
-    tenant_code                 VARCHAR(100),
-    tenant_name                 VARCHAR(255),
-    protheus_rest_url           VARCHAR(1024),
-    protheus_user               VARCHAR(255),
-    encrypted_protheus_password TEXT,
-    auth_mode                   VARCHAR(50) DEFAULT 'basic',
-    system_prompt               TEXT,
-    temperature                 FLOAT DEFAULT 0.2,
-    status                      VARCHAR(50) DEFAULT 'active',
-    plan_code                   VARCHAR(50),
-    created_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at                  TIMESTAMP WITH TIME ZONE
-);
-
-CREATE TABLE IF NOT EXISTS public.companies (
-    id                          SERIAL PRIMARY KEY,
-    tenant_id                   VARCHAR(100),
-    cnpj                        VARCHAR(30),
-    ie                          VARCHAR(30),
-    razao_social                VARCHAR(255),
-    email                       VARCHAR(255),
-    telefone                    VARCHAR(50),
-    endereco                    VARCHAR(500),
-    protheus_grupo              VARCHAR(20),
-    protheus_empresa            VARCHAR(20),
-    protheus_unidade            VARCHAR(20),
-    protheus_filial             VARCHAR(30),
-    protheus_ambientes          VARCHAR(100) DEFAULT 'producao',
-    protheus_usuario            VARCHAR(100),
-    encrypted_protheus_password TEXT,
-    protheus_rest_url           VARCHAR(1024),
-    protheus_webapp_url         VARCHAR(1024),
-    licenca_uso                 TEXT,
-    status                      VARCHAR(50) DEFAULT 'ativa',
-    company_code                VARCHAR(60),
-    company_name                VARCHAR(200),
-    protheus_env                VARCHAR(100),
-    protheus_branch             VARCHAR(100),
-    created_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at                  TIMESTAMP WITH TIME ZONE
-);
-
 CREATE INDEX IF NOT EXISTS ix_tenant_registry_status ON public.tenant_registry(status);
 CREATE INDEX IF NOT EXISTS ix_audit_tenant_code ON public.platform_audit_log(tenant_code);
-CREATE INDEX IF NOT EXISTS ix_tenants_tenant_code ON public.tenants(tenant_code);
-CREATE INDEX IF NOT EXISTS ix_companies_tenant_id ON public.companies(tenant_id);
