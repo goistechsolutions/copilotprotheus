@@ -433,33 +433,28 @@ def api_generate_license(payload: LicenseGenerateRequest, admin_key: str = Depen
 @router.get("/companies/{company_id}/billing")
 def get_company_billing(company_id: int, db: Session = Depends(get_db)):
     comp = db.query(Company).filter(Company.id == company_id).first()
+    total_queries = 0
     if comp and comp.tenant_id:
         import re
+        from sqlalchemy import text
         from app.db.database import ensure_tenant_tables
         clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(comp.tenant_id))
         if clean_tenant and clean_tenant != "public":
             try:
                 ensure_tenant_tables(db, clean_tenant)
+                row = db.execute(text(f'SELECT COUNT(*) FROM "{clean_tenant}".query_audit')).first()
+                if row and row[0]:
+                    total_queries = row[0]
             except Exception:
-                pass
-
-    total_queries = 0
-    try:
-        usage = db.query(
-            func.count(AgentQueryAudit.id).label("total_queries")
-        ).filter(AgentQueryAudit.company_id == company_id).first()
-        if usage and usage.total_queries:
-            total_queries = usage.total_queries
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
     return {
         "company_id": company_id,
         "total_queries": total_queries,
-        "note": "Billing V4: baseado em AgentQueryAudit."
+        "note": "Billing V5: baseado em query_audit por tenant."
     }
 
 

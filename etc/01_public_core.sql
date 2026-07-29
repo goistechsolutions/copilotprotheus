@@ -105,23 +105,6 @@ CREATE TABLE IF NOT EXISTS public.companies (
     updated_at                  TIMESTAMP WITH TIME ZONE
 );
 
-CREATE TABLE IF NOT EXISTS public.agent_query_audit (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id               VARCHAR(100),
-    company_id              INTEGER,
-    user_id                 VARCHAR(100),
-    request_id              VARCHAR(120),
-    natural_language_prompt TEXT,
-    generated_sql           TEXT,
-    sql_hash                VARCHAR(128),
-    execution_status        VARCHAR(20) DEFAULT 'planned',
-    rows_returned           INTEGER,
-    response_time_ms        INTEGER,
-    blocked_reason          VARCHAR(255),
-    tables_used             TEXT,
-    created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE INDEX IF NOT EXISTS ix_tenant_registry_status ON public.tenant_registry(status);
 CREATE INDEX IF NOT EXISTS ix_audit_tenant_code ON public.platform_audit_log(tenant_code);
 CREATE INDEX IF NOT EXISTS ix_tenants_tenant_code ON public.tenants(tenant_code);
