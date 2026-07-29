@@ -44,6 +44,14 @@ def _decrypt(encrypted: str) -> str:
         return encrypted
 
 
+def _parse_sanitized_json(text: str):
+    if not text:
+        return None
+    import re
+    clean_text = re.sub(r'[\x00-\x1f]', lambda m: '\\n' if m.group(0) in ('\n', '\r') else ('\\t' if m.group(0) == '\t' else f'\\u{ord(m.group(0)):04x}'), text)
+    return json.loads(clean_text)
+
+
 def queryrest_exec(
     rest_url: str,
     user: str,
@@ -80,7 +88,7 @@ def queryrest_exec(
                 auth=(user, password),
             )
             if resp.status_code == 200:
-                data = resp.json()
+                data = _parse_sanitized_json(resp.text)
                 if isinstance(data, list):
                     return data
                 if isinstance(data, dict):
@@ -105,7 +113,7 @@ def queryrest_exec(
             f"QueryRest retornou HTTP {resp.status_code} para {url}: {resp.text[:300]}"
         )
 
-    data = resp.json()
+    data = _parse_sanitized_json(resp.text)
     if isinstance(data, list):
         return data
     if isinstance(data, dict):

@@ -386,8 +386,12 @@ async def sync_schema(
     from app.services.protheus_service import execute_protheus_tool
 
     def fix_json_escapes(raw: str) -> str:
-        s = raw.replace('\\', '\\\\')
-        return s.replace('\\\\"', '\\"')
+        if not raw:
+            return ""
+        import re
+        # Trata caracteres de controle nao-escapados (0x00 a 0x1F) como \t, \r, \n raw
+        clean = re.sub(r'[\x00-\x1f]', lambda m: '\\n' if m.group(0) in ('\n', '\r') else ('\\t' if m.group(0) == '\t' else f'\\u{ord(m.group(0)):04x}'), raw)
+        return clean
 
     tenant_id = payload.get("tenant_id")
     modulos   = payload.get("modulos", [])

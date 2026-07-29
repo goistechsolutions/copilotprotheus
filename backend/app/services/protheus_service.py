@@ -208,6 +208,12 @@ async def get_protheus_token(tenant_id: str, user: str = None, password: str = N
         _OAUTH2_TOKENS[cache_key] = (access_token, now + expires_in - 60)
         return access_token
 
+def _sanitize_response_text(text: str) -> str:
+    if not text:
+        return text
+    import re
+    return re.sub(r'[\x00-\x1f]', lambda m: '\\n' if m.group(0) in ('\n', '\r') else ('\\t' if m.group(0) == '\t' else f'\\u{ord(m.group(0)):04x}'), text)
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=6),
@@ -219,7 +225,7 @@ async def _execute_http_get_with_retry(url: str, params: dict, headers: dict) ->
     async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
         resp = await client.get(url, params=params, headers=headers)
         resp.raise_for_status()
-        return resp.text
+        return _sanitize_response_text(resp.text)
 
 @retry(
     stop=stop_after_attempt(3),
@@ -232,7 +238,7 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
     async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
         resp = await client.post(url, json=json_data, headers=headers)
         resp.raise_for_status()
-        return resp.text
+        return _sanitize_response_text(resp.text)
 
 
 def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
@@ -289,36 +295,33 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
 def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, records_returned: int, response_time_ms: int, error_msg: str = None):
     from app.db.database import SessionLocal
     from app.models.knowledge import AgentQueryAudit, QueryUsageCounter
-    import uuid
     
     db = SessionLocal()
     try:
-        try:
-            tid = uuid.UUID(tenant_id)
-        except:
-            tid = None
-            
+        tid = str(tenant_id).strip() if tenant_id else None
         company_id = context.get("company_id") if context else None
         cid = None
         if company_id:
-            try: cid = uuid.UUID(company_id)
-            except: pass
+            try:
+                cid = int(company_id)
+            except (ValueError, TypeError):
+                cid = None
             
         if tid:
             audit = AgentQueryAudit(
                 tenant_id=tid,
                 company_id=cid,
                 user_id=None,
-                query_sql=query,
-                status=status,
-                records_returned=records_returned,
+                generated_sql=query,
+                execution_status=status,
+                rows_returned=records_returned,
                 response_time_ms=response_time_ms,
-                error_message=error_msg
+                blocked_reason=error_msg[:250] if error_msg else None
             )
             db.add(audit)
             
             if status == "success":
-                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == str(tid)).first()
+                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == tid).first()
                 if usage:
                     usage.total_queries += 1
             
