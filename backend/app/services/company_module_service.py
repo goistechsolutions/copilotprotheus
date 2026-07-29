@@ -212,15 +212,15 @@ def preload_allowed_tables_from_dictionary(db: Session, company_id: int, tenant_
                     'preload_allowed_tables_from_dictionary',
                     NOW(),
                     NOW()
-                FROM tenant_dictionary_tables tdt
+                FROM dictionary_tables dt
                 INNER JOIN protheus_modules_master pmm
-                    ON pmm.module_code = tdt.module_code
+                    ON pmm.module_code = dt.module_code
                 INNER JOIN tenant_module_contracts tmc
-                    ON tmc.tenant_id = tdt.tenant_id
+                    ON tmc.tenant_id = dt.tenant_id
                    AND tmc.contract_id = :contract_id
                    AND tmc.module_id = pmm.id
                    AND tmc.status = 'allowed'
-                WHERE tdt.tenant_id = :tenant_id
+                WHERE dt.tenant_id = :tenant_id
             """),
             {"tenant_id": tenant_id, "contract_id": contract_id}
         )

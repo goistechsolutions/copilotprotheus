@@ -260,61 +260,17 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 total_tables INT DEFAULT 0,
                 total_fields INT DEFAULT 0,
                 total_indexes INT DEFAULT 0,
-                notes TEXT
             );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_dictionary_tables (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                snapshot_id UUID NOT NULL,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id INT,
-                env_id UUID,
-                module_code VARCHAR(30),
-                table_key VARCHAR(20) NOT NULL,
-                physical_name VARCHAR(30) NOT NULL,
-                table_name VARCHAR(255),
-                unique_index_expr TEXT,
-                x2_tamfil NUMERIC(10,2),
-                x2_modo VARCHAR(5),
-                x2_tamun NUMERIC(10,2),
-                x2_modoun VARCHAR(5),
-                x2_tamemp NUMERIC(10,2),
-                x2_modoemp VARCHAR(5),
-                usa_empresa VARCHAR(1) NOT NULL DEFAULT 'N',
-                usa_unidade VARCHAR(1) NOT NULL DEFAULT 'N',
-                usa_filial VARCHAR(1) NOT NULL DEFAULT 'N',
-                active BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_dictionary_fields (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                snapshot_id UUID NOT NULL,
-                tenant_id VARCHAR(100) NOT NULL,
-                table_id UUID NOT NULL,
-                field_name VARCHAR(40) NOT NULL,
-                field_description VARCHAR(255),
-                field_type VARCHAR(5),
-                field_length NUMERIC(10,2),
-                field_order INT,
-                sxg_group VARCHAR(20),
-                sxg_size NUMERIC(10,2),
-                is_sensitive BOOLEAN NOT NULL DEFAULT FALSE,
-                mask_rule VARCHAR(50),
-                active BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_dictionary_indexes (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                snapshot_id UUID NOT NULL,
-                tenant_id VARCHAR(100) NOT NULL,
-                table_id UUID NOT NULL,
-                index_order INT,
-                index_nickname VARCHAR(80),
-                index_expression TEXT NOT NULL,
-                is_unique BOOLEAN NOT NULL DEFAULT FALSE,
-                is_primary_hint BOOLEAN NOT NULL DEFAULT FALSE,
-                active BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
+        """))
+
+        # 5. Limpeza de tabelas operacionais legadas duplicadas no schema do tenant
+        try:
+            db.execute(text(f'DROP TABLE IF EXISTS "{clean_tenant}".tenant_dictionary_tables, "{clean_tenant}".tenant_dictionary_fields, "{clean_tenant}".tenant_dictionary_indexes CASCADE'))
+            if hasattr(db, "commit"): db.commit()
+        except Exception:
+            pass
+
+        db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_allowed_tables (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id VARCHAR(100) NOT NULL,
