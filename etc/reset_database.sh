@@ -55,7 +55,7 @@ run_pg_dump "$BACKUP_DIR/pre_reset_${TIMESTAMP}.sql" || true
 
 echo "==> 2/5 Dropando todos os schemas de tenant existentes"
 SCHEMAS=""
-IF_QUERY="SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('public', 'information_schema', 'pg_catalog', 'pg_toast', 'default') AND schema_name NOT LIKE 'pg_%';"
+IF_QUERY="SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast', 'default') AND schema_name NOT LIKE 'pg_%';"
 if command -v psql >/dev/null 2>&1; then
   SCHEMAS=$(psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -t -c "$IF_QUERY" 2>/dev/null || true)
 elif command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
