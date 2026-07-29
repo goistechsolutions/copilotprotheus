@@ -203,6 +203,12 @@ def sync_modules_dictionary(
 ):
     company = get_company_or_404(db, company_id)
 
+    import re
+    from app.db.database import ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(company.get("tenant_id") or ''))
+    if clean_tenant and clean_tenant != "public":
+        ensure_tenant_tables(db, clean_tenant)
+
     module_filter = get_enabled_modules(
         db=db,
         company_id=company_id,

@@ -118,13 +118,36 @@ def get_tenant_config(tenant_id: str) -> dict:
                 "auth_mode": "basic"
             }
 
-        # 4. Fallback nas variáveis de ambiente (.env / Globais)
-        if str(tenant_id).lower() in ["default", "admin", "1", tenant_key.lower()] and settings.protheus_rest_url:
+        # 4. Busca na tabela company_info dentro do schema do tenant
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
+        if clean_tenant and clean_tenant != "public":
+            try:
+                from app.db.database import ensure_tenant_tables
+                ensure_tenant_tables(db, clean_tenant)
+                res = db.execute(text(f'SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode FROM "{clean_tenant}".company_info WHERE protheus_rest_url IS NOT NULL AND protheus_rest_url != \'\' LIMIT 1')).first()
+                if res and res[0]:
+                    pwd = ""
+                    if res[2]:
+                        try: pwd = decrypt_password(res[2])
+                        except: pwd = res[2]
+                    return {
+                        "rest_url": res[0].rstrip("/"),
+                        "webapp_url": res[3] or "",
+                        "vscode_server_url": "",
+                        "user": res[1] or "",
+                        "password": pwd,
+                        "auth_mode": res[4] or "basic"
+                    }
+            except Exception:
+                pass
+
+        # 5. Fallback nas variáveis de ambiente (.env / Globais)
+        if settings.protheus_rest_url:
             return {
                 "rest_url": settings.protheus_rest_url.rstrip("/"),
-                "webapp_url": getattr(settings, "protheus_webapp_url", ""),
+                "webapp_url": getattr(settings, "protheus_webapp_url", "") or "",
                 "vscode_server_url": "",
-                "user": getattr(settings, "protheus_user", "") or "admin",
+                "user": getattr(settings, "protheus_user", "") or getattr(settings, "protheus_usuario", "") or "admin",
                 "password": getattr(settings, "protheus_password", "") or "",
                 "auth_mode": "basic"
             }
@@ -132,7 +155,10 @@ def get_tenant_config(tenant_id: str) -> dict:
     except Exception as e:
         logger.error(f"Erro ao buscar configuracoes do tenant {tenant_id}: {e}")
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass
         
     raise ValueError(f"Configurações do Protheus (URL REST e credenciais) não encontradas no Banco de Dados para o cliente (tenant_id): {tenant_id}. Por favor, verifique se no cadastro do Cliente ({tenant_id}) ou Conector a URL REST do Protheus foi preenchida.")
 
