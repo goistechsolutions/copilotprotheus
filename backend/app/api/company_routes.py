@@ -432,12 +432,33 @@ def api_generate_license(payload: LicenseGenerateRequest, admin_key: str = Depen
 
 @router.get("/companies/{company_id}/billing")
 def get_company_billing(company_id: int, db: Session = Depends(get_db)):
-    usage = db.query(
-        func.count(AgentQueryAudit.id).label("total_queries")
-    ).filter(AgentQueryAudit.company_id == company_id).first()
+    comp = db.query(Company).filter(Company.id == company_id).first()
+    if comp and comp.tenant_id:
+        import re
+        from app.db.database import ensure_tenant_tables
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(comp.tenant_id))
+        if clean_tenant and clean_tenant != "public":
+            try:
+                ensure_tenant_tables(db, clean_tenant)
+            except Exception:
+                pass
+
+    total_queries = 0
+    try:
+        usage = db.query(
+            func.count(AgentQueryAudit.id).label("total_queries")
+        ).filter(AgentQueryAudit.company_id == company_id).first()
+        if usage and usage.total_queries:
+            total_queries = usage.total_queries
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
     return {
         "company_id": company_id,
-        "total_queries": usage.total_queries or 0,
+        "total_queries": total_queries,
         "note": "Billing V4: baseado em AgentQueryAudit."
     }
 

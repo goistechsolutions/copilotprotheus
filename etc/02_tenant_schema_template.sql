@@ -98,5 +98,22 @@ CREATE TABLE IF NOT EXISTS "{{schema}}".query_audit (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS "{{schema}}".agent_query_audit (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id               VARCHAR(100),
+    company_id              INTEGER,
+    user_id                 VARCHAR(100),
+    request_id              VARCHAR(120),
+    natural_language_prompt TEXT,
+    generated_sql           TEXT,
+    sql_hash                VARCHAR(128),
+    execution_status        VARCHAR(20) DEFAULT 'planned',
+    rows_returned           INTEGER,
+    response_time_ms        INTEGER,
+    blocked_reason          VARCHAR(255),
+    tables_used             TEXT,
+    created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS ix_{{schema}}_dict_tables_mod ON "{{schema}}".dictionary_tables(mod_code);
 CREATE INDEX IF NOT EXISTS ix_{{schema}}_query_audit_date ON "{{schema}}".query_audit(created_at);
