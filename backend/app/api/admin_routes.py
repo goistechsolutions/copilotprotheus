@@ -81,6 +81,94 @@ def verify_admin(
 
 
 # ─────────────────────────────────────────────────────────────
+# UTILITÁRIO: sanitização robusta de JSON do Protheus Cloud
+# ─────────────────────────────────────────────────────────────
+
+def fix_protheus_json(raw: str) -> str:
+    """
+    Sanitiza o JSON retornado pelo Protheus Cloud que pode conter:
+      1. Caracteres de controle raw (\\x00-\\x1f) em strings — ex: \\t, \\r, \\n literais
+      2. Backslash inválido antes de caracteres não-especiais JSON —
+         ex: \\-  \\(  \\_  \\C  \\P  \\u sem 4 hex-digits
+         Isso causa "Invalid \\escape" no json.loads padrão.
+
+    Estratégia:
+      - Percorre o texto char a char dentro de strings JSON.
+      - Substitui sequências \\X inválidas por X (remove a barra).
+      - Substitui caracteres de controle raw por sua representação \\uXXXX.
+    """
+    if not raw:
+        return ""
+
+    # Escapes válidos em JSON: " \\ / b f n r t u
+    VALID_ESCAPES = set('"\\\/bfnrtu')
+
+    out = []
+    i = 0
+    n = len(raw)
+    in_string = False
+
+    while i < n:
+        ch = raw[i]
+
+        if in_string:
+            if ch == '\\':
+                # Verifica o próximo caractere
+                if i + 1 < n:
+                    nxt = raw[i + 1]
+                    if nxt in VALID_ESCAPES:
+                        # Escape válido: copia os dois chars
+                        out.append(ch)
+                        out.append(nxt)
+                        # Para \uXXXX, copia também os 4 hex-digits se existirem
+                        if nxt == 'u':
+                            hex_seq = raw[i + 2:i + 6]
+                            if len(hex_seq) == 4 and all(c in '0123456789abcdefABCDEF' for c in hex_seq):
+                                out.append(hex_seq)
+                                i += 6
+                            else:
+                                # \u sem 4 hex válidos — substitui por espaço
+                                out.pop()  # remove 'u'
+                                out.pop()  # remove '\\'
+                                out.append(' ')
+                                i += 2
+                        else:
+                            i += 2
+                    else:
+                        # Backslash inválido: descarta a barra, mantém o char seguinte
+                        out.append(nxt)
+                        i += 2
+                else:
+                    # \\ no final do buffer — descarta
+                    i += 1
+            elif ch == '"':
+                in_string = False
+                out.append(ch)
+                i += 1
+            elif ord(ch) < 0x20:
+                # Caractere de controle raw dentro de string — converte para \\uXXXX
+                if ch == '\n':
+                    out.append('\\n')
+                elif ch == '\r':
+                    out.append('\\r')
+                elif ch == '\t':
+                    out.append('\\t')
+                else:
+                    out.append(f'\\u{ord(ch):04x}')
+                i += 1
+            else:
+                out.append(ch)
+                i += 1
+        else:
+            if ch == '"':
+                in_string = True
+            out.append(ch)
+            i += 1
+
+    return ''.join(out)
+
+
+# ─────────────────────────────────────────────────────────────
 # CONFIG (.env)
 # ─────────────────────────────────────────────────────────────
 
@@ -309,7 +397,7 @@ async def sync_modules(
     )
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
-        result_data  = json.loads(response_str)
+        result_data  = json.loads(fix_protheus_json(response_str))
         if isinstance(result_data, dict):
             result_data = result_data.get("items") or result_data.get("data", [])
         if not isinstance(result_data, list):
@@ -384,14 +472,6 @@ async def sync_schema(
     admin: str    = Depends(verify_admin),
 ):
     from app.services.protheus_service import execute_protheus_tool
-
-    def fix_json_escapes(raw: str) -> str:
-        if not raw:
-            return ""
-        import re
-        # Trata caracteres de controle nao-escapados (0x00 a 0x1F) como \t, \r, \n raw
-        clean = re.sub(r'[\x00-\x1f]', lambda m: '\\n' if m.group(0) in ('\n', '\r') else ('\\t' if m.group(0) == '\t' else f'\\u{ord(m.group(0)):04x}'), raw)
-        return clean
 
     tenant_id = payload.get("tenant_id")
     modulos   = payload.get("modulos", [])
@@ -509,7 +589,7 @@ async def sync_schema(
                 detail = f"Falha ao comunicar com o servidor Protheus REST ({tenant_id}): {err_msg}"
             raise HTTPException(status_code=400, detail=detail)
 
-        tables_data = json.loads(fix_json_escapes(response_str))
+        tables_data = json.loads(fix_protheus_json(response_str))
         if isinstance(tables_data, dict):
             tables_data = tables_data.get("items") or tables_data.get("data", [])
         if isinstance(tables_data, dict) and "error" in tables_data:
@@ -569,7 +649,7 @@ async def sync_schema(
                 f"ORDER BY X3.X3_ARQUIVO,X3.X3_ORDEM,X3.X3_CAMPO"
             )
             fr_str   = await execute_protheus_tool("QueryRest", {"cQuery": fields_query}, tenant_id=tenant_id)
-            fd       = json.loads(fix_json_escapes(fr_str))
+            fd       = json.loads(fix_protheus_json(fr_str))
             if isinstance(fd, dict):
                 fd = fd.get("items") or fd.get("data", [])
             if isinstance(fd, list):
