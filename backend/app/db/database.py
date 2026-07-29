@@ -15,6 +15,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
     try:
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        
+        # 1. protheus_modules
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,
@@ -27,6 +29,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_codmod ON "{clean_tenant}".protheus_modules (usr_codmod);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_modulo ON "{clean_tenant}".protheus_modules (usr_modulo);
         """))
+        
+        # 2. tenant_schemas
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (
                 id SERIAL PRIMARY KEY,
@@ -43,6 +47,68 @@ def ensure_tenant_tables(db, clean_tenant: str):
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_modulo ON "{clean_tenant}".tenant_schemas (modulo);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_chave ON "{clean_tenant}".tenant_schemas (chave);
         """))
+
+        # 3. dictionary_tables & fields & indexes & groups
+        db.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_tables (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id VARCHAR(100),
+                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
+                snapshot_code VARCHAR(60) NOT NULL,
+                table_name VARCHAR(30) NOT NULL,
+                table_alias VARCHAR(80),
+                module_code VARCHAR(10),
+                description TEXT,
+                physical_name VARCHAR(80),
+                active_flag BOOLEAN NOT NULL DEFAULT TRUE,
+                raw_payload JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_fields (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id VARCHAR(100),
+                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
+                snapshot_code VARCHAR(60) NOT NULL,
+                table_name VARCHAR(30) NOT NULL,
+                field_name VARCHAR(30) NOT NULL,
+                title VARCHAR(120),
+                field_type VARCHAR(5),
+                length_num INT,
+                decimal_num INT,
+                required_flag BOOLEAN NOT NULL DEFAULT FALSE,
+                browse_flag BOOLEAN NOT NULL DEFAULT FALSE,
+                virtual_flag BOOLEAN NOT NULL DEFAULT FALSE,
+                validation_rule TEXT,
+                relation_rule TEXT,
+                when_rule TEXT,
+                raw_payload JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+
+        # Migração transparente de dados legados do public se existirem
+        try:
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".protheus_modules (tenant_id, usr_modulo, usr_codmod, created_at)
+                SELECT tenant_id, usr_modulo, usr_codmod, created_at
+                FROM public.protheus_modules
+                WHERE tenant_id = '{clean_tenant}'
+                ON CONFLICT DO NOTHING;
+            """))
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, chave, tabela, nome, schema_json, created_at, updated_at)
+                SELECT tenant_id, modulo, chave, tabela, nome, schema_json, created_at, updated_at
+                FROM public.tenant_schemas
+                WHERE tenant_id = '{clean_tenant}'
+                ON CONFLICT DO NOTHING;
+            """))
+        except Exception:
+            pass
+
         db.commit()
     except Exception as e:
         db.rollback()
@@ -76,3 +142,4 @@ def get_db(x_tenant_id: str = Header("default")):
         except Exception:
             pass
         db.close()
+
