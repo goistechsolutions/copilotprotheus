@@ -131,6 +131,10 @@ try:
                 
         conn.execute(text("SET search_path TO public"))
         ensure_public_tables(conn)
+        try:
+            ensure_all_registered_tenant_schemas(conn)
+        except Exception as e_tenants:
+            logger.warning(f"Aviso ao provisionar schemas de tenants cadastrados: {e_tenants}")
         conn.commit()
     logger.info("Tabelas do banco de dados verificadas/criadas com sucesso com suporte a pgvector.")
 except Exception as e:

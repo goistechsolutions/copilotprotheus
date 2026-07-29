@@ -303,6 +303,17 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     db.add(comp)
     db.commit()
     db.refresh(comp)
+
+    from app.db.database import ensure_tenant_tables
+    import re
+    if comp.tenant_id:
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(comp.tenant_id))
+        if clean_tenant:
+            try:
+                ensure_tenant_tables(db, clean_tenant)
+            except Exception:
+                pass
+
     return comp
 
 
@@ -326,6 +337,17 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
 
     db.commit()
     db.refresh(comp)
+
+    from app.db.database import ensure_tenant_tables
+    import re
+    if comp.tenant_id:
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(comp.tenant_id))
+        if clean_tenant:
+            try:
+                ensure_tenant_tables(db, clean_tenant)
+            except Exception:
+                pass
+
     return comp
 
 

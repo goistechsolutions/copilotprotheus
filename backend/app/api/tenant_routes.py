@@ -102,6 +102,15 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depe
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
+
+    from app.db.database import ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(final_id))
+    if clean_tenant:
+        try:
+            ensure_tenant_tables(db, clean_tenant)
+        except Exception:
+            pass
+
     return tenant
 
 
@@ -119,6 +128,16 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
 
     db.commit()
     db.refresh(tenant)
+
+    from app.db.database import ensure_tenant_tables
+    import re
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+    if clean_tenant:
+        try:
+            ensure_tenant_tables(db, clean_tenant)
+        except Exception:
+            pass
+
     return tenant
 
 

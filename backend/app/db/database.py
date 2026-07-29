@@ -423,6 +423,42 @@ def ensure_tenant_tables(db, clean_tenant: str):
         db.rollback()
         print(f"[DB] Erro ao garantir tabelas no schema '{clean_tenant}': {e}")
 
+def ensure_all_registered_tenant_schemas(db):
+    """
+    Garante que todos os tenants e empresas cadastrados em public.tenants,
+    public.companies e public.tenant_registry possuam seus schemas criados no PostgreSQL.
+    """
+    ensure_public_tables(db)
+    tenant_ids = set()
+    try:
+        res1 = db.execute(text("SELECT id, tenant_code FROM public.tenants"))
+        for row in res1.fetchall():
+            if row[0]: tenant_ids.add(str(row[0]))
+            if row[1]: tenant_ids.add(str(row[1]))
+    except Exception:
+        pass
+    try:
+        res2 = db.execute(text("SELECT tenant_id FROM public.companies WHERE tenant_id IS NOT NULL"))
+        for row in res2.fetchall():
+            if row[0]: tenant_ids.add(str(row[0]))
+    except Exception:
+        pass
+    try:
+        res3 = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry"))
+        for row in res3.fetchall():
+            if row[0]: tenant_ids.add(str(row[0]))
+            if row[1]: tenant_ids.add(str(row[1]).replace("tenant_", ""))
+    except Exception:
+        pass
+
+    for tid in tenant_ids:
+        clean = re.sub(r'[^a-zA-Z0-9_]', '', str(tid))
+        if clean and clean != "public":
+            try:
+                ensure_tenant_tables(db, clean)
+            except Exception as err:
+                print(f"[DB] Aviso ao provisionar schema '{clean}': {err}")
+
 def get_tenant_session(tenant_id: str):
     db = SessionLocal()
     ensure_public_tables(db)
@@ -432,12 +468,12 @@ def get_tenant_session(tenant_id: str):
     if clean_tenant != "public":
         try:
             db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-            db.commit()
+            if hasattr(db, "commit"): db.commit()
         except Exception:
-            db.rollback()
+            if hasattr(db, "rollback"): db.rollback()
         ensure_tenant_tables(db, clean_tenant)
     db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-    db.commit()
+    if hasattr(db, "commit"): db.commit()
     return db
 
 def get_db(x_tenant_id: str = Header(None), tenant_id: str = None):
@@ -453,20 +489,20 @@ def get_db(x_tenant_id: str = Header(None), tenant_id: str = None):
         if clean_tenant != "public":
             try:
                 db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-                db.commit()
+                if hasattr(db, "commit"): db.commit()
             except Exception:
-                db.rollback()
+                if hasattr(db, "rollback"): db.rollback()
                 
             ensure_tenant_tables(db, clean_tenant)
             
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-        db.commit()
+        if hasattr(db, "commit"): db.commit()
         
         yield db
     finally:
         try:
             db.execute(text("SET search_path TO public"))
-            db.commit()
+            if hasattr(db, "commit"): db.commit()
         except Exception:
             pass
         db.close()
