@@ -8,7 +8,10 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-TEMPLATE_PATH = Path(__file__).parent / "sql" / "02_tenant_schema_template.sql"
+TEMPLATE_PATH = Path(__file__).parent / "02_tenant_schema_template.sql"
+if not TEMPLATE_PATH.exists():
+    TEMPLATE_PATH = Path(__file__).parent / "sql" / "02_tenant_schema_template.sql"
+
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
 
 
@@ -51,7 +54,7 @@ async def provision_tenant_schema(db: AsyncSession, tenant_code: str, tenant_nam
         for statement in filter(None, (s.strip() for s in rendered_sql.split(";"))):
             await db.execute(text(statement))
 
-        # 3. Marcar como ativo
+        # 3. Marcar como ativo em tenant_registry e sincronizar em public.tenants
         await db.execute(
             text("""
                 UPDATE public.tenant_registry
@@ -59,6 +62,14 @@ async def provision_tenant_schema(db: AsyncSession, tenant_code: str, tenant_nam
                 WHERE id = :id
             """),
             {"id": registry_id},
+        )
+        await db.execute(
+            text("""
+                INSERT INTO public.tenants (id, name, tenant_code, tenant_name, status, plan_code)
+                VALUES (:tenant_code, :tenant_name, :tenant_code, :tenant_name, 'active', :plan_code)
+                ON CONFLICT (id) DO UPDATE SET updated_at = NOW(), status = 'active'
+            """),
+            {"tenant_code": tenant_code, "tenant_name": tenant_name, "plan_code": plan_code},
         )
 
     return schema_name

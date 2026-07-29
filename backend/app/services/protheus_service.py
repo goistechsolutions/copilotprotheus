@@ -242,25 +242,24 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
 
 
 def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
-    from app.db.database import SessionLocal
-    from app.models.knowledge import TenantDictionaryTable, V4TenantAllowedTable, DictionarySnapshot, QueryUsageCounter, TenantContract, Company
+    from app.db.database import get_tenant_session
+    from app.models.knowledge import TenantDictionaryTable, V4TenantAllowedTable, DictionarySnapshot, QueryUsageCounter, TenantContract, Company, Tenant
     import uuid
     import re
     
-    db = SessionLocal()
+    db = get_tenant_session(tenant_id)
     try:
-        try:
-            tid = uuid.UUID(tenant_id)
-        except:
-            tenant = db.query(Tenant).filter(Tenant.tenant_code == tenant_id).first()
-            if not tenant:
-                return # Can't enforce if no tenant
-            tid = tenant.id
+        tid = str(tenant_id).strip() if tenant_id else "default"
+        tenant = db.query(Tenant).filter(Tenant.id == tid).first()
+        if not tenant:
+            tenant = db.query(Tenant).filter(Tenant.tenant_code == tid).first()
+        if tenant:
+            tid = str(tenant.id)
             
         # 1. Verifica quota
         if tid:
             try:
-                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == str(tid)).first()
+                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == tid).first()
                 if usage and usage.total_queries >= (usage.overage_queries or 999999):
                     raise Exception(f"Quota de consultas atingida ({usage.total_queries}).")
             except Exception as e:
@@ -293,12 +292,12 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
 
 
 def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, records_returned: int, response_time_ms: int, error_msg: str = None):
-    from app.db.database import SessionLocal
+    from app.db.database import get_tenant_session
     from app.models.knowledge import AgentQueryAudit, QueryUsageCounter
     
-    db = SessionLocal()
+    db = get_tenant_session(tenant_id)
     try:
-        tid = str(tenant_id).strip() if tenant_id else None
+        tid = str(tenant_id).strip() if tenant_id else "default"
         company_id = context.get("company_id") if context else None
         cid = None
         if company_id:

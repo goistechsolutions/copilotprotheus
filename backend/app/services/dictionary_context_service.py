@@ -7,6 +7,14 @@ def get_latest_snapshot_code(db, tenant_id: str, company_id: Union[int, str, Non
     Localiza o código do último snapshot do dicionário (v5.2) sincronizado
     para o tenant/empresa e com status ativo.
     """
+    import re
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if clean_tenant and clean_tenant != "public":
+        try:
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        except Exception:
+            pass
+
     company_str = str(company_id).strip() if company_id is not None else None
     
     # Busca por snapshot vinculado especificamente à empresa ou ao tenant como fallback
@@ -37,6 +45,13 @@ def build_dictionary_context(
     Constrói a árvore de contexto relacional do dicionário Protheus (tabelas + campos do SX2/SX3 v5.2),
     filtrando os módulos permitidos/solicitados no escopo do tenant.
     """
+    import re
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if clean_tenant and clean_tenant != "public":
+        try:
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        except Exception:
+            pass
     params = {
         "tenant_id": tenant_id,
         "snapshot_code": snapshot_code,

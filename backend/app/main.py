@@ -20,7 +20,7 @@ from app.api.leonardo_routes import router as leonardo_router
 from app.core.admin_security import require_admin
 from app.api.agent_sql_routes import router as agent_sql_router
 from app.core.logging_config import setup_logging
-from app.db.database import get_db, engine, Base
+from app.db.database import get_db, engine, Base, ensure_public_tables
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_user_flexible
 import app.models.knowledge
@@ -37,82 +37,89 @@ try:
     from sqlalchemy import text
     with engine.connect() as conn:
         try:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
+            conn.execute(text("SET search_path TO public"))
+            conn.commit()
+            ensure_public_tables(conn)
+        except Exception as e_pub:
+            logger.warning(f"Aviso ao garantir tabelas no schema public: {e_pub}")
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
             conn.commit()
         except Exception:
             try: conn.rollback()
             except: pass
         
         migrations = [
-            "CREATE TABLE IF NOT EXISTS tenants (id VARCHAR(100) PRIMARY KEY, name VARCHAR(255), protheus_rest_url VARCHAR(1024), auth_mode VARCHAR(50) DEFAULT 'basic', system_prompt TEXT, temperature FLOAT DEFAULT 0.7, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
-            "ALTER TABLE tenants ALTER COLUMN id TYPE VARCHAR(100);",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS name VARCHAR(255);",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_code VARCHAR(100);",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_name VARCHAR(255);",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS protheus_rest_url VARCHAR(1024);",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS protheus_user VARCHAR(255);",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS encrypted_protheus_password TEXT;",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS auth_mode VARCHAR(50) DEFAULT 'basic';",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS system_prompt TEXT;",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS temperature FLOAT DEFAULT 0.7;",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_code VARCHAR(50);",
-            "UPDATE tenants SET tenant_code = id WHERE tenant_code IS NULL;",
-            "UPDATE tenants SET tenant_name = name WHERE tenant_name IS NULL;",
-            "UPDATE tenants SET name = tenant_name WHERE name IS NULL;",
+            "CREATE TABLE IF NOT EXISTS public.tenants (id VARCHAR(100) PRIMARY KEY, name VARCHAR(255), protheus_rest_url VARCHAR(1024), auth_mode VARCHAR(50) DEFAULT 'basic', system_prompt TEXT, temperature FLOAT DEFAULT 0.7, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
+            "ALTER TABLE public.tenants ALTER COLUMN id TYPE VARCHAR(100);",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS name VARCHAR(255);",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS tenant_code VARCHAR(100);",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS tenant_name VARCHAR(255);",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS protheus_rest_url VARCHAR(1024);",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS protheus_user VARCHAR(255);",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS encrypted_protheus_password TEXT;",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS auth_mode VARCHAR(50) DEFAULT 'basic';",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS system_prompt TEXT;",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS temperature FLOAT DEFAULT 0.7;",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';",
+            "ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS plan_code VARCHAR(50);",
+            "UPDATE public.tenants SET tenant_code = id WHERE tenant_code IS NULL;",
+            "UPDATE public.tenants SET tenant_name = name WHERE tenant_name IS NULL;",
+            "UPDATE public.tenants SET name = tenant_name WHERE name IS NULL;",
             
-            "CREATE TABLE IF NOT EXISTS companies (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100), cnpj VARCHAR(30), razao_social VARCHAR(255), status VARCHAR(50) DEFAULT 'ativa', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS cnpj VARCHAR(30);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS ie VARCHAR(30);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS razao_social VARCHAR(255);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS email VARCHAR(255);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS telefone VARCHAR(50);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS endereco VARCHAR(500);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_grupo VARCHAR(20);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_empresa VARCHAR(20);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_unidade VARCHAR(20);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_filial VARCHAR(30);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT 'producao';",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_usuario VARCHAR(100);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_password VARCHAR(255);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_rest_url VARCHAR(1024);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_webapp_url VARCHAR(1024);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS licenca_uso TEXT;",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ativa';",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_code VARCHAR(60);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_name VARCHAR(200);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_env VARCHAR(100);",
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS protheus_branch VARCHAR(100);",
-            "UPDATE companies SET company_code = cnpj WHERE company_code IS NULL AND cnpj IS NOT NULL;",
-            "UPDATE companies SET company_name = razao_social WHERE company_name IS NULL AND razao_social IS NOT NULL;",
-            "UPDATE companies SET razao_social = company_name WHERE razao_social IS NULL AND company_name IS NOT NULL;",
-            "UPDATE companies SET cnpj = company_code WHERE cnpj IS NULL AND company_code IS NOT NULL;",
+            "CREATE TABLE IF NOT EXISTS public.companies (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100), cnpj VARCHAR(30), razao_social VARCHAR(255), status VARCHAR(50) DEFAULT 'ativa', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS cnpj VARCHAR(30);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS ie VARCHAR(30);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS razao_social VARCHAR(255);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS email VARCHAR(255);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS telefone VARCHAR(50);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS endereco VARCHAR(500);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_grupo VARCHAR(20);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_empresa VARCHAR(20);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_unidade VARCHAR(20);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_filial VARCHAR(30);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT 'producao';",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_usuario VARCHAR(100);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_password VARCHAR(255);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_rest_url VARCHAR(1024);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_webapp_url VARCHAR(1024);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS licenca_uso TEXT;",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ativa';",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS company_code VARCHAR(60);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS company_name VARCHAR(200);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_env VARCHAR(100);",
+            "ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS protheus_branch VARCHAR(100);",
+            "UPDATE public.companies SET company_code = cnpj WHERE company_code IS NULL AND cnpj IS NOT NULL;",
+            "UPDATE public.companies SET company_name = razao_social WHERE company_name IS NULL AND razao_social IS NOT NULL;",
+            "UPDATE public.companies SET razao_social = company_name WHERE razao_social IS NULL AND company_name IS NOT NULL;",
+            "UPDATE public.companies SET cnpj = company_code WHERE cnpj IS NULL AND company_code IS NOT NULL;",
 
-            "CREATE TABLE IF NOT EXISTS agent_users (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, username VARCHAR(100) NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(50) DEFAULT 'user', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
-            "CREATE TABLE IF NOT EXISTS agent_roles (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, name VARCHAR(50) NOT NULL, permissions JSON, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
-            "CREATE TABLE IF NOT EXISTS tenant_connectors (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, environment VARCHAR(100) DEFAULT 'producao' NOT NULL, rest_url VARCHAR(1024) NOT NULL, auth_mode VARCHAR(50) DEFAULT 'basic', username VARCHAR(255), password_hash TEXT, token TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
+            "CREATE TABLE IF NOT EXISTS public.agent_users (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, username VARCHAR(100) NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(50) DEFAULT 'user', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
+            "CREATE TABLE IF NOT EXISTS public.agent_roles (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, name VARCHAR(50) NOT NULL, permissions JSON, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
+            "CREATE TABLE IF NOT EXISTS public.tenant_connectors (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, environment VARCHAR(100) DEFAULT 'producao' NOT NULL, rest_url VARCHAR(1024) NOT NULL, auth_mode VARCHAR(50) DEFAULT 'basic', username VARCHAR(255), password_hash TEXT, token TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ);",
 
-            "ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
-            "ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
-            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
-            "ALTER TABLE memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
+            "ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
+            "ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
+            "ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
+            "ALTER TABLE public.document_chunks ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
+            "ALTER TABLE public.memories ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'tenant' NOT NULL;",
             
-            "CREATE TABLE IF NOT EXISTS tenant_dictionary_sources (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', source_type VARCHAR(20) NOT NULL, snapshot_code VARCHAR(60) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), started_at TIMESTAMPTZ NULL, finished_at TIMESTAMPTZ NULL, error_message TEXT NULL);",
-            "CREATE TABLE IF NOT EXISTS dictionary_tables (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, table_alias VARCHAR(80) NULL, module_code VARCHAR(10) NULL, description TEXT NULL, physical_name VARCHAR(80) NULL, active_flag BOOLEAN NOT NULL DEFAULT TRUE, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name));",
-            "CREATE TABLE IF NOT EXISTS dictionary_fields (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, title VARCHAR(120) NULL, field_type VARCHAR(5) NULL, length_num INTEGER NULL, decimal_num INTEGER NULL, required_flag BOOLEAN NOT NULL DEFAULT FALSE, browse_flag BOOLEAN NOT NULL DEFAULT FALSE, virtual_flag BOOLEAN NOT NULL DEFAULT FALSE, validation_rule TEXT NULL, relation_rule TEXT NULL, when_rule TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, field_name));",
-            "CREATE TABLE IF NOT EXISTS dictionary_indexes (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, index_order VARCHAR(10) NOT NULL, nickname VARCHAR(80) NULL, expression TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, index_order));",
-            "CREATE TABLE IF NOT EXISTS dictionary_groups (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, group_name VARCHAR(80) NOT NULL, description TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, group_name));",
-            "CREATE TABLE IF NOT EXISTS tenant_table_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, can_list BOOLEAN NOT NULL DEFAULT FALSE, can_describe BOOLEAN NOT NULL DEFAULT FALSE, can_query BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name));",
-            "CREATE TABLE IF NOT EXISTS tenant_field_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, can_select BOOLEAN NOT NULL DEFAULT FALSE, can_filter BOOLEAN NOT NULL DEFAULT FALSE, masked_flag BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name, field_name));",
-            "CREATE TABLE IF NOT EXISTS protheus_modules_master (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), module_code VARCHAR(30) NOT NULL UNIQUE, module_name VARCHAR(120) NOT NULL, source_name VARCHAR(50) NOT NULL DEFAULT 'SYS_USR_MODULE', active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NULL);",
-            "CREATE TABLE IF NOT EXISTS tenant_module_contracts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100) NOT NULL, contract_id UUID NOT NULL, module_id UUID NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'allowed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());",
-            "CREATE TABLE IF NOT EXISTS tenant_allowed_tables (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100) NOT NULL, contract_id UUID NOT NULL, snapshot_id UUID NOT NULL, table_id UUID NOT NULL, access_level VARCHAR(20) NOT NULL DEFAULT 'query', allowed BOOLEAN NOT NULL DEFAULT TRUE, rationale VARCHAR(255) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NULL);",
-            "CREATE INDEX IF NOT EXISTS idx_dictionary_tables_lookup ON dictionary_tables (tenant_id, environment_id, table_name);",
-            "CREATE INDEX IF NOT EXISTS idx_dictionary_fields_lookup ON dictionary_fields (tenant_id, environment_id, table_name, field_name);",
-            "CREATE INDEX IF NOT EXISTS idx_perm_table_lookup ON tenant_table_permissions (tenant_id, environment_id, role_id, table_name);",
-            "CREATE INDEX IF NOT EXISTS idx_perm_field_lookup ON tenant_field_permissions (tenant_id, environment_id, role_id, table_name, field_name);"
+            "CREATE TABLE IF NOT EXISTS public.tenant_dictionary_sources (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', source_type VARCHAR(20) NOT NULL, snapshot_code VARCHAR(60) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), started_at TIMESTAMPTZ NULL, finished_at TIMESTAMPTZ NULL, error_message TEXT NULL);",
+            "CREATE TABLE IF NOT EXISTS public.dictionary_tables (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, table_alias VARCHAR(80) NULL, module_code VARCHAR(10) NULL, description TEXT NULL, physical_name VARCHAR(80) NULL, active_flag BOOLEAN NOT NULL DEFAULT TRUE, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name));",
+            "CREATE TABLE IF NOT EXISTS public.dictionary_fields (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, title VARCHAR(120) NULL, field_type VARCHAR(5) NULL, length_num INTEGER NULL, decimal_num INTEGER NULL, required_flag BOOLEAN NOT NULL DEFAULT FALSE, browse_flag BOOLEAN NOT NULL DEFAULT FALSE, virtual_flag BOOLEAN NOT NULL DEFAULT FALSE, validation_rule TEXT NULL, relation_rule TEXT NULL, when_rule TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, field_name));",
+            "CREATE TABLE IF NOT EXISTS public.dictionary_indexes (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, table_name VARCHAR(30) NOT NULL, index_order VARCHAR(10) NOT NULL, nickname VARCHAR(80) NULL, expression TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, table_name, index_order));",
+            "CREATE TABLE IF NOT EXISTS public.dictionary_groups (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', snapshot_code VARCHAR(60) NOT NULL, group_name VARCHAR(80) NOT NULL, description TEXT NULL, raw_payload JSONB NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, snapshot_code, group_name));",
+            "CREATE TABLE IF NOT EXISTS public.tenant_table_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, can_list BOOLEAN NOT NULL DEFAULT FALSE, can_describe BOOLEAN NOT NULL DEFAULT FALSE, can_query BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name));",
+            "CREATE TABLE IF NOT EXISTS public.tenant_field_permissions (id BIGSERIAL PRIMARY KEY, tenant_id VARCHAR(100) NOT NULL, company_id VARCHAR(100) NULL, environment_id VARCHAR(100) NOT NULL DEFAULT 'producao', role_id VARCHAR(100) NOT NULL, table_name VARCHAR(30) NOT NULL, field_name VARCHAR(30) NOT NULL, can_select BOOLEAN NOT NULL DEFAULT FALSE, can_filter BOOLEAN NOT NULL DEFAULT FALSE, masked_flag BOOLEAN NOT NULL DEFAULT FALSE, approved_by VARCHAR(100) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (tenant_id, environment_id, role_id, table_name, field_name));",
+            "CREATE TABLE IF NOT EXISTS public.protheus_modules_master (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), module_code VARCHAR(30) NOT NULL UNIQUE, module_name VARCHAR(120) NOT NULL, source_name VARCHAR(50) NOT NULL DEFAULT 'SYS_USR_MODULE', active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NULL);",
+            "CREATE TABLE IF NOT EXISTS public.tenant_module_contracts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100) NOT NULL, contract_id UUID NOT NULL, module_id UUID NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'allowed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());",
+            "CREATE TABLE IF NOT EXISTS public.tenant_allowed_tables (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100) NOT NULL, contract_id UUID NOT NULL, snapshot_id UUID NOT NULL, table_id UUID NOT NULL, access_level VARCHAR(20) NOT NULL DEFAULT 'query', allowed BOOLEAN NOT NULL DEFAULT TRUE, rationale VARCHAR(255) NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NULL);",
+            "CREATE INDEX IF NOT EXISTS idx_dictionary_tables_lookup ON public.dictionary_tables (tenant_id, environment_id, table_name);",
+            "CREATE INDEX IF NOT EXISTS idx_dictionary_fields_lookup ON public.dictionary_fields (tenant_id, environment_id, table_name, field_name);",
+            "CREATE INDEX IF NOT EXISTS idx_perm_table_lookup ON public.tenant_table_permissions (tenant_id, environment_id, role_id, table_name);",
+            "CREATE INDEX IF NOT EXISTS idx_perm_field_lookup ON public.tenant_field_permissions (tenant_id, environment_id, role_id, table_name, field_name);"
         ]
         for query in migrations:
             try:
@@ -122,7 +129,9 @@ try:
                 try: conn.rollback()
                 except: pass
                 
-    Base.metadata.create_all(bind=engine)
+        conn.execute(text("SET search_path TO public"))
+        Base.metadata.create_all(bind=conn)
+        conn.commit()
     logger.info("Tabelas do banco de dados verificadas/criadas com sucesso com suporte a pgvector.")
 except Exception as e:
     logger.error(f"Erro ao criar tabelas: {e}")

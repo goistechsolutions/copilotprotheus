@@ -9,6 +9,7 @@ from tenant_provisioning import provision_tenant_schema
 
 DEV_TENANTS = [
     {"tenant_code": "elitecorp", "tenant_name": "Elite Corp Tecnologia", "plan_code": "trial"},
+    {"tenant_code": "rodol_matriz", "tenant_name": "Rodoviário Liderança Matriz", "plan_code": "enterprise"},
     {"tenant_code": "cliente_teste", "tenant_name": "Cliente Teste Homologação", "plan_code": "trial"},
 ]
 

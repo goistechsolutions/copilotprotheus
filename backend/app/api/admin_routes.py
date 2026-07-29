@@ -100,8 +100,8 @@ def fix_protheus_json(raw: str) -> str:
     if not raw:
         return ""
 
-    # Escapes válidos em JSON: " \\ / b f n r t u
-    VALID_ESCAPES = set('"\\\/bfnrtu')
+    # Escapes válidos em JSON: " \ / b f n r t u
+    VALID_ESCAPES = set('"\\/bfnrtu')
 
     out = []
     i = 0
@@ -317,6 +317,14 @@ def update_tables(
     admin: str               = Depends(verify_admin),
 ):
     """Atualiza tabelas permitidas no modelo V4 (tenant_allowed_tables)."""
+    import re
+    from app.db.database import ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if clean_tenant and clean_tenant != "public":
+        ensure_tenant_tables(db, clean_tenant)
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+
     contract = _get_active_contract(db, tenant_id)
     if not contract:
         raise HTTPException(
@@ -479,6 +487,13 @@ async def sync_schema(
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
 
     import re
+    from app.db.database import ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+    if clean_tenant and clean_tenant != "public":
+        ensure_tenant_tables(db, clean_tenant)
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+
     clean_modulos = [m.strip().upper() for m in modulos if isinstance(m, str) and m.strip()]
     if not clean_modulos:
         raise HTTPException(status_code=400, detail="Selecione ao menos um modulo.")

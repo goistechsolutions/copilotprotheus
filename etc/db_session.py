@@ -4,12 +4,22 @@ Camada de resolução dinâmica de schema por requisição (multi-tenant via sea
 """
 from contextlib import asynccontextmanager
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-DATABASE_URL = "postgresql+asyncpg://user:pass@host:5432/copilot_protheus"
+import os
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:sap_password_123@localhost:5432/copilot_protheus")
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 engine = create_async_engine(DATABASE_URL, pool_size=20, max_overflow=10)
-SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+try:
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+except ImportError:
+    SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @asynccontextmanager

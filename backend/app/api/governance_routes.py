@@ -47,6 +47,15 @@ def list_allowed_tables(
     db: Session = Depends(get_db)
 ):
     """Lista tabelas permitidas para o tenant/snapshot."""
+    if tenant_id:
+        import re
+        from sqlalchemy import text
+        from app.db.database import ensure_tenant_tables
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+        if clean_tenant and clean_tenant != "public":
+            ensure_tenant_tables(db, clean_tenant)
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+
     q = db.query(TenantAllowedTable)
     if tenant_id:
         q = q.filter(TenantAllowedTable.tenant_id == tenant_id)
@@ -65,6 +74,14 @@ def allow_table(
     db: Session = Depends(get_db)
 ):
     """Permite ou bloqueia acesso a uma tabela do dicionário para o tenant."""
+    if payload.tenant_id:
+        import re
+        from sqlalchemy import text
+        from app.db.database import ensure_tenant_tables
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(payload.tenant_id))
+        if clean_tenant and clean_tenant != "public":
+            ensure_tenant_tables(db, clean_tenant)
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
     try:
         entry = TenantAllowedTable(
             tenant_id=payload.tenant_id,
@@ -107,6 +124,15 @@ def list_dictionary_tables(
     db: Session = Depends(get_db)
 ):
     """Lista tabelas do dicionário Protheus sincronizadas."""
+    if tenant_id:
+        import re
+        from sqlalchemy import text
+        from app.db.database import ensure_tenant_tables
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+        if clean_tenant and clean_tenant != "public":
+            ensure_tenant_tables(db, clean_tenant)
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+
     q = db.query(TenantDictionaryTable)
     if tenant_id:
         q = q.filter(TenantDictionaryTable.tenant_id == tenant_id)
@@ -127,6 +153,15 @@ def list_snapshots(
     db: Session = Depends(get_db)
 ):
     """Lista snapshots de dicionário disponíveis."""
+    if tenant_id:
+        import re
+        from sqlalchemy import text
+        from app.db.database import ensure_tenant_tables
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+        if clean_tenant and clean_tenant != "public":
+            ensure_tenant_tables(db, clean_tenant)
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+
     q = db.query(DictionarySnapshot)
     if tenant_id:
         q = q.filter(DictionarySnapshot.tenant_id == tenant_id)

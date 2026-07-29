@@ -95,6 +95,14 @@ def get_dictionary_tables(
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin)
 ):
+    import re
+    from sqlalchemy import text
+    from app.db.database import ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+    if clean_tenant and clean_tenant != "public":
+        ensure_tenant_tables(db, clean_tenant)
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+
     query_tbl = db.query(DictionaryTable).filter(
         DictionaryTable.tenant_id == tenant_id,
         DictionaryTable.environment_id == environment_id,

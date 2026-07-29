@@ -121,6 +121,15 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     if not tenant_id or company_id is None or not prompt:
         raise HTTPException(status_code=400, detail="Os campos tenant_id, company_id e prompt são obrigatórios na v2.")
 
+    import re
+    from sqlalchemy import text
+    from app.db.database import ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+    if clean_tenant and clean_tenant != "public":
+        ensure_tenant_tables(db, clean_tenant)
+        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        db.commit()
+
     # 1. Montar e validar contexto XFILIAL
     op_context = build_protheus_context(empresa=empresa, filial=filial)
 

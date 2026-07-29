@@ -215,10 +215,19 @@ def run_snapshot(
     snapshot_code = snapshot_code or datetime.utcnow().strftime("%Y%m%d%H%M%S")
     own_session   = False
 
+    import re
+    from app.db.database import get_tenant_session, ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    if not clean_tenant:
+        clean_tenant = "default"
+
     if session is None:
-        SessionLocal = sessionmaker(bind=engine)
-        session      = SessionLocal()
+        session      = get_tenant_session(clean_tenant)
         own_session  = True
+    else:
+        if clean_tenant != "public":
+            ensure_tenant_tables(session, clean_tenant)
+            session.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
     allowed_snapshot_tables = set()
     try:
