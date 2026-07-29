@@ -3,7 +3,10 @@
 -- Dados compartilhados entre todos os tenants
 -- =========================================================
 
-CREATE TABLE IF NOT EXISTS tenant_registry (
+CREATE SCHEMA IF NOT EXISTS public;
+SET search_path TO public;
+
+CREATE TABLE IF NOT EXISTS public.tenant_registry (
     id              SERIAL PRIMARY KEY,
     tenant_code     VARCHAR(50) UNIQUE NOT NULL CHECK (tenant_code ~ '^[a-z0-9_]+$'),
     tenant_name     VARCHAR(150) NOT NULL,
@@ -17,7 +20,7 @@ CREATE TABLE IF NOT EXISTS tenant_registry (
     decommissioned_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS plans (
+CREATE TABLE IF NOT EXISTS public.plans (
     plan_code       VARCHAR(50) PRIMARY KEY,
     plan_name       VARCHAR(150) NOT NULL,
     max_users       INTEGER DEFAULT 5,
@@ -26,7 +29,7 @@ CREATE TABLE IF NOT EXISTS plans (
     active          BOOLEAN DEFAULT TRUE
 );
 
-CREATE TABLE IF NOT EXISTS platform_admins (
+CREATE TABLE IF NOT EXISTS public.platform_admins (
     id              SERIAL PRIMARY KEY,
     email           VARCHAR(150) UNIQUE NOT NULL,
     password_hash   VARCHAR(255) NOT NULL,
@@ -35,13 +38,13 @@ CREATE TABLE IF NOT EXISTS platform_admins (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS protheus_modules_master (
+CREATE TABLE IF NOT EXISTS public.protheus_modules_master (
     mod_code        VARCHAR(30) PRIMARY KEY,
     mod_name        VARCHAR(150) NOT NULL,
     description     TEXT
 );
 
-CREATE TABLE IF NOT EXISTS platform_audit_log (
+CREATE TABLE IF NOT EXISTS public.platform_audit_log (
     id              BIGSERIAL PRIMARY KEY,
     tenant_code     VARCHAR(50),
     actor            VARCHAR(150),
@@ -95,7 +98,7 @@ CREATE TABLE IF NOT EXISTS public.companies (
     updated_at                  TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX IF NOT EXISTS ix_tenant_registry_status ON tenant_registry(status);
-CREATE INDEX IF NOT EXISTS ix_audit_tenant_code ON platform_audit_log(tenant_code);
+CREATE INDEX IF NOT EXISTS ix_tenant_registry_status ON public.tenant_registry(status);
+CREATE INDEX IF NOT EXISTS ix_audit_tenant_code ON public.platform_audit_log(tenant_code);
 CREATE INDEX IF NOT EXISTS ix_tenants_tenant_code ON public.tenants(tenant_code);
 CREATE INDEX IF NOT EXISTS ix_companies_tenant_id ON public.companies(tenant_id);
