@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS "{{schema}}".company_info (
     company_code            VARCHAR(20) NOT NULL,
     branch_code              VARCHAR(20) NOT NULL,
     company_name            VARCHAR(150) NOT NULL,
+    environment            VARCHAR(60) NOT NULL,
     webapp_url               TEXT,
     protheus_rest_url        TEXT,
     protheus_usuario         VARCHAR(100),
