@@ -252,16 +252,14 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
             tid = tenant.id
             
         # 1. Verifica quota
-        company_id = context.get("company_id") if context else None
-        if company_id:
+        if tid:
             try:
-                cid = uuid.UUID(company_id)
-                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.company_id == cid).first()
-                if usage and usage.current_queries >= usage.max_queries:
-                    raise Exception(f"Quota de consultas atingida ({usage.current_queries}/{usage.max_queries}).")
+                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == str(tid)).first()
+                if usage and usage.total_queries >= (usage.overage_queries or 999999):
+                    raise Exception(f"Quota de consultas atingida ({usage.total_queries}).")
             except Exception as e:
                 if "Quota" in str(e): raise e
-        
+
         # 2. Verifica tabelas
         latest_snap = db.query(DictionarySnapshot).filter(
             DictionarySnapshot.tenant_id == tid, 
@@ -319,10 +317,10 @@ def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, rec
             )
             db.add(audit)
             
-            if status == "success" and cid:
-                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.company_id == cid).first()
+            if status == "success":
+                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == str(tid)).first()
                 if usage:
-                    usage.current_queries += 1
+                    usage.total_queries += 1
             
             db.commit()
     except Exception as e:

@@ -118,10 +118,10 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
             )
             db.add(audit)
             
-            if cid:
-                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.company_id == cid).first()
+            if tid:
+                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == str(tid)).first()
                 if usage:
-                    usage.current_queries += 1
+                    usage.total_queries += 1
             db.commit()
         except:
             db.rollback()
@@ -151,21 +151,19 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
 @router.get("/usage/{tenant_id}/{period_ref}")
 def get_usage(tenant_id: str, period_ref: str, db: Session = Depends(get_db)):
     # period_ref expected as 'YYYY-MM'
-    # Simplified search by tenant
     try:
-        tid = uuid.UUID(tenant_id)
-        # Assuming we just get the first one for the tenant for now (actually linked to company in v4, but endpoint says tenant_id)
         from app.models.knowledge import Tenant
-        tenant = db.query(Tenant).filter(Tenant.id == tid).first()
+        tenant = db.query(Tenant).filter((Tenant.id == str(tenant_id)) | (Tenant.tenant_code == str(tenant_id))).first()
         if not tenant: raise Exception("Tenant not found")
         
-        usage = db.query(QueryUsageCounter).first() # Simplified
+        usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == str(tenant.id)).first()
         if usage:
+            max_q = usage.overage_queries or 1000
             return {
                 "period": period_ref,
-                "current_queries": usage.current_queries,
-                "max_queries": usage.max_queries,
-                "status": "within_limits" if usage.current_queries < usage.max_queries else "exceeded"
+                "current_queries": usage.total_queries,
+                "max_queries": max_q,
+                "status": "within_limits" if usage.total_queries < max_q else "exceeded"
             }
         return {"period": period_ref, "current_queries": 0, "max_queries": 1000, "status": "within_limits"}
     except Exception as e:
