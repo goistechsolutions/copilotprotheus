@@ -401,7 +401,7 @@ async def sync_modules(
 
     modules_query = (
         "/* %notparser% */ SELECT DISTINCT USR_MODULO, USR_CODMOD "
-        "FROM SYS_USR_MODULE WHERE D_E_L_E_T_<>'*' ORDER BY USR_MODULO"
+        "FROM SYS_USR_MODULE ORDER BY USR_MODULO"
     )
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)

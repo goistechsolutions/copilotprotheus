@@ -97,14 +97,7 @@ async def get_available_modules(
 ):
     company = get_company_or_404(db, company_id)
 
-    sql = """
-        SELECT DISTINCT
-            USR_MODULO,
-            USR_CODMOD
-        FROM SYS_USR_MODULE
-        WHERE D_E_L_E_T_ <> '*'
-        ORDER BY USR_MODULO
-    """
+    sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
 
     try:
         if company.get("protheus_rest_url") and company.get("protheus_usuario") and company.get("encrypted_protheus_password"):
