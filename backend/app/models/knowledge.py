@@ -51,37 +51,34 @@ user_roles = Table(
 # ─────────────────────────────────────────────────────────────
 
 class Tenant(Base):
-    """Entidade raiz multi-tenant. PK = slug legível (ex: 'elitecorp')."""
-    __tablename__ = 'tenants'
+    """Registro global do Tenant no schema public (sem credenciais de conexão)."""
+    __tablename__ = 'tenant_registry'
     __table_args__ = {'schema': 'public'}
 
-    id                          = Column(String(100), primary_key=True, index=True)
-    name                        = Column(String(255), nullable=True)
-    tenant_code                 = Column(String(100), nullable=True, index=True)
-    tenant_name                 = Column(String(255), nullable=True)
-    protheus_rest_url           = Column(String(1024), nullable=True)
-    protheus_user               = Column(String(255), nullable=True)
-    encrypted_protheus_password = Column(Text, nullable=True)          # NUNCA devolver em GET
-    auth_mode                   = Column(String(50),  server_default='basic')
-    system_prompt               = Column(Text, nullable=True)
-    temperature                 = Column(Float, server_default='0.2')  # padrão conservador
-    status                      = Column(String(50),  server_default='active')
-    plan_code                   = Column(String(50),  nullable=True)
-    created_at                  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at                  = Column(DateTime(timezone=True), onupdate=func.now())
+    id              = Column(Integer,     primary_key=True, autoincrement=True)
+    tenant_code     = Column(String(50),  nullable=False, unique=True, index=True)
+    tenant_name     = Column(String(150), nullable=False)
+    schema_name     = Column(String(63),  nullable=False, unique=True)
+    status          = Column(String(20),  nullable=False, default='active')
+    plan_code       = Column(String(50),  nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
+    provisioned_at  = Column(DateTime(timezone=True), nullable=True)
+    decommissioned_at = Column(DateTime(timezone=True), nullable=True)
 
 
 # ─────────────────────────────────────────────────────────────
-# COMPANY
+# COMPANY INFO (Schema Específico da Empresa)
 # ─────────────────────────────────────────────────────────────
 
 class Company(Base):
-    """Empresa/filial Protheus vinculada a um tenant."""
-    __tablename__ = 'companies'
-    __table_args__ = {'schema': 'public'}
+    """Empresa/filial cadastrada dentro do schema exclusivo do tenant."""
+    __tablename__ = 'company_info'
 
-    id                          = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    tenant_id                   = Column(String(100), ForeignKey('public.tenants.id', ondelete='CASCADE'), index=True, nullable=False)
+    id                          = Column(Integer,     primary_key=True, autoincrement=True)
+    company_code                = Column(String(60),  nullable=False, default='01')
+    branch_code                 = Column(String(60),  nullable=False, default='0101')
+    company_name                = Column(String(200), nullable=False)
     cnpj                        = Column(String(30),   index=True, nullable=True)
     ie                          = Column(String(30),   nullable=True)
     razao_social                = Column(String(255),  nullable=True)
@@ -92,17 +89,16 @@ class Company(Base):
     protheus_empresa            = Column(String(20),   nullable=True)
     protheus_unidade            = Column(String(20),   nullable=True)
     protheus_filial             = Column(String(30),   nullable=True)
-    protheus_ambientes          = Column(String(100),  server_default='producao')
+    environment                 = Column(String(60),   default='producao')
+    protheus_ambientes          = Column(String(100),  default='producao')
     protheus_usuario            = Column(String(100),  nullable=True)
-    encrypted_protheus_password = Column(Text,         nullable=True)  # senha criptografada
+    encrypted_protheus_password = Column(Text,         nullable=True)
     protheus_rest_url           = Column(String(1024), nullable=True)
     protheus_webapp_url         = Column(String(1024), nullable=True)
-    licenca_uso                 = Column(Text,         nullable=True)
-    status                      = Column(String(50),   server_default='ativa')
-    company_code                = Column(String(60),   nullable=True)
-    company_name                = Column(String(200),  nullable=True)
-    protheus_env                = Column(String(100),  nullable=True)
-    protheus_branch             = Column(String(100),  nullable=True)
+    auth_mode                   = Column(String(30),   default='basic')
+    system_prompt               = Column(Text,         nullable=True)
+    temperature                 = Column(Float,        default=0.2)
+    status                      = Column(String(50),   default='active')
     created_at                  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at                  = Column(DateTime(timezone=True), onupdate=func.now())
 

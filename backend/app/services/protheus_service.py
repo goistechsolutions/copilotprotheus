@@ -71,54 +71,7 @@ def get_tenant_config(tenant_id: str) -> dict:
                     "auth_mode": connector.auth_type or "basic"
                 }
 
-        # 2. Busca nas configurações diretas no cadastro do Cliente (tabela tenants)
-        if tenant and tenant.protheus_rest_url:
-            pwd = ""
-            enc_pwd = tenant.encrypted_protheus_password or getattr(tenant, 'protheus_password', None)
-            if enc_pwd:
-                try:
-                    pwd = decrypt_password(enc_pwd)
-                except Exception:
-                    pwd = enc_pwd
-                if not pwd:
-                    pwd = enc_pwd
-            return {
-                "rest_url": tenant.protheus_rest_url.rstrip("/"),
-                "webapp_url": "",
-                "vscode_server_url": "",
-                "user": tenant.protheus_user or "",
-                "password": pwd,
-                "auth_mode": tenant.auth_mode or "basic"
-            }
-
-        # 3. Busca nas configurações da Empresa associada (tabela companies)
-        company = db.query(Company).filter(
-            (Company.tenant_id == tenant_key) | (Company.tenant_id == str(tenant_id)),
-            Company.protheus_rest_url != None,
-            Company.protheus_rest_url != ""
-        ).first()
-        
-        if company and company.protheus_rest_url:
-            pwd = ""
-            enc_pwd = getattr(company, 'encrypted_protheus_password', None) or getattr(company, 'protheus_password', None)
-            if enc_pwd:
-                try:
-                    pwd = decrypt_password(enc_pwd)
-                except Exception as e:
-                    logger.error(f"Erro ao decriptar senha da empresa {company.id}: {e}")
-                    pwd = enc_pwd
-                if not pwd:
-                    pwd = enc_pwd
-            return {
-                "rest_url": company.protheus_rest_url.rstrip("/"),
-                "webapp_url": company.protheus_webapp_url or "",
-                "vscode_server_url": "",
-                "user": company.protheus_usuario or "",
-                "password": pwd,
-                "auth_mode": "basic"
-            }
-
-        # 4. Busca na tabela company_info dentro do schema do tenant
+        # 1. Busca na tabela company_info dentro do schema do tenant
         clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
         if clean_tenant and clean_tenant != "public":
             try:
@@ -138,8 +91,8 @@ def get_tenant_config(tenant_id: str) -> dict:
                         "password": pwd,
                         "auth_mode": res[4] or "basic"
                     }
-            except Exception:
-                pass
+            except Exception as schema_err:
+                logger.warning(f"Aviso ao consultar company_info do schema {clean_tenant}: {schema_err}")
 
         # 5. Fallback nas variáveis de ambiente (.env / Globais)
         if settings.protheus_rest_url:

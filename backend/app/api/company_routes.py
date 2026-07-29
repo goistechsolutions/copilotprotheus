@@ -334,20 +334,18 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
             "c_app": c_app, "c_rest": c_rest, "c_user": c_user, "c_pass": c_pass
         })
 
-        upsert_public_tenant = text("""
-            INSERT INTO public.tenants (
-                id, tenant_code, tenant_name, protheus_rest_url, protheus_user, encrypted_protheus_password, status
+        upsert_tenant_registry = text("""
+            INSERT INTO public.tenant_registry (
+                tenant_code, tenant_name, schema_name, status
             ) VALUES (
-                :t_code, :t_code, :c_name, :c_rest, :c_user, :c_pass, 'active'
-            ) ON CONFLICT (id) DO UPDATE SET
+                :t_code, :c_name, :s_name, 'active'
+            ) ON CONFLICT (tenant_code) DO UPDATE SET
                 tenant_name = EXCLUDED.tenant_name,
-                protheus_rest_url = EXCLUDED.protheus_rest_url,
-                protheus_user = EXCLUDED.protheus_user,
-                encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
+                status = EXCLUDED.status,
                 updated_at = NOW();
         """)
-        db.execute(upsert_public_tenant, {
-            "t_code": clean_tenant, "c_name": c_name, "c_rest": c_rest, "c_user": c_user, "c_pass": c_pass
+        db.execute(upsert_tenant_registry, {
+            "t_code": clean_tenant, "c_name": c_name, "s_name": clean_tenant
         })
 
         db.commit()
