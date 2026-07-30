@@ -26,11 +26,12 @@ def get_tenant_config(tenant_id: str) -> dict:
     """
     db = SessionLocal()
     try:
-        tenant = db.query(Tenant).filter(Tenant.id == str(tenant_id)).first()
-        if not tenant:
-            tenant = db.query(Tenant).filter(Tenant.tenant_code == str(tenant_id)).first()
+        t_str = str(tenant_id or '').strip()
+        tenant = db.query(Tenant).filter(Tenant.tenant_code == t_str).first()
+        if not tenant and t_str.isdigit():
+            tenant = db.query(Tenant).filter(Tenant.id == int(t_str)).first()
             
-        tenant_key = str(tenant.id if tenant else tenant_id)
+        tenant_key = str(tenant.tenant_code if tenant else tenant_id)
 
         # 1. Busca na tabela Connector (V4)
         connector = db.query(Connector).filter(
@@ -229,11 +230,11 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
     db = get_tenant_session(tenant_id)
     try:
         tid = str(tenant_id).strip() if tenant_id else "default"
-        tenant = db.query(Tenant).filter(Tenant.id == tid).first()
-        if not tenant:
-            tenant = db.query(Tenant).filter(Tenant.tenant_code == tid).first()
+        tenant = db.query(Tenant).filter(Tenant.tenant_code == tid).first()
+        if not tenant and tid.isdigit():
+            tenant = db.query(Tenant).filter(Tenant.id == int(tid)).first()
         if tenant:
-            tid = str(tenant.id)
+            tid = str(tenant.tenant_code)
             
         # 1. Verifica quota
         if tid:

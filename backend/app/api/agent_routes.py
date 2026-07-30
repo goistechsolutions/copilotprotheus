@@ -152,8 +152,10 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
 def get_usage(tenant_id: str, period_ref: str, db: Session = Depends(get_db)):
     # period_ref expected as 'YYYY-MM'
     try:
-        from app.models.knowledge import Tenant
-        tenant = db.query(Tenant).filter((Tenant.id == str(tenant_id)) | (Tenant.tenant_code == str(tenant_id))).first()
+        t_str = str(tenant_id or '').strip()
+        tenant = db.query(Tenant).filter(Tenant.tenant_code == t_str).first()
+        if not tenant and t_str.isdigit():
+            tenant = db.query(Tenant).filter(Tenant.id == int(t_str)).first()
         if not tenant: raise Exception("Tenant not found")
         
         usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == str(tenant.id)).first()

@@ -54,96 +54,189 @@ def _apply_password(tenant_obj: Tenant, plaintext: Optional[str]) -> None:
 
 # ── Endpoints Protegidos por Admin ─────────────────────────────
 
-@router.get("", response_model=List[TenantResponse])
-@router.get("/", response_model=List[TenantResponse], include_in_schema=False)
+def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Tenant]:
+    t_str = str(tenant_id or '').strip()
+    if not t_str:
+        return None
+    t = db.query(Tenant).filter(Tenant.tenant_code == t_str).first()
+    if not t:
+        t = db.query(Tenant).filter(Tenant.schema_name == t_str).first()
+    if not t and t_str.isdigit():
+        t = db.query(Tenant).filter(Tenant.id == int(t_str)).first()
+    return t
+
+
+def _to_tenant_dict(db: Session, t: Tenant) -> dict:
+    import re
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', t.tenant_code)
+    rest_url, user, prompt, temp = None, None, None, 0.2
+    if clean_tenant and clean_tenant != "public":
+        try:
+            from app.db.database import ensure_tenant_tables
+            ensure_tenant_tables(db, clean_tenant)
+            res = db.execute(text(f'SELECT protheus_rest_url, protheus_usuario, system_prompt, temperature FROM "{clean_tenant}".company_info LIMIT 1')).first()
+            if res:
+                rest_url = res[0]
+                user = res[1]
+                prompt = res[2]
+                temp = float(res[3]) if res[3] is not None else 0.2
+        except Exception:
+            pass
+
+    return {
+        "id": t.tenant_code,
+        "name": t.tenant_name,
+        "tenant_code": t.tenant_code,
+        "tenant_name": t.tenant_name,
+        "protheus_rest_url": rest_url,
+        "protheus_user": user,
+        "auth_mode": "basic",
+        "system_prompt": prompt,
+        "temperature": temp,
+        "status": t.status or "active",
+        "plan_code": t.plan_code,
+        "created_at": t.created_at,
+        "updated_at": t.updated_at
+    }
+
+
+# ── Endpoints Protegidos por Admin ─────────────────────────────
+
+@router.get("", response_model=List[dict])
+@router.get("/", response_model=List[dict], include_in_schema=False)
 def list_tenants(db: Session = Depends(get_db), _admin=Depends(require_admin)):
-    return db.query(Tenant).order_by(Tenant.created_at.desc()).all()
+    tenants = db.query(Tenant).order_by(Tenant.created_at.desc()).all()
+    return [_to_tenant_dict(db, t) for t in tenants]
 
 
-@router.get("/{tenant_id}", response_model=TenantResponse)
+@router.get("/{tenant_id}", response_model=dict)
 def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin)):
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
-    return tenant
+    return _to_tenant_dict(db, tenant)
 
 
-@router.post("", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
-@router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     import re, uuid
-    tenant_id = body.id
-    if not tenant_id:
-        base = body.tenant_code or body.tenant_name or body.name or "tenant"
-        tenant_id = re.sub(r'[^a-z0-9_\-]+', '-', base.lower().strip()).strip('-')
-        if not tenant_id:
-            tenant_id = f"tenant-{uuid.uuid4().hex[:6]}"
+    raw_code = body.tenant_code or body.id or body.tenant_name or body.name or "tenant"
+    t_code = re.sub(r'[^a-z0-9_]+', '_', str(raw_code).lower().strip()).strip('_')
+    if not t_code:
+        t_code = f"tenant_{uuid.uuid4().hex[:6]}"
 
-    final_id = tenant_id
-    counter = 1
-    while db.query(Tenant).filter(Tenant.id == final_id).first():
-        final_id = f"{tenant_id}-{counter}"
-        counter += 1
+    clean_tenant = t_code
+    tenant = find_tenant_by_id_or_code(db, clean_tenant)
 
-    tenant = Tenant(
-        id=final_id,
-        name=body.name or body.tenant_name or final_id,
-        tenant_code=body.tenant_code or final_id,
-        tenant_name=body.tenant_name or body.name,
-        protheus_rest_url=body.protheus_rest_url,
-        protheus_user=body.protheus_user,
-        auth_mode=body.auth_mode or 'basic',
-        system_prompt=body.system_prompt,
-        temperature=body.temperature if body.temperature is not None else 0.2,
-        status=body.status or 'active',
-        plan_code=body.plan_code,
-    )
-    _apply_password(tenant, body.protheus_password)
-    db.add(tenant)
-    db.commit()
-    db.refresh(tenant)
+    if not tenant:
+        tenant = Tenant(
+            tenant_code=clean_tenant,
+            tenant_name=body.tenant_name or body.name or clean_tenant,
+            schema_name=clean_tenant,
+            status=body.status or 'active',
+            plan_code=body.plan_code,
+        )
+        db.add(tenant)
+        db.commit()
+        db.refresh(tenant)
+    else:
+        tenant.tenant_name = body.tenant_name or body.name or tenant.tenant_name
+        tenant.status = body.status or tenant.status
+        tenant.plan_code = body.plan_code or tenant.plan_code
+        db.commit()
+        db.refresh(tenant)
 
+    # Cria schema e salva dados em company_info no schema isolado
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(final_id))
-    if clean_tenant:
-        try:
-            ensure_tenant_tables(db, clean_tenant)
-        except Exception:
-            pass
+    ensure_tenant_tables(db, clean_tenant)
 
-    return tenant
+    enc_pass = None
+    if body.protheus_password:
+        enc_pass = encrypt_password(body.protheus_password)
+
+    upsert_company_info = text(f"""
+        INSERT INTO "{clean_tenant}".company_info (
+            company_code, branch_code, company_name, protheus_rest_url, protheus_usuario, encrypted_protheus_password, system_prompt, temperature, status
+        ) VALUES (
+            '01', '0101', :c_name, :c_rest, :c_user, :c_pass, :c_prompt, :c_temp, 'active'
+        ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
+            company_name = EXCLUDED.company_name,
+            protheus_rest_url = COALESCE(EXCLUDED.protheus_rest_url, "{clean_tenant}".company_info.protheus_rest_url),
+            protheus_usuario = COALESCE(EXCLUDED.protheus_usuario, "{clean_tenant}".company_info.protheus_usuario),
+            encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
+            system_prompt = COALESCE(EXCLUDED.system_prompt, "{clean_tenant}".company_info.system_prompt),
+            temperature = COALESCE(EXCLUDED.temperature, "{clean_tenant}".company_info.temperature),
+            updated_at = NOW();
+    """)
+    db.execute(upsert_company_info, {
+        "c_name": tenant.tenant_name,
+        "c_rest": body.protheus_rest_url,
+        "c_user": body.protheus_user,
+        "c_pass": enc_pass,
+        "c_prompt": body.system_prompt,
+        "c_temp": body.temperature if body.temperature is not None else 0.2
+    })
+    db.commit()
+
+    return _to_tenant_dict(db, tenant)
 
 
-@router.put("/{tenant_id}", response_model=TenantResponse)
+@router.put("/{tenant_id}", response_model=dict)
 def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
-    update_data = body.model_dump(exclude_none=True, exclude={'protheus_password'})
-    for field, value in update_data.items():
-        setattr(tenant, field, value)
-
-    _apply_password(tenant, body.protheus_password)
+    if body.tenant_name or body.name:
+        tenant.tenant_name = body.tenant_name or body.name
+    if body.status:
+        tenant.status = body.status
+    if body.plan_code:
+        tenant.plan_code = body.plan_code
 
     db.commit()
     db.refresh(tenant)
 
-    from app.db.database import ensure_tenant_tables
-    import re
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
-    if clean_tenant:
-        try:
-            ensure_tenant_tables(db, clean_tenant)
-        except Exception:
-            pass
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant.tenant_code)
+    if clean_tenant and clean_tenant != "public":
+        from app.db.database import ensure_tenant_tables
+        ensure_tenant_tables(db, clean_tenant)
 
-    return tenant
+        enc_pass = None
+        if body.protheus_password:
+            enc_pass = encrypt_password(body.protheus_password)
+
+        upsert_company_info = text(f"""
+            INSERT INTO "{clean_tenant}".company_info (
+                company_code, branch_code, company_name, protheus_rest_url, protheus_usuario, encrypted_protheus_password, system_prompt, temperature, status
+            ) VALUES (
+                '01', '0101', :c_name, :c_rest, :c_user, :c_pass, :c_prompt, :c_temp, 'active'
+            ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
+                company_name = COALESCE(EXCLUDED.company_name, "{clean_tenant}".company_info.company_name),
+                protheus_rest_url = COALESCE(EXCLUDED.protheus_rest_url, "{clean_tenant}".company_info.protheus_rest_url),
+                protheus_usuario = COALESCE(EXCLUDED.protheus_usuario, "{clean_tenant}".company_info.protheus_usuario),
+                encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
+                system_prompt = COALESCE(EXCLUDED.system_prompt, "{clean_tenant}".company_info.system_prompt),
+                temperature = COALESCE(EXCLUDED.temperature, "{clean_tenant}".company_info.temperature),
+                updated_at = NOW();
+        """)
+        db.execute(upsert_company_info, {
+            "c_name": tenant.tenant_name,
+            "c_rest": body.protheus_rest_url,
+            "c_user": body.protheus_user,
+            "c_pass": enc_pass,
+            "c_prompt": body.system_prompt,
+            "c_temp": body.temperature
+        })
+        db.commit()
+
+    return _to_tenant_dict(db, tenant)
 
 
 @router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin)):
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
     db.delete(tenant)
