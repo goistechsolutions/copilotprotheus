@@ -25,7 +25,7 @@ import hashlib
 import uuid
 from pathlib import Path
 
-from app.db.database import get_db
+from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import (
     AuditLog, Tenant, Company,
     TenantAllowedTable, TenantContract, DictionarySnapshot, TenantDictionaryTable,
