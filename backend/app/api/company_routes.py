@@ -354,7 +354,20 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
 
 @router.post("/companies", response_model=CompanyResponse)
 def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
-    tenant_code = str(payload.tenant_id or payload.protheus_grupo or payload.cnpj or "default")
+    raw_tenant = str(payload.tenant_id or payload.protheus_grupo or payload.cnpj or "default")
+    tenant_code = raw_tenant
+    try:
+        if raw_tenant.isdigit():
+            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE id = :id OR tenant_code = :tc"), {"id": int(raw_tenant), "tc": raw_tenant}).mappings().first()
+            if reg:
+                tenant_code = reg["schema_name"] or reg["tenant_code"]
+        else:
+            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE tenant_code = :tc OR schema_name = :tc"), {"tc": raw_tenant}).mappings().first()
+            if reg:
+                tenant_code = reg["schema_name"] or reg["tenant_code"]
+    except Exception:
+        pass
+
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
     if not clean_tenant or clean_tenant == "public":
         clean_tenant = "default"

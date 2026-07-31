@@ -113,7 +113,7 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
               >
                 <option value="">Selecione um Tenant...</option>
                 {tenants.map(t => (
-                  <option key={t.id} value={t.id}>{t.tenant_name || t.name} ({t.tenant_code || t.id})</option>
+                  <option key={t.id} value={t.tenant_code || t.code || t.id}>{t.tenant_name || t.name} ({t.tenant_code || t.code || t.id})</option>
                 ))}
               </select>
             </div>

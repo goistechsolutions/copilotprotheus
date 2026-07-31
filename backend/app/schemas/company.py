@@ -3,22 +3,22 @@ from typing import Optional
 from datetime import datetime
 
 class CompanyBase(BaseModel):
-    cnpj: str
+    cnpj: Optional[str] = ""
     ie: Optional[str] = None
-    razao_social: str
+    razao_social: Optional[str] = ""
     email: Optional[str] = None
     telefone: Optional[str] = None
     endereco: Optional[str] = None
-    protheus_grupo: str
+    protheus_grupo: Optional[str] = ""
     protheus_empresa: Optional[str] = None
     protheus_unidade: Optional[str] = None
-    protheus_filial: str
+    protheus_filial: Optional[str] = "0101"
     protheus_ambientes: Optional[str] = "producao"
     protheus_usuario: Optional[str] = None
     protheus_rest_url: Optional[str] = None
     protheus_webapp_url: Optional[str] = None
     licenca_uso: Optional[str] = None
-    status: str = "ativa"
+    status: Optional[str] = "ativa"
     tenant_id: Optional[str] = None
 
 class CompanyCreate(CompanyBase):
