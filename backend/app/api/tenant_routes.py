@@ -7,6 +7,7 @@ Segurança:
 - Apenas platform_admin pode criar/deletar tenants.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from cryptography.fernet import Fernet
 import os
