@@ -14,6 +14,7 @@ Regras obrigatórias (Base_Conhecimento.pdf):
 - Sempre respeitar D_E_L_E_T_ <> '*'.
 - JOINs baseados em SIX/X2_UNICO, nunca em X3_RELACAO.
 """
+import re
 import os
 import json
 import requests

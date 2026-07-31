@@ -2,6 +2,7 @@
 report_service.py — Serviço de exportação de relatórios (Excel e PDF) para dados do Protheus.
 Busca dados via Protheus REST API e gera os arquivos formatados.
 """
+import re
 import os
 import json
 import uuid

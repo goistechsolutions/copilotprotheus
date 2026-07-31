@@ -6,6 +6,7 @@ Segurança:
 - Senha recebida como protheus_password (plaintext) → criptografada antes de persistir.
 - Apenas platform_admin pode criar/deletar tenants.
 """
+import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session

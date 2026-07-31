@@ -12,6 +12,7 @@ Seguranca:
   - Senhas nunca em claro. Uso de Fernet via FERNET_KEY.
   - ADMIN_USER / ADMIN_PASSWORD via env.
 """
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field

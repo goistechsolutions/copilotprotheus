@@ -5,6 +5,7 @@ Helper para chamar a QueryRest do Protheus.
 A QueryRest aceita POST com {"cQuery": "SELECT ..."} e retorna lista JSON.
 Suporta chamadas diretas via URL/credenciais e chamadas contextualizadas por tenant/portal.
 """
+import re
 import logging
 import json
 import os
