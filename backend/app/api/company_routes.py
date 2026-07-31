@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from typing import Dict, Any, List, Optional
 import logging
+import re
 from datetime import datetime
 import uuid
 import json
