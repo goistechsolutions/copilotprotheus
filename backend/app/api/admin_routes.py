@@ -389,22 +389,94 @@ def update_tables(
 # SYNC MODULOS  (V4: ProtheusModuleMaster)
 # ─────────────────────────────────────────────────────────────
 
+CANONICAL_MODULES_QUERY = """SELECT DISTINCT          
+    USR_MODULO AS CODIGO_MODULO,      
+    USR_CODMOD AS CODIGO_TABELA,         
+    CASE USR_MODULO         
+        WHEN '01' THEN 'SIGAATF - Ativo Fixo'         
+        WHEN '02' THEN 'SIGAFAT - Faturamento'         
+        WHEN '03' THEN 'SIGACOM - Compras / Suprimentos'         
+        WHEN '04' THEN 'SIGAEST - Estoque e Custos'         
+        WHEN '05' THEN 'SIGAFIN - Financeiro'         
+        WHEN '06' THEN 'SIGAFIS - Livros Fiscais'         
+        WHEN '07' THEN 'SIGAGPE - Gestão de Pessoal'         
+        WHEN '08' THEN 'SIGAPCP - Planejamento e Controle da Produção'         
+        WHEN '09' THEN 'SIGAMNT - Manutenção de Ativos'         
+        WHEN '10' THEN 'SIGOFI  - Oficina'         
+        WHEN '11' THEN 'SIGACRM - Gestão de Relacionamento (CRM)'         
+        WHEN '12' THEN 'SIGAPLN - Planejamento e Orçamento'         
+        WHEN '13' THEN 'SIGAADV - Administração de Vendas'         
+        WHEN '14' THEN 'SIGAPEG - Pecúlio e Pensões'         
+        WHEN '15' THEN 'SIGAAGR - Agronegócio'         
+        WHEN '16' THEN 'SIGAPON - Ponto Eletrônico'         
+        WHEN '17' THEN 'SIGAMDT - Medicina e Segurança do Trabalho'         
+        WHEN '18' THEN 'SIGAQHT - Qualidade / Hotelaria'         
+        WHEN '19' THEN 'SIGAQMT - Metrologia'         
+        WHEN '20' THEN 'SIGAQDO - Documentação da Qualidade'         
+        WHEN '21' THEN 'SIGAQIP - Inspeção de Processos'         
+        WHEN '22' THEN 'SIGAQIE - Inspeção de Entradas'         
+        WHEN '23' THEN 'SIGAFSP - Fast Service / Posto de Combustível'         
+        WHEN '24' THEN 'SIGAPAT - Patrimônio / Ativo Fixo'         
+        WHEN '25' THEN 'SIGAVEC - Veículos'         
+        WHEN '26' THEN 'SIGAEC  - Easy Construction'         
+        WHEN '27' THEN 'SIGAACD - Automação Coleta de Dados'         
+        WHEN '28' THEN 'SIGATMS - Gestão de Transportes (TMS)'         
+        WHEN '29' THEN 'SIGAWMS - Gestão de Armazém (WMS)'         
+        WHEN '30' THEN 'SIGAPMS - Gestão de Projetos (PMS)'         
+        WHEN '31' THEN 'SIGACDB - Código de Bars / Automação'         
+        WHEN '32' THEN 'SIGAERM - Risk Management'         
+        WHEN '33' THEN 'SIGAEIC - Easy Import Control (Importação)'         
+        WHEN '34' THEN 'SIGAEEC - Easy Export Control (Exportação)'         
+        WHEN '35' THEN 'SIGAEFF - Easy Foreign Finance'         
+        WHEN '36' THEN 'SIGAECO - Easy Accounting / Contabilidade Câmbio'         
+        WHEN '37' THEN 'SIGAEDC - Easy Data Collection'         
+        WHEN '38' THEN 'SIGAEPO - Easy Purchase Order'         
+        WHEN '39' THEN 'SIGASFC - Shop Floor Control (Chão de Fábrica)'         
+        WHEN '40' THEN 'SIGAPLS - Planos de Saúde'         
+        WHEN '41' THEN 'SIGACTL - Controle de Locação'         
+        WHEN '42' THEN 'SIGAGVA - Gestão de Varejo'         
+        WHEN '43' THEN 'SIGATAC - Gestão de Acervos / Módulos Especiais'         
+        WHEN '44' THEN 'SIGAOMS - Order Management System'         
+        WHEN '45' THEN 'SIGAAMB - Gestão Ambiental'         
+        WHEN '46' THEN 'SIGANCM - Nomenclatura Comum do Mercosul'         
+        WHEN '47' THEN 'SIGAGCC - Gestão de Contratos de Concessão'         
+        WHEN '48' THEN 'SIGAGSP - Gestão do Setor Público'         
+        WHEN '49' THEN 'SIGAGTP - Gestão de Transporte de Passageiros'         
+        WHEN '53' THEN 'SIGATFP - Gestão de Frota / Passagens'         
+        WHEN '56' THEN 'SIGAGCV - Gestão de Cargas e Veículos'         
+        WHEN '84' THEN 'SIGACFG - Configurador'         
+        WHEN '88' THEN 'SIGAESP - Específico / Customizados'         
+        WHEN '97' THEN 'SIGAFWD - Framework / Arquitetura'         
+        WHEN 1 THEN 'SIGAATF - Ativo Fixo'         
+        WHEN 2 THEN 'SIGAFAT - Faturamento'         
+        WHEN 3 THEN 'SIGACOM - Compras / Suprimentos'         
+        WHEN 4 THEN 'SIGAEST - Estoque e Custos'         
+        WHEN 5 THEN 'SIGAFIN - Financeiro'         
+        WHEN 6 THEN 'SIGAFIS - Livros Fiscais'         
+        WHEN 7 THEN 'SIGAGPE - Gestão de Pessoal'         
+        WHEN 8 THEN 'SIGAPCP - Planejamento e Controle da Produção'         
+        WHEN 9 THEN 'SIGAMNT - Manutenção de Ativos'         
+        ELSE 'Outros'        
+    END AS NOME_MODULO         
+FROM SYS_USR_MODULE         
+WHERE D_E_L_E_T_ <> '*'         
+ORDER BY USR_MODULO"""
+
 @router.post("/sync-modules")
 async def sync_modules(
     payload: dict     = Body(...),
     db: Session       = Depends(get_db),
     admin: str        = Depends(verify_admin),
 ):
-    """Sincroniza SYS_USR_MODULE -> protheus_modules_master."""
+    """Sincroniza SYS_USR_MODULE -> protheus_modules_master usando a query canônica."""
     from app.services.protheus_service import execute_protheus_tool
 
     tenant_id = payload.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
 
-    modules_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
     try:
-        response_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
+        response_str = await execute_protheus_tool("QueryRest", {"cQuery": CANONICAL_MODULES_QUERY}, tenant_id=tenant_id)
         result_data  = json.loads(fix_protheus_json(response_str))
         if isinstance(result_data, dict):
             result_data = result_data.get("items") or result_data.get("data", [])
@@ -422,21 +494,28 @@ async def sync_modules(
 
         count = 0
         for row in result_data:
-            mod_code = _val(row, "USR_MODULO")
-            mod_name = _val(row, "USR_CODMOD")
-            if not mod_code:
+            c_mod = _val(row, "CODIGO_MODULO") or _val(row, "USR_MODULO")
+            c_tab = _val(row, "CODIGO_TABELA") or _val(row, "USR_CODMOD")
+            n_mod = _val(row, "NOME_MODULO")
+            if not c_mod:
                 continue
+
             existing = db.query(ProtheusModuleMaster).filter(
-                ProtheusModuleMaster.module_code == mod_code
+                (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
             ).first()
+
             if existing:
-                existing.module_name = mod_name or existing.module_name
+                existing.module_code = c_mod
+                existing.module_name = c_tab or existing.module_name
+                existing.description = n_mod or existing.description
                 existing.active      = True
             else:
                 db.add(ProtheusModuleMaster(
-                    module_code=mod_code,
-                    module_name=mod_name or mod_code,
+                    module_code=c_mod,
+                    module_name=c_tab or c_mod,
+                    description=n_mod,
                     source_name="SYS_USR_MODULE",
+                    active=True
                 ))
             count += 1
 
@@ -463,7 +542,11 @@ def get_protheus_modules(
     )
     return {
         "modules": [
-            {"module_code": m.module_code, "module_name": m.module_name}
+            {
+                "module_code": m.module_code,
+                "module_name": m.module_name,
+                "description": m.description or m.module_name or m.module_code
+            }
             for m in modules
         ]
     }

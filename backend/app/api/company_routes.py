@@ -456,6 +456,44 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 
     db.commit()
 
+    # Popula public.protheus_modules_master ao cadastrar empresa
+    if payload.protheus_rest_url and payload.protheus_usuario and payload.protheus_password:
+        try:
+            from app.api.admin_routes import CANONICAL_MODULES_QUERY
+            from app.services.protheus_service import queryrest_exec
+            rows = queryrest_exec(
+                payload.protheus_rest_url,
+                payload.protheus_usuario,
+                enc_pass or payload.protheus_password,
+                CANONICAL_MODULES_QUERY
+            )
+            if isinstance(rows, list):
+                for r in rows:
+                    if not isinstance(r, dict): continue
+                    c_mod = str(r.get("CODIGO_MODULO") or r.get("USR_MODULO") or "").strip()
+                    c_tab = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
+                    n_mod = str(r.get("NOME_MODULO") or "").strip()
+                    if not c_mod: continue
+                    existing = db.query(ProtheusModuleMaster).filter(
+                        (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
+                    ).first()
+                    if existing:
+                        existing.module_code = c_mod
+                        existing.module_name = c_tab or existing.module_name
+                        existing.description = n_mod or existing.description
+                        existing.active      = True
+                    else:
+                        db.add(ProtheusModuleMaster(
+                            module_code=c_mod,
+                            module_name=c_tab or c_mod,
+                            description=n_mod,
+                            source_name="SYS_USR_MODULE",
+                            active=True
+                        ))
+                db.commit()
+        except Exception as e_mod:
+            logger.warning(f"Aviso ao sincronizar protheus_modules_master no cadastro da empresa: {e_mod}")
+
     cid = res[0] if res else 1
     now = datetime.now()
     return {
