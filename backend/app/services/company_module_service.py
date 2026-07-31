@@ -244,10 +244,10 @@ def replace_company_modules(
             
             db.execute(
                 text(f"""
-                    INSERT INTO "{clean_tenant}".protheus_modules (tenant_id, usr_modulo, usr_codmod)
-                    VALUES (:tid, :mname, :mcode);
+                    INSERT INTO "{clean_tenant}".protheus_modules (tenant_id, modulo, codmod, usr_modulo, usr_codmod)
+                    VALUES (:tid, :mname, :mcode, :mname, :mcode);
                 """),
-                {"tid": tenant_id, "mname": m_name, "mcode": m_code}
+                {"tid": clean_tenant, "mname": m_name, "mcode": m_code}
             )
         db.commit()
     except Exception as e:

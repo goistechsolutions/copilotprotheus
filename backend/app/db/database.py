@@ -166,14 +166,24 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
                 company_code VARCHAR(60),
-                usr_modulo VARCHAR(50) NOT NULL,
-                usr_codmod VARCHAR(50) NOT NULL,
+                modulo VARCHAR(50) NOT NULL,
+                codmod VARCHAR(50) NOT NULL,
+                usr_modulo VARCHAR(50),
+                usr_codmod VARCHAR(50),
                 usr_nome VARCHAR(255),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+            ALTER TABLE "{clean_tenant}".protheus_modules ADD COLUMN IF NOT EXISTS modulo VARCHAR(50);
+            ALTER TABLE "{clean_tenant}".protheus_modules ADD COLUMN IF NOT EXISTS codmod VARCHAR(50);
+            UPDATE "{clean_tenant}".protheus_modules SET modulo = usr_modulo WHERE modulo IS NULL AND usr_modulo IS NOT NULL;
+            UPDATE "{clean_tenant}".protheus_modules SET codmod = usr_codmod WHERE codmod IS NULL AND usr_codmod IS NOT NULL;
+
+            DROP INDEX IF EXISTS "{clean_tenant}".idx_{clean_tenant}_pm_usr_modulo;
+            DROP INDEX IF EXISTS "{clean_tenant}".idx_{clean_tenant}_pm_usr_codmod;
+
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_tenant ON "{clean_tenant}".protheus_modules (tenant_id);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_usr_modulo ON "{clean_tenant}".protheus_modules (usr_modulo);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_usr_codmod ON "{clean_tenant}".protheus_modules (usr_codmod);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_modulo ON "{clean_tenant}".protheus_modules (modulo);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_codmod ON "{clean_tenant}".protheus_modules (codmod);
         """))
 
         # 2. tenant_schemas
