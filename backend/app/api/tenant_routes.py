@@ -73,8 +73,6 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
     rest_url, user, prompt, temp = None, None, None, 0.2
     if clean_tenant and clean_tenant != "public":
         try:
-            from app.db.database import ensure_tenant_tables
-            ensure_tenant_tables(db, clean_tenant)
             res = db.execute(text(f'SELECT protheus_rest_url, protheus_usuario, system_prompt, temperature FROM "{clean_tenant}".company_info LIMIT 1')).first()
             if res:
                 rest_url = res[0]
