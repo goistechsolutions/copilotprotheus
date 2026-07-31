@@ -115,7 +115,7 @@ def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
                         COALESCE(protheus_ambientes, environment, 'producao') AS protheus_ambientes,
                         protheus_usuario,
                         protheus_rest_url,
-                        protheus_webapp_url,
+                        webapp_url AS protheus_webapp_url,
                         COALESCE(status, 'ativa') AS status,
                         created_at,
                         updated_at
