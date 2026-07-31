@@ -27,7 +27,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql+psycopg2://postgres:sap_password_123@db:5432/copilot_protheus
     depends_on:
       db:
         condition: service_healthy
