@@ -705,11 +705,13 @@ async def sync_schema(
             if not chave: continue
             chaves_list.append(chave)
             x2_mod   = _fv(row, "X2_MODULO")
-            cod_name = code_to_name.get(x2_mod, clean_modulos[0] if clean_modulos else "")
+            cod_sigla = code_to_name.get(x2_mod, clean_modulos[0] if clean_modulos else "")
             schema_dict[chave] = {
-                "modulo": cod_name,
-                "tabela": _fv(row, "X2_ARQUIVO"),
-                "nome":   _fv(row, "X2_NOME"),
+                "x2_modulo": x2_mod,
+                "codmod":    cod_sigla,
+                "modulo":    cod_sigla,
+                "tabela":    _fv(row, "X2_ARQUIVO"),
+                "nome":      _fv(row, "X2_NOME"),
                 "compartilhamento": {
                     "empresa": _fv(row, "USA_EMPRESA", "N"),
                     "unidade": _fv(row, "USA_UNIDADE", "N"),
@@ -761,19 +763,20 @@ async def sync_schema(
 
         for clean_mod in clean_modulos:
             db.execute(
-                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE modulo = :m'),
+                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE modulo = :m OR codmod = :m'),
                 {"m": clean_mod}
             )
 
         for chave, meta in schema_dict.items():
             db.execute(
                 text(f"""
-                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, chave, tabela, nome, schema_json, updated_at)
-                    VALUES (:t, :m, :c, :tbl, :n, :j, NOW())
+                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, codmod, chave, tabela, nome, schema_json, updated_at)
+                    VALUES (:t, :m, :cm, :c, :tbl, :n, :j, NOW())
                 """),
                 {
                     "t": clean_tenant,
-                    "m": meta["modulo"],
+                    "m": meta["x2_modulo"],
+                    "cm": meta["codmod"],
                     "c": chave,
                     "tbl": meta["tabela"],
                     "n": meta["nome"],

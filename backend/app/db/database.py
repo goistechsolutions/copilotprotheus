@@ -168,11 +168,12 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 company_code VARCHAR(60),
                 usr_modulo VARCHAR(50) NOT NULL,
                 usr_codmod VARCHAR(50) NOT NULL,
+                usr_nome VARCHAR(255),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_tenant ON "{clean_tenant}".protheus_modules (tenant_id);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_codmod ON "{clean_tenant}".protheus_modules (usr_codmod);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_modulo ON "{clean_tenant}".protheus_modules (usr_modulo);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_usr_modulo ON "{clean_tenant}".protheus_modules (usr_modulo);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_usr_codmod ON "{clean_tenant}".protheus_modules (usr_codmod);
         """))
 
         # 2. tenant_schemas
@@ -180,7 +181,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
-                modulo VARCHAR(50),
+                modulo VARCHAR(50) NOT NULL,
+                codmod VARCHAR(50),
                 chave VARCHAR(10) NOT NULL,
                 tabela VARCHAR(50),
                 nome VARCHAR(255),
@@ -188,8 +190,10 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+            ALTER TABLE "{clean_tenant}".tenant_schemas ADD COLUMN IF NOT EXISTS codmod VARCHAR(50);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_tenant ON "{clean_tenant}".tenant_schemas (tenant_id);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_modulo ON "{clean_tenant}".tenant_schemas (modulo);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_codmod ON "{clean_tenant}".tenant_schemas (codmod);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_chave ON "{clean_tenant}".tenant_schemas (chave);
         """))
 
