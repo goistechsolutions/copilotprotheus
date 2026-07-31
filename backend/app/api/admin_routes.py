@@ -686,21 +686,37 @@ async def sync_schema(
         if not schema_dict:
             raise Exception("Nenhuma tabela retornada pelo Protheus.")
 
-        # Persiste em tenant_schemas (cache legivel) + TenantDictionaryTable (modelo V4)
-        db.query(TenantSchema).filter(
-            TenantSchema.tenant_id == tenant_id,
-            TenantSchema.modulo.in_(clean_modulos),
-        ).delete(synchronize_session=False)
+        # Persiste em "{clean_tenant}".tenant_schemas (cache legivel no schema do tenant)
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
+        if not clean_tenant or clean_tenant == "public":
+            clean_tenant = "default"
 
-        for chave, meta in schema_dict.items():
-            db.add(TenantSchema(
-                tenant_id  =tenant_id,
-                modulo     =meta["modulo"],
-                chave      =chave,
-                tabela     =meta["tabela"],
-                nome       =meta["nome"],
-                schema_json=meta,
-            ))
+        ensure_tenant_tables(db, clean_tenant)
+
+        try:
+            for clean_mod in clean_modulos:
+                db.execute(
+                    text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE modulo = :m'),
+                    {"m": clean_mod}
+                )
+
+            for chave, meta in schema_dict.items():
+                db.execute(
+                    text(f"""
+                        INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, chave, tabela, nome, schema_json, updated_at)
+                        VALUES (:t, :m, :c, :tbl, :n, :j, NOW())
+                    """),
+                    {
+                        "t": clean_tenant,
+                        "m": meta["modulo"],
+                        "c": chave,
+                        "tbl": meta["tabela"],
+                        "n": meta["nome"],
+                        "j": json.dumps(meta)
+                    }
+                )
+        except Exception as e_ts:
+            logger.warning(f"Aviso ao persistir tenant_schemas em {clean_tenant}: {e_ts}")
             # Upsert no dicionario V4
             existing_dt = db.query(TenantDictionaryTable).filter(
                 TenantDictionaryTable.tenant_id  == tenant_id,
@@ -742,25 +758,38 @@ def get_schemas(
     db: Session   = Depends(get_db),
     admin: str    = Depends(verify_admin),
 ):
-    schemas = (
-        db.query(TenantSchema)
-        .filter(TenantSchema.tenant_id == tenant_id)
-        .all()
-    )
-    return {
-        "schemas": [
-            {
-                "id":           s.id,
-                "modulo":       s.modulo,
-                "chave":        s.chave,
-                "tabela":       s.tabela,
-                "nome":         s.nome,
-                "campos_count": len(s.schema_json.get("campos", [])),
-                "compartilhamento": s.schema_json.get("compartilhamento", {}),
-            }
-            for s in schemas
-        ]
-    }
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
+    if not clean_tenant or clean_tenant == "public":
+        clean_tenant = "default"
+
+    ensure_tenant_tables(db, clean_tenant)
+
+    try:
+        rows = db.execute(
+            text(f'SELECT id, modulo, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
+        ).mappings().all()
+
+        schemas_list = []
+        for s in rows:
+            schema_json = s.get("schema_json") or {}
+            if isinstance(schema_json, str):
+                try: schema_json = json.loads(schema_json)
+                except Exception: schema_json = {}
+
+            schemas_list.append({
+                "id": s["id"],
+                "modulo": s["modulo"],
+                "chave": s["chave"],
+                "tabela": s["tabela"],
+                "nome": s["nome"],
+                "campos_count": len(schema_json.get("campos", [])) if isinstance(schema_json, dict) else 0,
+                "compartilhamento": schema_json.get("compartilhamento", {}) if isinstance(schema_json, dict) else {}
+            })
+
+        return {"schemas": schemas_list}
+    except Exception as e:
+        logger.error(f"Erro ao buscar schemas para {clean_tenant}: {e}")
+        return {"schemas": []}
 
 
 # ─────────────────────────────────────────────────────────────
