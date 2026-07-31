@@ -28,15 +28,21 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
             {"cid": cid_str}
         ).mappings().first()
 
+        if not reg and cid_str.isdigit():
+            reg = db.execute(
+                text("SELECT id, tenant_code, tenant_name, schema_name, status FROM public.tenant_registry ORDER BY id ASC LIMIT 1")
+            ).mappings().first()
+
         if reg:
             clean_tenant = reg.get("schema_name") or reg.get("tenant_code")
     except Exception:
         pass
 
-    if not clean_tenant:
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', cid_str)
+    if not clean_tenant or clean_tenant.isdigit():
+        clean_tenant = "default"
 
-    if not clean_tenant or clean_tenant == "public":
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(clean_tenant))
+    if not clean_tenant or clean_tenant == "public" or clean_tenant.isdigit():
         clean_tenant = "default"
 
     # Garante que o schema existe
