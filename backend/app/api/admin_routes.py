@@ -783,7 +783,10 @@ def get_schemas(
     db: Session   = Depends(get_db),
     admin: str    = Depends(verify_admin),
 ):
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
+   import re
+    from app.db.database import ensure_tenant_tables
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+
     if not clean_tenant or clean_tenant == "public":
         clean_tenant = "default"
 
