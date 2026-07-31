@@ -35,13 +35,11 @@ jobs:
 
       - name: Smoke Test — Health Check
         run: |
-          sleep 10
+          sleep 15
           curl --fail --retry 5 --retry-delay 5 \
-            https://${{ secrets.VPS_HOST }}/health || \
-            (echo "❌ Health check falhou!" && exit 1)
+            http://${{ secrets.VPS_HOST }}:8000/health || \
+            (echo "❌ Health check falhou após o deploy!" && exit 1)
 
       - name: Notificar falha
         if: failure()
-        run: |
-          echo "::error::Deploy falhou — verifique os logs do job"
-          # Aqui pode chamar webhook Slack/Teams se quiser
+        run: echo "::error::Deploy ou health check falhou — revise os logs acima"

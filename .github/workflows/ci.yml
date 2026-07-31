@@ -28,7 +28,8 @@ jobs:
         run: pip install pytest pytest-asyncio httpx
 
       - name: Executar testes
-        run: pytest tests/ -q --tb=short   # SEM || true — falha real deve reprovar o CI
+        run: pytest tests/ -q --tb=short
+        # SEM || true — falha real reprova o CI
 
   frontend-lint:
     name: Admin Frontend (Node)
