@@ -783,9 +783,8 @@ def get_schemas(
     db: Session   = Depends(get_db),
     admin: str    = Depends(verify_admin),
 ):
-  import re
-        from sqlalchemy import text
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id)
+    import re
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
     if not clean_tenant or clean_tenant == "public":
         clean_tenant = "default"
 
