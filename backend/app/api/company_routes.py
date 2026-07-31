@@ -436,7 +436,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     db.commit()
 
     cid = res[0] if res else 1
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.now()
     return {
         "id": cid,
         "tenant_id": clean_tenant,
@@ -521,7 +521,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
 
     db.commit()
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.now()
     return {
         "id": company_id,
         "tenant_id": clean_tenant,
