@@ -1,29 +1,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Deploy Backend → Hetzner VPS
-# Branch main  → ambiente production  (secrets prefixo PROD_)
-# Branch hml   → ambiente homologation (secrets prefixo HML_)
+# Branch main → production   (usa os secrets existentes sem prefixo)
+# Branch hml  → homologation (usa os mesmos secrets — mesmo servidor, pasta hml)
 #
-# Secrets necessários no repositório (Settings → Secrets → Actions):
+# Secrets necessários (Settings → Secrets → Actions):
 #
-#   PROD_VPS_HOST            IP/hostname do VPS de produção
-#   PROD_VPS_USER            Usuário SSH de produção
-#   PROD_VPS_SSH_KEY         Chave privada SSH de produção
-#   PROD_VPS_PORT            Porta SSH (default 22)
-#   PROD_SECRET_KEY          openssl rand -hex 32
-#   PROD_POSTGRES_PASSWORD   Senha forte do banco
-#   PROD_OPENAI_API_KEY      Chave OpenAI de produção
-#   PROD_CLOUDFLARE_TUNNEL_TOKEN   Token do túnel Cloudflare
-#   PROD_CORS_ORIGINS        Domínios separados por vírgula
-#
-#   HML_VPS_HOST             (idem acima para hml)
-#   HML_VPS_USER
-#   HML_VPS_SSH_KEY
-#   HML_VPS_PORT
-#   HML_SECRET_KEY
-#   HML_POSTGRES_PASSWORD
-#   HML_OPENAI_API_KEY
-#   HML_CLOUDFLARE_TUNNEL_TOKEN
-#   HML_CORS_ORIGINS
+#   VPS_HOST                IP/hostname do servidor Hetzner
+#   VPS_USER                Usuário SSH
+#   VPS_SSH_KEY             Chave privada SSH (conteúdo do id_ed25519)
+#   VPS_PORT                Porta SSH (padrão: 22)
+#   SECRET_KEY              openssl rand -hex 32
+#   POSTGRES_PASSWORD       Senha forte do banco
+#   OPENAI_API_KEY          Chave da OpenAI
+#   CLOUDFLARE_TUNNEL_TOKEN Token do túnel Cloudflare
+#   CORS_ORIGINS            Domínios separados por vírgula
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Deploy Backend → Hetzner VPS
@@ -41,33 +31,27 @@ jobs:
     name: SSH Deploy (${{ github.ref_name }})
     runs-on: ubuntu-latest
 
-    # Resolve variáveis de ambiente com base no branch que disparou o workflow
     env:
-      APP_ENV:        ${{ github.ref_name == 'main' && 'production'    || 'homologation' }}
-      VPS_HOST:       ${{ github.ref_name == 'main' && secrets.PROD_VPS_HOST       || secrets.HML_VPS_HOST }}
-      VPS_USER:       ${{ github.ref_name == 'main' && secrets.PROD_VPS_USER       || secrets.HML_VPS_USER }}
-      VPS_SSH_KEY:    ${{ github.ref_name == 'main' && secrets.PROD_VPS_SSH_KEY    || secrets.HML_VPS_SSH_KEY }}
-      VPS_PORT:       ${{ github.ref_name == 'main' && secrets.PROD_VPS_PORT       || secrets.HML_VPS_PORT }}
-      SECRET_KEY:     ${{ github.ref_name == 'main' && secrets.PROD_SECRET_KEY     || secrets.HML_SECRET_KEY }}
-      POSTGRES_PASS:  ${{ github.ref_name == 'main' && secrets.PROD_POSTGRES_PASSWORD || secrets.HML_POSTGRES_PASSWORD }}
-      OPENAI_KEY:     ${{ github.ref_name == 'main' && secrets.PROD_OPENAI_API_KEY || secrets.HML_OPENAI_API_KEY }}
-      CF_TOKEN:       ${{ github.ref_name == 'main' && secrets.PROD_CLOUDFLARE_TUNNEL_TOKEN || secrets.HML_CLOUDFLARE_TUNNEL_TOKEN }}
-      CORS_ORIGINS:   ${{ github.ref_name == 'main' && secrets.PROD_CORS_ORIGINS   || secrets.HML_CORS_ORIGINS }}
-      HEALTH_PORT:    ${{ github.ref_name == 'main' && '8000' || '8001' }}
-      DEPLOY_DIR:     ${{ github.ref_name == 'main' && '/opt/copilotprotheus' || '/opt/copilotprotheus-hml' }}
+      # Derivados do branch — sem prefixo nos secrets
+      APP_ENV:     ${{ github.ref_name == 'main' && 'production' || 'homologation' }}
+      DEBUG:       ${{ github.ref_name == 'main' && 'false' || 'false' }}
+      LOG_LEVEL:   ${{ github.ref_name == 'main' && 'WARNING' || 'INFO' }}
+      DB_SUFFIX:   ${{ github.ref_name == 'main' && '' || '_hml' }}
+      DEPLOY_DIR:  ${{ github.ref_name == 'main' && '/opt/copilotprotheus' || '/opt/copilotprotheus-hml' }}
+      HEALTH_PORT: ${{ github.ref_name == 'main' && '8000' || '8001' }}
 
     steps:
       - uses: actions/checkout@v4
 
-      # ── 1. Deploy via SSH ──────────────────────────────────────────────────
+      # ── 1. Deploy via SSH ────────────────────────────────────────────────────
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host:     ${{ env.VPS_HOST }}
-          username: ${{ env.VPS_USER }}
-          key:      ${{ env.VPS_SSH_KEY }}
-          port:     ${{ env.VPS_PORT }}
-          envs:     APP_ENV,SECRET_KEY,POSTGRES_PASS,OPENAI_KEY,CF_TOKEN,CORS_ORIGINS,DEPLOY_DIR
+          host:     ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          port:     ${{ secrets.VPS_PORT }}
+          envs:     APP_ENV,DEBUG,LOG_LEVEL,DB_SUFFIX,DEPLOY_DIR
           script: |
             set -euo pipefail
             cd "$DEPLOY_DIR"
@@ -79,18 +63,18 @@ jobs:
             echo "==> Escrevendo .env ($APP_ENV)..."
             cat > .env <<EOF
             ENVIRONMENT=$APP_ENV
-            DEBUG=false
-            LOG_LEVEL=$( [ "$APP_ENV" = "production" ] && echo 'WARNING' || echo 'INFO' )
-            SECRET_KEY=$SECRET_KEY
+            DEBUG=$DEBUG
+            LOG_LEVEL=$LOG_LEVEL
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
             POSTGRES_USER=postgres
-            POSTGRES_PASSWORD=$POSTGRES_PASS
-            POSTGRES_DB=copilot_protheus_$( [ "$APP_ENV" = "production" ] && echo '' || echo 'hml' | sed 's/^_//' )
-            DATABASE_URL=postgresql+psycopg2://postgres:$POSTGRES_PASS@db:5432/copilot_protheus$( [ "$APP_ENV" = "production" ] && echo '' || echo '_hml' )
-            OPENAI_API_KEY=$OPENAI_KEY
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=copilot_protheus$DB_SUFFIX
+            DATABASE_URL=postgresql+psycopg2://postgres:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilot_protheus$DB_SUFFIX
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             LLM_MODEL=gpt-4o-mini
             EMBEDDING_MODEL=text-embedding-3-small
-            CLOUDFLARE_TUNNEL_TOKEN=$CF_TOKEN
-            CORS_ORIGINS=$CORS_ORIGINS
+            CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
             EOF
             chmod 600 .env
 
@@ -103,16 +87,16 @@ jobs:
 
             echo "✅ Backend [$APP_ENV] atualizado em $(date)"
 
-      # ── 2. Smoke test — health check remoto ────────────────────────────────
+      # ── 2. Smoke test ────────────────────────────────────────────────────────
       - name: Smoke Test — Health Check
         run: |
           sleep 20
           curl --fail --retry 5 --retry-delay 5 \
-            http://${{ env.VPS_HOST }}:${{ env.HEALTH_PORT }}/health || \
+            http://${{ secrets.VPS_HOST }}:${{ env.HEALTH_PORT }}/health || \
             (echo "❌ Health check falhou! Ambiente: ${{ env.APP_ENV }}" && exit 1)
 
-      # ── 3. Notifica falha ──────────────────────────────────────────────────
+      # ── 3. Notifica falha ────────────────────────────────────────────────────
       - name: Notificar falha
         if: failure()
         run: |
-          echo "::error::Deploy [${{ env.APP_ENV }}] ou health check falhou. Branch: ${{ github.ref_name }}. Revise os logs acima."
+          echo "::error::Deploy [${{ env.APP_ENV }}] ou health check falhou. Branch: ${{ github.ref_name }}."

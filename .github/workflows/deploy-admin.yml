@@ -1,14 +1,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Deploy Admin Frontend → Cloudflare Pages
-# Branch main  → production  (project: copilotprotheus-admin,  URL: admin.copilotprotheus.com.br)
-# Branch hml   → homologation (project: copilotprotheus-admin-hml, URL: admin-hml.copilotprotheus.com.br)
+# Branch main → production   (project: copilotprotheus-admin)
+# Branch hml  → homologation (project: copilotprotheus-admin-hml)
 #
 # Secrets necessários (Settings → Secrets → Actions):
 #
-#   CLOUDFLARE_API_TOKEN          Token com permissão Cloudflare Pages:Edit
-#   CLOUDFLARE_ACCOUNT_ID         ID da conta Cloudflare
-#   PROD_VITE_API_BASE_URL        https://api.copilotprotheus.com.br
-#   HML_VITE_API_BASE_URL         https://api-hml.copilotprotheus.com.br
+#   CLOUDFLARE_API_TOKEN     Token com permissão Cloudflare Pages:Edit
+#   CLOUDFLARE_ACCOUNT_ID    ID da conta Cloudflare
+#   VITE_API_BASE_URL        URL da API backend (ex: https://api.copilotprotheus.com.br)
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Deploy Admin → Cloudflare Pages
@@ -31,51 +30,50 @@ jobs:
     env:
       APP_ENV:          ${{ github.ref_name == 'main' && 'production' || 'homologation' }}
       CF_PAGES_PROJECT: ${{ github.ref_name == 'main' && 'copilotprotheus-admin' || 'copilotprotheus-admin-hml' }}
-      VITE_API_BASE_URL: ${{ github.ref_name == 'main' && secrets.PROD_VITE_API_BASE_URL || secrets.HML_VITE_API_BASE_URL }}
 
     steps:
       - uses: actions/checkout@v4
 
-      # ── 1. Node + cache ────────────────────────────────────────────────────
+      # ── 1. Node + cache ──────────────────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: admin-frontend/package-lock.json
 
-      # ── 2. Instalar dependências ───────────────────────────────────────────
+      # ── 2. Instalar dependências ──────────────────────────────────────────────
       - name: Install dependencies
         working-directory: admin-frontend
         run: npm ci --frozen-lockfile
 
-      # ── 3. Build com variáveis do ambiente correto ────────────────────────
+      # ── 3. Build com variáveis do ambiente ────────────────────────────────────
       - name: Build (${{ env.APP_ENV }})
         working-directory: admin-frontend
         run: npm run build
         env:
-          VITE_API_BASE_URL: ${{ env.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_APP_ENV:      ${{ env.APP_ENV }}
 
-      # ── 4. Deploy para o projeto Cloudflare Pages correto ─────────────────
+      # ── 4. Deploy para o projeto Cloudflare Pages correto ─────────────────────
       - name: Deploy to Cloudflare Pages (${{ env.CF_PAGES_PROJECT }})
         uses: cloudflare/pages-action@v1
         with:
-          apiToken:    ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId:   ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: ${{ env.CF_PAGES_PROJECT }}
-          directory:   admin-frontend/dist
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          apiToken:        ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId:       ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName:     ${{ env.CF_PAGES_PROJECT }}
+          directory:       admin-frontend/dist
+          gitHubToken:     ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: '3'
-          branch: ${{ github.ref_name }}
+          branch:          ${{ github.ref_name }}
 
-      # ── 5. Resumo do deploy ────────────────────────────────────────────────
+      # ── 5. Resumo ─────────────────────────────────────────────────────────────
       - name: Resumo
         run: |
-          echo "✅ Admin [${{ env.APP_ENV }}] deployed → project: ${{ env.CF_PAGES_PROJECT }}"
-          echo "   Branch: ${{ github.ref_name }} | API: ${{ env.VITE_API_BASE_URL }}"
+          echo "✅ Admin [${{ env.APP_ENV }}] → project: ${{ env.CF_PAGES_PROJECT }}"
+          echo "   Branch: ${{ github.ref_name }} | API: ${{ secrets.VITE_API_BASE_URL }}"
 
-      # ── 6. Notifica falha ─────────────────────────────────────────────────
+      # ── 6. Notifica falha ─────────────────────────────────────────────────────
       - name: Notificar falha
         if: failure()
         run: |
-          echo "::error::Deploy Admin [${{ env.APP_ENV }}] falhou. Branch: ${{ github.ref_name }}. Revise os logs acima."
+          echo "::error::Deploy Admin [${{ env.APP_ENV }}] falhou. Branch: ${{ github.ref_name }}."
