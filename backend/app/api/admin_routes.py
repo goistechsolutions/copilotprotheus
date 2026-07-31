@@ -828,6 +828,32 @@ def get_schemas(
         return {"schemas": []}
 
 
+@router.post("/recreate-schema-tables")
+def recreate_schema_tables(
+    payload: dict = Body(...),
+    db: Session   = Depends(get_db),
+    admin: str    = Depends(verify_admin),
+):
+    """Recria as tabelas protheus_modules e tenant_schemas do tenant para resetar totalmente a estrutura de índices."""
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
+
+    from app.db.database import ensure_tenant_tables, resolve_clean_tenant
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
+
+    try:
+        db.execute(text(f'DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules CASCADE'))
+        db.execute(text(f'DROP TABLE IF EXISTS "{clean_tenant}".tenant_schemas CASCADE'))
+        db.commit()
+
+        ensure_tenant_tables(db, clean_tenant)
+        return {"success": True, "message": f"Tabelas do schema '{clean_tenant}' recriadas com sucesso!"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao recriar tabelas: {str(e)}")
+
+
 # ─────────────────────────────────────────────────────────────
 # USERS  (V4: User + Role + user_roles)
 # Substitui /agent-users e /agent-roles

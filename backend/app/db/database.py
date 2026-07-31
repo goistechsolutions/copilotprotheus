@@ -66,7 +66,15 @@ def ensure_public_tables(db):
         "CREATE TABLE IF NOT EXISTS public.protheus_modules_master (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), mod_code VARCHAR(30) UNIQUE, module_code VARCHAR(30) UNIQUE, mod_name VARCHAR(150), module_name VARCHAR(150), description TEXT, source_name VARCHAR(60) NOT NULL DEFAULT 'SYS_USR_MODULE', active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE);",
         "CREATE TABLE IF NOT EXISTS public.platform_audit_log (id BIGSERIAL PRIMARY KEY, tenant_code VARCHAR(50), actor VARCHAR(150), action VARCHAR(100) NOT NULL, detail JSONB, created_at TIMESTAMP DEFAULT NOW());",
         'DROP SCHEMA IF EXISTS "1" CASCADE;',
-        "DELETE FROM public.protheus_modules_master WHERE source_name = 'fallback_hardcoded';"
+        "DELETE FROM public.protheus_modules_master WHERE source_name = 'fallback_hardcoded';",
+        "ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_code VARCHAR(30);",
+        "ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_name VARCHAR(150);",
+        "ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS module_code VARCHAR(30);",
+        "ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS module_name VARCHAR(150);",
+        "UPDATE public.protheus_modules_master SET mod_code = module_code WHERE mod_code IS NULL AND module_code IS NOT NULL;",
+        "UPDATE public.protheus_modules_master SET mod_name = module_name WHERE mod_name IS NULL AND module_name IS NOT NULL;",
+        "UPDATE public.protheus_modules_master SET module_code = mod_code WHERE module_code IS NULL AND mod_code IS NOT NULL;",
+        "UPDATE public.protheus_modules_master SET module_name = mod_name WHERE module_name IS NULL AND mod_name IS NOT NULL;"
     ]
 
     try:
