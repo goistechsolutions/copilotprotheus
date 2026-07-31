@@ -1,20 +1,22 @@
-
 services:
-  # Banco de dados local com suporte a vetores (pgvector)
   db:
     image: pgvector/pgvector:pg16
     container_name: copilot-protheus-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: sap_password_123
-      POSTGRES_DB: copilot_protheus
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
-  # Backend FastAPI
   backend:
     build:
       context: .
@@ -25,17 +27,14 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # Sobrescreve URL do banco para apontar ao container db
-      - DATABASE_URL=postgresql+psycopg2://postgres:sap_password_123@db:5432/copilot_protheus
-    volumes:
-      - ./backend/.env:/app/.env
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: always
 
-  # Middleware Express Node.js
   middleware:
     build:
       context: ./middleware
@@ -46,13 +45,11 @@ services:
     env_file:
       - ./middleware/.env
     environment:
-      # Sobrescreve URL do backend para apontar ao container backend
       - BACKEND_URL=http://backend:8000
     depends_on:
       - backend
     restart: always
 
-  # Frontend React (Nginx) - Chat/Usuário Final
   frontend:
     build:
       context: ./frontend
@@ -64,7 +61,6 @@ services:
       - middleware
     restart: always
 
-  # Admin Frontend React (Nginx) - Painel Administrativo
   admin-frontend:
     build:
       context: ./admin-frontend
@@ -76,25 +72,26 @@ services:
       - backend
     restart: always
 
-  # Gerenciador de Banco de Dados (Adminer)
   adminer:
     image: adminer:latest
     container_name: copilot-protheus-adminer
+    profiles:
+      - tools   # só sobe com: docker compose --profile tools up
     environment:
       - ADMINER_DEFAULT_DB_DRIVER=pgsql
       - ADMINER_DEFAULT_DB_HOST=db
-      - ADMINER_DEFAULT_DB_NAME=copilot_protheus
+      - ADMINER_DEFAULT_DB_NAME=${POSTGRES_DB}
+      - ADMINER_DESIGN=pepa-linha
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"   # bind local apenas
     depends_on:
       - db
     restart: always
 
-  # Cloudflare Tunnel
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: copilot-protheus-cloudflared
-    command: tunnel --no-autoupdate run --token eyJhIjoiNmMzNjg4YjE5ZjNiN2E3NGE0ZTVlNjE0NWFjMTU1OTMiLCJ0IjoiYWE2NDdiZGMtNjVhYi00NGZhLThmNjYtMWM4OTliNDQ3ZDUxIiwicyI6Ik1UTTBObUl3TkRjdFpqazFPUzAwT0dJMUxUazNabUl0TkdFelpqZ3lPVEF3WXpndyJ9
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     restart: always
     depends_on:
       - frontend
