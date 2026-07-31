@@ -393,60 +393,6 @@ CANONICAL_MODULES_QUERY = """SELECT DISTINCT
     USR_MODULO AS CODIGO_MODULO,      
     USR_CODMOD AS CODIGO_TABELA,         
     CASE USR_MODULO         
-        WHEN '01' THEN 'SIGAATF - Ativo Fixo'         
-        WHEN '02' THEN 'SIGAFAT - Faturamento'         
-        WHEN '03' THEN 'SIGACOM - Compras / Suprimentos'         
-        WHEN '04' THEN 'SIGAEST - Estoque e Custos'         
-        WHEN '05' THEN 'SIGAFIN - Financeiro'         
-        WHEN '06' THEN 'SIGAFIS - Livros Fiscais'         
-        WHEN '07' THEN 'SIGAGPE - Gestão de Pessoal'         
-        WHEN '08' THEN 'SIGAPCP - Planejamento e Controle da Produção'         
-        WHEN '09' THEN 'SIGAMNT - Manutenção de Ativos'         
-        WHEN '10' THEN 'SIGOFI  - Oficina'         
-        WHEN '11' THEN 'SIGACRM - Gestão de Relacionamento (CRM)'         
-        WHEN '12' THEN 'SIGAPLN - Planejamento e Orçamento'         
-        WHEN '13' THEN 'SIGAADV - Administração de Vendas'         
-        WHEN '14' THEN 'SIGAPEG - Pecúlio e Pensões'         
-        WHEN '15' THEN 'SIGAAGR - Agronegócio'         
-        WHEN '16' THEN 'SIGAPON - Ponto Eletrônico'         
-        WHEN '17' THEN 'SIGAMDT - Medicina e Segurança do Trabalho'         
-        WHEN '18' THEN 'SIGAQHT - Qualidade / Hotelaria'         
-        WHEN '19' THEN 'SIGAQMT - Metrologia'         
-        WHEN '20' THEN 'SIGAQDO - Documentação da Qualidade'         
-        WHEN '21' THEN 'SIGAQIP - Inspeção de Processos'         
-        WHEN '22' THEN 'SIGAQIE - Inspeção de Entradas'         
-        WHEN '23' THEN 'SIGAFSP - Fast Service / Posto de Combustível'         
-        WHEN '24' THEN 'SIGAPAT - Patrimônio / Ativo Fixo'         
-        WHEN '25' THEN 'SIGAVEC - Veículos'         
-        WHEN '26' THEN 'SIGAEC  - Easy Construction'         
-        WHEN '27' THEN 'SIGAACD - Automação Coleta de Dados'         
-        WHEN '28' THEN 'SIGATMS - Gestão de Transportes (TMS)'         
-        WHEN '29' THEN 'SIGAWMS - Gestão de Armazém (WMS)'         
-        WHEN '30' THEN 'SIGAPMS - Gestão de Projetos (PMS)'         
-        WHEN '31' THEN 'SIGACDB - Código de Bars / Automação'         
-        WHEN '32' THEN 'SIGAERM - Risk Management'         
-        WHEN '33' THEN 'SIGAEIC - Easy Import Control (Importação)'         
-        WHEN '34' THEN 'SIGAEEC - Easy Export Control (Exportação)'         
-        WHEN '35' THEN 'SIGAEFF - Easy Foreign Finance'         
-        WHEN '36' THEN 'SIGAECO - Easy Accounting / Contabilidade Câmbio'         
-        WHEN '37' THEN 'SIGAEDC - Easy Data Collection'         
-        WHEN '38' THEN 'SIGAEPO - Easy Purchase Order'         
-        WHEN '39' THEN 'SIGASFC - Shop Floor Control (Chão de Fábrica)'         
-        WHEN '40' THEN 'SIGAPLS - Planos de Saúde'         
-        WHEN '41' THEN 'SIGACTL - Controle de Locação'         
-        WHEN '42' THEN 'SIGAGVA - Gestão de Varejo'         
-        WHEN '43' THEN 'SIGATAC - Gestão de Acervos / Módulos Especiais'         
-        WHEN '44' THEN 'SIGAOMS - Order Management System'         
-        WHEN '45' THEN 'SIGAAMB - Gestão Ambiental'         
-        WHEN '46' THEN 'SIGANCM - Nomenclatura Comum do Mercosul'         
-        WHEN '47' THEN 'SIGAGCC - Gestão de Contratos de Concessão'         
-        WHEN '48' THEN 'SIGAGSP - Gestão do Setor Público'         
-        WHEN '49' THEN 'SIGAGTP - Gestão de Transporte de Passageiros'         
-        WHEN '53' THEN 'SIGATFP - Gestão de Frota / Passagens'         
-        WHEN '56' THEN 'SIGAGCV - Gestão de Cargas e Veículos'         
-        WHEN '84' THEN 'SIGACFG - Configurador'         
-        WHEN '88' THEN 'SIGAESP - Específico / Customizados'         
-        WHEN '97' THEN 'SIGAFWD - Framework / Arquitetura'         
         WHEN 1 THEN 'SIGAATF - Ativo Fixo'         
         WHEN 2 THEN 'SIGAFAT - Faturamento'         
         WHEN 3 THEN 'SIGACOM - Compras / Suprimentos'         
@@ -456,6 +402,51 @@ CANONICAL_MODULES_QUERY = """SELECT DISTINCT
         WHEN 7 THEN 'SIGAGPE - Gestão de Pessoal'         
         WHEN 8 THEN 'SIGAPCP - Planejamento e Controle da Produção'         
         WHEN 9 THEN 'SIGAMNT - Manutenção de Ativos'         
+        WHEN 10 THEN 'SIGOFI  - Oficina'         
+        WHEN 11 THEN 'SIGACRM - Gestão de Relacionamento (CRM)'         
+        WHEN 12 THEN 'SIGAPLN - Planejamento e Orçamento'         
+        WHEN 13 THEN 'SIGAADV - Administração de Vendas'         
+        WHEN 14 THEN 'SIGAPEG - Pecúlio e Pensões'         
+        WHEN 15 THEN 'SIGAAGR - Agronegócio'         
+        WHEN 16 THEN 'SIGAPON - Ponto Eletrônico'         
+        WHEN 17 THEN 'SIGAMDT - Medicina e Segurança do Trabalho'         
+        WHEN 18 THEN 'SIGAQHT - Qualidade / Hotelaria'         
+        WHEN 19 THEN 'SIGAQMT - Metrologia'         
+        WHEN 20 THEN 'SIGAQDO - Documentação da Qualidade'         
+        WHEN 21 THEN 'SIGAQIP - Inspeção de Processos'         
+        WHEN 22 THEN 'SIGAQIE - Inspeção de Entradas'         
+        WHEN 23 THEN 'SIGAFSP - Fast Service / Posto de Combustível'         
+        WHEN 24 THEN 'SIGAPAT - Patrimônio / Ativo Fixo'         
+        WHEN 25 THEN 'SIGAVEC - Veículos'         
+        WHEN 26 THEN 'SIGAEC  - Easy Construction'         
+        WHEN 27 THEN 'SIGAACD - Automação Coleta de Dados'         
+        WHEN 28 THEN 'SIGATMS - Gestão de Transportes (TMS)'         
+        WHEN 29 THEN 'SIGAWMS - Gestão de Armazém (WMS)'         
+        WHEN 30 THEN 'SIGAPMS - Gestão de Projetos (PMS)'         
+        WHEN 31 THEN 'SIGACDB - Código de Bars / Automação'         
+        WHEN 32 THEN 'SIGAERM - Risk Management'         
+        WHEN 33 THEN 'SIGAEIC - Easy Import Control (Importação)'         
+        WHEN 34 THEN 'SIGAEEC - Easy Export Control (Exportação)'         
+        WHEN 35 THEN 'SIGAEFF - Easy Foreign Finance'         
+        WHEN 36 THEN 'SIGAECO - Easy Accounting / Contabilidade Câmbio'         
+        WHEN 37 THEN 'SIGAEDC - Easy Data Collection'         
+        WHEN 38 THEN 'SIGAEPO - Easy Purchase Order'         
+        WHEN 39 THEN 'SIGASFC - Shop Floor Control (Chão de Fábrica)'         
+        WHEN 40 THEN 'SIGAPLS - Planos de Saúde'         
+        WHEN 41 THEN 'SIGACTL - Controle de Locação'         
+        WHEN 42 THEN 'SIGAGVA - Gestão de Varejo'         
+        WHEN 43 THEN 'SIGATAC - Gestão de Acervos / Módulos Especiais'         
+        WHEN 44 THEN 'SIGAOMS - Order Management System'         
+        WHEN 45 THEN 'SIGAAMB - Gestão Ambiental'         
+        WHEN 46 THEN 'SIGANCM - Nomenclatura Comum do Mercosul'         
+        WHEN 47 THEN 'SIGAGCC - Gestão de Contratos de Concessão'         
+        WHEN 48 THEN 'SIGAGSP - Gestão do Setor Público'         
+        WHEN 49 THEN 'SIGAGTP - Gestão de Transporte de Passageiros'         
+        WHEN 53 THEN 'SIGATFP - Gestão de Frota / Passagens'         
+        WHEN 56 THEN 'SIGAGCV - Gestão de Cargas e Veículos'         
+        WHEN 84 THEN 'SIGACFG - Configurador'         
+        WHEN 88 THEN 'SIGAESP - Específico / Customizados'         
+        WHEN 97 THEN 'SIGAFWD - Framework / Arquitetura'         
         ELSE 'Outros'        
     END AS NOME_MODULO         
 FROM SYS_USR_MODULE         
@@ -708,8 +699,8 @@ async def sync_schema(
             cod_sigla = code_to_name.get(x2_mod, clean_modulos[0] if clean_modulos else "")
             schema_dict[chave] = {
                 "x2_modulo": x2_mod,
+                "modulo":    x2_mod,
                 "codmod":    cod_sigla,
-                "modulo":    cod_sigla,
                 "tabela":    _fv(row, "X2_ARQUIVO"),
                 "nome":      _fv(row, "X2_NOME"),
                 "compartilhamento": {
@@ -867,9 +858,11 @@ def list_users(
     db: Session = Depends(get_db),
     admin: str  = Depends(verify_admin),
 ):
+    from app.db.database import resolve_clean_tenant
     q = db.query(User)
     if tenant_id:
-        q = q.filter(User.tenant_id == tenant_id)
+        clean_tenant = resolve_clean_tenant(db, tenant_id)
+        q = q.filter((User.tenant_id == clean_tenant) | (User.tenant_id == tenant_id))
     users = q.order_by(User.created_at.desc()).all()
     return [
         {
