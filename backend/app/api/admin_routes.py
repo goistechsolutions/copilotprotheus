@@ -419,8 +419,8 @@ async def sync_modules(
 
         count = 0
         for row in result_data:
-            mod_code = _val(row, "USR_CODMOD")
-            mod_name = _val(row, "USR_MODULO")
+            mod_code = _val(row, "USR_MODULO")
+            mod_name = _val(row, "USR_CODMOD")
             if not mod_code:
                 continue
             existing = db.query(ProtheusModuleMaster).filter(
@@ -562,8 +562,8 @@ async def sync_schema(
         if isinstance(sys_rows, list):
             for row in sys_rows:
                 if not isinstance(row, dict): continue
-                u_mod = (row.get("USR_MODULO") or "").strip().upper()
-                u_cod = (row.get("USR_CODMOD") or "").strip()
+                u_mod = (row.get("USR_CODMOD") or "").strip().upper()
+                u_cod = (row.get("USR_MODULO") or "").strip()
                 if u_mod in clean_modulos and u_cod:
                     if u_cod.isdigit():
                         v = int(u_cod)
