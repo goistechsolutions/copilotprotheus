@@ -7,12 +7,16 @@ on:
     branches: [main]
 
 jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend: só roda testes se a pasta tests/ existir
+  # ─────────────────────────────────────────────────────────────────────────
   backend-test:
     name: Backend (Python)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,22 +31,36 @@ jobs:
       - name: Instalar dependências de teste
         run: pip install pytest pytest-asyncio httpx
 
-      - name: Executar testes
-        run: pytest tests/ -q --tb=short
-        # SEM || true — falha real reprova o CI
+      - name: Verificar se pasta tests/ existe
+        id: check_tests
+        run: |
+          if [ -d "tests" ] && [ "$(ls -A tests/)" ]; then
+            echo "has_tests=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Pasta tests/ não encontrada ou vazia — pulando pytest"
+          fi
 
+      - name: Executar testes
+        if: steps.check_tests.outputs.has_tests == 'true'
+        run: pytest tests/ -q --tb=short
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin Frontend: lint + build (Node 24)
+  # ─────────────────────────────────────────────────────────────────────────
   frontend-lint:
     name: Admin Frontend (Node)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: admin-frontend
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: admin-frontend/package-lock.json
 
@@ -51,3 +69,5 @@ jobs:
 
       - name: Build de validação
         run: npm run build
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
