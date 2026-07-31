@@ -77,27 +77,6 @@ def ensure_public_tables(db):
                 if hasattr(db, "rollback"): db.rollback()
             except: pass
 
-    # Seed de módulos padrão do Protheus se estiver vazio
-    try:
-        modules_seed_sql = """
-        INSERT INTO public.protheus_modules_master (id, mod_code, module_code, mod_name, module_name, description, source_name, active) VALUES
-        (gen_random_uuid(), 'SIGAFAT', 'SIGAFAT', 'Faturamento', 'Faturamento', 'Módulo de Faturamento e Vendas Protheus', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGAFIN', 'SIGAFIN', 'Financeiro', 'Financeiro', 'Módulo Financeiro Protheus', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGACOM', 'SIGACOM', 'Compras', 'Compras', 'Módulo de Compras e Suprimentos Protheus', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGAEST', 'SIGAEST', 'Estoque', 'Estoque', 'Módulo de Estoque e Custos Protheus', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGAPCP', 'SIGAPCP', 'PCP', 'PCP', 'Planejamento e Controle da Produção', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGACONT', 'SIGACONT', 'Contabilidade', 'Contabilidade', 'Contabilidade Gerencial Protheus', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGAFIS', 'SIGAFIS', 'Fiscais', 'Fiscais', 'Livros Fiscais Protheus', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGATMS', 'SIGATMS', 'TMS', 'TMS', 'Gestão de Transportes Protheus', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGAGPE', 'SIGAGPE', 'RH/Folha', 'RH/Folha', 'Gestão de Pessoas e Folha', 'SYS_USR_MODULE', true),
-        (gen_random_uuid(), 'SIGAATF', 'SIGAATF', 'Ativo Fixo', 'Ativo Fixo', 'Gestão do Ativo Imobilizado', 'SYS_USR_MODULE', true)
-        ON CONFLICT DO NOTHING;
-        """
-        db.execute(text(modules_seed_sql))
-        if hasattr(db, "commit"): db.commit()
-    except Exception:
-        if hasattr(db, "rollback"): db.rollback()
-
 def ensure_tenant_tables(db, clean_tenant: str):
     ensure_public_tables(db)
     if not clean_tenant or clean_tenant == "public":
@@ -110,6 +89,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".company_info (
                 id                      SERIAL PRIMARY KEY,
+                tenant_id               VARCHAR(100),
                 company_code            VARCHAR(60) NOT NULL,
                 branch_code             VARCHAR(60) NOT NULL,
                 company_name            VARCHAR(200) NOT NULL,
@@ -140,6 +120,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
+                company_code VARCHAR(60),
                 usr_modulo VARCHAR(50) NOT NULL,
                 usr_codmod VARCHAR(50) NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

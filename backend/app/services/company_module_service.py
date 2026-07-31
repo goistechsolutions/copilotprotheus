@@ -79,17 +79,7 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
 
 
 def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
-    sql = """
-        SELECT
-            id,
-            tenant_code AS tenant_id,
-            tenant_code AS code,
-            tenant_name AS name,
-            status,
-            created_at
-        FROM public.tenant_registry
-        WHERE 1=1
-    """
+    sql = "SELECT id, tenant_code, tenant_name, status, created_at, updated_at FROM public.tenant_registry WHERE 1=1"
     params = {}
     if tenant_id:
         sql += " AND (tenant_code = :tenant_id OR schema_name = :tenant_id)"
@@ -97,22 +87,78 @@ def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
 
     sql += " ORDER BY tenant_name"
     rows = db.execute(text(sql), params).mappings().all()
-    
+
     result = []
     for r in rows:
-        c_dict = dict(r)
-        clean = re.sub(r'[^a-zA-Z0-9_]', '', c_dict["tenant_id"])
-        if clean and clean != "public":
-            try:
-                ensure_tenant_tables(db, clean)
-                info = db.execute(text(f'SELECT protheus_rest_url, protheus_usuario, company_name FROM "{clean}".company_info LIMIT 1')).mappings().first()
-                if info:
-                    if info.get("company_name"): c_dict["name"] = info["company_name"]
-                    c_dict["protheus_rest_url"] = info.get("protheus_rest_url")
-                    c_dict["protheus_usuario"] = info.get("protheus_usuario")
-            except Exception:
-                pass
-        result.append(c_dict)
+        t_code = r["tenant_code"]
+        clean = re.sub(r'[^a-zA-Z0-9_]', '', t_code)
+        if not clean or clean == "public":
+            continue
+
+        try:
+            ensure_tenant_tables(db, clean)
+            c_rows = db.execute(
+                text(f"""
+                    SELECT
+                        id,
+                        COALESCE(tenant_id, '{clean}') AS tenant_id,
+                        COALESCE(cnpj, '') AS cnpj,
+                        ie,
+                        COALESCE(razao_social, company_name, '{r["tenant_name"]}') AS razao_social,
+                        email,
+                        telefone,
+                        endereco,
+                        COALESCE(protheus_grupo, '{clean}') AS protheus_grupo,
+                        protheus_empresa,
+                        protheus_unidade,
+                        COALESCE(protheus_filial, '0101') AS protheus_filial,
+                        COALESCE(protheus_ambientes, environment, 'producao') AS protheus_ambientes,
+                        protheus_usuario,
+                        protheus_rest_url,
+                        protheus_webapp_url,
+                        COALESCE(status, 'ativa') AS status,
+                        created_at,
+                        updated_at
+                    FROM "{clean}".company_info
+                    ORDER BY id ASC
+                """)
+            ).mappings().all()
+
+            for c in c_rows:
+                cd = dict(c)
+                if not cd.get("razao_social"):
+                    cd["razao_social"] = r["tenant_name"]
+                if not cd.get("protheus_grupo"):
+                    cd["protheus_grupo"] = clean
+                if not cd.get("protheus_filial"):
+                    cd["protheus_filial"] = "0101"
+                result.append(cd)
+
+            if not c_rows:
+                result.append({
+                    "id": r["id"],
+                    "tenant_id": t_code,
+                    "cnpj": "",
+                    "ie": None,
+                    "razao_social": r["tenant_name"],
+                    "email": None,
+                    "telefone": None,
+                    "endereco": None,
+                    "protheus_grupo": t_code,
+                    "protheus_empresa": "01",
+                    "protheus_unidade": "01",
+                    "protheus_filial": "0101",
+                    "protheus_ambientes": "producao",
+                    "protheus_usuario": None,
+                    "protheus_rest_url": None,
+                    "protheus_webapp_url": None,
+                    "licenca_uso": None,
+                    "status": r["status"] or "ativa",
+                    "created_at": r["created_at"],
+                    "updated_at": r["updated_at"]
+                })
+        except Exception as e:
+            logger.warning(f"Erro ao listar company_info em {clean}: {e}")
 
     return result
 

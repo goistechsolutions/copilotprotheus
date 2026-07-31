@@ -373,14 +373,15 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 
     upsert_company_info = text(f"""
         INSERT INTO "{clean_tenant}".company_info (
-            company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
+            tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
             protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment, protheus_ambientes,
             webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
         ) VALUES (
-            :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
+            :t_id, :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
             :grp, :emp, :und, :fil, :env, :env,
             :app, :rest, :user, :pass, 'basic', :status
         ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
+            tenant_id = EXCLUDED.tenant_id,
             company_name = EXCLUDED.company_name,
             cnpj = EXCLUDED.cnpj,
             ie = EXCLUDED.ie,
@@ -404,7 +405,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     """)
 
     res = db.execute(upsert_company_info, {
-        "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
+        "t_id": clean_tenant, "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
         "env": c_env, "app": payload.protheus_webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
@@ -473,14 +474,15 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
 
     upsert_company_info = text(f"""
         INSERT INTO "{clean_tenant}".company_info (
-            company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
+            tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
             protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment, protheus_ambientes,
             webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
         ) VALUES (
-            :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
+            :t_id, :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
             :grp, :emp, :und, :fil, :env, :env,
             :app, :rest, :user, :pass, 'basic', :status
         ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
+            tenant_id = COALESCE(EXCLUDED.tenant_id, "{clean_tenant}".company_info.tenant_id),
             company_name = EXCLUDED.company_name,
             cnpj = COALESCE(EXCLUDED.cnpj, "{clean_tenant}".company_info.cnpj),
             ie = COALESCE(EXCLUDED.ie, "{clean_tenant}".company_info.ie),
@@ -504,7 +506,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     """)
 
     res = db.execute(upsert_company_info, {
-        "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
+        "t_id": clean_tenant, "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
         "env": c_env, "app": payload.protheus_webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,

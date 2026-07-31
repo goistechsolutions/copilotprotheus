@@ -8,6 +8,7 @@ CREATE SCHEMA IF NOT EXISTS "{{schema}}";
 -- Dados cadastrais e conexão com o Protheus
 CREATE TABLE IF NOT EXISTS "{{schema}}".company_info (
     id                      SERIAL PRIMARY KEY,
+    tenant_id               VARCHAR(100),
     company_code            VARCHAR(60) NOT NULL,
     branch_code             VARCHAR(60) NOT NULL,
     company_name            VARCHAR(200) NOT NULL,
@@ -62,6 +63,15 @@ CREATE TABLE IF NOT EXISTS "{{schema}}".module_contracts (
     enabled     BOOLEAN DEFAULT TRUE,
     created_at  TIMESTAMP DEFAULT NOW(),
     UNIQUE (mod_code)
+);
+
+CREATE TABLE IF NOT EXISTS "{{schema}}".protheus_modules (
+    id          SERIAL PRIMARY KEY,
+    tenant_id   VARCHAR(100) NOT NULL,
+    company_code VARCHAR(60),
+    usr_modulo  VARCHAR(50) NOT NULL,
+    usr_codmod  VARCHAR(50) NOT NULL,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Dicionário de dados curado (apenas o que a empresa usa/customiza)
