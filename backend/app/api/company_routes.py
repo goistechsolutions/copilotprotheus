@@ -116,6 +116,21 @@ async def get_available_modules(
                 query=sql
             )
     except Exception as e:
+        logger.warning(f"Aviso ao consultar módulos no Protheus REST ({company_id}): {e}. Retornando módulos do catálogo master.")
+        master_mods = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
+        if master_mods:
+            return {
+                "tenant_id": company.get("tenant_id", "default"),
+                "company_id": str(company_id),
+                "items": [
+                    {
+                        "module_code": m.module_code,
+                        "module_name": m.module_name or m.module_code,
+                        "description": m.description or ""
+                    }
+                    for m in master_mods
+                ]
+            }
         raise HTTPException(
             status_code=502,
             detail=f"Falha ao consultar módulos disponíveis no Protheus: {str(e)}"

@@ -648,18 +648,6 @@ async def sync_schema(
                 if k.strip().upper() == key.upper(): return "" if val is None else str(val).strip()
             return default
 
-        # Cria snapshot
-        snapshot = DictionarySnapshot(
-            tenant_id=tenant_id,
-            snapshot_code=f"sync_{'-'.join(clean_modulos)}",
-            source_db_type="oracle",
-            sync_mode="partial",
-            sync_status="in_progress",
-            total_modules=len(clean_modulos),
-        )
-        db.add(snapshot)
-        db.flush()
-
         schema_dict  = {}
         chaves_list  = []
         for row in tables_data:
@@ -716,59 +704,32 @@ async def sync_schema(
 
         # Persiste em "{clean_tenant}".tenant_schemas (cache legivel no schema do tenant)
         clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
-        if not clean_tenant or clean_tenant == "public":
+        if not clean_tenant or clean_tenant == "public" or clean_tenant.isdigit():
             clean_tenant = "default"
 
         ensure_tenant_tables(db, clean_tenant)
 
-        try:
-            for clean_mod in clean_modulos:
-                db.execute(
-                    text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE modulo = :m'),
-                    {"m": clean_mod}
-                )
+        for clean_mod in clean_modulos:
+            db.execute(
+                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE modulo = :m'),
+                {"m": clean_mod}
+            )
 
-            for chave, meta in schema_dict.items():
-                db.execute(
-                    text(f"""
-                        INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, chave, tabela, nome, schema_json, updated_at)
-                        VALUES (:t, :m, :c, :tbl, :n, :j, NOW())
-                    """),
-                    {
-                        "t": clean_tenant,
-                        "m": meta["modulo"],
-                        "c": chave,
-                        "tbl": meta["tabela"],
-                        "n": meta["nome"],
-                        "j": json.dumps(meta)
-                    }
-                )
-        except Exception as e_ts:
-            logger.warning(f"Aviso ao persistir tenant_schemas em {clean_tenant}: {e_ts}")
-
-        # Upsert no dicionario V4
         for chave, meta in schema_dict.items():
-            existing_dt = db.query(TenantDictionaryTable).filter(
-                TenantDictionaryTable.tenant_id  == tenant_id,
-                TenantDictionaryTable.snapshot_id == snapshot.id,
-                TenantDictionaryTable.table_key   == chave,
-            ).first()
-            if not existing_dt:
-                db.add(TenantDictionaryTable(
-                    snapshot_id    =snapshot.id,
-                    tenant_id      =tenant_id,
-                    module_code    =meta["modulo"],
-                    table_key      =chave,
-                    physical_name  =meta["tabela"][:30] if meta["tabela"] else chave[:30],
-                    table_name     =meta["nome"],
-                    unique_index_expr=meta.get("indice_principal"),
-                    usa_empresa    =meta["compartilhamento"]["empresa"],
-                    usa_unidade    =meta["compartilhamento"]["unidade"],
-                    usa_filial     =meta["compartilhamento"]["filial"],
-                ))
-
-        snapshot.sync_status  = "completed"
-        snapshot.total_tables = len(schema_dict)
+            db.execute(
+                text(f"""
+                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, chave, tabela, nome, schema_json, updated_at)
+                    VALUES (:t, :m, :c, :tbl, :n, :j, NOW())
+                """),
+                {
+                    "t": clean_tenant,
+                    "m": meta["modulo"],
+                    "c": chave,
+                    "tbl": meta["tabela"],
+                    "n": meta["nome"],
+                    "j": json.dumps(meta)
+                }
+            )
         db.commit()
 
         return {
