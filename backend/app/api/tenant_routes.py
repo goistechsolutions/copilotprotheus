@@ -148,37 +148,9 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depe
         db.commit()
         db.refresh(tenant)
 
-    # Cria schema e salva dados em company_info no schema isolado
+    # Cria schema isolado para o tenant
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
-
-    enc_pass = None
-    if body.protheus_password:
-        enc_pass = encrypt_password(body.protheus_password)
-
-    upsert_company_info = text(f"""
-        INSERT INTO "{clean_tenant}".company_info (
-            company_code, branch_code, company_name, protheus_rest_url, protheus_usuario, encrypted_protheus_password, system_prompt, temperature, status
-        ) VALUES (
-            '01', '0101', :c_name, :c_rest, :c_user, :c_pass, :c_prompt, :c_temp, 'active'
-        ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
-            company_name = EXCLUDED.company_name,
-            protheus_rest_url = COALESCE(EXCLUDED.protheus_rest_url, "{clean_tenant}".company_info.protheus_rest_url),
-            protheus_usuario = COALESCE(EXCLUDED.protheus_usuario, "{clean_tenant}".company_info.protheus_usuario),
-            encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
-            system_prompt = COALESCE(EXCLUDED.system_prompt, "{clean_tenant}".company_info.system_prompt),
-            temperature = COALESCE(EXCLUDED.temperature, "{clean_tenant}".company_info.temperature),
-            updated_at = NOW();
-    """)
-    db.execute(upsert_company_info, {
-        "c_name": tenant.tenant_name,
-        "c_rest": body.protheus_rest_url,
-        "c_user": body.protheus_user,
-        "c_pass": enc_pass,
-        "c_prompt": body.system_prompt,
-        "c_temp": body.temperature if body.temperature is not None else 0.2
-    })
-    db.commit()
 
     return _to_tenant_dict(db, tenant)
 
@@ -203,34 +175,6 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
     if clean_tenant and clean_tenant != "public":
         from app.db.database import ensure_tenant_tables
         ensure_tenant_tables(db, clean_tenant)
-
-        enc_pass = None
-        if body.protheus_password:
-            enc_pass = encrypt_password(body.protheus_password)
-
-        upsert_company_info = text(f"""
-            INSERT INTO "{clean_tenant}".company_info (
-                company_code, branch_code, company_name, protheus_rest_url, protheus_usuario, encrypted_protheus_password, system_prompt, temperature, status
-            ) VALUES (
-                '01', '0101', :c_name, :c_rest, :c_user, :c_pass, :c_prompt, :c_temp, 'active'
-            ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
-                company_name = COALESCE(EXCLUDED.company_name, "{clean_tenant}".company_info.company_name),
-                protheus_rest_url = COALESCE(EXCLUDED.protheus_rest_url, "{clean_tenant}".company_info.protheus_rest_url),
-                protheus_usuario = COALESCE(EXCLUDED.protheus_usuario, "{clean_tenant}".company_info.protheus_usuario),
-                encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
-                system_prompt = COALESCE(EXCLUDED.system_prompt, "{clean_tenant}".company_info.system_prompt),
-                temperature = COALESCE(EXCLUDED.temperature, "{clean_tenant}".company_info.temperature),
-                updated_at = NOW();
-        """)
-        db.execute(upsert_company_info, {
-            "c_name": tenant.tenant_name,
-            "c_rest": body.protheus_rest_url,
-            "c_user": body.protheus_user,
-            "c_pass": enc_pass,
-            "c_prompt": body.system_prompt,
-            "c_temp": body.temperature
-        })
-        db.commit()
 
     return _to_tenant_dict(db, tenant)
 

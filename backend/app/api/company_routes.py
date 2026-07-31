@@ -63,9 +63,9 @@ def verify_admin_key(
             pass
 
     # 2. Permite acesso via X-Admin-Key header para requisições externas/scripts
-    admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
+    admin_pass = os.getenv("ADMIN_PASSWORD", "")
     jwt_secret = getattr(settings, 'jwt_secret', '') or os.getenv("ADMIN_JWT_SECRET", "") or os.getenv("JWT_SECRET", "")
-    if x_admin_key and (x_admin_key == admin_pass or x_admin_key == jwt_secret or x_admin_key == "admin123"):
+    if x_admin_key and ((admin_pass and x_admin_key == admin_pass) or (jwt_secret and x_admin_key == jwt_secret)):
         return x_admin_key
 
     raise HTTPException(
@@ -289,7 +289,7 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
     from sqlalchemy import text
     from app.db.database import ensure_tenant_tables
     
-    tenant_code = str(comp.tenant_id or comp.company_code or comp.cnpj or "default")
+    tenant_code = str(getattr(comp, 'tenant_id', None) or getattr(comp, 'protheus_grupo', None) or getattr(comp, 'company_code', None) or getattr(comp, 'cnpj', None) or "default")
     clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
     if not clean_tenant or clean_tenant == "public":
         return
@@ -297,34 +297,60 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
     try:
         ensure_tenant_tables(db, clean_tenant)
         
-        c_code = comp.protheus_empresa or comp.company_code or "01"
-        b_code = comp.protheus_filial or comp.protheus_branch or "0101"
-        c_name = comp.razao_social or comp.company_name or "Empresa"
-        c_env  = comp.protheus_ambientes or comp.protheus_env or "producao"
-        c_rest = comp.protheus_rest_url or ""
-        c_app  = comp.protheus_webapp_url or ""
-        c_user = comp.protheus_usuario or ""
-        c_pass = comp.encrypted_protheus_password or ""
+        c_code = getattr(comp, 'protheus_empresa', None) or getattr(comp, 'company_code', None) or "01"
+        b_code = getattr(comp, 'protheus_filial', None) or getattr(comp, 'protheus_branch', None) or "0101"
+        c_name = getattr(comp, 'razao_social', None) or getattr(comp, 'company_name', None) or "Empresa"
+        c_cnpj = getattr(comp, 'cnpj', None)
+        c_ie   = getattr(comp, 'ie', None)
+        c_rz   = getattr(comp, 'razao_social', None)
+        c_email= getattr(comp, 'email', None)
+        c_tel  = getattr(comp, 'telefone', None)
+        c_end  = getattr(comp, 'endereco', None)
+        c_grp  = getattr(comp, 'protheus_grupo', None)
+        c_emp  = getattr(comp, 'protheus_empresa', None)
+        c_und  = getattr(comp, 'protheus_unidade', None)
+        c_fil  = getattr(comp, 'protheus_filial', None)
+        c_env  = getattr(comp, 'protheus_ambientes', None) or getattr(comp, 'protheus_env', None) or "producao"
+        c_rest = getattr(comp, 'protheus_rest_url', None) or ""
+        c_app  = getattr(comp, 'protheus_webapp_url', None) or ""
+        c_user = getattr(comp, 'protheus_usuario', None) or ""
+        c_pass = getattr(comp, 'encrypted_protheus_password', None) or ""
+        c_status = getattr(comp, 'status', None) or "active"
 
         upsert_company_info = text(f"""
             INSERT INTO "{clean_tenant}".company_info (
-                company_code, branch_code, company_name, environment,
+                company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
+                protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment,
                 webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
             ) VALUES (
-                :c_code, :b_code, :c_name, :c_env,
-                :c_app, :c_rest, :c_user, :c_pass, 'basic', 'active'
+                :c_code, :b_code, :c_name, :c_cnpj, :c_ie, :c_rz, :c_email, :c_tel, :c_end,
+                :c_grp, :c_emp, :c_und, :c_fil, :c_env,
+                :c_app, :c_rest, :c_user, :c_pass, 'basic', :c_status
             ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
                 company_name = EXCLUDED.company_name,
+                cnpj = COALESCE(EXCLUDED.cnpj, "{clean_tenant}".company_info.cnpj),
+                ie = COALESCE(EXCLUDED.ie, "{clean_tenant}".company_info.ie),
+                razao_social = COALESCE(EXCLUDED.razao_social, "{clean_tenant}".company_info.razao_social),
+                email = COALESCE(EXCLUDED.email, "{clean_tenant}".company_info.email),
+                telefone = COALESCE(EXCLUDED.telefone, "{clean_tenant}".company_info.telefone),
+                endereco = COALESCE(EXCLUDED.endereco, "{clean_tenant}".company_info.endereco),
+                protheus_grupo = COALESCE(EXCLUDED.protheus_grupo, "{clean_tenant}".company_info.protheus_grupo),
+                protheus_empresa = COALESCE(EXCLUDED.protheus_empresa, "{clean_tenant}".company_info.protheus_empresa),
+                protheus_unidade = COALESCE(EXCLUDED.protheus_unidade, "{clean_tenant}".company_info.protheus_unidade),
+                protheus_filial = COALESCE(EXCLUDED.protheus_filial, "{clean_tenant}".company_info.protheus_filial),
                 environment = EXCLUDED.environment,
                 webapp_url = EXCLUDED.webapp_url,
                 protheus_rest_url = EXCLUDED.protheus_rest_url,
                 protheus_usuario = EXCLUDED.protheus_usuario,
                 encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
+                status = EXCLUDED.status,
                 updated_at = NOW();
         """)
         db.execute(upsert_company_info, {
-            "c_code": c_code, "b_code": b_code, "c_name": c_name, "c_env": c_env,
-            "c_app": c_app, "c_rest": c_rest, "c_user": c_user, "c_pass": c_pass
+            "c_code": c_code, "b_code": b_code, "c_name": c_name, "c_cnpj": c_cnpj, "c_ie": c_ie,
+            "c_rz": c_rz, "c_email": c_email, "c_tel": c_tel, "c_end": c_end,
+            "c_grp": c_grp, "c_emp": c_emp, "c_und": c_und, "c_fil": c_fil, "c_env": c_env,
+            "c_app": c_app, "c_rest": c_rest, "c_user": c_user, "c_pass": c_pass, "c_status": c_status
         })
 
         upsert_tenant_registry = text("""
