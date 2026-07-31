@@ -191,14 +191,15 @@ export default function Companies() {
 
   const fetchData = async () => {
     try {
-      const [c, t] = await Promise.all([
-        axios.get('/api/companies'),
-        axios.get('/api/tenants')
-      ]);
-      setCompanies(Array.isArray(c.data) ? c.data : c.data?.items ?? []);
-      setTenants(Array.isArray(t.data) ? t.data : t.data?.items ?? []);
-    } catch {}
-    setLoading(false);
+      const cRes = await axios.get('/api/companies').catch(() => null);
+      const tRes = await axios.get('/api/tenants').catch(() => null);
+      if (cRes) setCompanies(Array.isArray(cRes.data) ? cRes.data : cRes.data?.items ?? []);
+      if (tRes) setTenants(Array.isArray(tRes.data) ? tRes.data : tRes.data?.items ?? []);
+    } catch (err) {
+      console.error("Erro ao carregar dados:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (e, id) => {

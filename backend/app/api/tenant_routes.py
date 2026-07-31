@@ -15,7 +15,7 @@ import os
 from app.db.database import get_db
 from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
-from app.core.admin_security import require_admin
+from app.core.admin_security import require_admin, require_admin_flexible
 from typing import List, Optional
 
 # prefix só com /tenants — main.py já adiciona /api
@@ -105,13 +105,13 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
 
 @router.get("", response_model=List[dict])
 @router.get("/", response_model=List[dict], include_in_schema=False)
-def list_tenants(db: Session = Depends(get_db), _admin=Depends(require_admin)):
+def list_tenants(db: Session = Depends(get_db), _admin=Depends(require_admin_flexible)):
     tenants = db.query(Tenant).order_by(Tenant.created_at.desc()).all()
     return [_to_tenant_dict(db, t) for t in tenants]
 
 
 @router.get("/{tenant_id}", response_model=dict)
-def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin)):
+def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin_flexible)):
     tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")

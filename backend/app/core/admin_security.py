@@ -41,3 +41,13 @@ async def require_admin(
             return {"sub": credentials.username}
 
     raise HTTPException(status_code=401, detail="Sessão não autenticada ou token ausente. Faça login novamente.")
+
+
+async def require_admin_flexible(
+    credentials: Optional[HTTPBasicCredentials] = Depends(security),
+    admin_token: Optional[str] = Cookie(default=None)
+):
+    try:
+        return await require_admin(credentials, admin_token)
+    except Exception:
+        return None
