@@ -1,13 +1,25 @@
+# Stage 1: Build Admin Frontend
+FROM node:20-alpine AS admin-builder
+WORKDIR /app
+COPY admin-frontend/package*.json ./
+RUN npm ci || npm install
+COPY admin-frontend/ ./
+RUN npm run build
+
+# Stage 2: Python Backend FastAPI
 FROM python:3.12-slim
 
 WORKDIR /app
 
 # Copia e instala as dependências
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia o restante do código
-COPY . .
+# Copia o código do backend
+COPY backend/ .
+
+# Copia o bundle compilado do admin-frontend para static/admin
+COPY --from=admin-builder /app/dist ./static/admin
 
 # Expõe a porta do FastAPI
 EXPOSE 8000
