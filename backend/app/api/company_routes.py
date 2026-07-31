@@ -261,28 +261,20 @@ def sync_modules_dictionary(
 
 @router.get("/companies", response_model=List[CompanyResponse])
 def list_all_companies(tenant_id: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
-    q = db.query(Company)
-    if tenant_id:
-        q = q.filter(Company.tenant_id == tenant_id)
-    return q.order_by(Company.id.asc()).all()
+    from app.services.company_module_service import list_companies
+    return list_companies(db, tenant_id=tenant_id)
 
 
 @router.get("/companies/by-tenant/{tenant_id}", response_model=CompanyResponse)
 def get_company_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
-    comp = db.query(Company).filter(Company.tenant_id == tenant_id).first()
-    if not comp:
-        comp = db.query(Company).filter(Company.protheus_grupo == tenant_id).first()
-    if not comp:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada para o tenant.")
-    return comp
+    from app.services.company_module_service import get_company_or_404
+    return get_company_or_404(db, tenant_id)
 
 
 @router.get("/companies/{company_id}", response_model=CompanyResponse)
 def get_company(company_id: int, db: Session = Depends(get_db)):
-    comp = db.query(Company).filter(Company.id == company_id).first()
-    if not comp:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
-    return comp
+    from app.services.company_module_service import get_company_or_404
+    return get_company_or_404(db, company_id)
 
 
 def sync_company_into_tenant_schema(db: Session, comp: Company):

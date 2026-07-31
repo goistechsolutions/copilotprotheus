@@ -90,8 +90,15 @@ class Company(Base):
     protheus_unidade            = Column(String(20),   nullable=True)
     protheus_filial             = Column(String(30),   nullable=True)
     environment                 = Column(String(60),   default='producao')
-    protheus_ambientes          = Column(String(100),  default='producao')
     protheus_usuario            = Column(String(100),  nullable=True)
+
+    @property
+    def protheus_ambientes(self):
+        return self.environment or 'producao'
+
+    @protheus_ambientes.setter
+    def protheus_ambientes(self, val):
+        self.environment = val
     encrypted_protheus_password = Column(Text,         nullable=True)
     protheus_rest_url           = Column(String(1024), nullable=True)
     protheus_webapp_url         = Column(String(1024), nullable=True)
