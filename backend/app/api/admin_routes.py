@@ -399,10 +399,7 @@ async def sync_modules(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
 
-    modules_query = (
-        "/* %notparser% */ SELECT DISTINCT USR_MODULO, USR_CODMOD "
-        "FROM SYS_USR_MODULE ORDER BY USR_MODULO"
-    )
+    modules_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
     try:
         response_str = await execute_protheus_tool("QueryRest", {"cQuery": modules_query}, tenant_id=tenant_id)
         result_data  = json.loads(fix_protheus_json(response_str))
@@ -551,25 +548,53 @@ async def sync_schema(
         .all()
     )
 
+    mod_codes_list = set()
+    code_to_name   = {}
+
+    # 1. Consulta dinâmica no Protheus (SYS_USR_MODULE)
+    try:
+        sys_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
+        sys_res_str = await execute_protheus_tool("QueryRest", {"cQuery": sys_query}, tenant_id=tenant_id)
+        sys_rows = json.loads(fix_protheus_json(sys_res_str))
+        if isinstance(sys_rows, dict):
+            sys_rows = sys_rows.get("items") or sys_rows.get("data", [])
+
+        if isinstance(sys_rows, list):
+            for row in sys_rows:
+                if not isinstance(row, dict): continue
+                u_mod = (row.get("USR_MODULO") or "").strip().upper()
+                u_cod = (row.get("USR_CODMOD") or "").strip()
+                if u_mod in clean_modulos and u_cod:
+                    if u_cod.isdigit():
+                        v = int(u_cod)
+                        mod_codes_list.update([str(v), f"{v:02d}"])
+                        code_to_name[str(v)] = u_mod
+                        code_to_name[f"{v:02d}"] = u_mod
+                    else:
+                        mod_codes_list.add(u_cod)
+                        code_to_name[u_cod] = u_mod
+    except Exception as e_sys:
+        logger.warning(f"Aviso ao consultar SYS_USR_MODULE via QueryRest para {tenant_id}: {e_sys}")
+
+    # 2. Fallback caso a consulta dinamica nao traga o modulo selecionado
     fallback_num_map = {
         "SIGAATF": "01", "SIGACOM": "02", "SIGAEST": "04", "SIGAFAT": "05",
         "SIGAFIN": "06", "SIGAGPE": "07", "SIGAFIS": "09", "SIGAPON": "16",
         "SIGATMK": "31", "SIGACTB": "34", "SIGAADV": "34", "SIGAMNT": "43", "SIGAJURI": "76",
     }
 
-    mod_codes_list = set()
-    code_to_name   = {}
     for m in db_mods:
         code_key = m.module_code.strip().upper()
-        num = fallback_num_map.get(code_key) or (m.module_name.strip() if m.module_name and m.module_name.isdigit() else "05")
-        if num.isdigit():
-            v = int(num)
-            mod_codes_list.update([str(v), f"{v:02d}"])
-            code_to_name[str(v)] = m.module_code
-            code_to_name[f"{v:02d}"] = m.module_code
-        else:
-            mod_codes_list.add(num)
-            code_to_name[num] = m.module_code
+        if code_key in clean_modulos:
+            num = fallback_num_map.get(code_key) or (m.module_name.strip() if m.module_name and m.module_name.isdigit() else "05")
+            if num.isdigit():
+                v = int(num)
+                mod_codes_list.update([str(v), f"{v:02d}"])
+                code_to_name[str(v)] = m.module_code
+                code_to_name[f"{v:02d}"] = m.module_code
+            else:
+                mod_codes_list.add(num)
+                code_to_name[num] = m.module_code
 
     if not mod_codes_list:
         raise HTTPException(
