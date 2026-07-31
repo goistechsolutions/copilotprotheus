@@ -25,14 +25,19 @@ def ensure_database_exists(db_url: str):
     except Exception as e:
         print(f"[DB] Aviso ao verificar/criar banco de dados: {e}")
 
-DATABASE_URL = os.getenv('DATABASE_URL', '')
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip() or "sqlite:///:memory:"
 
 try:
     ensure_database_exists(DATABASE_URL)
 except Exception:
     pass
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine_args = {"pool_pre_ping": True}
+if DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy.pool import StaticPool
+    engine_args = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool}
+
+engine = create_engine(DATABASE_URL, **engine_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
