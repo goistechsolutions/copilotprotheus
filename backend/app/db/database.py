@@ -65,7 +65,8 @@ def ensure_public_tables(db):
         "CREATE TABLE IF NOT EXISTS public.platform_admins (id SERIAL PRIMARY KEY, email VARCHAR(150) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, is_superadmin BOOLEAN DEFAULT FALSE, active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW());",
         "CREATE TABLE IF NOT EXISTS public.protheus_modules_master (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), mod_code VARCHAR(30) UNIQUE, module_code VARCHAR(30) UNIQUE, mod_name VARCHAR(150), module_name VARCHAR(150), description TEXT, source_name VARCHAR(60) NOT NULL DEFAULT 'SYS_USR_MODULE', active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE);",
         "CREATE TABLE IF NOT EXISTS public.platform_audit_log (id BIGSERIAL PRIMARY KEY, tenant_code VARCHAR(50), actor VARCHAR(150), action VARCHAR(100) NOT NULL, detail JSONB, created_at TIMESTAMP DEFAULT NOW());",
-        'DROP SCHEMA IF EXISTS "1" CASCADE;'
+        'DROP SCHEMA IF EXISTS "1" CASCADE;',
+        "DELETE FROM public.protheus_modules_master WHERE source_name = 'fallback_hardcoded';"
     ]
 
     try:

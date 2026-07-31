@@ -581,114 +581,81 @@ async def sync_schema(
     if not clean_modulos:
         raise HTTPException(status_code=400, detail="Selecione ao menos um modulo.")
 
-    # Resolve codigos numericos via ProtheusModuleMaster
-    db_mods = (
-        db.query(ProtheusModuleMaster)
-        .filter(ProtheusModuleMaster.module_code.in_(clean_modulos))
-        .all()
-    )
-
-    # Fallback hardcoded TOTVS classico
-    fallback_details = {
-        "SIGAATF": ("01", "Ativo Fixo"),
-        "SIGACOM": ("02", "Compras"),
-        "SIGAEST": ("04", "Estoque e Custos"),
-        "SIGAFAT": ("05", "Faturamento"),
-        "SIGAFIN": ("06", "Financeiro"),
-        "SIGAGPE": ("07", "Gestão de Pessoal"),
-        "SIGAFIS": ("09", "Livros Fiscais"),
-        "SIGAPON": ("16", "Ponto Eletrônico"),
-        "SIGATMK": ("31", "Telemarketing"),
-        "SIGACTB": ("34", "Contabilidade Gerencial"),
-        "SIGAADV": ("34", "Desenvolvimento AdvPL"),
-        "SIGAMNT": ("43", "Manutenção de Ativos"),
-        "SIGAJURI": ("76", "Jurídico"),
-    }
-
-    existing_all = db.query(ProtheusModuleMaster).all()
-    existing_map = {m.module_code: m for m in existing_all}
-    changed = False
-
-    for code, (num, name) in fallback_details.items():
-        if code not in existing_map:
-            db.add(ProtheusModuleMaster(
-                module_code=code,
-                module_name=name,
-                source_name="fallback_hardcoded",
-                active=True
-            ))
-            changed = True
-        else:
-            # Se o module_name gravado era apenas número ('01', '05', etc.), atualiza para o nome amigável
-            m = existing_map[code]
-            if m.module_name.isdigit() or len(m.module_name.strip()) <= 2:
-                m.module_name = name
-                changed = True
-
-    if changed:
-        db.commit()
-
-    db_mods = (
-        db.query(ProtheusModuleMaster)
-        .filter(ProtheusModuleMaster.module_code.in_(clean_modulos))
-        .all()
-    )
-
     mod_codes_list = set()
     code_to_name   = {}
 
-    # 1. Consulta dinâmica no Protheus (SYS_USR_MODULE)
+    # Popula / lê protheus_modules_master
     try:
-        sys_query = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
-        sys_res_str = await execute_protheus_tool("QueryRest", {"cQuery": sys_query}, tenant_id=tenant_id)
+        sys_res_str = await execute_protheus_tool("QueryRest", {"cQuery": CANONICAL_MODULES_QUERY}, tenant_id=tenant_id)
         sys_rows = json.loads(fix_protheus_json(sys_res_str))
         if isinstance(sys_rows, dict):
             sys_rows = sys_rows.get("items") or sys_rows.get("data", [])
-
         if isinstance(sys_rows, list):
-            for row in sys_rows:
-                if not isinstance(row, dict): continue
-                u_mod = (row.get("USR_MODULO") or "").strip().upper()
-                u_cod = (row.get("USR_CODMOD") or "").strip()
-                if u_mod in clean_modulos and u_cod:
-                    if u_cod.isdigit():
-                        v = int(u_cod)
-                        mod_codes_list.update([str(v), f"{v:02d}"])
-                        code_to_name[str(v)] = u_mod
-                        code_to_name[f"{v:02d}"] = u_mod
-                    else:
-                        mod_codes_list.add(u_cod)
-                        code_to_name[u_cod] = u_mod
+            for r in sys_rows:
+                if not isinstance(r, dict): continue
+                c_mod = str(r.get("CODIGO_MODULO") or r.get("USR_MODULO") or "").strip()
+                c_tab = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
+                n_mod = str(r.get("NOME_MODULO") or "").strip()
+                if not c_mod: continue
+                existing = db.query(ProtheusModuleMaster).filter(
+                    (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
+                ).first()
+                if existing:
+                    existing.module_code = c_mod
+                    existing.module_name = c_tab or existing.module_name
+                    existing.description = n_mod or existing.description
+                    existing.active      = True
+                else:
+                    db.add(ProtheusModuleMaster(
+                        module_code=c_mod,
+                        module_name=c_tab or c_mod,
+                        description=n_mod,
+                        source_name="SYS_USR_MODULE",
+                        active=True
+                    ))
+            db.commit()
     except Exception as e_sys:
-        logger.warning(f"Aviso ao consultar SYS_USR_MODULE via QueryRest para {tenant_id}: {e_sys}")
+        logger.warning(f"Aviso ao atualizar protheus_modules_master via QueryRest: {e_sys}")
 
-    # 2. Fallback caso a consulta dinamica nao traga o modulo selecionado
-    fallback_num_map = {
-        "SIGAATF": "01", "SIGACOM": "02", "SIGAEST": "04", "SIGAFAT": "05",
-        "SIGAFIN": "06", "SIGAGPE": "07", "SIGAFIS": "09", "SIGAPON": "16",
-        "SIGATMK": "31", "SIGACTB": "34", "SIGAADV": "34", "SIGAMNT": "43", "SIGAJURI": "76",
-    }
+    master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
-    for m in db_mods:
-        code_key = m.module_code.strip().upper()
-        if code_key in clean_modulos:
-            num = fallback_num_map.get(code_key) or (m.module_name.strip() if m.module_name and m.module_name.isdigit() else "05")
-            if num.isdigit():
-                v = int(num)
+    for m in master_rows:
+        m_code = (m.module_code or "").strip()
+        m_desc = (m.description or m.module_name or m_code).strip()
+
+        is_selected = False
+        if not clean_modulos:
+            is_selected = True
+        else:
+            for cm in clean_modulos:
+                if cm == m_code.upper() or cm in m_desc.upper() or cm in (m.module_name or "").upper():
+                    is_selected = True
+                    break
+
+        if is_selected:
+            if m_code.isdigit():
+                v = int(m_code)
                 mod_codes_list.update([str(v), f"{v:02d}"])
-                code_to_name[str(v)] = m.module_code
-                code_to_name[f"{v:02d}"] = m.module_code
+                code_to_name[str(v)] = m_desc
+                code_to_name[f"{v:02d}"] = m_desc
             else:
-                mod_codes_list.add(num)
-                code_to_name[num] = m.module_code
+                mod_codes_list.add(m_code)
+                code_to_name[m_code] = m_desc
 
-    if not mod_codes_list:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Nao foi possivel obter codigos numericos para: {', '.join(clean_modulos)}.",
-        )
+    for cm in clean_modulos:
+        if cm.isdigit():
+            v = int(cm)
+            mod_codes_list.update([str(v), f"{v:02d}"])
+            if str(v) not in code_to_name:
+                code_to_name[str(v)] = cm
+                code_to_name[f"{v:02d}"] = cm
 
-    numeric_in = ", ".join([f"'{c}'" for c in mod_codes_list])
+    if mod_codes_list:
+        numeric_in = ", ".join([f"'{c}'" for c in mod_codes_list])
+        where_clause = f"WHERE X2.D_E_L_E_T_<>'*' AND TRIM(X2.X2_MODULO) IN ({numeric_in})"
+    else:
+        where_clause = "WHERE X2.D_E_L_E_T_<>'*'"
+
     tables_query = (
         f"SELECT DISTINCT X2.X2_MODULO,X2.X2_CHAVE,X2.X2_ARQUIVO,X2.X2_NOME,"
         f"X2.X2_TAMFIL,X2.X2_MODO,X2.X2_TAMUN,X2.X2_MODOUN,X2.X2_TAMEMP,X2.X2_MODOEMP,X2.X2_UNICO,"
@@ -696,7 +663,7 @@ async def sync_schema(
         f"CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,"
         f"CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL "
         f"FROM SX2010 X2 INNER JOIN SX3010 X3 ON TRIM(X2.X2_CHAVE)=TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_<>'*' "
-        f"WHERE X2.D_E_L_E_T_<>'*' AND TRIM(X2.X2_MODULO) IN ({numeric_in}) "
+        f"{where_clause} "
         f"ORDER BY X2.X2_MODULO,X2.X2_CHAVE"
     )
 
