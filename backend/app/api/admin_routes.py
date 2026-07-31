@@ -22,8 +22,10 @@ import os
 import json
 import dotenv
 import hashlib
-import uuid
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import (
@@ -562,8 +564,8 @@ async def sync_schema(
         if isinstance(sys_rows, list):
             for row in sys_rows:
                 if not isinstance(row, dict): continue
-                u_mod = (row.get("USR_CODMOD") or "").strip().upper()
-                u_cod = (row.get("USR_MODULO") or "").strip()
+                u_mod = (row.get("USR_MODULO") or "").strip().upper()
+                u_cod = (row.get("USR_CODMOD") or "").strip()
                 if u_mod in clean_modulos and u_cod:
                     if u_cod.isdigit():
                         v = int(u_cod)
@@ -742,7 +744,9 @@ async def sync_schema(
                 )
         except Exception as e_ts:
             logger.warning(f"Aviso ao persistir tenant_schemas em {clean_tenant}: {e_ts}")
-            # Upsert no dicionario V4
+
+        # Upsert no dicionario V4
+        for chave, meta in schema_dict.items():
             existing_dt = db.query(TenantDictionaryTable).filter(
                 TenantDictionaryTable.tenant_id  == tenant_id,
                 TenantDictionaryTable.snapshot_id == snapshot.id,

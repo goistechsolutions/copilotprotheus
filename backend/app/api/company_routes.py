@@ -93,7 +93,7 @@ def get_companies_list(
 
 @router.get("/companies/{company_id}/modules/available", response_model=CompanyModulesAvailableResponse)
 async def get_available_modules(
-    company_id: int,
+    company_id: str,
     db: Session = Depends(get_db),
 ):
     company = get_company_or_404(db, company_id)
@@ -125,7 +125,7 @@ async def get_available_modules(
     seen = set()
 
     for row in rows:
-        module_code = (row.get("USR_CODMOD") or "").strip().upper()
+        module_code = (row.get("USR_MODULO") or row.get("USR_CODMOD") or "").strip().upper()
         module_name = (row.get("USR_MODULO") or "").strip()
 
         if not module_code or not module_name:
@@ -142,14 +142,14 @@ async def get_available_modules(
 
     return {
         "status": "success",
-        "company_id": company_id,
+        "company_id": str(company_id),
         "items": items,
     }
 
 
 @router.get("/companies/{company_id}/modules", response_model=CompanyModulesAssignedResponse)
 def get_modules_by_company(
-    company_id: int,
+    company_id: str,
     db: Session = Depends(get_db),
 ):
     company = get_company_or_404(db, company_id)
@@ -162,14 +162,14 @@ def get_modules_by_company(
 
     return {
         "status": "success",
-        "company_id": company_id,
+        "company_id": str(company_id),
         "items": items,
     }
 
 
 @router.post("/companies/{company_id}/modules", response_model=CompanyModulesSaveResponse)
 def save_modules_by_company(
-    company_id: int,
+    company_id: str,
     payload: CompanyModulesSaveRequest,
     db: Session = Depends(get_db),
 ):
@@ -184,14 +184,14 @@ def save_modules_by_company(
 
     return {
         "status": "success",
-        "company_id": company_id,
+        "company_id": str(company_id),
         "modules_saved": modules_saved,
     }
 
 
 @router.post("/companies/{company_id}/modules/sync", response_model=CompanyModulesSyncResponse)
 def sync_modules_dictionary(
-    company_id: int,
+    company_id: str,
     payload: CompanyModulesSyncRequest,
     db: Session = Depends(get_db),
 ):
