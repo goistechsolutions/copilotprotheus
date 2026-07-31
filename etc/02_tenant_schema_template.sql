@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS "{{schema}}".company_info (
     protheus_unidade        VARCHAR(20),
     protheus_filial         VARCHAR(30),
     environment             VARCHAR(60) DEFAULT 'producao',
+    protheus_ambientes      VARCHAR(100) DEFAULT 'producao',
     webapp_url              TEXT,
     protheus_rest_url       TEXT,
     protheus_usuario        VARCHAR(100),

@@ -124,6 +124,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 protheus_unidade        VARCHAR(20),
                 protheus_filial         VARCHAR(30),
                 environment             VARCHAR(60) DEFAULT 'producao',
+                protheus_ambientes      VARCHAR(100) DEFAULT 'producao',
                 webapp_url              TEXT,
                 protheus_rest_url       TEXT,
                 protheus_usuario        VARCHAR(100),
@@ -136,6 +137,17 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 updated_at              TIMESTAMP DEFAULT NOW(),
                 UNIQUE (company_code, branch_code)
             );
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT 'producao';
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_grupo VARCHAR(20);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_empresa VARCHAR(20);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_unidade VARCHAR(20);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_filial VARCHAR(30);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS cnpj VARCHAR(30);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS ie VARCHAR(30);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS razao_social VARCHAR(255);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS telefone VARCHAR(50);
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS endereco VARCHAR(500);
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
