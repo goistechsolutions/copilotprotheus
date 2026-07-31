@@ -1,7 +1,17 @@
+"""
+backend/app/schemas/company_modules.py
+
+Pydantic V2 — schemas de módulos Protheus por empresa.
+
+Atualização V4:
+  CompanyModuleAssignedItem: adicionar company_name e branch_code para
+    permitir exibição no frontend sem join extra.
+"""
+
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CompanyModuleAvailableItem(BaseModel):
@@ -12,6 +22,8 @@ class CompanyModuleAvailableItem(BaseModel):
 class CompanyModuleAssignedItem(BaseModel):
     company_id: int
     tenant_id: str
+    company_name: Optional[str] = Field(None, description="Nome da empresa (company_info.company_name)")
+    branch_code: Optional[str] = Field(None, max_length=60, description="Filial (company_info.branch_code)")
     module_code: str
     module_name: str
     enabled: bool = True
@@ -75,8 +87,10 @@ class CompanyModulesSyncResponse(BaseModel):
 class CompanyListItem(BaseModel):
     id: int
     tenant_id: str
-    code: Optional[str] = None
-    name: str
+    company_code: Optional[str] = Field(None, description="Código Protheus da empresa")
+    branch_code: Optional[str] = Field(None, description="Código Protheus da filial")
+    name: Optional[str] = Field(None, description="Alias legado — equivale a company_name")
+    company_name: Optional[str] = None
     status: Optional[str] = None
     created_at: Optional[datetime] = None
 
