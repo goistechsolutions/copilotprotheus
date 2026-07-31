@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS public.tenant_registry (
     status          VARCHAR(20) NOT NULL DEFAULT 'provisioning'
                         CHECK (status IN ('provisioning','active','suspended','decommissioned')),
     plan_code       VARCHAR(50),
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW(),
     provisioned_at  TIMESTAMP,
     decommissioned_at TIMESTAMP
 );
