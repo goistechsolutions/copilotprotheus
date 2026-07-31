@@ -64,7 +64,8 @@ def ensure_public_tables(db):
         "CREATE TABLE IF NOT EXISTS public.plans (plan_code VARCHAR(50) PRIMARY KEY, plan_name VARCHAR(150) NOT NULL, max_users INTEGER DEFAULT 5, max_queries_day INTEGER DEFAULT 500, modules_allowed JSONB DEFAULT '[]', active BOOLEAN DEFAULT TRUE);",
         "CREATE TABLE IF NOT EXISTS public.platform_admins (id SERIAL PRIMARY KEY, email VARCHAR(150) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, is_superadmin BOOLEAN DEFAULT FALSE, active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW());",
         "CREATE TABLE IF NOT EXISTS public.protheus_modules_master (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), mod_code VARCHAR(30) UNIQUE, module_code VARCHAR(30) UNIQUE, mod_name VARCHAR(150), module_name VARCHAR(150), description TEXT, source_name VARCHAR(60) NOT NULL DEFAULT 'SYS_USR_MODULE', active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE);",
-        "CREATE TABLE IF NOT EXISTS public.platform_audit_log (id BIGSERIAL PRIMARY KEY, tenant_code VARCHAR(50), actor VARCHAR(150), action VARCHAR(100) NOT NULL, detail JSONB, created_at TIMESTAMP DEFAULT NOW());"
+        "CREATE TABLE IF NOT EXISTS public.platform_audit_log (id BIGSERIAL PRIMARY KEY, tenant_code VARCHAR(50), actor VARCHAR(150), action VARCHAR(100) NOT NULL, detail JSONB, created_at TIMESTAMP DEFAULT NOW());",
+        'DROP SCHEMA IF EXISTS "1" CASCADE;'
     ]
 
     try:
@@ -86,6 +87,24 @@ def ensure_tenant_tables(db, clean_tenant: str):
     ensure_public_tables(db)
     if not clean_tenant or clean_tenant == "public":
         return
+
+    # Se clean_tenant for numérico (ex: "1"), resolve o tenant_code real em public.tenant_registry
+    clean_str = str(clean_tenant).strip()
+    if clean_str.isdigit():
+        try:
+            reg = db.execute(
+                text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE id = :id OR tenant_code = :tc LIMIT 1"),
+                {"id": int(clean_str), "tc": clean_str}
+            ).mappings().first()
+            if reg and (reg.get("schema_name") or reg.get("tenant_code")):
+                clean_tenant = reg.get("schema_name") or reg.get("tenant_code")
+        except Exception:
+            pass
+
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(clean_tenant))
+    if not clean_tenant or clean_tenant == "public":
+        clean_tenant = "default"
+
     try:
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))

@@ -121,7 +121,7 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(req
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     import re, uuid
-    raw_code = body.tenant_code or body.id or body.tenant_name or body.name or "tenant"
+    raw_code = body.tenant_code or body.tenant_name or body.name or body.id or "tenant"
     t_code = re.sub(r'[^a-z0-9_]+', '_', str(raw_code).lower().strip()).strip('_')
     if not t_code:
         t_code = f"tenant_{uuid.uuid4().hex[:6]}"

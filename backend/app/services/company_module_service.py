@@ -13,22 +13,28 @@ logger = logging.getLogger("app.services.company_module_service")
 
 
 def get_company_or_404(db: Session, company_id: int | str) -> dict:
-    cid_str = str(company_id)
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', cid_str)
+    cid_str = str(company_id).strip()
+    clean_tenant = ""
     
-    # 1. Busca no tenant_registry global
-    reg = db.execute(
-        text("""
-            SELECT id, tenant_code, tenant_name, schema_name, status
-            FROM public.tenant_registry
-            WHERE id::text = :cid OR tenant_code = :cid OR schema_name = :cid
-            LIMIT 1
-        """),
-        {"cid": cid_str}
-    ).mappings().first()
+    # 1. Busca no tenant_registry global por id, tenant_code ou schema_name
+    try:
+        reg = db.execute(
+            text("""
+                SELECT id, tenant_code, tenant_name, schema_name, status
+                FROM public.tenant_registry
+                WHERE id::text = :cid OR tenant_code = :cid OR schema_name = :cid
+                LIMIT 1
+            """),
+            {"cid": cid_str}
+        ).mappings().first()
 
-    if reg:
-        clean_tenant = reg["tenant_code"]
+        if reg:
+            clean_tenant = reg.get("schema_name") or reg.get("tenant_code")
+    except Exception:
+        pass
+
+    if not clean_tenant:
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', cid_str)
 
     if not clean_tenant or clean_tenant == "public":
         clean_tenant = "default"
