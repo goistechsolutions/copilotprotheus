@@ -153,7 +153,7 @@ async def dashboard_stats(
 ):
     """Métricas gerais do painel admin EliteCorp"""
     try:
-        tenants = db.execute(text("SELECT COUNT(*) FROM tenants")).scalar() or 0
+        tenants = db.execute(text("SELECT COUNT(*) FROM tenant_registry")).scalar() or 0
     except Exception:
         tenants = 0
     try:
