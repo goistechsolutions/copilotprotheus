@@ -137,17 +137,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 updated_at              TIMESTAMP DEFAULT NOW(),
                 UNIQUE (company_code, branch_code)
             );
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT 'producao';
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_grupo VARCHAR(20);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_empresa VARCHAR(20);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_unidade VARCHAR(20);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_filial VARCHAR(30);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS cnpj VARCHAR(30);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS ie VARCHAR(30);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS razao_social VARCHAR(255);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS telefone VARCHAR(50);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS endereco VARCHAR(500);
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
@@ -363,25 +352,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """))
-
-        # Migração transparente de dados legados do public se existirem
-        try:
-            db.execute(text(f"""
-                INSERT INTO "{clean_tenant}".protheus_modules (tenant_id, usr_modulo, usr_codmod, created_at)
-                SELECT tenant_id, usr_modulo, usr_codmod, created_at
-                FROM public.protheus_modules
-                WHERE tenant_id = '{clean_tenant}'
-                ON CONFLICT DO NOTHING;
-            """))
-            db.execute(text(f"""
-                INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, chave, tabela, nome, schema_json, created_at, updated_at)
-                SELECT tenant_id, modulo, chave, tabela, nome, schema_json, created_at, updated_at
-                FROM public.tenant_schemas
-                WHERE tenant_id = '{clean_tenant}'
-                ON CONFLICT DO NOTHING;
-            """))
-        except Exception:
-            pass
 
         db.commit()
     except Exception as e:
