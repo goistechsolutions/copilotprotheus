@@ -1,594 +1,661 @@
-"""Models canônicos V4 — copilot_protheus
-
-Regras:
-- Um único modelo por entidade. Sem duplicatas V2.
-- PKs: tenants.id = String(100) slug; demais entidades = UUID.
-- Senhas sempre criptografadas (encrypted_*). Nunca em claro.
-- tenant_id presente em toda tabela de domínio.
-- Indexes explícitos em colunas de busca frequente.
-"""
-from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey,
-    JSON, Float, Boolean, Date, Table, Numeric, Index
-)
-from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import UUID
-from pgvector.sqlalchemy import Vector
-from app.db.database import Base
-import uuid
-
-# ─────────────────────────────────────────────────────────────
-# TABELAS DE ASSOCIAÇÃO (Many-to-Many Globais em public)
-# ─────────────────────────────────────────────────────────────
-
-role_permissions = Table(
-    'role_permissions', Base.metadata,
-    Column('role_id',       UUID(as_uuid=True), ForeignKey('public.roles.id',       ondelete='CASCADE'), primary_key=True),
-    Column('permission_id', UUID(as_uuid=True), ForeignKey('public.permissions.id', ondelete='CASCADE'), primary_key=True),
-    schema='public'
-)
-
-user_company_access = Table(
-    'user_company_access', Base.metadata,
-    Column('user_id',    UUID(as_uuid=True), primary_key=True),
-    Column('tenant_id',  String(100),        primary_key=True),
-    Column('company_id', Integer,            primary_key=True),
-    Column('env_id',     UUID(as_uuid=True), ),
-    schema='public'
-)
-
-user_roles = Table(
-    'user_roles', Base.metadata,
-    Column('user_id',    UUID(as_uuid=True), primary_key=True),
-    Column('role_id',    UUID(as_uuid=True), ForeignKey('public.roles.id',     ondelete='CASCADE'), primary_key=True),
-    Column('tenant_id',  String(100),        primary_key=True),
-    Column('company_id', Integer,            primary_key=True),
-    schema='public'
-)
-
-# ─────────────────────────────────────────────────────────────
-# TENANT  (PK slug String — mantido por compatibilidade)
-# ─────────────────────────────────────────────────────────────
-
-class Tenant(Base):
-    """Registro global do Tenant no schema public (sem credenciais de conexão)."""
-    __tablename__ = 'tenant_registry'
-    __table_args__ = {'schema': 'public'}
-
-    id              = Column(Integer,     primary_key=True, autoincrement=True)
-    tenant_code     = Column(String(50),  nullable=False, unique=True, index=True)
-    tenant_name     = Column(String(150), nullable=False)
-    schema_name     = Column(String(63),  nullable=False, unique=True)
-    status          = Column(String(20),  nullable=False, default='active')
-    plan_code       = Column(String(50),  nullable=True)
-    created_at      = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at      = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    provisioned_at  = Column(DateTime(timezone=True), nullable=True)
-    decommissioned_at = Column(DateTime(timezone=True), nullable=True)
-
-
-# ─────────────────────────────────────────────────────────────
-# COMPANY INFO (Schema Específico da Empresa)
-# ─────────────────────────────────────────────────────────────
-
-class Company(Base):
-    """Empresa/filial cadastrada dentro do schema exclusivo do tenant."""
-    __tablename__ = 'company_info'
-
-    id                          = Column(Integer,     primary_key=True, autoincrement=True)
-    company_code                = Column(String(60),  nullable=False, default='01')
-    branch_code                 = Column(String(60),  nullable=False, default='0101')
-    company_name                = Column(String(200), nullable=False)
-    cnpj                        = Column(String(30),   index=True, nullable=True)
-    ie                          = Column(String(30),   nullable=True)
-    razao_social                = Column(String(255),  nullable=True)
-    email                       = Column(String(255),  nullable=True)
-    telefone                    = Column(String(50),   nullable=True)
-    endereco                    = Column(String(500),  nullable=True)
-    protheus_grupo              = Column(String(20),   nullable=True)
-    protheus_empresa            = Column(String(20),   nullable=True)
-    protheus_unidade            = Column(String(20),   nullable=True)
-    protheus_filial             = Column(String(30),   nullable=True)
-    environment                 = Column(String(60),   default='producao')
-    protheus_usuario            = Column(String(100),  nullable=True)
-
-    @property
-    def protheus_ambientes(self):
-        return self.environment or 'producao'
-
-    @protheus_ambientes.setter
-    def protheus_ambientes(self, val):
-        self.environment = val
-    encrypted_protheus_password = Column(Text,         nullable=True)
-    protheus_rest_url           = Column(String(1024), nullable=True)
-    protheus_webapp_url         = Column(String(1024), nullable=True)
-    auth_mode                   = Column(String(30),   default='basic')
-    system_prompt               = Column(Text,         nullable=True)
-    temperature                 = Column(Float,        default=0.2)
-    status                      = Column(String(50),   default='active')
-    created_at                  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at                  = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# RBAC — Users / Roles / Permissions  (MODELO ÚNICO)
-# ─────────────────────────────────────────────────────────────
-
-class User(Base):
-    """Usuário da plataforma. Substitui AgentUser (V2 removido)."""
-    __tablename__ = 'users'
-    __table_args__ = {'schema': 'public'}
-
-    id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id         = Column(String(100), index=True, nullable=True)
-    email             = Column(String(180), nullable=False, unique=True, index=True)
-    full_name         = Column(String(180), nullable=False)
-    password_hash     = Column(String(255), nullable=False)
-    status            = Column(String(20),  nullable=False, default='active')
-    is_platform_admin = Column(Boolean,     nullable=False, default=False)
-    created_at        = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at        = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class Role(Base):
-    """Papel RBAC. Substitui AgentRole (V2 removido)."""
-    __tablename__ = 'roles'
-    __table_args__ = {'schema': 'public'}
-
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    role_code   = Column(String(60),  nullable=False, unique=True, index=True)
-    role_name   = Column(String(120), nullable=False)
-    scope_level = Column(String(30),  nullable=False)  # platform | tenant | company
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-
-
-class Permission(Base):
-    __tablename__ = 'permissions'
-    __table_args__ = {'schema': 'public'}
-
-    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    permission_code = Column(String(100), nullable=False, unique=True, index=True)
-    permission_name = Column(String(150), nullable=False)
-    module_name     = Column(String(80),  nullable=False)
-    created_at      = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# INFRA — Environments / Connectors  (MODELO ÚNICO)
-# ─────────────────────────────────────────────────────────────
-
-class Environment(Base):
-    """Ambiente Protheus (prod, hml, dev). Substitui TenantConnector (V2 removido)."""
-    __tablename__ = 'environments'
-    __table_args__ = {'schema': 'public'}
-
-    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id          = Column(String(100), index=True, nullable=False)
-    company_id         = Column(Integer,     index=True, nullable=True)
-    env_code           = Column(String(60),  nullable=False)
-    env_name           = Column(String(120), nullable=False)
-    api_base_url       = Column(String(500), nullable=True)
-    middleware_route   = Column(String(500), nullable=True)
-    status             = Column(String(20),  nullable=False, default='active')
-    created_at         = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at         = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class Connector(Base):
-    """Conector REST/OAuth por ambiente. Substitui TenantConnector (V2 removido)."""
-    __tablename__ = 'connectors'
-    __table_args__ = {'schema': 'public'}
-
-    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id      = Column(String(100), index=True, nullable=False)
-    company_id     = Column(Integer,     index=True, nullable=True)
-    env_id         = Column(UUID(as_uuid=True), index=True, nullable=True)
-    connector_type = Column(String(50),  nullable=False)           # rest | oauth | token
-    connector_name = Column(String(150), nullable=False)
-    base_url       = Column(String(500), nullable=True)
-    auth_type      = Column(String(50),  nullable=True)
-    secret_ref     = Column(String(200), nullable=True)            # referência ao vault/env
-    status         = Column(String(20),  nullable=False, default='active')
-    created_at     = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at     = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# GOVERNANÇA — Licença / Plano / Contrato  (MODELO ÚNICO V4)
-# ─────────────────────────────────────────────────────────────
-
-class LicensePlan(Base):
-    """Plano de licença da plataforma. Substitui CompanyLicense (V2 removido)."""
-    __tablename__ = 'license_plans'
-    __table_args__ = {'schema': 'public'}
-
-    id                       = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    plan_code                = Column(String(60),  nullable=False, unique=True, index=True)
-    plan_name                = Column(String(150), nullable=False)
-    billing_cycle            = Column(String(20),  nullable=False, default='monthly')
-    query_limit              = Column(Integer,     nullable=True)
-    concurrent_sessions_limit= Column(Integer,     nullable=True)
-    overage_mode             = Column(String(20),  nullable=False, default='block')
-    active                   = Column(Boolean,     nullable=False, default=True)
-    created_at               = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at               = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class TenantContract(Base):
-    __tablename__ = 'tenant_contracts'
-    __table_args__ = {'schema': 'public'}
-
-    id                          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id                   = Column(String(100), index=True, nullable=False)
-    plan_id                     = Column(UUID(as_uuid=True), ForeignKey('public.license_plans.id'), nullable=True)
-    contract_code               = Column(String(80),  nullable=False, unique=True)
-    contract_status             = Column(String(20),  nullable=False, default='active')
-    starts_at                   = Column(Date,        nullable=False)
-    ends_at                     = Column(Date,        nullable=True)
-    query_limit_override        = Column(Integer,     nullable=True)
-    concurrent_sessions_override= Column(Integer,     nullable=True)
-    overage_mode_override       = Column(String(20),  nullable=True)
-    notes                       = Column(Text,        nullable=True)
-    created_at                  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at                  = Column(DateTime(timezone=True), onupdate=func.now())
-
-class QueryUsageCounter(Base):
-    __tablename__ = 'query_usage_counters'
-    __table_args__ = {'schema': 'public'}
-
-    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id        = Column(String(100), index=True, nullable=False)
-    contract_id      = Column(UUID(as_uuid=True), nullable=False)
-    period_ref       = Column(String(20),  nullable=False)   # ex: '2026-07'
-    total_queries    = Column(Integer,     nullable=False, default=0)
-    blocked_queries  = Column(Integer,     nullable=False, default=0)
-    overage_queries  = Column(Integer,     nullable=False, default=0)
-    updated_at       = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class ConcurrentSession(Base):
-    __tablename__ = 'concurrent_sessions'
-    __table_args__ = {'schema': 'public'}
-
-    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id      = Column(String(100), index=True, nullable=False)
-    user_id        = Column(UUID(as_uuid=True), nullable=True)
-    session_key    = Column(String(120), nullable=False, unique=True, index=True)
-    started_at     = Column(DateTime(timezone=True), server_default=func.now())
-    expires_at     = Column(DateTime(timezone=True), nullable=True)
-    session_status = Column(String(20),  nullable=False, default='active')
-
-
-# ─────────────────────────────────────────────────────────────
-# MÓDULOS PROTHEUS  (MODELO ÚNICO V4)
-# ─────────────────────────────────────────────────────────────
-
-class ProtheusModuleMaster(Base):
-    """Catálogo global de módulos. Substitui ProtheusModule (V2 removido)."""
-    __tablename__ = 'protheus_modules_master'
-    __table_args__ = {'schema': 'public'}
-
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    module_code = Column(String(30),  nullable=True, unique=True, index=True)
-    module_name = Column(String(150), nullable=True)
-    mod_code    = Column(String(30),  nullable=True, unique=True)
-    mod_name    = Column(String(150), nullable=True)
-    description = Column(Text,        nullable=True)
-    source_name = Column(String(60),  nullable=False, default='SYS_USR_MODULE')
-    active      = Column(Boolean,     nullable=False, default=True)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class TenantModuleContract(Base):
-    __tablename__ = 'tenant_module_contracts'
-    __table_args__ = {'schema': 'public'}
-
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id   = Column(String(100), index=True, nullable=False)
-    contract_id = Column(UUID(as_uuid=True), nullable=False)
-    module_id   = Column(UUID(as_uuid=True), ForeignKey('public.protheus_modules_master.id'), nullable=False)
-    status      = Column(String(20),  nullable=False, default='allowed')
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-
-
-
-# ─────────────────────────────────────────────────────────────
-# DICIONÁRIO DE DADOS PROTHEUS
-# ─────────────────────────────────────────────────────────────
-
-class DictionarySnapshot(Base):
-    __tablename__ = 'dictionary_snapshots'
-
-    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id      = Column(String(100), index=True, nullable=False)
-    company_id     = Column(Integer,     index=True, nullable=True)
-    env_id         = Column(UUID(as_uuid=True), nullable=True)
-    snapshot_code  = Column(String(80),  nullable=False)
-    source_db_type = Column(String(30),  nullable=False, default='oracle')
-    source_label   = Column(String(150), nullable=True)
-    sync_mode      = Column(String(20),  nullable=False, default='full')
-    sync_status    = Column(String(20),  nullable=False, default='completed')
-    requested_by   = Column(UUID(as_uuid=True), nullable=True)
-    started_at     = Column(DateTime(timezone=True), server_default=func.now())
-    finished_at    = Column(DateTime(timezone=True), nullable=True)
-    total_modules  = Column(Integer, default=0)
-    total_tables   = Column(Integer, default=0)
-    total_fields   = Column(Integer, default=0)
-    total_indexes  = Column(Integer, default=0)
-    notes          = Column(Text, nullable=True)
-
-
-class TenantDictionaryTable(Base):
-    __tablename__ = 'tenant_dictionary_tables'
-
-    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    snapshot_id      = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False, index=True)
-    tenant_id        = Column(String(100), index=True, nullable=False)
-    company_id       = Column(Integer,     index=True, nullable=True)
-    env_id           = Column(UUID(as_uuid=True), nullable=True)
-    module_code      = Column(String(30),  nullable=True)
-    table_key        = Column(String(20),  nullable=False)
-    physical_name    = Column(String(30),  nullable=False)
-    table_name       = Column(String(255), nullable=True)
-    unique_index_expr= Column(Text,        nullable=True)
-    x2_tamfil        = Column(Numeric(10,2), nullable=True)
-    x2_modo          = Column(String(5),   nullable=True)
-    x2_tamun         = Column(Numeric(10,2), nullable=True)
-    x2_modoun        = Column(String(5),   nullable=True)
-    x2_tamemp        = Column(Numeric(10,2), nullable=True)
-    x2_modoemp       = Column(String(5),   nullable=True)
-    usa_empresa      = Column(String(1),   nullable=False, default='N')
-    usa_unidade      = Column(String(1),   nullable=False, default='N')
-    usa_filial       = Column(String(1),   nullable=False, default='N')
-    active           = Column(Boolean,     nullable=False, default=True)
-    created_at       = Column(DateTime(timezone=True), server_default=func.now())
-
-
-class TenantDictionaryField(Base):
-    __tablename__ = 'tenant_dictionary_fields'
-
-    id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    snapshot_id       = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
-    tenant_id         = Column(String(100), index=True, nullable=False)
-    table_id          = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False, index=True)
-    field_name        = Column(String(40),  nullable=False)
-    field_description = Column(String(255), nullable=True)
-    field_type        = Column(String(5),   nullable=True)
-    field_length      = Column(Numeric(10,2), nullable=True)
-    field_order       = Column(Integer,     nullable=True)
-    sxg_group         = Column(String(20),  nullable=True)
-    sxg_size          = Column(Numeric(10,2), nullable=True)
-    is_sensitive      = Column(Boolean,     nullable=False, default=False)
-    mask_rule         = Column(String(50),  nullable=True)
-    active            = Column(Boolean,     nullable=False, default=True)
-    created_at        = Column(DateTime(timezone=True), server_default=func.now())
-
-
-class TenantDictionaryIndex(Base):
-    __tablename__ = 'tenant_dictionary_indexes'
-
-    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    snapshot_id      = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
-    tenant_id        = Column(String(100), index=True, nullable=False)
-    table_id         = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False, index=True)
-    index_order      = Column(Integer,     nullable=True)
-    index_nickname   = Column(String(80),  nullable=True)
-    index_expression = Column(Text,        nullable=False)
-    is_unique        = Column(Boolean,     nullable=False, default=False)
-    is_primary_hint  = Column(Boolean,     nullable=False, default=False)
-    active           = Column(Boolean,     nullable=False, default=True)
-    created_at       = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# CONTROLE DE ACESSO AO DICIONÁRIO  (MODELO ÚNICO V4)
-# ─────────────────────────────────────────────────────────────
-
-class TenantAllowedTable(Base):
-    """Tabela Protheus permitida por contrato. Substitui AllowedTable (V2 removido)."""
-    __tablename__ = 'tenant_allowed_tables'
-
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id   = Column(String(100), index=True, nullable=False)
-    contract_id = Column(UUID(as_uuid=True), nullable=False)
-    snapshot_id = Column(UUID(as_uuid=True), ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False)
-    table_id    = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_tables.id', ondelete='CASCADE'), nullable=False)
-    access_level= Column(String(20),  nullable=False, default='query')  # query | write | admin
-    allowed     = Column(Boolean,     nullable=False, default=True)
-    rationale   = Column(String(255), nullable=True)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-# Alias para retrocompatibilidade
-V4TenantAllowedTable = TenantAllowedTable
-
-
-class TenantAllowedField(Base):
-    __tablename__ = 'tenant_allowed_fields'
-
-    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id        = Column(String(100), index=True, nullable=False)
-    allowed_table_id = Column(UUID(as_uuid=True), ForeignKey('tenant_allowed_tables.id', ondelete='CASCADE'), nullable=False)
-    field_id         = Column(UUID(as_uuid=True), ForeignKey('tenant_dictionary_fields.id', ondelete='CASCADE'), nullable=False)
-    allowed          = Column(Boolean, nullable=False, default=True)
-    masking_required = Column(Boolean, nullable=False, default=False)
-    created_at       = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# KNOWLEDGE BASE / RAG
-# ─────────────────────────────────────────────────────────────
-
-class KnowledgeBase(Base):
-    __tablename__ = 'knowledge_bases'
-
-    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id        = Column(String(100), index=True, nullable=False)
-    company_id       = Column(Integer,     index=True, nullable=True)
-    kb_code          = Column(String(60),  nullable=False)
-    kb_name          = Column(String(200), nullable=False)
-    storage_type     = Column(String(50),  nullable=False, default='r2')
-    storage_prefix   = Column(String(500), nullable=False)
-    vector_collection= Column(String(200), nullable=True)
-    status           = Column(String(20),  nullable=False, default='active')
-    created_at       = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at       = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class Document(Base):
-    __tablename__ = 'documents'
-
-    id          = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    tenant_id   = Column(String(100), index=True, nullable=False, server_default='default')
-    visibility  = Column(String(20),  nullable=False, server_default='tenant', index=True)
-    title       = Column(String(255), nullable=False)
-    source_path = Column(String(1024),nullable=False)
-    source_type = Column(String(50),  nullable=True)
-    module      = Column(String(100), nullable=True)
-    category    = Column(String(100), nullable=True)
-    version     = Column(String(50),  nullable=True)
-    status      = Column(String(50),  nullable=True)
-    checksum    = Column(String(64),  unique=True, index=True)
-    language    = Column(String(10),  nullable=True)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class DocumentChunk(Base):
-    __tablename__ = 'document_chunks'
-
-    id              = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    document_id     = Column(Integer, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
-    chunk_order     = Column(Integer, nullable=False)
-    content         = Column(Text,    nullable=False)
-    token_count     = Column(Integer, nullable=True)
-    embedding_model = Column(String(100), nullable=True)
-    vector          = Column(Vector(3072), nullable=True)   # text-embedding-3-large = 3072
-    page_number     = Column(Integer, nullable=True)
-    section         = Column(String(255), nullable=True)
-    created_at      = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# MEMÓRIA DO AGENTE
-# ─────────────────────────────────────────────────────────────
-
-class Memory(Base):
-    __tablename__ = 'memories'
-
-    id           = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    tenant_id    = Column(String(100), index=True, nullable=False, server_default='default')
-    company_id   = Column(Integer,     index=True, nullable=True)
-    visibility   = Column(String(20),  nullable=False, server_default='tenant', index=True)
-    memory_key   = Column(String(255), nullable=False, index=True)
-    memory_value = Column(Text,        nullable=False)
-    memory_type  = Column(String(50),  nullable=True)
-    scope        = Column(String(100), nullable=True)
-    tags         = Column(JSON,        nullable=True)
-    confidence   = Column(Integer,     nullable=True)
-    source       = Column(String(255), nullable=True)
-    expires_at   = Column(DateTime(timezone=True), nullable=True)
-    created_at   = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at   = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# CATÁLOGO DE SCHEMAS (SX2/SX3 sincronizados)
-# ─────────────────────────────────────────────────────────────
-
-class TenantSchema(Base):
-    __tablename__ = 'tenant_schemas'
-
-    id          = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    tenant_id   = Column(String(100), index=True, nullable=False)
-    modulo      = Column(String(50),  index=True, nullable=True)
-    chave       = Column(String(10),  index=True, nullable=False)
-    tabela      = Column(String(50),  nullable=True)
-    nome        = Column(String(255), nullable=True)
-    schema_json = Column(JSON,        nullable=False)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# AUDITORIA
-# ─────────────────────────────────────────────────────────────
-
-class AuditLog(Base):
-    __tablename__ = 'audit_logs'
-    __table_args__ = {'schema': 'public'}
-
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id   = Column(String(100), index=True, nullable=True)
-    company_id  = Column(Integer,     index=True, nullable=True)
-    user_id     = Column(String(100), nullable=True)
-    module_name = Column(String(80),  nullable=False)
-    action_name = Column(String(120), nullable=False)
-    target_type = Column(String(80),  nullable=True)
-    target_id   = Column(String(120), nullable=True)
-    request_id  = Column(String(120), nullable=True)
-    details_json= Column(JSON,        nullable=True)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-
-
-class AgentQueryAudit(Base):
-    """Log de cada consulta gerada pelo agente. Substitui ApiUsageLog (V2 removido)."""
-    __tablename__ = 'agent_query_audit'
-
-    id                     = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id              = Column(String(100), index=True, nullable=False)
-    company_id             = Column(Integer,     index=True, nullable=True)
-    env_id                 = Column(UUID(as_uuid=True), nullable=True)
-    user_id                = Column(UUID(as_uuid=True), nullable=True)
-    contract_id            = Column(UUID(as_uuid=True), nullable=True)
-    snapshot_id            = Column(UUID(as_uuid=True), nullable=True)
-    request_id             = Column(String(120), nullable=True)
-    natural_language_prompt= Column(Text,        nullable=True)
-    generated_sql          = Column(Text,        nullable=True)
-    sql_hash               = Column(String(128), nullable=True, index=True)
-    execution_status       = Column(String(20),  nullable=False, default='planned')
-    rows_returned          = Column(Integer,     nullable=True)
-    response_time_ms       = Column(Integer,     nullable=True)
-    blocked_reason         = Column(String(255), nullable=True)
-    tables_used            = Column(Text,        nullable=True)
-    created_at             = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# ─────────────────────────────────────────────────────────────
-# ONBOARDING
-# ─────────────────────────────────────────────────────────────
-
-class OnboardingProject(Base):
-    __tablename__ = 'onboarding_projects'
-    __table_args__ = {'schema': 'public'}
-
-    id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id         = Column(String(100), index=True, nullable=False)
-    company_id        = Column(Integer,     index=True, nullable=True)
-    project_code      = Column(String(60),  nullable=False)
-    project_name      = Column(String(180), nullable=False)
-    onboarding_status = Column(String(30),  nullable=False, default='planned')
-    go_live_target_date= Column(Date,       nullable=True)
-    owner_name        = Column(String(180), nullable=True)
-    owner_email       = Column(String(180), nullable=True)
-    created_at        = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at        = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class OnboardingTask(Base):
-    __tablename__ = 'onboarding_tasks'
-    __table_args__ = {'schema': 'public'}
-
-    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    onboarding_project_id= Column(UUID(as_uuid=True), ForeignKey('public.onboarding_projects.id', ondelete='CASCADE'), nullable=False)
-    task_code            = Column(String(80),  nullable=False)
-    task_name            = Column(String(200), nullable=False)
-    task_type            = Column(String(50),  nullable=False)
-    mandatory            = Column(Boolean,     nullable=False, default=True)
-    task_status          = Column(String(30),  nullable=False, default='pending')
-    assigned_to          = Column(String(180), nullable=True)
-    due_date             = Column(Date,        nullable=True)
-    created_at           = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at           = Column(DateTime(timezone=True), onupdate=func.now())
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, declarative_base
+from fastapi import Header, Request
+import os
+import re
+
+def ensure_database_exists(db_url: str):
+    if not db_url or "sqlite" in db_url:
+        return
+    try:
+        from sqlalchemy.engine.url import make_url
+        url = make_url(db_url)
+        target_db = url.database
+        if not target_db or target_db == 'postgres':
+            return
+
+        default_url = url._replace(database='postgres')
+        tmp_engine = create_engine(default_url, isolation_level="AUTOCOMMIT")
+        with tmp_engine.connect() as conn:
+            res = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :dbname"),
+                {"dbname": target_db}
+            ).scalar()
+            if not res:
+                conn.execute(text(f'CREATE DATABASE "{target_db}"'))
+                print(f"[DB] Banco de dados '{target_db}' criado com sucesso!")
+        tmp_engine.dispose()
+    except Exception as e:
+        print(f"[DB] Aviso ao verificar/criar banco de dados: {e}")
+
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip() or "sqlite:///:memory:"
+
+try:
+    ensure_database_exists(DATABASE_URL)
+except Exception:
+    pass
+
+engine_args = {"pool_pre_ping": True}
+if DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy.pool import StaticPool
+    engine_args = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool}
+
+engine = create_engine(DATABASE_URL, **engine_args)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+PUBLIC_BOOTSTRAP_FLAG = "public_schema_v4"
+PUBLIC_BOOTSTRAP_DONE = False
+
+PUBLIC_REQUIRED_TABLES = {
+    "app_bootstrap_flags",
+    "tenant_registry",
+    "plans",
+    "platform_admins",
+    "protheus_modules_master",
+    "users",
+    "roles",
+    "permissions",
+    "environments",
+    "connectors",
+    "license_plans",
+    "tenant_contracts",
+    "query_usage_counters",
+    "concurrent_sessions",
+    "tenant_module_contracts",
+    "audit_logs",
+    "agent_users",
+    "agent_roles",
+    "agent_query_audit",
+    "platform_audit_log",
+}
+
+def _safe_commit(db):
+    if hasattr(db, "commit"):
+        db.commit()
+
+def _safe_rollback(db):
+    try:
+        if hasattr(db, "rollback"):
+            db.rollback()
+    except Exception:
+        pass
+
+def _table_exists(db, schema_name: str, table_name: str) -> bool:
+    return bool(db.execute(text("""
+        SELECT EXISTS (
+            SELECT 1
+              FROM information_schema.tables
+             WHERE table_schema = :schema_name
+               AND table_name   = :table_name
+        )
+    """), {"schema_name": schema_name, "table_name": table_name}).scalar())
+
+def _ensure_bootstrap_flags_table(db):
+    db.execute(text("""
+        CREATE TABLE IF NOT EXISTS public.app_bootstrap_flags (
+            flag_name   VARCHAR(100) PRIMARY KEY,
+            flag_value  BOOLEAN NOT NULL DEFAULT FALSE,
+            updated_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+
+def _public_required_tables_exist(db) -> bool:
+    for table_name in PUBLIC_REQUIRED_TABLES:
+        if not _table_exists(db, "public", table_name):
+            return False
+    return True
+
+def _is_public_bootstrap_done(db) -> bool:
+    if not _table_exists(db, "public", "app_bootstrap_flags"):
+        return False
+
+    done = db.execute(text("""
+        SELECT flag_value
+          FROM public.app_bootstrap_flags
+         WHERE flag_name = :flag_name
+         LIMIT 1
+    """), {"flag_name": PUBLIC_BOOTSTRAP_FLAG}).scalar()
+
+    return bool(done) and _public_required_tables_exist(db)
+
+def _mark_public_bootstrap_done(db):
+    db.execute(text("""
+        INSERT INTO public.app_bootstrap_flags (flag_name, flag_value, updated_at)
+        VALUES (:flag_name, TRUE, CURRENT_TIMESTAMP)
+        ON CONFLICT (flag_name)
+        DO UPDATE SET
+            flag_value = EXCLUDED.flag_value,
+            updated_at = EXCLUDED.updated_at
+    """), {"flag_name": PUBLIC_BOOTSTRAP_FLAG})
+
+def _run_public_ddl(db, statements):
+    for stmt in statements:
+        db.execute(text(stmt))
+
+def ensure_public_tables(db, force: bool = False):
+    global PUBLIC_BOOTSTRAP_DONE
+
+    if DATABASE_URL.startswith("sqlite"):
+        PUBLIC_BOOTSTRAP_DONE = True
+        return
+
+    if PUBLIC_BOOTSTRAP_DONE and not force:
+        return
+
+    try:
+        db.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
+        db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public"))
+        db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
+        _ensure_bootstrap_flags_table(db)
+        _safe_commit(db)
+    except Exception as e:
+        _safe_rollback(db)
+        print(f"[DB] Aviso ao preparar schema public: {e}")
+        return
+
+    try:
+        if not force and _is_public_bootstrap_done(db):
+            PUBLIC_BOOTSTRAP_DONE = True
+            return
+    except Exception:
+        _safe_rollback(db)
+
+    public_queries = [
+        """
+        CREATE TABLE IF NOT EXISTS public.tenant_registry (
+            id                SERIAL PRIMARY KEY,
+            tenant_code       VARCHAR(50) UNIQUE NOT NULL CHECK (tenant_code ~ '^[a-z0-9_]+$'),
+            tenant_name       VARCHAR(150) NOT NULL,
+            schema_name       VARCHAR(63) UNIQUE NOT NULL,
+            status            VARCHAR(20) NOT NULL DEFAULT 'provisioning'
+                              CHECK (status IN ('provisioning','active','suspended','decommissioned')),
+            plan_code         VARCHAR(50),
+            created_at        TIMESTAMP DEFAULT NOW(),
+            updated_at        TIMESTAMP DEFAULT NOW(),
+            provisioned_at    TIMESTAMP,
+            decommissioned_at TIMESTAMP
+        );
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS tenant_code       VARCHAR(50);
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS tenant_name       VARCHAR(150);
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS schema_name       VARCHAR(63);
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS status            VARCHAR(20);
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS plan_code         VARCHAR(50);
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS created_at        TIMESTAMP DEFAULT NOW();
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS updated_at        TIMESTAMP DEFAULT NOW();
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS provisioned_at    TIMESTAMP;
+        ALTER TABLE public.tenant_registry ADD COLUMN IF NOT EXISTS decommissioned_at TIMESTAMP;
+        ALTER TABLE public.tenant_registry ALTER COLUMN updated_at DROP NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_registry_tenant_code ON public.tenant_registry (tenant_code);
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_registry_schema_name ON public.tenant_registry (schema_name);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.plans (
+            plan_code       VARCHAR(50) PRIMARY KEY,
+            plan_name       VARCHAR(150) NOT NULL,
+            max_users       INTEGER DEFAULT 5,
+            max_queries_day INTEGER DEFAULT 500,
+            modules_allowed JSONB DEFAULT '[]',
+            active          BOOLEAN DEFAULT TRUE
+        );
+        ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS plan_name       VARCHAR(150);
+        ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS max_users       INTEGER DEFAULT 5;
+        ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS max_queries_day INTEGER DEFAULT 500;
+        ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS modules_allowed JSONB DEFAULT '[]';
+        ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS active          BOOLEAN DEFAULT TRUE;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.platform_admins (
+            id            SERIAL PRIMARY KEY,
+            email         VARCHAR(150) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            is_superadmin BOOLEAN DEFAULT FALSE,
+            active        BOOLEAN DEFAULT TRUE,
+            created_at    TIMESTAMP DEFAULT NOW()
+        );
+        ALTER TABLE public.platform_admins ADD COLUMN IF NOT EXISTS email         VARCHAR(150);
+        ALTER TABLE public.platform_admins ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+        ALTER TABLE public.platform_admins ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE;
+        ALTER TABLE public.platform_admins ADD COLUMN IF NOT EXISTS active        BOOLEAN DEFAULT TRUE;
+        ALTER TABLE public.platform_admins ADD COLUMN IF NOT EXISTS created_at    TIMESTAMP DEFAULT NOW();
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_admins_email ON public.platform_admins (email);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.protheus_modules_master (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            mod_code    VARCHAR(30) UNIQUE,
+            module_code VARCHAR(30) UNIQUE,
+            mod_name    VARCHAR(150),
+            module_name VARCHAR(150),
+            description TEXT,
+            source_name VARCHAR(60) NOT NULL DEFAULT 'SYS_USR_MODULE',
+            active      BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at  TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_code    VARCHAR(30);
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS module_code VARCHAR(30);
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_name    VARCHAR(150);
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS module_name VARCHAR(150);
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS description TEXT;
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS source_name VARCHAR(60) NOT NULL DEFAULT 'SYS_USR_MODULE';
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS active      BOOLEAN NOT NULL DEFAULT TRUE;
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMP WITH TIME ZONE;
+        UPDATE public.protheus_modules_master SET mod_code    = module_code WHERE mod_code    IS NULL AND module_code IS NOT NULL;
+        UPDATE public.protheus_modules_master SET mod_name    = module_name WHERE mod_name    IS NULL AND module_name IS NOT NULL;
+        UPDATE public.protheus_modules_master SET module_code = mod_code    WHERE module_code IS NULL AND mod_code    IS NOT NULL;
+        UPDATE public.protheus_modules_master SET module_name = mod_name    WHERE module_name IS NULL AND mod_name    IS NOT NULL;
+        DELETE FROM public.protheus_modules_master WHERE source_name = 'fallback_hardcoded';
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.users (
+            id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id         VARCHAR(100),
+            email             VARCHAR(180) NOT NULL,
+            full_name         VARCHAR(180) NOT NULL,
+            password_hash     VARCHAR(255) NOT NULL,
+            status            VARCHAR(20) NOT NULL DEFAULT 'active',
+            is_platform_admin BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at        TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS tenant_id         VARCHAR(100);
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email             VARCHAR(180);
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS full_name         VARCHAR(180);
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash     VARCHAR(255);
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS status            VARCHAR(20) NOT NULL DEFAULT 'active';
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_platform_admin BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS created_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at        TIMESTAMP WITH TIME ZONE;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON public.users (email);
+        CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON public.users (tenant_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.roles (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            role_code   VARCHAR(60) NOT NULL,
+            role_name   VARCHAR(120) NOT NULL,
+            scope_level VARCHAR(30) NOT NULL,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS role_code   VARCHAR(60);
+        ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS role_name   VARCHAR(120);
+        ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS scope_level VARCHAR(30);
+        ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_roles_role_code ON public.roles (role_code);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.permissions (
+            id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            permission_code VARCHAR(100) NOT NULL,
+            permission_name VARCHAR(150) NOT NULL,
+            module_name     VARCHAR(80) NOT NULL,
+            created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        ALTER TABLE public.permissions ADD COLUMN IF NOT EXISTS permission_code VARCHAR(100);
+        ALTER TABLE public.permissions ADD COLUMN IF NOT EXISTS permission_name VARCHAR(150);
+        ALTER TABLE public.permissions ADD COLUMN IF NOT EXISTS module_name     VARCHAR(80);
+        ALTER TABLE public.permissions ADD COLUMN IF NOT EXISTS created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_permissions_code ON public.permissions (permission_code);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.role_permissions (
+            role_id       UUID NOT NULL,
+            permission_id UUID NOT NULL,
+            PRIMARY KEY (role_id, permission_id),
+            CONSTRAINT fk_role_permissions_role
+                FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE,
+            CONSTRAINT fk_role_permissions_permission
+                FOREIGN KEY (permission_id) REFERENCES public.permissions(id) ON DELETE CASCADE
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.user_roles (
+            user_id    UUID NOT NULL,
+            role_id    UUID NOT NULL,
+            tenant_id  VARCHAR(100) NOT NULL,
+            company_id INTEGER NOT NULL,
+            PRIMARY KEY (user_id, role_id, tenant_id, company_id),
+            CONSTRAINT fk_user_roles_role
+                FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE
+        );
+        ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS tenant_id  VARCHAR(100);
+        ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS company_id INTEGER;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.user_company_access (
+            user_id    UUID NOT NULL,
+            tenant_id  VARCHAR(100) NOT NULL,
+            company_id INTEGER NOT NULL,
+            env_id     UUID,
+            PRIMARY KEY (user_id, tenant_id, company_id)
+        );
+        ALTER TABLE public.user_company_access ADD COLUMN IF NOT EXISTS env_id UUID;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.environments (
+            id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id        VARCHAR(100) NOT NULL,
+            company_id       INTEGER,
+            env_code         VARCHAR(60) NOT NULL,
+            env_name         VARCHAR(120) NOT NULL,
+            api_base_url     VARCHAR(500),
+            middleware_route VARCHAR(500),
+            status           VARCHAR(20) NOT NULL DEFAULT 'active',
+            created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at       TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS tenant_id        VARCHAR(100);
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS company_id       INTEGER;
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS env_code         VARCHAR(60);
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS env_name         VARCHAR(120);
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS api_base_url     VARCHAR(500);
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS middleware_route VARCHAR(500);
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS status           VARCHAR(20) NOT NULL DEFAULT 'active';
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.environments ADD COLUMN IF NOT EXISTS updated_at       TIMESTAMP WITH TIME ZONE;
+        CREATE INDEX IF NOT EXISTS idx_environments_tenant_id ON public.environments (tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_environments_company_id ON public.environments (company_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.connectors (
+            id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id      VARCHAR(100) NOT NULL,
+            company_id     INTEGER,
+            env_id         UUID,
+            connector_type VARCHAR(50) NOT NULL,
+            connector_name VARCHAR(150) NOT NULL,
+            base_url       VARCHAR(500),
+            auth_type      VARCHAR(50),
+            secret_ref     VARCHAR(200),
+            status         VARCHAR(20) NOT NULL DEFAULT 'active',
+            created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at     TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS tenant_id      VARCHAR(100);
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS company_id     INTEGER;
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS env_id         UUID;
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS connector_type VARCHAR(50);
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS connector_name VARCHAR(150);
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS base_url       VARCHAR(500);
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS auth_type      VARCHAR(50);
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS secret_ref     VARCHAR(200);
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS status         VARCHAR(20) NOT NULL DEFAULT 'active';
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.connectors ADD COLUMN IF NOT EXISTS updated_at     TIMESTAMP WITH TIME ZONE;
+        CREATE INDEX IF NOT EXISTS idx_connectors_tenant_id ON public.connectors (tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_connectors_company_id ON public.connectors (company_id);
+        CREATE INDEX IF NOT EXISTS idx_connectors_env_id ON public.connectors (env_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.license_plans (
+            id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            plan_code                 VARCHAR(60) NOT NULL,
+            plan_name                 VARCHAR(150) NOT NULL,
+            billing_cycle             VARCHAR(20) NOT NULL DEFAULT 'monthly',
+            query_limit               INTEGER,
+            concurrent_sessions_limit INTEGER,
+            overage_mode              VARCHAR(20) NOT NULL DEFAULT 'block',
+            active                    BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at                TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at                TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS plan_code                 VARCHAR(60);
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS plan_name                 VARCHAR(150);
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS billing_cycle             VARCHAR(20) NOT NULL DEFAULT 'monthly';
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS query_limit               INTEGER;
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS concurrent_sessions_limit INTEGER;
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS overage_mode              VARCHAR(20) NOT NULL DEFAULT 'block';
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS active                    BOOLEAN NOT NULL DEFAULT TRUE;
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS created_at                TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.license_plans ADD COLUMN IF NOT EXISTS updated_at                TIMESTAMP WITH TIME ZONE;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_license_plans_plan_code ON public.license_plans (plan_code);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.tenant_contracts (
+            id                           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id                    VARCHAR(100) NOT NULL,
+            plan_id                      UUID,
+            contract_code                VARCHAR(80) NOT NULL,
+            contract_status              VARCHAR(20) NOT NULL DEFAULT 'active',
+            starts_at                    DATE NOT NULL,
+            ends_at                      DATE,
+            query_limit_override         INTEGER,
+            concurrent_sessions_override INTEGER,
+            overage_mode_override        VARCHAR(20),
+            notes                        TEXT,
+            created_at                   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at                   TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS tenant_id                    VARCHAR(100);
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS plan_id                      UUID;
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS contract_code                VARCHAR(80);
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS contract_status              VARCHAR(20) NOT NULL DEFAULT 'active';
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS starts_at                    DATE;
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS ends_at                      DATE;
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS query_limit_override         INTEGER;
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS concurrent_sessions_override INTEGER;
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS overage_mode_override        VARCHAR(20);
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS notes                        TEXT;
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS created_at                   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.tenant_contracts ADD COLUMN IF NOT EXISTS updated_at                   TIMESTAMP WITH TIME ZONE;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_contracts_contract_code ON public.tenant_contracts (contract_code);
+        CREATE INDEX IF NOT EXISTS idx_tenant_contracts_tenant_id ON public.tenant_contracts (tenant_id);
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                  FROM information_schema.table_constraints
+                 WHERE table_schema = 'public'
+                   AND table_name = 'tenant_contracts'
+                   AND constraint_name = 'fk_tenant_contracts_plan'
+            ) THEN
+                ALTER TABLE public.tenant_contracts
+                  ADD CONSTRAINT fk_tenant_contracts_plan
+                  FOREIGN KEY (plan_id) REFERENCES public.license_plans(id);
+            END IF;
+        END $$;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.query_usage_counters (
+            id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id       VARCHAR(100) NOT NULL,
+            contract_id     UUID NOT NULL,
+            period_ref      VARCHAR(20) NOT NULL,
+            total_queries   INTEGER NOT NULL DEFAULT 0,
+            blocked_queries INTEGER NOT NULL DEFAULT 0,
+            overage_queries INTEGER NOT NULL DEFAULT 0,
+            updated_at      TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.query_usage_counters ADD COLUMN IF NOT EXISTS tenant_id       VARCHAR(100);
+        ALTER TABLE public.query_usage_counters ADD COLUMN IF NOT EXISTS contract_id     UUID;
+        ALTER TABLE public.query_usage_counters ADD COLUMN IF NOT EXISTS period_ref      VARCHAR(20);
+        ALTER TABLE public.query_usage_counters ADD COLUMN IF NOT EXISTS total_queries   INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE public.query_usage_counters ADD COLUMN IF NOT EXISTS blocked_queries INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE public.query_usage_counters ADD COLUMN IF NOT EXISTS overage_queries INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE public.query_usage_counters ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMP WITH TIME ZONE;
+        CREATE INDEX IF NOT EXISTS idx_query_usage_counters_tenant_id ON public.query_usage_counters (tenant_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.concurrent_sessions (
+            id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id      VARCHAR(100) NOT NULL,
+            user_id        UUID,
+            session_key    VARCHAR(120) NOT NULL,
+            started_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            expires_at     TIMESTAMP WITH TIME ZONE,
+            session_status VARCHAR(20) NOT NULL DEFAULT 'active'
+        );
+        ALTER TABLE public.concurrent_sessions ADD COLUMN IF NOT EXISTS tenant_id      VARCHAR(100);
+        ALTER TABLE public.concurrent_sessions ADD COLUMN IF NOT EXISTS user_id        UUID;
+        ALTER TABLE public.concurrent_sessions ADD COLUMN IF NOT EXISTS session_key    VARCHAR(120);
+        ALTER TABLE public.concurrent_sessions ADD COLUMN IF NOT EXISTS started_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.concurrent_sessions ADD COLUMN IF NOT EXISTS expires_at     TIMESTAMP WITH TIME ZONE;
+        ALTER TABLE public.concurrent_sessions ADD COLUMN IF NOT EXISTS session_status VARCHAR(20) NOT NULL DEFAULT 'active';
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_concurrent_sessions_session_key ON public.concurrent_sessions (session_key);
+        CREATE INDEX IF NOT EXISTS idx_concurrent_sessions_tenant_id ON public.concurrent_sessions (tenant_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.tenant_module_contracts (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id   VARCHAR(100) NOT NULL,
+            contract_id UUID NOT NULL,
+            module_id   UUID NOT NULL,
+            status      VARCHAR(20) NOT NULL DEFAULT 'allowed',
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        ALTER TABLE public.tenant_module_contracts ADD COLUMN IF NOT EXISTS tenant_id   VARCHAR(100);
+        ALTER TABLE public.tenant_module_contracts ADD COLUMN IF NOT EXISTS contract_id UUID;
+        ALTER TABLE public.tenant_module_contracts ADD COLUMN IF NOT EXISTS module_id   UUID;
+        ALTER TABLE public.tenant_module_contracts ADD COLUMN IF NOT EXISTS status      VARCHAR(20) NOT NULL DEFAULT 'allowed';
+        ALTER TABLE public.tenant_module_contracts ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        CREATE INDEX IF NOT EXISTS idx_tenant_module_contracts_tenant_id ON public.tenant_module_contracts (tenant_id);
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                  FROM information_schema.table_constraints
+                 WHERE table_schema = 'public'
+                   AND table_name = 'tenant_module_contracts'
+                   AND constraint_name = 'fk_tenant_module_contracts_module'
+            ) THEN
+                ALTER TABLE public.tenant_module_contracts
+                  ADD CONSTRAINT fk_tenant_module_contracts_module
+                  FOREIGN KEY (module_id) REFERENCES public.protheus_modules_master(id);
+            END IF;
+        END $$;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.audit_logs (
+            id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id    VARCHAR(100),
+            company_id   INTEGER,
+            user_id      VARCHAR(100),
+            module_name  VARCHAR(80) NOT NULL,
+            action_name  VARCHAR(120) NOT NULL,
+            target_type  VARCHAR(80),
+            target_id    VARCHAR(120),
+            request_id   VARCHAR(120),
+            details_json JSONB,
+            created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS tenant_id    VARCHAR(100);
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS company_id   INTEGER;
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS user_id      VARCHAR(100);
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS module_name  VARCHAR(80);
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS action_name  VARCHAR(120);
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS target_type  VARCHAR(80);
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS target_id    VARCHAR(120);
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS request_id   VARCHAR(120);
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS details_json JSONB;
+        ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id ON public.audit_logs (tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_company_id ON public.audit_logs (company_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.agent_users (
+            id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id     VARCHAR(100),
+            email         VARCHAR(180),
+            full_name     VARCHAR(180),
+            password_hash VARCHAR(255),
+            active        BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TIMESTAMP WITH TIME ZONE
+        );
+        ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS tenant_id     VARCHAR(100);
+        ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS email         VARCHAR(180);
+        ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS full_name     VARCHAR(180);
+        ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+        ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS active        BOOLEAN NOT NULL DEFAULT TRUE;
+        ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS created_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS updated_at    TIMESTAMP WITH TIME ZONE;
+        CREATE INDEX IF NOT EXISTS idx_agent_users_tenant_id ON public.agent_users (tenant_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.agent_roles (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id   VARCHAR(100),
+            role_code   VARCHAR(60),
+            role_name   VARCHAR(120),
+            scope_level VARCHAR(30),
+            active      BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS tenant_id   VARCHAR(100);
+        ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS role_code   VARCHAR(60);
+        ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS role_name   VARCHAR(120);
+        ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS scope_level VARCHAR(30);
+        ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS active      BOOLEAN NOT NULL DEFAULT TRUE;
+        ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        CREATE INDEX IF NOT EXISTS idx_agent_roles_tenant_id ON public.agent_roles (tenant_id);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.agent_query_audit (
+            id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id               VARCHAR(100) NOT NULL,
+            company_id              INTEGER,
+            env_id                  UUID,
+            user_id                 UUID,
+            contract_id             UUID,
+            snapshot_id             UUID,
+            request_id              VARCHAR(120),
+            natural_language_prompt TEXT,
+            generated_sql           TEXT,
+            sql_hash                VARCHAR(128),
+            execution_status        VARCHAR(20) NOT NULL DEFAULT 'planned',
+            rows_returned           INTEGER,
+            response_time_ms        INTEGER,
+            blocked_reason          VARCHAR(255),
+            tables_used             TEXT,
+            created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS tenant_id               VARCHAR(100);
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS company_id              INTEGER;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS env_id                  UUID;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS user_id                 UUID;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS contract_id             UUID;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS snapshot_id             UUID;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS request_id              VARCHAR(120);
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS natural_language_prompt TEXT;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS generated_sql           TEXT;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS sql_hash                VARCHAR(128);
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS execution_status        VARCHAR(20) NOT NULL DEFAULT 'planned';
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS rows_returned           INTEGER;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS response_time_ms        INTEGER;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS blocked_reason          VARCHAR(255);
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS tables_used             TEXT;
+        ALTER TABLE public.agent_query_audit ADD COLUMN IF NOT EXISTS created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        CREATE INDEX IF NOT EXISTS idx_agent_query_audit_tenant_id ON public.agent_query_audit (tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_query_audit_sql_hash ON public.agent_query_audit (sql_hash);
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.platform_audit_log (
+            id          BIGSERIAL PRIMARY KEY,
+            tenant_code VARCHAR(50),
+            actor       VARCHAR(150),
+            action      VARCHAR(100) NOT NULL,
+            detail      JSONB,
+            created_at  TIMESTAMP DEFAULT NOW()
+        );
+        ALTER TABLE public.platform_audit_log ADD COLUMN IF NOT EXISTS tenant_code VARCHAR(50);
+        ALTER TABLE public.platform_audit_log ADD COLUMN IF NOT EXISTS actor       VARCHAR(150);
+        ALTER TABLE public.platform_audit_log ADD COLUMN IF NOT EXISTS action      VARCHAR(100);
+        ALTER TABLE public.platform_audit_log ADD COLUMN IF NOT EXISTS detail      JSONB;
+        ALTER TABLE public.platform_audit_log ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP DEFAULT NOW();
+        """,
+        """
+        DROP SCHEMA IF EXISTS "1" CASCADE;
+        """
+    ]
+
+    try:
+        _run_public_ddl(db, public_queries)
+        _mark_public_bootstrap_done(db)
+        _safe_commit(db)
+        PUBLIC_BOOTSTRAP_DONE = True
+    except Exception as e:
+        _safe_rollback(db)
+        PUBLIC_BOOTSTRAP_DONE = False
+        print(f"[DB] Erro ao garantir tabelas globais em public: {e}")
