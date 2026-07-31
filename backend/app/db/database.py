@@ -83,19 +83,23 @@ def ensure_public_tables(db):
                 if hasattr(db, "rollback"): db.rollback()
             except: pass
 
-def ensure_tenant_tables(db, clean_tenant: str):
-    ensure_public_tables(db)
+def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
+    """
+    Garante que o tenant_id seja convertido em um nome de schema válido.
+    Se for numérico (ex: '1' ou 1), busca no tenant_registry ou assume o primeiro tenant ou 'default'.
+    NUNCA retorna um nome de schema puramente numérico ou 'public'.
+    """
+    raw_str = str(tenant_id or '').strip()
+    if not raw_str or raw_str == "public":
+        return "default"
 
-    clean_str = str(clean_tenant or '').strip()
-    if not clean_str or clean_str == "public":
-        clean_str = "default"
+    clean = re.sub(r'[^a-zA-Z0-9_]', '', raw_str)
 
-    # Se clean_tenant for numérico (ex: "1"), resolve no tenant_registry ou usa default — NUNCA cria schema com nome numérico!
-    if clean_str.isdigit():
+    if clean.isdigit():
         try:
             reg = db.execute(
                 text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE id = :id OR tenant_code = :tc LIMIT 1"),
-                {"id": int(clean_str), "tc": clean_str}
+                {"id": int(clean), "tc": clean}
             ).mappings().first()
 
             if not reg:
@@ -104,17 +108,22 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 ).mappings().first()
 
             if reg and (reg.get("schema_name") or reg.get("tenant_code")):
-                clean_tenant = reg.get("schema_name") or reg.get("tenant_code")
+                clean = reg.get("schema_name") or reg.get("tenant_code")
             else:
-                clean_tenant = "default"
+                clean = "default"
         except Exception:
-            clean_tenant = "default"
-    else:
-        clean_tenant = clean_str
+            clean = "default"
 
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(clean_tenant))
-    if not clean_tenant or clean_tenant == "public" or clean_tenant.isdigit():
-        clean_tenant = "default"
+    clean = re.sub(r'[^a-zA-Z0-9_]', '', str(clean))
+    if not clean or clean == "public" or clean.isdigit():
+        clean = "default"
+
+    return clean
+
+
+def ensure_tenant_tables(db, clean_tenant: str):
+    ensure_public_tables(db)
+    clean_tenant = resolve_clean_tenant(db, clean_tenant)
 
     try:
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))

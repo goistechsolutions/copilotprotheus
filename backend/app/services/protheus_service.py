@@ -24,24 +24,11 @@ def get_tenant_config(tenant_id: str) -> dict:
     """
     db = SessionLocal()
     try:
-        raw_t = str(tenant_id or '').strip()
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', raw_t)
-        
-        if clean_tenant and clean_tenant != "public":
-            try:
-                reg = db.execute(
-                    text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE tenant_code = :t OR schema_name = :t OR id::text = :t LIMIT 1"),
-                    {"t": raw_t}
-                ).mappings().first()
-                if reg:
-                    t_code = reg["schema_name"] or reg["tenant_code"]
-                    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', t_code)
-            except Exception:
-                pass
+        from app.db.database import ensure_tenant_tables, resolve_clean_tenant
+        clean_tenant = resolve_clean_tenant(db, tenant_id)
 
         if clean_tenant and clean_tenant != "public":
             try:
-                from app.db.database import ensure_tenant_tables
                 ensure_tenant_tables(db, clean_tenant)
                 res = db.execute(
                     text(f'SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode FROM "{clean_tenant}".company_info WHERE protheus_rest_url IS NOT NULL AND protheus_rest_url != \'\' LIMIT 1')
