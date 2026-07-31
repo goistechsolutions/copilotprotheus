@@ -15,13 +15,20 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
-      - run: pip install -r requirements.txt
-      - run: pip install pytest pytest-asyncio httpx
-      - run: pytest tests/ -q --tb=short || true
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Instalar dependências de teste
+        run: pip install pytest pytest-asyncio httpx
+
+      - name: Executar testes
+        run: pytest tests/ -q --tb=short   # SEM || true — falha real deve reprovar o CI
 
   frontend-lint:
     name: Admin Frontend (Node)
@@ -31,10 +38,15 @@ jobs:
         working-directory: admin-frontend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: admin-frontend/package-lock.json
-      - run: npm ci --frozen-lockfile
-      - run: npm run build
+
+      - name: Instalar dependências
+        run: npm ci --frozen-lockfile
+
+      - name: Build de validação
+        run: npm run build
