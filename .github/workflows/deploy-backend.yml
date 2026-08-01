@@ -32,7 +32,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Derivados do branch — sem prefixo nos secrets
       APP_ENV:     ${{ github.ref_name == 'main' && 'production' || 'homologation' }}
       DEBUG:       ${{ github.ref_name == 'main' && 'false' || 'false' }}
       LOG_LEVEL:   ${{ github.ref_name == 'main' && 'WARNING' || 'INFO' }}
@@ -57,26 +56,31 @@ jobs:
             cd "$DEPLOY_DIR"
 
             echo "==> [⚑ $APP_ENV] Atualizando código..."
-            git fetch origin ${{ github.ref_name }}
-            git reset --hard origin/${{ github.ref_name }}
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> Parando cloudflared para evitar logs no heredoc..."
+            docker compose stop cloudflared 2>/dev/null || true
 
             echo "==> Escrevendo .env ($APP_ENV)..."
-            cat > .env <<EOF
-            ENVIRONMENT=$APP_ENV
-            DEBUG=$DEBUG
-            LOG_LEVEL=$LOG_LEVEL
-            SECRET_KEY=${{ secrets.SECRET_KEY }}
-            POSTGRES_USER=postgres
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            POSTGRES_DB=copilot_protheus$DB_SUFFIX
-            DATABASE_URL=postgresql+psycopg2://postgres:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilot_protheus$DB_SUFFIX
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            LLM_MODEL=gpt-4o-mini
-            EMBEDDING_MODEL=text-embedding-3-small
-            CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-            EOF
-            chmod 600 .env
+            ENV_FILE=".env"
+            : > "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
+            {
+              echo "ENVIRONMENT=$APP_ENV"
+              echo "DEBUG=$DEBUG"
+              echo "LOG_LEVEL=$LOG_LEVEL"
+              echo "SECRET_KEY=${{ secrets.SECRET_KEY }}"
+              echo "POSTGRES_USER=postgres"
+              echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}"
+              echo "POSTGRES_DB=copilot_protheus$DB_SUFFIX"
+              echo "DATABASE_URL=postgresql+psycopg2://postgres:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilot_protheus$DB_SUFFIX"
+              echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
+              echo "LLM_MODEL=gpt-4o-mini"
+              echo "EMBEDDING_MODEL=text-embedding-3-small"
+              echo "CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}"
+              echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
+            } >> "$ENV_FILE"
 
             echo "==> Subindo containers..."
             docker compose pull --ignore-pull-failures || true
@@ -84,6 +88,9 @@ jobs:
 
             echo "==> Executando migrations Alembic..."
             docker compose exec -T backend alembic upgrade head
+
+            echo "==> Reiniciando cloudflared..."
+            docker compose up -d cloudflared
 
             echo "✅ Backend [$APP_ENV] atualizado em $(date)"
 
