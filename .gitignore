@@ -39,3 +39,8 @@ backend/tmp/
 desktop.ini
 Thumbs.db
 .tmp.driveupload/
+
+# Conexão SSH
+*.pem
+id_ed25519*
+.ssh/
