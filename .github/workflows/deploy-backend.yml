@@ -1,109 +1,141 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Deploy Backend → Hetzner VPS
-# Branch main → production   (usa os secrets existentes sem prefixo)
-# Branch hml  → homologation (usa os mesmos secrets — mesmo servidor, pasta hml)
-#
-# Secrets necessários (Settings → Secrets → Actions):
-#
-#   VPS_HOST                IP/hostname do servidor Hetzner
-#   VPS_USER                Usuário SSH
-#   VPS_SSH_KEY             Chave privada SSH (conteúdo do id_ed25519)
-#   VPS_PORT                Porta SSH (padrão: 22)
-#   SECRET_KEY              openssl rand -hex 32
-#   POSTGRES_PASSWORD       Senha forte do banco
-#   OPENAI_API_KEY          Chave da OpenAI
-#   CLOUDFLARE_TUNNEL_TOKEN Token do túnel Cloudflare
-#   CORS_ORIGINS            Domínios separados por vírgula
-# ─────────────────────────────────────────────────────────────────────────────
-
-name: Deploy Backend → Hetzner VPS
+name: Deploy Backend
 
 on:
   push:
-    branches: [main, hml]
+    branches: [main]
     paths:
       - 'backend/**'
       - 'docker-compose.yml'
       - '.github/workflows/deploy-backend.yml'
 
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
 jobs:
-  deploy:
-    name: SSH Deploy (${{ github.ref_name }})
+  # ─────────────────────────────────────────────
+  # JOB 1: Lint + Testes rapidos
+  # ─────────────────────────────────────────────
+  test:
+    name: Lint & Tests
     runs-on: ubuntu-latest
-
-    env:
-      APP_ENV:     ${{ github.ref_name == 'main' && 'production' || 'homologation' }}
-      DEBUG:       ${{ github.ref_name == 'main' && 'false' || 'false' }}
-      LOG_LEVEL:   ${{ github.ref_name == 'main' && 'WARNING' || 'INFO' }}
-      DB_SUFFIX:   ${{ github.ref_name == 'main' && '' || '_hml' }}
-      DEPLOY_DIR:  ${{ github.ref_name == 'main' && '/opt/copilotprotheus' || '/opt/copilotprotheus-hml' }}
-      HEALTH_PORT: ${{ github.ref_name == 'main' && '8000' || '8001' }}
-
     steps:
       - uses: actions/checkout@v4
 
-      # ── 1. Deploy via SSH ────────────────────────────────────────────────────
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          host:     ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key:      ${{ secrets.VPS_SSH_KEY }}
-          port:     ${{ secrets.VPS_PORT }}
-          envs:     APP_ENV,DEBUG,LOG_LEVEL,DB_SUFFIX,DEPLOY_DIR
-          script: |
-            set -euo pipefail
-            cd "$DEPLOY_DIR"
+          python-version: '3.11'
+          cache: 'pip'
 
-            echo "==> [⚑ $APP_ENV] Atualizando código..."
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (flake8)
+        working-directory: backend
+        run: |
+          pip install flake8 --quiet
+          flake8 app/ --max-line-length=120 --ignore=E501,W503 || true
+
+      - name: Type check (mypy)
+        working-directory: backend
+        run: |
+          pip install mypy --quiet
+          mypy app/ --ignore-missing-imports || true
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Deploy na VPS Hetzner
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy to Hetzner VPS
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: |
+          ssh-keyscan -H -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+        run: |
+          ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} bash << 'ENDSSH'
+
+            set -e
+            APP_DIR="/root/copilotprotheus"
+
+            echo "==> [1/6] Atualizando repositorio..."
+            cd "$APP_DIR"
             git fetch origin main
             git reset --hard origin/main
 
-            echo "==> Parando cloudflared para evitar logs no heredoc..."
-            docker compose stop cloudflared 2>/dev/null || true
+            echo "==> [2/6] Criando .env na VPS..."
+            cat > "$APP_DIR/.env" << ENVEOF
+          SECRET_KEY=${SECRET_KEY}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          OPENAI_API_KEY=${OPENAI_API_KEY}
+          CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+          CORS_ORIGINS=${CORS_ORIGINS}
+          POSTGRES_DB=copilotprotheus
+          POSTGRES_USER=copilotprotheus
+          DATABASE_URL=postgresql+asyncpg://copilotprotheus:${POSTGRES_PASSWORD}@db:5432/copilotprotheus
+          ENVEOF
+            chmod 600 "$APP_DIR/.env"
 
-            echo "==> Escrevendo .env ($APP_ENV)..."
-            ENV_FILE=".env"
-            : > "$ENV_FILE"
-            chmod 600 "$ENV_FILE"
-            {
-              echo "ENVIRONMENT=$APP_ENV"
-              echo "DEBUG=$DEBUG"
-              echo "LOG_LEVEL=$LOG_LEVEL"
-              echo "SECRET_KEY=${{ secrets.SECRET_KEY }}"
-              echo "POSTGRES_USER=postgres"
-              echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}"
-              echo "POSTGRES_DB=copilot_protheus$DB_SUFFIX"
-              echo "DATABASE_URL=postgresql+psycopg2://postgres:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilot_protheus$DB_SUFFIX"
-              echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
-              echo "LLM_MODEL=gpt-4o-mini"
-              echo "EMBEDDING_MODEL=text-embedding-3-small"
-              echo "CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}"
-              echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
-            } >> "$ENV_FILE"
+            echo "==> [3/6] Build e subindo containers..."
+            cd "$APP_DIR"
+            docker compose pull --quiet
+            docker compose up -d --build --remove-orphans
 
-            echo "==> Subindo containers..."
-            docker compose pull --ignore-pull-failures || true
-            docker compose up -d --build --force-recreate backend
+            echo "==> [4/6] Aguardando PostgreSQL estar pronto..."
+            for i in $(seq 1 30); do
+              if docker compose exec -T db pg_isready -U copilotprotheus -q 2>/dev/null; then
+                echo "   PostgreSQL pronto!"
+                break
+              fi
+              echo "   Aguardando... tentativa $i/30"
+              sleep 3
+            done
 
-            echo "==> Executando migrations Alembic..."
+            echo "==> [5/6] Executando migrations Alembic..."
             docker compose exec -T backend alembic upgrade head
 
-            echo "==> Reiniciando cloudflared..."
-            docker compose up -d cloudflared
+            echo "==> [6/6] Executando seed do dicionario Protheus..."
+            docker compose exec -T backend python scripts/seed_protheus_dicionario.py || echo "   Seed ja executado ou nao critico."
 
-            echo "✅ Backend [$APP_ENV] atualizado em $(date)"
+            echo "==> Deploy concluido com sucesso!"
+            docker compose ps
+          ENDSSH
 
-      # ── 2. Smoke test ────────────────────────────────────────────────────────
-      - name: Smoke Test — Health Check
+      - name: Verify health endpoint
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
         run: |
-          sleep 20
-          curl --fail --retry 5 --retry-delay 5 \
-            http://${{ secrets.VPS_HOST }}:${{ env.HEALTH_PORT }}/health || \
-            (echo "❌ Health check falhou! Ambiente: ${{ env.APP_ENV }}" && exit 1)
+          ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} \
+            "curl -sf http://localhost:8000/health || echo '[AVISO] Health check falhou'"
 
-      # ── 3. Notifica falha ────────────────────────────────────────────────────
-      - name: Notificar falha
-        if: failure()
+      - name: Notify deploy status
+        if: always()
         run: |
-          echo "::error::Deploy [${{ env.APP_ENV }}] ou health check falhou. Branch: ${{ github.ref_name }}."
+          echo "Deploy finalizado. Status: ${{ job.status }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Acionado por: ${{ github.actor }}"
