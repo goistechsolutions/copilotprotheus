@@ -1,8 +1,26 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Deploy Backend → Hetzner VPS
+# Branch main → production   (usa os secrets existentes sem prefixo)
+# Branch hml  → homologation (usa os mesmos secrets — mesmo servidor, pasta hml)
+#
+# Secrets necessários (Settings → Secrets → Actions):
+#
+#   VPS_HOST                IP/hostname do servidor Hetzner
+#   VPS_USER                Usuário SSH
+#   VPS_SSH_KEY             Chave privada SSH (conteúdo do id_ed25519)
+#   VPS_PORT                Porta SSH (padrão: 22)
+#   SECRET_KEY              openssl rand -hex 32
+#   POSTGRES_PASSWORD       Senha forte do banco
+#   OPENAI_API_KEY          Chave da OpenAI
+#   CLOUDFLARE_TUNNEL_TOKEN Token do túnel Cloudflare
+#   CORS_ORIGINS            Domínios separados por vírgula
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: Deploy Backend → Hetzner VPS
 
 on:
   push:
-    branches: [main]
+    branches: [main, hml]
     paths:
       - 'backend/**'
       - 'docker-compose.yml'
@@ -10,12 +28,21 @@ on:
 
 jobs:
   deploy:
-    name: SSH Deploy
+    name: SSH Deploy (${{ github.ref_name }})
     runs-on: ubuntu-latest
+
+    env:
+      APP_ENV:     ${{ github.ref_name == 'main' && 'production' || 'homologation' }}
+      DEBUG:       ${{ github.ref_name == 'main' && 'false' || 'false' }}
+      LOG_LEVEL:   ${{ github.ref_name == 'main' && 'WARNING' || 'INFO' }}
+      DB_SUFFIX:   ${{ github.ref_name == 'main' && '' || '_hml' }}
+      DEPLOY_DIR:  ${{ github.ref_name == 'main' && '/opt/copilotprotheus' || '/opt/copilotprotheus-hml' }}
+      HEALTH_PORT: ${{ github.ref_name == 'main' && '8000' || '8001' }}
 
     steps:
       - uses: actions/checkout@v4
 
+      # ── 1. Deploy via SSH ────────────────────────────────────────────────────
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -23,23 +50,60 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key:      ${{ secrets.VPS_SSH_KEY }}
           port:     ${{ secrets.VPS_PORT }}
+          envs:     APP_ENV,DEBUG,LOG_LEVEL,DB_SUFFIX,DEPLOY_DIR
           script: |
-            set -e
-            cd /opt/copilotprotheus
+            set -euo pipefail
+            cd "$DEPLOY_DIR"
+
+            echo "==> [⚑ $APP_ENV] Atualizando código..."
             git fetch origin main
             git reset --hard origin/main
+
+            echo "==> Parando cloudflared para evitar logs no heredoc..."
+            docker compose stop cloudflared 2>/dev/null || true
+
+            echo "==> Escrevendo .env ($APP_ENV)..."
+            ENV_FILE=".env"
+            : > "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
+            {
+              echo "ENVIRONMENT=$APP_ENV"
+              echo "DEBUG=$DEBUG"
+              echo "LOG_LEVEL=$LOG_LEVEL"
+              echo "SECRET_KEY=${{ secrets.SECRET_KEY }}"
+              echo "POSTGRES_USER=postgres"
+              echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}"
+              echo "POSTGRES_DB=copilot_protheus$DB_SUFFIX"
+              echo "DATABASE_URL=postgresql+psycopg2://postgres:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilot_protheus$DB_SUFFIX"
+              echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
+              echo "LLM_MODEL=gpt-4o-mini"
+              echo "EMBEDDING_MODEL=text-embedding-3-small"
+              echo "CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}"
+              echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
+            } >> "$ENV_FILE"
+
+            echo "==> Subindo containers..."
             docker compose pull --ignore-pull-failures || true
             docker compose up -d --build --force-recreate backend
-            docker compose exec -T backend alembic upgrade head
-            echo "✅ Backend atualizado em $(date)"
 
+            echo "==> Executando migrations Alembic..."
+            docker compose exec -T backend alembic upgrade head
+
+            echo "==> Reiniciando cloudflared..."
+            docker compose up -d cloudflared
+
+            echo "✅ Backend [$APP_ENV] atualizado em $(date)"
+
+      # ── 2. Smoke test ────────────────────────────────────────────────────────
       - name: Smoke Test — Health Check
         run: |
-          sleep 15
+          sleep 20
           curl --fail --retry 5 --retry-delay 5 \
-            http://${{ secrets.VPS_HOST }}:8000/health || \
-            (echo "❌ Health check falhou após o deploy!" && exit 1)
+            http://${{ secrets.VPS_HOST }}:${{ env.HEALTH_PORT }}/health || \
+            (echo "❌ Health check falhou! Ambiente: ${{ env.APP_ENV }}" && exit 1)
 
+      # ── 3. Notifica falha ────────────────────────────────────────────────────
       - name: Notificar falha
         if: failure()
-        run: echo "::error::Deploy ou health check falhou — revise os logs acima"
+        run: |
+          echo "::error::Deploy [${{ env.APP_ENV }}] ou health check falhou. Branch: ${{ github.ref_name }}."

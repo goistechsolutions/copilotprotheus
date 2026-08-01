@@ -27,13 +27,28 @@ from datetime import datetime
 
 from sqlalchemy import (
     Column, String, Integer, BigInteger, Boolean, Text, TIMESTAMP, DATE,
-    ForeignKey, Numeric, UniqueConstraint, Index
+    ForeignKey, Numeric, UniqueConstraint, Index, Table
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+
+
+# ═══════════════════════════════════════════════════════════════
+# ASSOCIATION TABLE — public.user_roles
+# ═══════════════════════════════════════════════════════════════
+
+user_roles = Table(
+    "user_roles",
+    Base.metadata,
+    Column("user_id", UUID(as_uuid=True), ForeignKey("public.users.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", UUID(as_uuid=True), ForeignKey("public.roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("tenant_id", String(100), primary_key=True),
+    Column("company_id", Integer, primary_key=True),
+    schema="public",
+)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -150,9 +165,9 @@ class RolePermission(Base):
 
 
 class UserRole(Base):
-    """Corresponde a public.user_roles"""
+    """Corresponde a public.user_roles (ORM model — use a table `user_roles` para many-to-many)"""
     __tablename__ = "user_roles"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     user_id = Column(UUID(as_uuid=True), primary_key=True)
     role_id = Column(UUID(as_uuid=True), ForeignKey("public.roles.id", ondelete="CASCADE"), primary_key=True)
@@ -372,6 +387,80 @@ class PlatformAuditLog(Base):
     action = Column(String(100), nullable=False)
     detail = Column(JSONB)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODELOS GLOBAIS ADICIONAIS — ausentes na versão anterior
+# Adicionados para corrigir ImportError em admin_routes.py
+# ═══════════════════════════════════════════════════════════════
+
+class TenantAllowedTable(Base):
+    """
+    Corresponde a public.tenant_allowed_tables.
+    Controla quais tabelas do dicionário Protheus cada tenant tem permissão
+    de consultar via agente (whitelist por tenant).
+    """
+    __tablename__ = "tenant_allowed_tables"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    table_name = Column(String(30), nullable=False, index=True)
+    module_code = Column(String(30))
+    description = Column(Text)
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "table_name", name="uq_tenant_allowed_table"),
+        {"schema": "public"},
+    )
+
+
+class DictionarySnapshot(Base):
+    """
+    Corresponde a public.dictionary_snapshots (ou schema de tenant).
+    Registra snapshots do dicionário de dados importado do Protheus.
+    """
+    __tablename__ = "dictionary_snapshots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    company_id = Column(String(100))
+    environment_id = Column(String(100), nullable=False, default="producao")
+    snapshot_code = Column(String(60), nullable=False, unique=True)
+    snapshot_status = Column(String(20), nullable=False, default="pending")
+    total_tables = Column(Integer, default=0)
+    total_fields = Column(Integer, default=0)
+    source_type = Column(String(30), default="api")
+    notes = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    finished_at = Column(TIMESTAMP(timezone=True))
+
+
+class TenantDictionaryTable(Base):
+    """
+    Corresponde a "<tenant>".tenant_dictionary_tables.
+    Tabela de catálogo de tabelas do dicionário por tenant/snapshot,
+    usada para controle de importação e exibição no admin.
+    """
+    __tablename__ = "tenant_dictionary_tables"
+
+    id = Column(BigInteger, primary_key=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    company_id = Column(String(100))
+    environment_id = Column(String(100), nullable=False, default="producao")
+    snapshot_code = Column(String(60), nullable=False, index=True)
+    table_name = Column(String(30), nullable=False, index=True)
+    table_alias = Column(String(80))
+    module_code = Column(String(10))
+    description = Column(Text)
+    physical_name = Column(String(80))
+    active_flag = Column(Boolean, nullable=False, default=True)
+    raw_payload = Column(JSONB)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -639,10 +728,6 @@ class DocumentChunk(Base):
     content = Column(Text, nullable=False)
     token_count = Column(Integer)
     embedding_model = Column(String(100))
-    # vector(3072) é criado via DDL raw em database.py (extensão pgvector).
-    # Mantido fora do ORM tipado para evitar dependência rígida de
-    # sqlalchemy-pgvector no model; leitura/escrita do embedding é feita
-    # via SQL raw em rag_service.py.
     page_number = Column(Integer)
     section = Column(String(255))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

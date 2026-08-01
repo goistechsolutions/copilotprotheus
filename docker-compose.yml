@@ -25,9 +25,9 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:sap_password_123@db:5432/copilot_protheus
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
       db:
         condition: service_healthy
@@ -91,6 +91,8 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: copilot-protheus-cloudflared
+    env_file:
+      - ./.env
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     restart: always
     depends_on:
