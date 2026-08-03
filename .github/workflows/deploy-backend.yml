@@ -22,6 +22,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Cria .env stub no runner para satisfazer env_file do docker-compose
+      # e eventuais imports do app que carregam dotenv na inicializacao
+      - name: Criar .env stub para o runner
+        run: |
+          cat > .env << 'EOF'
+          SECRET_KEY=stub-secret-key-for-ci
+          POSTGRES_USER=copilotprotheus
+          POSTGRES_DB=copilotprotheus
+          POSTGRES_PASSWORD=stub-password-for-ci
+          OPENAI_API_KEY=stub-openai-key-for-ci
+          CLOUDFLARE_TUNNEL_TOKEN=stub-cf-token-for-ci
+          CORS_ORIGINS=http://localhost
+          DATABASE_URL=postgresql+asyncpg://copilotprotheus:stub@db:5432/copilotprotheus
+          EOF
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -77,12 +92,8 @@ jobs:
         run: |
           ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} \
             -o StrictHostKeyChecking=no \
-            SECRET_KEY="${SECRET_KEY}" \
-            POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-            OPENAI_API_KEY="${OPENAI_API_KEY}" \
-            CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN}" \
-            CORS_ORIGINS="${CORS_ORIGINS}" \
-            bash << 'ENDSSH'
+            -o SendEnv="SECRET_KEY POSTGRES_PASSWORD OPENAI_API_KEY CLOUDFLARE_TUNNEL_TOKEN CORS_ORIGINS" \
+            bash -s << 'ENDSSH'
 
             set -e
             APP_DIR="/root/copilotprotheus"
@@ -95,9 +106,9 @@ jobs:
             echo "==> [2/6] Criando .env na VPS..."
             cat > "$APP_DIR/.env" << ENVEOF
 SECRET_KEY=${SECRET_KEY}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_USER=copilotprotheus
 POSTGRES_DB=copilotprotheus
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 OPENAI_API_KEY=${OPENAI_API_KEY}
 CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
 CORS_ORIGINS=${CORS_ORIGINS}
