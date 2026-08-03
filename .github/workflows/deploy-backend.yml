@@ -75,7 +75,14 @@ jobs:
           CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
         run: |
-          ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} bash << 'ENDSSH'
+          ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} \
+            -o StrictHostKeyChecking=no \
+            SECRET_KEY="${SECRET_KEY}" \
+            POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            OPENAI_API_KEY="${OPENAI_API_KEY}" \
+            CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN}" \
+            CORS_ORIGINS="${CORS_ORIGINS}" \
+            bash << 'ENDSSH'
 
             set -e
             APP_DIR="/root/copilotprotheus"
@@ -87,15 +94,15 @@ jobs:
 
             echo "==> [2/6] Criando .env na VPS..."
             cat > "$APP_DIR/.env" << ENVEOF
-          SECRET_KEY=${SECRET_KEY}
-          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-          OPENAI_API_KEY=${OPENAI_API_KEY}
-          CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-          CORS_ORIGINS=${CORS_ORIGINS}
-          POSTGRES_DB=copilotprotheus
-          POSTGRES_USER=copilotprotheus
-          DATABASE_URL=postgresql+asyncpg://copilotprotheus:${POSTGRES_PASSWORD}@db:5432/copilotprotheus
-          ENVEOF
+SECRET_KEY=${SECRET_KEY}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+POSTGRES_USER=copilotprotheus
+POSTGRES_DB=copilotprotheus
+OPENAI_API_KEY=${OPENAI_API_KEY}
+CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+CORS_ORIGINS=${CORS_ORIGINS}
+DATABASE_URL=postgresql+asyncpg://copilotprotheus:${POSTGRES_PASSWORD}@db:5432/copilotprotheus
+ENVEOF
             chmod 600 "$APP_DIR/.env"
 
             echo "==> [3/6] Build e subindo containers..."
@@ -130,6 +137,7 @@ jobs:
           VPS_PORT: ${{ secrets.VPS_PORT }}
         run: |
           ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} \
+            -o StrictHostKeyChecking=no \
             "curl -sf http://localhost:8000/health || echo '[AVISO] Health check falhou'"
 
       - name: Notify deploy status
