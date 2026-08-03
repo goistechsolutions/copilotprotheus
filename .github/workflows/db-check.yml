@@ -1,0 +1,66 @@
+# =============================================================================
+# GitHub Actions — Verificação de saúde do PostgreSQL
+# Roda diariamente às 07:00 BRT (10:00 UTC)
+# =============================================================================
+
+name: DB Health Check
+
+on:
+  schedule:
+    - cron: '0 10 * * *'   # 07:00 BRT todos os dias
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: 🩺 PostgreSQL Health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Configurar chave SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Adicionar VPS ao known_hosts
+        run: |
+          ssh-keyscan -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Verificar saúde do banco
+        run: |
+          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'CHECKCMD'
+            set -e
+            cd /root/copilotprotheus
+            echo "=== Status Containers ==="
+            docker compose ps
+
+            echo "=== Conectividade PostgreSQL ==="
+            docker compose exec -T db psql -U copilot -d copilotprotheus -c "
+              SELECT
+                schemaname,
+                count(*) as total_tabelas
+              FROM pg_tables
+              WHERE schemaname IN ('protheus','copilot')
+              GROUP BY schemaname;
+            "
+
+            echo "=== Registros por tabela (schema protheus) ==="
+            docker compose exec -T db psql -U copilot -d copilotprotheus -c "
+              SELECT
+                relname AS tabela,
+                n_live_tup AS registros_ativos,
+                n_dead_tup AS registros_mortos,
+                last_vacuum,
+                last_autovacuum
+              FROM pg_stat_user_tables
+              WHERE schemaname = 'protheus'
+              ORDER BY n_live_tup DESC;
+            "
+
+            echo "=== Tamanho do banco ==="
+            docker compose exec -T db psql -U copilot -d copilotprotheus -c "
+              SELECT pg_size_pretty(pg_database_size('copilotprotheus')) AS tamanho_banco;
+            "
+
+            echo "✅ Health check concluído"
+          CHECKCMD

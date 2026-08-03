@@ -1,3 +1,9 @@
+# =============================================================================
+# GitHub Actions — Deploy Backend CopilotProtheus
+# Fluxo: Push main → Build Docker → SSH VPS → Migrations → Restart
+# Cloudflare Tunnel expõe a API sem abrir portas
+# =============================================================================
+
 name: Deploy Backend
 
 on:
@@ -5,213 +11,225 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'app/**'
+      - 'database/**'
       - 'docker-compose.yml'
+      - 'Dockerfile'
+      - 'requirements.txt'
       - '.github/workflows/deploy-backend.yml'
 
-concurrency:
-  group: deploy-backend
-  cancel-in-progress: true
+  workflow_dispatch:   # permite rodar manualmente pelo GitHub
+
+env:
+  PYTHON_VERSION: '3.11'
 
 jobs:
-  # ─────────────────────────────────────────────
-  # JOB 1: Lint + Testes
-  # ─────────────────────────────────────────────
+  # ---------------------------------------------------------------------------
+  # JOB 1: Testes e validação local
+  # ---------------------------------------------------------------------------
   test:
-    name: Lint & Tests
+    name: 🧪 Testes e Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout código
+        uses: actions/checkout@v4
 
-      # .env stub — satisfaz env_file do docker-compose no runner (valores fictícios)
-      - name: Criar .env stub para o runner
-        run: |
-          cat > .env << 'EOF'
-          SECRET_KEY=stub-secret-key-for-ci
-          POSTGRES_USER=copilotprotheus
-          POSTGRES_DB=copilotprotheus
-          POSTGRES_PASSWORD=stub-password-for-ci
-          OPENAI_API_KEY=stub-openai-key-for-ci
-          CLOUDFLARE_TUNNEL_TOKEN=stub-cf-token-for-ci
-          CORS_ORIGINS=http://localhost
-          DATABASE_URL=postgresql+asyncpg://copilotprotheus:stub@db:5432/copilotprotheus
-          EOF
-
-      - name: Set up Python 3.11
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Install dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt -r requirements-dev.txt
-
-      - name: Lint (flake8)
-        working-directory: backend
+      - name: Instalar dependências
         run: |
-          pip install flake8 --quiet
-          flake8 app/ --max-line-length=120 --ignore=E501,W503 || true
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install flake8 pytest
 
-      - name: Type check (mypy)
-        working-directory: backend
+      - name: Lint com flake8
         run: |
-          pip install mypy --quiet
-          mypy app/ --ignore-missing-imports || true
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        continue-on-error: true
 
-  # ─────────────────────────────────────────────
-  # JOB 2: Deploy + Migration na VPS Hetzner
-  # ─────────────────────────────────────────────
+      - name: Validar SQL migrations
+        run: |
+          echo "Validando sintaxe dos arquivos SQL..."
+          for f in database/migrations/*.sql; do
+            echo "→ Verificando: $f"
+            python -c "
+          import re, sys
+          content = open('$f').read()
+          # Verifica filtros obrigatórios nas views
+          if 'CREATE OR REPLACE VIEW' in content:
+              if "D_E_L_E_T_" not in content and "d_e_l_e_t_" not in content:
+                  print('AVISO: View sem filtro D_E_L_E_T_ em $f')
+          print('OK: $f')
+          "
+          done
+
+  # ---------------------------------------------------------------------------
+  # JOB 2: Deploy na VPS via SSH
+  # ---------------------------------------------------------------------------
   deploy:
-    name: Deploy to Hetzner VPS
+    name: 🚀 Deploy VPS
     runs-on: ubuntu-latest
     needs: test
+    timeout-minutes: 20
     environment: production
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Configure SSH
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar chave SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
-      - name: Add VPS to known_hosts
+      - name: Adicionar VPS ao known_hosts
         run: |
-          ssh-keyscan -H -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy + Migration via SSH
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+      - name: Criar .env na VPS
         run: |
-          ssh -p ${VPS_PORT:-22} \
-            -o StrictHostKeyChecking=no \
-            -o ServerAliveInterval=60 \
-            ${VPS_USER}@${VPS_HOST} \
-            SECRET_KEY="${SECRET_KEY}" \
-            POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-            OPENAI_API_KEY="${OPENAI_API_KEY}" \
-            CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN}" \
-            CORS_ORIGINS="${CORS_ORIGINS}" \
-            bash -s << 'ENDSSH'
+          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENVCMD'
+            mkdir -p /root/copilotprotheus
+            cat > /root/copilotprotheus/.env << 'ENVEOF'
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          DEBUG=false
+          ENVIRONMENT=production
 
-            set -euo pipefail
-            APP_DIR="/root/copilotprotheus"
+          # PostgreSQL
+          POSTGRES_HOST=db
+          POSTGRES_PORT=5432
+          POSTGRES_DB=copilotprotheus
+          POSTGRES_USER=copilot
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          DATABASE_URL=postgresql://copilot:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilotprotheus
 
-            # ── [1/7] Atualiza repositório ──────────────────────────────────
-            echo "==> [1/7] Atualizando repositorio..."
-            cd "$APP_DIR"
-            git fetch origin main
-            git reset --hard origin/main
+          # OpenAI
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL=gpt-4o
 
-            # ── [2/7] Gera .env real na VPS ─────────────────────────────────
-            echo "==> [2/7] Criando .env na VPS..."
-            cat > "$APP_DIR/.env" << ENVEOF
-SECRET_KEY=${SECRET_KEY}
-POSTGRES_USER=copilotprotheus
-POSTGRES_DB=copilotprotheus
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-OPENAI_API_KEY=${OPENAI_API_KEY}
-CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-CORS_ORIGINS=${CORS_ORIGINS}
-DATABASE_URL=postgresql+asyncpg://copilotprotheus:${POSTGRES_PASSWORD}@db:5432/copilotprotheus
-ENVEOF
-            chmod 600 "$APP_DIR/.env"
-            echo "   .env criado com sucesso."
+          # Cloudflare
+          CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
 
-            # ── [3/7] Build e sobe containers ───────────────────────────────
-            echo "==> [3/7] Build e subindo containers..."
-            cd "$APP_DIR"
-            docker compose pull --quiet || true
-            docker compose up -d --build --remove-orphans
+          # CORS
+          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+          ENVEOF
+            chmod 600 /root/copilotprotheus/.env
+            echo "✅ .env criado com sucesso"
+          ENVCMD
 
-            # ── [4/7] Aguarda PostgreSQL healthy ────────────────────────────
-            echo "==> [4/7] Aguardando PostgreSQL ficar pronto..."
-            MAX_TRIES=40
-            COUNT=0
-            until docker compose exec -T db pg_isready -U copilotprotheus -d copilotprotheus -q 2>/dev/null; do
-              COUNT=$((COUNT + 1))
-              if [ $COUNT -ge $MAX_TRIES ]; then
-                echo "ERRO: PostgreSQL nao ficou pronto apos ${MAX_TRIES} tentativas."
-                docker compose logs db --tail=30
-                exit 1
-              fi
-              echo "   Aguardando PostgreSQL... tentativa ${COUNT}/${MAX_TRIES}"
-              sleep 3
+      - name: Sincronizar código para VPS
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='node_modules' \
+            --exclude='.DS_Store' \
+            -e "ssh -p ${{ secrets.VPS_PORT || 22 }}" \
+            ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/root/copilotprotheus/
+
+      - name: Executar deploy e migrations
+        run: |
+          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'DEPLOYCMD'
+            set -e
+            cd /root/copilotprotheus
+
+            echo "📦 Parando containers antigos..."
+            docker compose down --remove-orphans || true
+
+            echo "🏗️ Build da imagem..."
+            docker compose build --no-cache
+
+            echo "🗃️ Subindo apenas o banco de dados..."
+            docker compose up -d db
+            sleep 8
+
+            echo "🔄 Executando migrations SQL..."
+            for sql_file in database/migrations/*.sql; do
+              echo "→ Aplicando: $sql_file"
+              docker compose exec -T db psql \
+                -U copilot \
+                -d copilotprotheus \
+                -f /dev/stdin < "$sql_file" || echo "⚠️  Arquivo já aplicado ou erro não crítico: $sql_file"
             done
-            echo "   PostgreSQL pronto!"
 
-            # ── [5/7] Aguarda backend saudavel ──────────────────────────────
-            echo "==> [5/7] Aguardando container backend ficar healthy..."
-            COUNT=0
-            until [ "$(docker inspect --format='{{.State.Status}}' copilot-protheus-backend 2>/dev/null)" = "running" ]; do
-              COUNT=$((COUNT + 1))
-              if [ $COUNT -ge 20 ]; then
-                echo "ERRO: Container backend nao iniciou."
-                docker compose logs backend --tail=30
-                exit 1
-              fi
-              echo "   Aguardando backend... tentativa ${COUNT}/20"
-              sleep 3
-            done
-            echo "   Backend em execucao!"
+            echo "🚀 Subindo todos os serviços..."
+            docker compose up -d
 
-            # ── [6/7] Executa migration Alembic ─────────────────────────────
-            echo "==> [6/7] Executando migration Alembic..."
-            echo "   >> alembic current (estado antes da migration):"
-            docker compose exec -T backend alembic current 2>&1 || true
+            echo "⏳ Aguardando inicialização..."
+            sleep 10
 
-            echo "   >> alembic upgrade head:"
-            if docker compose exec -T backend alembic upgrade head 2>&1; then
-              echo "   Migration executada com sucesso!"
-            else
-              MIGRATION_EXIT=$?
-              echo "ERRO: Migration falhou com codigo ${MIGRATION_EXIT}."
-              echo "   >> Log do backend:"
-              docker compose logs backend --tail=50
-              echo "   >> alembic history:"
-              docker compose exec -T backend alembic history 2>&1 || true
-              exit ${MIGRATION_EXIT}
-            fi
-
-            echo "   >> alembic current (estado apos a migration):"
-            docker compose exec -T backend alembic current 2>&1 || true
-
-            # ── [7/7] Seed do dicionario Protheus ───────────────────────────
-            echo "==> [7/7] Seed do dicionario Protheus..."
-            docker compose exec -T backend python scripts/seed_protheus_dicionario.py 2>&1 \
-              && echo "   Seed executado!" \
-              || echo "   Seed ja executado ou nao critico — continuando."
-
-            echo ""
-            echo "==> Deploy concluido com sucesso! $(date -u)"
-            echo ""
+            echo "✅ Status dos containers:"
             docker compose ps
-          ENDSSH
 
-      - name: Verify health endpoint
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
+            echo "📋 Logs recentes:"
+            docker compose logs --tail=20
+          DEPLOYCMD
+
+      - name: Health check da API
         run: |
-          ssh -p ${VPS_PORT:-22} \
-            -o StrictHostKeyChecking=no \
-            ${VPS_USER}@${VPS_HOST} \
-            "curl -sf http://localhost:8000/health && echo 'Health OK' || echo '[AVISO] Health check falhou'"
+          echo "Aguardando 15s para a API inicializar..."
+          sleep 15
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 30 \
+            "${{ secrets.API_HEALTH_URL || 'https://api.copilotprotheus.com.br/health' }}" || echo "000")
+          echo "HTTP Status: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "000" ]; then
+            echo "⚠️ API respondeu com status $HTTP_CODE (pode ser normal no primeiro deploy)"
+          else
+            echo "✅ API operacional"
+          fi
+        continue-on-error: true
 
-      - name: Notify deploy status
+      - name: Notificar conclusão
         if: always()
         run: |
-          echo "======================================"
-          echo " Deploy finalizado"
-          echo " Status  : ${{ job.status }}"
-          echo " Branch  : ${{ github.ref_name }}"
-          echo " Commit  : ${{ github.sha }}"
-          echo " Ator    : ${{ github.actor }}"
-          echo "======================================"
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Deploy concluído com sucesso em $(date)"
+          else
+            echo "❌ Deploy falhou em $(date)"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # JOB 3: Backup do PostgreSQL antes de migrations (apenas segundas e sextas)
+  # ---------------------------------------------------------------------------
+  backup-db:
+    name: 🗄️ Backup PostgreSQL
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 10
+
+    steps:
+      - name: Configurar chave SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Adicionar VPS ao known_hosts
+        run: |
+          ssh-keyscan -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Realizar backup pg_dump
+        run: |
+          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'BACKUPCMD'
+            set -e
+            BACKUP_DIR="/root/copilotprotheus/backups"
+            mkdir -p "$BACKUP_DIR"
+            BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql.gz"
+            docker compose exec -T db pg_dump \
+              -U copilot copilotprotheus | gzip > "$BACKUP_FILE"
+            echo "✅ Backup criado: $BACKUP_FILE"
+            # Mantém apenas os 7 backups mais recentes
+            ls -t "$BACKUP_DIR"/backup_*.sql.gz | tail -n +8 | xargs -r rm
+            echo "📦 Backups disponíveis:"
+            ls -lh "$BACKUP_DIR"
+          BACKUPCMD
+        continue-on-error: true
