@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────
-  # JOB 1: Lint + Testes rapidos
+  # JOB 1: Lint + Testes
   # ─────────────────────────────────────────────
   test:
     name: Lint & Tests
@@ -22,8 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Cria .env stub no runner para satisfazer env_file do docker-compose
-      # e eventuais imports do app que carregam dotenv na inicializacao
+      # .env stub — satisfaz env_file do docker-compose no runner (valores fictícios)
       - name: Criar .env stub para o runner
         run: |
           cat > .env << 'EOF'
@@ -60,7 +59,7 @@ jobs:
           mypy app/ --ignore-missing-imports || true
 
   # ─────────────────────────────────────────────
-  # JOB 2: Deploy na VPS Hetzner
+  # JOB 2: Deploy + Migration na VPS Hetzner
   # ─────────────────────────────────────────────
   deploy:
     name: Deploy to Hetzner VPS
@@ -79,7 +78,7 @@ jobs:
         run: |
           ssh-keyscan -H -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy via SSH
+      - name: Deploy + Migration via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -90,20 +89,28 @@ jobs:
           CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
         run: |
-          ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} \
+          ssh -p ${VPS_PORT:-22} \
             -o StrictHostKeyChecking=no \
-            -o SendEnv="SECRET_KEY POSTGRES_PASSWORD OPENAI_API_KEY CLOUDFLARE_TUNNEL_TOKEN CORS_ORIGINS" \
+            -o ServerAliveInterval=60 \
+            ${VPS_USER}@${VPS_HOST} \
+            SECRET_KEY="${SECRET_KEY}" \
+            POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            OPENAI_API_KEY="${OPENAI_API_KEY}" \
+            CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN}" \
+            CORS_ORIGINS="${CORS_ORIGINS}" \
             bash -s << 'ENDSSH'
 
-            set -e
+            set -euo pipefail
             APP_DIR="/root/copilotprotheus"
 
-            echo "==> [1/6] Atualizando repositorio..."
+            # ── [1/7] Atualiza repositório ──────────────────────────────────
+            echo "==> [1/7] Atualizando repositorio..."
             cd "$APP_DIR"
             git fetch origin main
             git reset --hard origin/main
 
-            echo "==> [2/6] Criando .env na VPS..."
+            # ── [2/7] Gera .env real na VPS ─────────────────────────────────
+            echo "==> [2/7] Criando .env na VPS..."
             cat > "$APP_DIR/.env" << ENVEOF
 SECRET_KEY=${SECRET_KEY}
 POSTGRES_USER=copilotprotheus
@@ -115,29 +122,75 @@ CORS_ORIGINS=${CORS_ORIGINS}
 DATABASE_URL=postgresql+asyncpg://copilotprotheus:${POSTGRES_PASSWORD}@db:5432/copilotprotheus
 ENVEOF
             chmod 600 "$APP_DIR/.env"
+            echo "   .env criado com sucesso."
 
-            echo "==> [3/6] Build e subindo containers..."
+            # ── [3/7] Build e sobe containers ───────────────────────────────
+            echo "==> [3/7] Build e subindo containers..."
             cd "$APP_DIR"
-            docker compose pull --quiet
+            docker compose pull --quiet || true
             docker compose up -d --build --remove-orphans
 
-            echo "==> [4/6] Aguardando PostgreSQL estar pronto..."
-            for i in $(seq 1 30); do
-              if docker compose exec -T db pg_isready -U copilotprotheus -q 2>/dev/null; then
-                echo "   PostgreSQL pronto!"
-                break
+            # ── [4/7] Aguarda PostgreSQL healthy ────────────────────────────
+            echo "==> [4/7] Aguardando PostgreSQL ficar pronto..."
+            MAX_TRIES=40
+            COUNT=0
+            until docker compose exec -T db pg_isready -U copilotprotheus -d copilotprotheus -q 2>/dev/null; do
+              COUNT=$((COUNT + 1))
+              if [ $COUNT -ge $MAX_TRIES ]; then
+                echo "ERRO: PostgreSQL nao ficou pronto apos ${MAX_TRIES} tentativas."
+                docker compose logs db --tail=30
+                exit 1
               fi
-              echo "   Aguardando... tentativa $i/30"
+              echo "   Aguardando PostgreSQL... tentativa ${COUNT}/${MAX_TRIES}"
               sleep 3
             done
+            echo "   PostgreSQL pronto!"
 
-            echo "==> [5/6] Executando migrations Alembic..."
-            docker compose exec -T backend alembic upgrade head
+            # ── [5/7] Aguarda backend saudavel ──────────────────────────────
+            echo "==> [5/7] Aguardando container backend ficar healthy..."
+            COUNT=0
+            until [ "$(docker inspect --format='{{.State.Status}}' copilot-protheus-backend 2>/dev/null)" = "running" ]; do
+              COUNT=$((COUNT + 1))
+              if [ $COUNT -ge 20 ]; then
+                echo "ERRO: Container backend nao iniciou."
+                docker compose logs backend --tail=30
+                exit 1
+              fi
+              echo "   Aguardando backend... tentativa ${COUNT}/20"
+              sleep 3
+            done
+            echo "   Backend em execucao!"
 
-            echo "==> [6/6] Executando seed do dicionario Protheus..."
-            docker compose exec -T backend python scripts/seed_protheus_dicionario.py || echo "   Seed ja executado ou nao critico."
+            # ── [6/7] Executa migration Alembic ─────────────────────────────
+            echo "==> [6/7] Executando migration Alembic..."
+            echo "   >> alembic current (estado antes da migration):"
+            docker compose exec -T backend alembic current 2>&1 || true
 
-            echo "==> Deploy concluido com sucesso!"
+            echo "   >> alembic upgrade head:"
+            if docker compose exec -T backend alembic upgrade head 2>&1; then
+              echo "   Migration executada com sucesso!"
+            else
+              MIGRATION_EXIT=$?
+              echo "ERRO: Migration falhou com codigo ${MIGRATION_EXIT}."
+              echo "   >> Log do backend:"
+              docker compose logs backend --tail=50
+              echo "   >> alembic history:"
+              docker compose exec -T backend alembic history 2>&1 || true
+              exit ${MIGRATION_EXIT}
+            fi
+
+            echo "   >> alembic current (estado apos a migration):"
+            docker compose exec -T backend alembic current 2>&1 || true
+
+            # ── [7/7] Seed do dicionario Protheus ───────────────────────────
+            echo "==> [7/7] Seed do dicionario Protheus..."
+            docker compose exec -T backend python scripts/seed_protheus_dicionario.py 2>&1 \
+              && echo "   Seed executado!" \
+              || echo "   Seed ja executado ou nao critico — continuando."
+
+            echo ""
+            echo "==> Deploy concluido com sucesso! $(date -u)"
+            echo ""
             docker compose ps
           ENDSSH
 
@@ -147,14 +200,18 @@ ENVEOF
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
         run: |
-          ssh -p ${VPS_PORT:-22} ${VPS_USER}@${VPS_HOST} \
+          ssh -p ${VPS_PORT:-22} \
             -o StrictHostKeyChecking=no \
-            "curl -sf http://localhost:8000/health || echo '[AVISO] Health check falhou'"
+            ${VPS_USER}@${VPS_HOST} \
+            "curl -sf http://localhost:8000/health && echo 'Health OK' || echo '[AVISO] Health check falhou'"
 
       - name: Notify deploy status
         if: always()
         run: |
-          echo "Deploy finalizado. Status: ${{ job.status }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "Acionado por: ${{ github.actor }}"
+          echo "======================================"
+          echo " Deploy finalizado"
+          echo " Status  : ${{ job.status }}"
+          echo " Branch  : ${{ github.ref_name }}"
+          echo " Commit  : ${{ github.sha }}"
+          echo " Ator    : ${{ github.actor }}"
+          echo "======================================"
