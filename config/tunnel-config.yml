@@ -1,9 +1,9 @@
-tunnel: 556edbaf-17a9-4841-a284-6134f09230e0
-credentials-file: /root/copilotprotheus/config/556edbaf-17a9-4841-a284-6134f09230e0.json
+tunnel: 7eafecde-b82a-4d65-9db7-42fe116f43ec
+credentials-file: /root/copilotprotheus/config/7eafecde-b82a-4d65-9db7-42fe116f43ec.json
 
 ingress:
   - hostname: copilot.elitecorp.tec.br
     service: http://localhost:3001
-  - hostname: admin.elitecorp.tec.br
+  - hostname: copílot-admin.elitecorp.tec.br
     service: http://localhost:5174
   - service: http_status:404
