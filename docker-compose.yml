@@ -87,16 +87,5 @@ services:
       - db
     restart: always
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: copilot-protheus-cloudflared
-    env_file:
-      - ./.env
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    restart: always
-    depends_on:
-      - frontend
-      - backend
-
 volumes:
   pgdata:
