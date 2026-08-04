@@ -39,20 +39,16 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    // 1. Tenta chamar o backend para deletar o cookie HttpOnly via Set-Cookie
+    // Chama o backend para invalidar o cookie HttpOnly via Set-Cookie
     try {
       await fetch('/api/admin/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {
-      // Se a API estiver offline, tenta forçar expiração do cookie pelo lado do client.
-      // Cookies HttpOnly não são acessíveis via JS, mas podemos setar um cookie
-      // com o mesmo nome e max-age=0 para substituí-lo (sem httponly).
-      document.cookie = 'admin_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      // Backend indisponível — segue com limpeza local
+      // Nota: cookie HttpOnly não pode ser removido via JS (comportamento esperado)
     }
 
-    // 2. Limpa estado React imediatamente
+    // Limpa estado React e redireciona
     setUser(null);
-
-    // 3. Redireciona para login com reload completo (limpa cache de estado)
     window.location.replace('/admin/login');
   };
 

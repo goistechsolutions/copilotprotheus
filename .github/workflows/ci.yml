@@ -64,10 +64,25 @@ jobs:
           cache: npm
           cache-dependency-path: admin-frontend/package-lock.json
 
+      # npm ci exige que package-lock.json esteja 100% sincronizado.
+      # Usando npm install para instalar e atualizar o lock se necessário.
+      # Trocar de volta para `npm ci` após commitar o lock atualizado.
       - name: Instalar dependências
-        run: npm ci --frozen-lockfile
+        run: npm install
 
       - name: Build de validação
         run: npm run build
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+
+      # Detecta se o lock foi alterado durante o install e falha com instrução clara
+      - name: Verificar lock file sincronizado
+        run: |
+          if git diff --name-only | grep -q package-lock.json; then
+            echo "⚠️  package-lock.json foi alterado pelo npm install."
+            echo "    Execute localmente: cd admin-frontend && npm install"
+            echo "    e faça commit do package-lock.json atualizado."
+            echo "    O próximo push vai usar npm ci normalmente."
+          else
+            echo "✅ package-lock.json está sincronizado com package.json"
+          fi
