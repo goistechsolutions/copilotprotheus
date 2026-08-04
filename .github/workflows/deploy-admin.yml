@@ -45,7 +45,7 @@ jobs:
       # ── 2. Instalar dependências ─────────────────────────────────────────
       - name: Install dependencies
         working-directory: admin-frontend
-        run: npm ci --frozen-lockfile
+        run: npm install
 
       # ── 3. Build ────────────────────────────────────────────────────────
       - name: Build (${{ env.APP_ENV }})
