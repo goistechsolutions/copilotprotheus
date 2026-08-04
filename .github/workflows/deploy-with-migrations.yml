@@ -49,6 +49,19 @@ jobs:
 
       - name: Validar docker-compose.yml
         run: |
+          # Cria .env dummy para que o docker compose config não falhe por variáveis ausentes
+          cat > .env << 'ENVEOF'
+          CLOUDFLARE_TUNNEL_TOKEN=dummy
+          POSTGRES_USER=dummy
+          POSTGRES_PASSWORD=dummy
+          POSTGRES_DB=dummy
+          SECRET_KEY=dummy
+          DATABASE_URL=postgresql://dummy:dummy@postgres:5432/dummy
+          OPENAI_API_KEY=dummy
+          CORS_ORIGINS=dummy
+          ENVIRONMENT=ci
+          LOG_LEVEL=INFO
+          ENVEOF
           docker compose -f docker-compose.yml config --quiet
           echo "✓ docker-compose.yml válido"
 
