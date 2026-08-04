@@ -1,5 +1,5 @@
 # Stage 1: Build Admin Frontend
-FROM node:20-alpine AS admin-builder
+FROM node:20-slim AS admin-builder
 WORKDIR /app
 COPY admin-frontend/package*.json ./
 RUN npm ci || npm install
