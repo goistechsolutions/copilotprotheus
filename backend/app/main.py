@@ -259,11 +259,18 @@ async def global_exception_handler(request, exc):
         content={"detail": "Erro interno do servidor. Por favor, tente novamente mais tarde."}
     )
 
+@app.get("/admin")
+def redirect_admin_no_slash():
+    return RedirectResponse(url="/admin/")
+
 from fastapi.responses import RedirectResponse
 
 @app.get("/")
-def read_root():
-    return RedirectResponse(url="/api/launch")
+def read_root(request: Request):
+    host = request.headers.get("host", "").lower()
+    if "copilot-admin" in host or "admin" in host:
+        return RedirectResponse(url="/admin/")
+    return RedirectResponse(url="/admin/")
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
