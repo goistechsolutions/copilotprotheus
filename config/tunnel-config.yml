@@ -5,9 +5,9 @@ ingress:
   # Rota da API Backend (FastAPI na Hetzner VPS - porta 8000)
   - hostname: copilot-api.elitecorp.tec.br
     service: http://localhost:8000
-  # Rota do Painel Admin (admin-frontend - porta 3001)
+  # Rota do Painel Admin (FastAPI Integrado - porta 8000)
   - hostname: copilot-admin.elitecorp.tec.br
-    service: http://localhost:3001
+    service: http://localhost:8000
   # Rota do Frontend Chat / Middleware (Node.js Express / Nginx)
   - hostname: copilot.elitecorp.tec.br
     service: http://localhost:3001
