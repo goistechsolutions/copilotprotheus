@@ -91,6 +91,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: copilot-protheus-cloudflared
+    network_mode: "host"
     restart: always
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-eyJhIjoiNmMzNjg4YjE5ZjNiN2E3NGE0ZTVlNjE0NWFjMTU1OTMiLCJ0IjoiNDVhMTIxYTItZjUyMi00YmJmLTgxNzctOTQ3YjAwYTZlMmE5IiwicyI6IlpHTmlOV1psWVRndE5qUmlOQzAwWTJJMExUZ3paRFV0TmpNell6Tm1Namt4TVdZMiJ9}
     depends_on:
