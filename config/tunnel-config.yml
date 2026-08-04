@@ -1,5 +1,5 @@
-tunnel: 7eafecde-b82a-4d65-9db7-42fe116f43ec
-credentials-file: /root/copilotprotheus/config/7eafecde-b82a-4d65-9db7-42fe116f43ec.json
+tunnel: 45a121a2-f522-4bbf-8177-947b00a6e2a9
+credentials-file: /root/copilotprotheus/config/45a121a2-f522-4bbf-8177-947b00a6e2a9.json
 
 ingress:
   # Rota da API Backend (FastAPI na Hetzner VPS - porta 8000 / container backend)
