@@ -399,9 +399,13 @@ class TenantAllowedTable(Base):
     Corresponde a public.tenant_allowed_tables.
     Controla quais tabelas do dicionário Protheus cada tenant tem permissão
     de consultar via agente (whitelist por tenant).
+    FIX: __table_args__ unificado em tupla única (era duplicado, causava ImportError).
     """
     __tablename__ = "tenant_allowed_tables"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "table_name", name="uq_tenant_allowed_table"),
+        {"schema": "public"},
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -411,11 +415,6 @@ class TenantAllowedTable(Base):
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "table_name", name="uq_tenant_allowed_table"),
-        {"schema": "public"},
-    )
 
 
 class DictionarySnapshot(Base):
@@ -473,7 +472,7 @@ class TenantDictionaryTable(Base):
 # ═══════════════════════════════════════════════════════════════
 
 class Company(Base):
-    """Corresponde a "<tenant>".company_info"""
+    """Corresponde a \"<tenant>\".company_info"""
     __tablename__ = "company_info"
 
     id = Column(Integer, primary_key=True)
@@ -510,7 +509,7 @@ class Company(Base):
 
 
 class ProtheusModule(Base):
-    """Corresponde a "<tenant>".protheus_modules"""
+    """Corresponde a \"<tenant>\".protheus_modules"""
     __tablename__ = "protheus_modules"
 
     id = Column(Integer, primary_key=True)
@@ -525,7 +524,7 @@ class ProtheusModule(Base):
 
 
 class TenantSchema(Base):
-    """Corresponde a "<tenant>".tenant_schemas"""
+    """Corresponde a \"<tenant>\".tenant_schemas"""
     __tablename__ = "tenant_schemas"
 
     id = Column(Integer, primary_key=True)
@@ -541,7 +540,7 @@ class TenantSchema(Base):
 
 
 class DictionaryTable(Base):
-    """Corresponde a "<tenant>".dictionary_tables"""
+    """Corresponde a \"<tenant>\".dictionary_tables"""
     __tablename__ = "dictionary_tables"
 
     id = Column(BigInteger, primary_key=True)
@@ -561,7 +560,7 @@ class DictionaryTable(Base):
 
 
 class DictionaryField(Base):
-    """Corresponde a "<tenant>".dictionary_fields"""
+    """Corresponde a \"<tenant>\".dictionary_fields"""
     __tablename__ = "dictionary_fields"
 
     id = Column(BigInteger, primary_key=True)
@@ -587,7 +586,7 @@ class DictionaryField(Base):
 
 
 class DictionaryIndex(Base):
-    """Corresponde a "<tenant>".dictionary_indexes"""
+    """Corresponde a \"<tenant>\".dictionary_indexes"""
     __tablename__ = "dictionary_indexes"
 
     id = Column(BigInteger, primary_key=True)
@@ -604,7 +603,7 @@ class DictionaryIndex(Base):
 
 
 class DictionaryGroup(Base):
-    """Corresponde a "<tenant>".dictionary_groups"""
+    """Corresponde a \"<tenant>\".dictionary_groups"""
     __tablename__ = "dictionary_groups"
 
     id = Column(BigInteger, primary_key=True)
@@ -619,7 +618,7 @@ class DictionaryGroup(Base):
 
 
 class TenantDictionarySource(Base):
-    """Corresponde a "<tenant>".tenant_dictionary_sources"""
+    """Corresponde a \"<tenant>\".tenant_dictionary_sources"""
     __tablename__ = "tenant_dictionary_sources"
 
     id = Column(BigInteger, primary_key=True)
@@ -636,7 +635,7 @@ class TenantDictionarySource(Base):
 
 
 class TenantTablePermission(Base):
-    """Corresponde a "<tenant>".tenant_table_permissions"""
+    """Corresponde a \"<tenant>\".tenant_table_permissions"""
     __tablename__ = "tenant_table_permissions"
 
     id = Column(BigInteger, primary_key=True)
@@ -654,7 +653,7 @@ class TenantTablePermission(Base):
 
 
 class TenantFieldPermission(Base):
-    """Corresponde a "<tenant>".tenant_field_permissions"""
+    """Corresponde a \"<tenant>\".tenant_field_permissions"""
     __tablename__ = "tenant_field_permissions"
 
     id = Column(BigInteger, primary_key=True)
@@ -673,7 +672,7 @@ class TenantFieldPermission(Base):
 
 
 class Memory(Base):
-    """Corresponde a "<tenant>".memories"""
+    """Corresponde a \"<tenant>\".memories"""
     __tablename__ = "memories"
 
     id = Column(Integer, primary_key=True)
@@ -693,7 +692,7 @@ class Memory(Base):
 
 
 class Document(Base):
-    """Corresponde a "<tenant>".documents"""
+    """Corresponde a \"<tenant>\".documents"""
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True)
@@ -719,7 +718,7 @@ class Document(Base):
 
 
 class DocumentChunk(Base):
-    """Corresponde a "<tenant>".document_chunks"""
+    """Corresponde a \"<tenant>\".document_chunks"""
     __tablename__ = "document_chunks"
 
     id = Column(Integer, primary_key=True)
@@ -737,7 +736,7 @@ class DocumentChunk(Base):
 
 class AgentQueryAudit(Base):
     """
-    Corresponde a "<tenant>".agent_query_audit (auditoria operacional
+    Corresponde a \"<tenant>\".agent_query_audit (auditoria operacional
     por tenant, é a tabela usada no dia a dia pelos serviços via
     search_path). Não confundir com AgentQueryAuditGlobal (public).
     """
