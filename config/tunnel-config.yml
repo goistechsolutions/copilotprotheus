@@ -2,13 +2,13 @@ tunnel: 45a121a2-f522-4bbf-8177-947b00a6e2a9
 credentials-file: /root/copilotprotheus/config/45a121a2-f522-4bbf-8177-947b00a6e2a9.json
 
 ingress:
-  # Rota da API Backend (FastAPI na Hetzner VPS - porta 8000 / container backend)
+  # Rota da API Backend (FastAPI na Hetzner VPS - porta 8000)
   - hostname: copilot-api.elitecorp.tec.br
-    service: http://backend:8000
-  # Rota do Painel Admin (FastAPI /admin ou container admin-frontend)
+    service: http://localhost:8000
+  # Rota do Painel Admin (FastAPI /admin)
   - hostname: copilot-admin.elitecorp.tec.br
-    service: http://backend:8000
+    service: http://localhost:8000
   # Rota do Frontend Chat / Middleware (Node.js Express / Nginx)
   - hostname: copilot.elitecorp.tec.br
-    service: http://middleware:3001
+    service: http://localhost:3001
   - service: http_status:404
