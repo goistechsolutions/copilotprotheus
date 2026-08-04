@@ -411,7 +411,26 @@ class TenantAllowedTable(Base):
     tenant_id = Column(String(100), nullable=False, index=True)
     table_name = Column(String(30), nullable=False, index=True)
     module_code = Column(String(30))
-    description = Column(Text)
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True))
+
+
+class TenantAllowedField(Base):
+    """
+    Controla quais campos de tabelas do dicionário Protheus cada tenant tem permissão
+    de consultar via agente.
+    """
+    __tablename__ = "tenant_allowed_fields"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "table_name", "field_name", name="uq_tenant_allowed_field"),
+        {"schema": "public"},
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    table_name = Column(String(30), nullable=False, index=True)
+    field_name = Column(String(30), nullable=False, index=True)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
