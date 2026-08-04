@@ -143,3 +143,47 @@ async def get_ollama_status():
                 return {"status": "error", "detail": f"Erro do Ollama: {response.status_code}"}
     except Exception as e:
         return {"status": "offline", "detail": str(e)}
+
+
+# ----------------- MÉTRICAS E GOVERNANÇA DE TENANTS -----------------
+
+@router.get("/metrics/tenants", dependencies=[Depends(verify_admin)])
+async def get_tenants_metrics():
+    from app.db.database import SessionLocal
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        query = text("""
+            SELECT 
+                tr.tenant_code,
+                tr.tenant_name,
+                tr.status,
+                COALESCE(p.plan_name, 'Standard') AS plan_name,
+                COALESCE(p.max_queries_day, 500) AS max_queries_day,
+                COUNT(pal.id) AS queries_today
+            FROM public.tenant_registry tr
+            LEFT JOIN public.plans p ON tr.plan_code = p.plan_code
+            LEFT JOIN public.platform_audit_log pal 
+                   ON pal.tenant_code = tr.tenant_code 
+                  AND pal.created_at >= CURRENT_DATE
+            GROUP BY tr.tenant_code, tr.tenant_name, tr.status, p.plan_name, p.max_queries_day
+            ORDER BY queries_today DESC
+        """)
+        rows = db.execute(query).fetchall()
+        metrics = []
+        for r in rows:
+            metrics.append({
+                "tenant_code": r[0],
+                "tenant_name": r[1],
+                "status": r[2],
+                "plan_name": r[3],
+                "max_queries_day": r[4],
+                "queries_today": r[5],
+                "remaining": max(0, r[4] - r[5])
+            })
+        return {"tenants": metrics}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar métricas dos tenants: {str(e)}")
+    finally:
+        db.close()
