@@ -4,4 +4,6 @@ credentials-file: /root/copilotprotheus/config/556edbaf-17a9-4841-a284-6134f0923
 ingress:
   - hostname: copilot.elitecorp.tec.br
     service: http://localhost:3001
+  - hostname: admin.elitecorp.tec.br
+    service: http://localhost:5174
   - service: http_status:404
