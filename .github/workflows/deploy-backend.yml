@@ -63,7 +63,7 @@ jobs:
           content = open('$f').read()
           # Verifica filtros obrigatórios nas views
           if 'CREATE OR REPLACE VIEW' in content:
-              if "D_E_L_E_T_" not in content and "d_e_l_e_t_" not in content:
+              if \"D_E_L_E_T_\" not in content and \"d_e_l_e_t_\" not in content:
                   print('AVISO: View sem filtro D_E_L_E_T_ em $f')
           print('OK: $f')
           "
@@ -92,36 +92,40 @@ jobs:
         run: |
           ssh-keyscan -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
+      # -------------------------------------------------------------------------
+      # FIX 1: Usar printf em vez de heredoc com aspas simples.
+      # Heredoc << 'ENVCMD' bloqueia a expansão de ${{ secrets.* }} pelo runner.
+      # Com printf, as variáveis são expandidas pelo GitHub Actions ANTES do SSH.
+      # -------------------------------------------------------------------------
       - name: Criar .env na VPS
         run: |
-          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENVCMD'
-            mkdir -p /root/copilotprotheus
-            cat > /root/copilotprotheus/.env << 'ENVEOF'
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          DEBUG=false
-          ENVIRONMENT=production
+          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "mkdir -p /root/copilotprotheus && chmod 700 /root/copilotprotheus"
 
-          # PostgreSQL
-          POSTGRES_HOST=db
-          POSTGRES_PORT=5432
-          POSTGRES_DB=copilotprotheus
-          POSTGRES_USER=copilot
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          DATABASE_URL=postgresql://copilot:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilotprotheus
-
-          # OpenAI
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL=gpt-4o
-
-          # Cloudflare
-          CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-
-          # CORS
-          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-          ENVEOF
-            chmod 600 /root/copilotprotheus/.env
-            echo "✅ .env criado com sucesso"
-          ENVCMD
+          printf '%s\n' \
+            "SECRET_KEY=${{ secrets.SECRET_KEY }}" \
+            "DEBUG=false" \
+            "ENVIRONMENT=production" \
+            "" \
+            "# PostgreSQL" \
+            "POSTGRES_HOST=db" \
+            "POSTGRES_PORT=5432" \
+            "POSTGRES_DB=copilotprotheus" \
+            "POSTGRES_USER=copilot" \
+            "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" \
+            "DATABASE_URL=postgresql://copilot:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilotprotheus" \
+            "" \
+            "# OpenAI" \
+            "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
+            "OPENAI_MODEL=gpt-4o" \
+            "" \
+            "# Cloudflare" \
+            "CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" \
+            "" \
+            "# CORS" \
+            "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}" \
+          | ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cat > /root/copilotprotheus/.env && chmod 600 /root/copilotprotheus/.env && echo '✅ .env criado'"
 
       - name: Sincronizar código para VPS
         run: |
@@ -135,6 +139,12 @@ jobs:
             -e "ssh -p ${{ secrets.VPS_PORT || 22 }}" \
             ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/root/copilotprotheus/
 
+      # -------------------------------------------------------------------------
+      # FIX 2: Copiar cada SQL para dentro do container antes de executar psql.
+      # O redirecionamento < "$sql_file" falha silenciosamente quando o arquivo
+      # está no host e o container não tem acesso ao path do host.
+      # Usando docker cp + psql -f /tmp/migration.sql dentro do container.
+      # -------------------------------------------------------------------------
       - name: Executar deploy e migrations
         run: |
           ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'DEPLOYCMD'
@@ -149,16 +159,31 @@ jobs:
 
             echo "🗃️ Subindo apenas o banco de dados..."
             docker compose up -d db
-            sleep 8
+
+            echo "⏳ Aguardando PostgreSQL aceitar conexões..."
+            for i in $(seq 1 15); do
+              docker compose exec -T db pg_isready -U copilot -d copilotprotheus && break
+              echo "  tentativa $i/15..."
+              sleep 2
+            done
 
             echo "🔄 Executando migrations SQL..."
+            SQL_COUNT=0
             for sql_file in database/migrations/*.sql; do
-              echo "→ Aplicando: $sql_file"
+              [ -f "$sql_file" ] || { echo "⚠️  Nenhum arquivo SQL encontrado em database/migrations/"; break; }
+              SQL_COUNT=$((SQL_COUNT + 1))
+              BASENAME=$(basename "$sql_file")
+              echo "→ Copiando $BASENAME para container..."
+              docker cp "$sql_file" "$(docker compose ps -q db)":/tmp/"$BASENAME"
+              echo "→ Aplicando $BASENAME..."
               docker compose exec -T db psql \
                 -U copilot \
                 -d copilotprotheus \
-                -f /dev/stdin < "$sql_file" || echo "⚠️  Arquivo já aplicado ou erro não crítico: $sql_file"
+                -f /tmp/"$BASENAME" \
+                && echo "  ✅ $BASENAME aplicado" \
+                || echo "  ⚠️  $BASENAME: já aplicado ou erro não crítico"
             done
+            echo "📊 Total de migrations processadas: $SQL_COUNT"
 
             echo "🚀 Subindo todos os serviços..."
             docker compose up -d
