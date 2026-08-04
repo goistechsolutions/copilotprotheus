@@ -23,10 +23,13 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          charts: ['chart.js', 'react-chartjs-2'],
+        // ✅ manualChunks como função (obrigatório no Vite 8 / Rollup 4+)
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) return 'vendor'
+            if (id.includes('react-router-dom')) return 'router'
+            if (id.includes('chart.js') || id.includes('react-chartjs-2')) return 'charts'
+          }
         },
       },
     },
