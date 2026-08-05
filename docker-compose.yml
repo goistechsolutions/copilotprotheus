@@ -60,16 +60,6 @@ services:
       - middleware
     restart: always
 
-  admin-frontend:
-    build:
-      context: ./admin-frontend
-      dockerfile: Dockerfile
-    container_name: copilot-protheus-admin-frontend
-    ports:
-      - "5174:80"
-    depends_on:
-      - backend
-    restart: always
 
   adminer:
     image: adminer:latest
