@@ -575,7 +575,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "t_id": clean_tenant, "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
-        "env": c_env, "app": payload.protheus_webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
+        "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
         "pass": enc_pass, "status": payload.status or "ativa"
     }).first()
 
