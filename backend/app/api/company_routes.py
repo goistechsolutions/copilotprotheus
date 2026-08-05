@@ -403,11 +403,11 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         INSERT INTO "{clean_tenant}".company_info (
             tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
             protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment, protheus_ambientes,
-            webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
+            webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, licenca_uso, auth_mode, status
         ) VALUES (
             :t_id, :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
             :grp, :emp, :und, :fil, :env, :env,
-            :app, :rest, :user, :pass, 'basic', :status
+            :app, :rest, :user, :pass, :lic, 'basic', :status
         ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
             tenant_id = EXCLUDED.tenant_id,
             company_name = EXCLUDED.company_name,
@@ -427,6 +427,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
             protheus_rest_url = EXCLUDED.protheus_rest_url,
             protheus_usuario = EXCLUDED.protheus_usuario,
             encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
+            licenca_uso = EXCLUDED.licenca_uso,
             status = EXCLUDED.status,
             updated_at = NOW()
         RETURNING id, created_at, updated_at;
@@ -437,7 +438,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
         "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
-        "pass": enc_pass, "status": payload.status or "ativa"
+        "pass": enc_pass, "lic": payload.licenca_uso, "status": payload.status or "ativa"
     }).first()
 
     upsert_tenant_registry = text("""
@@ -542,11 +543,11 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         INSERT INTO "{clean_tenant}".company_info (
             tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
             protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment, protheus_ambientes,
-            webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
+            webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, licenca_uso, auth_mode, status
         ) VALUES (
             :t_id, :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
             :grp, :emp, :und, :fil, :env, :env,
-            :app, :rest, :user, :pass, 'basic', :status
+            :app, :rest, :user, :pass, :lic, 'basic', :status
         ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
             tenant_id = COALESCE(EXCLUDED.tenant_id, "{clean_tenant}".company_info.tenant_id),
             company_name = EXCLUDED.company_name,
@@ -566,6 +567,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
             protheus_rest_url = EXCLUDED.protheus_rest_url,
             protheus_usuario = EXCLUDED.protheus_usuario,
             encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
+            licenca_uso = EXCLUDED.licenca_uso,
             status = EXCLUDED.status,
             updated_at = NOW()
         RETURNING id, created_at, updated_at;
@@ -576,7 +578,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
         "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
-        "pass": enc_pass, "status": payload.status or "ativa"
+        "pass": enc_pass, "lic": payload.licenca_uso, "status": payload.status or "ativa"
     }).first()
 
     db.commit()
