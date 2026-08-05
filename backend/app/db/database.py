@@ -632,6 +632,22 @@ def ensure_tenant_tables(db, clean_tenant: str):
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
+        # Aplica patches em schemas já existentes
+        db.execute(text(f"""
+            DO $$$$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = '{clean_tenant}'
+                      AND table_name = 'company_info'
+                      AND column_name = 'encrypted_protheus_pass'
+                ) THEN
+                    ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password;
+                END IF;
+            END $$$$;
+        """))
+
         if _tenant_schema_bootstrap_done(db, clean_tenant):
             db.commit()
             return
@@ -673,19 +689,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url TEXT;
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT;
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20;
-
-            DO $$$$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = '{clean_tenant}'
-                      AND table_name = 'company_info'
-                      AND column_name = 'encrypted_protheus_pass'
-                ) THEN
-                    ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password;
-                END IF;
-            END $$$$;
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,
