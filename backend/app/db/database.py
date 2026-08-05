@@ -690,19 +690,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT;
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20;
 
-            DO $$$$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = '{clean_tenant}'
-                      AND table_name = 'company_info'
-                      AND column_name = 'encrypted_protheus_pass'
-                ) THEN
-                    ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password;
-                END IF;
-            END $$$$;
-
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
