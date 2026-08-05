@@ -676,6 +676,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 protheus_rest_url       TEXT,
                 protheus_usuario        VARCHAR(100),
                 encrypted_protheus_password TEXT,
+                licenca_uso             TEXT,
                 auth_mode               VARCHAR(30) DEFAULT 'basic',
                 status                  VARCHAR(20) DEFAULT 'active',
                 system_prompt           TEXT,
@@ -689,6 +690,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url TEXT;
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT;
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20;
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT;
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,
