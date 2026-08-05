@@ -436,7 +436,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "t_id": clean_tenant, "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
-        "env": c_env, "app": payload.protheus_webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
+        "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
         "pass": enc_pass, "status": payload.status or "ativa"
     }).first()
 
@@ -512,7 +512,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "protheus_ambientes": payload.protheus_ambientes or "producao",
         "protheus_usuario": payload.protheus_usuario,
         "protheus_rest_url": payload.protheus_rest_url,
-        "protheus_webapp_url": payload.protheus_webapp_url,
+        "webapp_url": payload.webapp_url,
         "licenca_uso": payload.licenca_uso,
         "status": payload.status or "ativa",
         "created_at": res[1] if res and res[1] else now,
@@ -598,7 +598,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "protheus_ambientes": payload.protheus_ambientes or comp_info.get("protheus_ambientes", "producao"),
         "protheus_usuario": payload.protheus_usuario or comp_info.get("protheus_usuario"),
         "protheus_rest_url": payload.protheus_rest_url or comp_info.get("protheus_rest_url"),
-        "protheus_webapp_url": payload.protheus_webapp_url or comp_info.get("protheus_webapp_url"),
+        "webapp_url": payload.webapp_url or comp_info.get("webapp_url"),
         "licenca_uso": payload.licenca_uso or comp_info.get("licenca_uso"),
         "status": payload.status or comp_info.get("status", "ativa"),
         "created_at": res[1] if res and res[1] else now,
