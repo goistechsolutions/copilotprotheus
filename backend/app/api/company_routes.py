@@ -40,6 +40,7 @@ from app.services.queryrest_service import queryrest_exec, queryrest_exec_tenant
 from app.services.sync_dictionary_v52 import run_snapshot
 from app.core.config import settings
 from app.core.security import encrypt_password
+from app.services.tenant_resolver import resolve_clean_tenant
 
 logger = logging.getLogger("app.api.company_routes")
 
@@ -214,7 +215,7 @@ def sync_modules_dictionary(
 
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(company.get("tenant_id") or ''))
+    clean_tenant = resolve_clean_tenant(company.get("tenant_id"))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
 
@@ -298,8 +299,8 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
     from app.db.database import ensure_tenant_tables
     
     tenant_code = str(getattr(comp, 'tenant_id', None) or getattr(comp, 'protheus_grupo', None) or getattr(comp, 'company_code', None) or getattr(comp, 'cnpj', None) or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
-    if not clean_tenant or clean_tenant == "public":
+    clean_tenant = resolve_clean_tenant(tenant_code)
+    if clean_tenant == "default":
         return
 
     try:
@@ -383,9 +384,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     except Exception:
         pass
 
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
-    if not clean_tenant or clean_tenant == "public":
-        clean_tenant = "default"
+    clean_tenant = resolve_clean_tenant(tenant_code)
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
@@ -525,7 +524,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
     tenant_code = str(payload.tenant_id or comp_info.get("tenant_id") or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
+    clean_tenant = resolve_clean_tenant(tenant_code)
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
@@ -612,7 +611,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
 def delete_company(company_id: int, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
     tenant_code = str(comp_info.get("tenant_id") or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
+    clean_tenant = resolve_clean_tenant(tenant_code)
     if clean_tenant and clean_tenant != "public":
         try:
             db.execute(text(f'DELETE FROM "{clean_tenant}".company_info WHERE id = :cid'), {"cid": company_id})
@@ -640,7 +639,7 @@ def get_company_billing(company_id: int, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
     total_queries = 0
     tenant_code = str(comp_info.get("tenant_id") or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
+    clean_tenant = resolve_clean_tenant(tenant_code)
     if clean_tenant and clean_tenant != "public":
         try:
             from app.db.database import ensure_tenant_tables

@@ -1,4 +1,5 @@
 import re
+from app.services.tenant_resolver import resolve_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -52,7 +53,7 @@ def list_allowed_tables(
         import re
         from sqlalchemy import text
         from app.db.database import ensure_tenant_tables
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+        clean_tenant = resolve_clean_tenant(tenant_id)
         if clean_tenant and clean_tenant != "public":
             ensure_tenant_tables(db, clean_tenant)
             db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -79,7 +80,7 @@ def allow_table(
         import re
         from sqlalchemy import text
         from app.db.database import ensure_tenant_tables
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(payload.tenant_id))
+        clean_tenant = resolve_clean_tenant(payload.tenant_id)
         if clean_tenant and clean_tenant != "public":
             ensure_tenant_tables(db, clean_tenant)
             db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -129,7 +130,7 @@ def list_dictionary_tables(
         import re
         from sqlalchemy import text
         from app.db.database import ensure_tenant_tables
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+        clean_tenant = resolve_clean_tenant(tenant_id)
         if clean_tenant and clean_tenant != "public":
             ensure_tenant_tables(db, clean_tenant)
             db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -158,7 +159,7 @@ def list_snapshots(
         import re
         from sqlalchemy import text
         from app.db.database import ensure_tenant_tables
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+        clean_tenant = resolve_clean_tenant(tenant_id)
         if clean_tenant and clean_tenant != "public":
             ensure_tenant_tables(db, clean_tenant)
             db.execute(text(f'SET search_path TO "{clean_tenant}", public'))

@@ -2,6 +2,7 @@ import time
 import re
 import logging
 from typing import Dict, Any, List
+from app.services.tenant_resolver import resolve_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -124,7 +125,7 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     import re
     from sqlalchemy import text
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+    clean_tenant = resolve_clean_tenant(tenant_id)
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))

@@ -13,6 +13,7 @@ Seguranca:
   - ADMIN_USER / ADMIN_PASSWORD via env.
 """
 import re
+from app.services.tenant_resolver import resolve_clean_tenant as secure_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
@@ -334,7 +335,7 @@ def update_tables(
     """Atualiza tabelas permitidas no modelo V4 (tenant_allowed_tables)."""
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -574,7 +575,7 @@ async def sync_schema(
 
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+    clean_tenant = secure_clean_tenant(str(tenant_id))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -758,9 +759,7 @@ async def sync_schema(
             raise Exception("Nenhuma tabela retornada pelo Protheus.")
 
         # Persiste em "{clean_tenant}".tenant_schemas (cache legivel no schema do tenant)
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
-        if not clean_tenant or clean_tenant == "public" or clean_tenant.isdigit():
-            clean_tenant = "default"
+        clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
 
         ensure_tenant_tables(db, clean_tenant)
 
@@ -806,9 +805,7 @@ def get_schemas(
     admin: str    = Depends(verify_admin),
 ):
     import re
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
-    if not clean_tenant or clean_tenant == "public":
-        clean_tenant = "default"
+    clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
 
     ensure_tenant_tables(db, clean_tenant)
 
@@ -1170,7 +1167,7 @@ def get_query_audit(
     if tenant_id:
         import re
         from sqlalchemy import text
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id)
+        clean_tenant = secure_clean_tenant(tenant_id)
         if clean_tenant and clean_tenant != "public":
             try:
                 sql = text(f'SELECT id, user_email, question, generated_sql, response_time_ms, created_at FROM "{clean_tenant}".query_audit ORDER BY created_at DESC LIMIT :lim OFFSET :skp')
