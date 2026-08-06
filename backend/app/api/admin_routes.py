@@ -623,6 +623,31 @@ async def sync_schema(
     except Exception as e_sys:
         logger.warning(f"Aviso ao atualizar protheus_modules_master via QueryRest: {e_sys}")
 
+    try:
+        if db.query(ProtheusModuleMaster).count() == 0:
+            logger.info("Populando protheus_modules_master com módulos padrão (fallback)...")
+            default_mods = {
+                1: ("SIGAFAT", "Faturamento"),
+                2: ("SIGACOM", "Compras"),
+                4: ("SIGAEST", "Estoque/Custos"),
+                5: ("SIGAPON", "Ponto"),
+                6: ("SIGAFIN", "Financeiro"),
+                7: ("SIGAFPA", "Folha de Pagamento"),
+                9: ("SIGAFIS", "Livros Fiscais"),
+                10: ("SIGAPLS", "Plano de Saúde"),
+                12: ("SIGALOJA", "Controle de Lojas"),
+                34: ("SIGAJURI", "Jurídico"),
+                35: ("SIGAPMS", "Projetos"),
+                43: ("SIGATMS", "TMS"),
+                84: ("SIGAFRO", "Frotas")
+            }
+            for m_code, (m_sigla, m_nome) in default_mods.items():
+                db.add(ProtheusModuleMaster(mod_code=m_code, mod_sigla=m_sigla, mod_name=m_nome, active=True))
+            db.commit()
+    except Exception as fallback_e:
+        logger.error(f"Erro ao inserir fallback de módulos: {fallback_e}")
+        db.rollback()
+
     master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
     for m in master_rows:
