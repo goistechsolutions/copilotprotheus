@@ -241,7 +241,7 @@ def replace_company_modules(
             if not item.enabled:
                 continue
             m_code = item.module_code.strip().upper()
-            m_name = (item.module_name or m_code).strip()
+            m_name = (getattr(item, "module_name", None) or m_code).strip()
             
             db.execute(
                 text(f"""

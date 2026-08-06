@@ -141,10 +141,11 @@ async def get_available_modules(
     seen = set()
 
     for row in rows:
-        module_code = str(row.get("USR_MODULO") or row.get("USR_CODMOD") or "").strip().upper()
-        module_name = str(row.get("USR_MODULO") or "").strip()
+        # USR_CODMOD = código do módulo (ex: FAT, FIN); USR_MODULO = número sequencial ou descrição
+        module_code = str(row.get("USR_CODMOD") or row.get("USR_MODULO") or "").strip().upper()
+        module_name = str(row.get("USR_MODULO") or module_code).strip()
 
-        if not module_code or not module_name:
+        if not module_code:
             continue
 
         if module_code in seen:
