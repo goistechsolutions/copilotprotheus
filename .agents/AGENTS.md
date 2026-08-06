@@ -58,3 +58,15 @@
 ## 8. Infraestrutura e Deploy (Ambiente Cloud)
 - **Proibido Implementação Local**: O projeto é um servidor multiempresa centralizado em Cloud. **Nunca** assuma, proponha ou realize implementações focadas em servidores locais de teste (`localhost`). 
 - A infraestrutura alvo para os deploys é a **Hetzner** (Backend/APIs e serviços Docker) e a **Cloudflare** (Frontend/Deploy automático e roteamento/túneis).
+
+---
+
+## 9. Repositório Alvo — Regra Crítica de Desenvolvimento
+
+> [!CAUTION]
+> **SEMPRE** realizar todas as alterações de código nos arquivos do repositório local do projeto, no worktree:
+> `C:\Users\muril\.gemini\antigravity\worktrees\copilotprotheus\implement_multi_tenant_schema\`
+
+- Este worktree está vinculado ao repositório oficial no GitHub: **[goistechsolutions/copilotprotheus](https://github.com/goistechsolutions/copilotprotheus)** — branch `implement_multi_tenant_schema`
+- Após **cada alteração de arquivo**, obrigatoriamente executar `git commit` seguido de `git push origin implement_multi_tenant_schema`.
+- **Nunca** editar arquivos fora deste worktree. **Nunca** deixar alterações sem commit e push.
