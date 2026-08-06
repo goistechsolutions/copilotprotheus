@@ -99,7 +99,7 @@ async def get_available_modules(
 ):
     company = get_company_or_404(db, company_id)
 
-    sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
+    sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD, USR_NOME FROM SYS_USR_MODULE ORDER BY USR_MODULO"
 
     try:
         if company.get("protheus_rest_url") and company.get("protheus_usuario") and company.get("encrypted_protheus_password"):
@@ -141,9 +141,9 @@ async def get_available_modules(
     seen = set()
 
     for row in rows:
-        # USR_CODMOD = código do módulo (ex: FAT, FIN); USR_MODULO = número sequencial ou descrição
-        module_code = str(row.get("USR_CODMOD") or row.get("USR_MODULO") or "").strip().upper()
-        module_name = str(row.get("USR_MODULO") or module_code).strip()
+        # USR_MODULO = número sequencial; USR_CODMOD = sigla (SIGAFAT, SIGAFIN...); USR_NOME = descrição
+        module_code = str(row.get("USR_CODMOD") or "").strip().upper()
+        module_name = str(row.get("USR_NOME") or row.get("USR_CODMOD") or "").strip()
 
         if not module_code:
             continue
