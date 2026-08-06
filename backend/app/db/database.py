@@ -681,6 +681,26 @@ def ensure_tenant_tables(db, clean_tenant: str):
         """))
         db.commit()
 
+        # ── Patch 3: Drop legacy V4 tables to allow recreation with V5 schema ──
+        db.execute(text(f"""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{clean_tenant}' AND table_name = 'protheus_modules' AND column_name = 'modulo'
+                ) THEN
+                    DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules CASCADE;
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{clean_tenant}' AND table_name = 'tenant_schemas' AND column_name = 'modulo'
+                ) THEN
+                    DROP TABLE IF EXISTS "{clean_tenant}".tenant_schemas CASCADE;
+                END IF;
+            END $$;
+        """))
+        db.commit()
+
         if _tenant_schema_bootstrap_done(db, clean_tenant):
             return
 
@@ -725,44 +745,45 @@ def ensure_tenant_tables(db, clean_tenant: str):
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT;
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
-                id SERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_code VARCHAR(60),
-                modulo VARCHAR(50) NOT NULL,
-                codmod VARCHAR(50) NOT NULL,
-                usr_modulo VARCHAR(50),
-                usr_codmod VARCHAR(50),
-                usr_nome VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                id          BIGSERIAL    PRIMARY KEY,
+                tenant_id   VARCHAR(100) NOT NULL,
+                mod_code    INTEGER      NOT NULL,
+                mod_sigla   VARCHAR(30)  NOT NULL,
+                mod_name    VARCHAR(150) NOT NULL,
+                active      BOOLEAN      NOT NULL DEFAULT TRUE,
+                created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                UNIQUE(tenant_id, mod_code)
             );
-            ALTER TABLE "{clean_tenant}".protheus_modules ADD COLUMN IF NOT EXISTS modulo VARCHAR(50);
-            ALTER TABLE "{clean_tenant}".protheus_modules ADD COLUMN IF NOT EXISTS codmod VARCHAR(50);
-            UPDATE "{clean_tenant}".protheus_modules SET modulo = usr_modulo WHERE modulo IS NULL AND usr_modulo IS NOT NULL;
-            UPDATE "{clean_tenant}".protheus_modules SET codmod = usr_codmod WHERE codmod IS NULL AND usr_codmod IS NOT NULL;
 
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_tenant ON "{clean_tenant}".protheus_modules (tenant_id);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_modulo ON "{clean_tenant}".protheus_modules (modulo);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_codmod ON "{clean_tenant}".protheus_modules (codmod);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_code  ON "{clean_tenant}".protheus_modules (mod_code);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_sigla ON "{clean_tenant}".protheus_modules (mod_sigla);
         """))
 
         # 2. tenant_schemas
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (
-                id SERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                modulo VARCHAR(50) NOT NULL,
-                codmod VARCHAR(50),
-                chave VARCHAR(10) NOT NULL,
-                tabela VARCHAR(50),
-                nome VARCHAR(255),
-                schema_json JSONB NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                id                  BIGSERIAL    PRIMARY KEY,
+                tenant_id           VARCHAR(100) NOT NULL,
+                mod_code            INTEGER      NOT NULL,
+                mod_sigla           VARCHAR(30)  NOT NULL,
+                chave               VARCHAR(10)  NOT NULL,
+                tabela              VARCHAR(20),
+                nome                VARCHAR(120),
+                campo               VARCHAR(15)  NOT NULL,
+                campo_titulo        VARCHAR(80),
+                campo_tipo          VARCHAR(5),
+                campo_tamanho       INTEGER,
+                campo_decimal       INTEGER      DEFAULT 0,
+                campo_obrigatorio   BOOLEAN      DEFAULT FALSE,
+                campo_usado         BOOLEAN      DEFAULT TRUE,
+                campo_descricao     TEXT,
+                is_customizado      BOOLEAN      DEFAULT FALSE,
+                ordem               INTEGER      DEFAULT 0,
+                schema_json         JSONB,
+                created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                updated_at          TIMESTAMPTZ
             );
-            ALTER TABLE "{clean_tenant}".tenant_schemas ADD COLUMN IF NOT EXISTS codmod VARCHAR(50);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_tenant ON "{clean_tenant}".tenant_schemas (tenant_id);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_modulo ON "{clean_tenant}".tenant_schemas (modulo);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_codmod ON "{clean_tenant}".tenant_schemas (codmod);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_mod_code ON "{clean_tenant}".tenant_schemas (mod_code);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_chave ON "{clean_tenant}".tenant_schemas (chave);
         """))
 
