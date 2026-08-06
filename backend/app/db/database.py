@@ -247,22 +247,18 @@ def ensure_public_tables(db, force: bool = False):
         """,
         """
         CREATE TABLE IF NOT EXISTS public.protheus_modules_master (
-            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            mod_code    VARCHAR(30) UNIQUE,
-            module_code VARCHAR(30) UNIQUE,
-            mod_name    VARCHAR(150),
-            module_name VARCHAR(150),
+            id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+            mod_code    INTEGER      NOT NULL,
+            mod_sigla   VARCHAR(30)  UNIQUE,
+            mod_name    VARCHAR(150) NOT NULL,
             description TEXT,
-            source_name VARCHAR(60) NOT NULL DEFAULT 'SYS_USR_MODULE',
-            active      BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            updated_at  TIMESTAMP WITH TIME ZONE
+            active      BOOLEAN      NOT NULL DEFAULT TRUE,
+            created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            updated_at  TIMESTAMPTZ,
+            UNIQUE(mod_code)
         );
-        UPDATE public.protheus_modules_master SET mod_code    = module_code WHERE mod_code    IS NULL AND module_code IS NOT NULL;
-        UPDATE public.protheus_modules_master SET mod_name    = module_name WHERE mod_name    IS NULL AND module_name IS NOT NULL;
-        UPDATE public.protheus_modules_master SET module_code = mod_code    WHERE module_code IS NULL AND mod_code    IS NOT NULL;
-        UPDATE public.protheus_modules_master SET module_name = mod_name    WHERE module_name IS NULL AND mod_name    IS NOT NULL;
-        DELETE FROM public.protheus_modules_master WHERE source_name = 'fallback_hardcoded';
+        CREATE INDEX IF NOT EXISTS idx_pmm_code   ON public.protheus_modules_master(mod_code);
+        CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(mod_sigla);
         """,
         """
         CREATE TABLE IF NOT EXISTS public.users (

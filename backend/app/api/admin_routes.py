@@ -499,26 +499,27 @@ async def sync_modules(
         count = 0
         for row in result_data:
             c_mod = _val(row, "CODIGO_MODULO") or _val(row, "USR_MODULO")
-            c_tab = _val(row, "CODIGO_TABELA") or _val(row, "USR_CODMOD")
-            n_mod = _val(row, "NOME_MODULO")
-            if not c_mod:
+            c_sigla = _val(row, "CODIGO_TABELA") or _val(row, "USR_CODMOD")
+            n_mod = _val(row, "NOME_MODULO") or _val(row, "USR_NOME")
+            
+            if not c_mod or not str(c_mod).isdigit():
                 continue
+                
+            c_mod_int = int(c_mod)
 
             existing = db.query(ProtheusModuleMaster).filter(
-                (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
+                ProtheusModuleMaster.mod_code == c_mod_int
             ).first()
 
             if existing:
-                existing.module_code = c_mod
-                existing.module_name = c_tab or existing.module_name
-                existing.description = n_mod or existing.description
+                existing.mod_sigla = c_sigla or existing.mod_sigla
+                existing.mod_name = n_mod or existing.mod_name
                 existing.active      = True
             else:
                 db.add(ProtheusModuleMaster(
-                    module_code=c_mod,
-                    module_name=c_tab or c_mod,
-                    description=n_mod,
-                    source_name="SYS_USR_MODULE",
+                    mod_code=c_mod_int,
+                    mod_sigla=c_sigla,
+                    mod_name=n_mod or c_sigla,
                     active=True
                 ))
             count += 1
@@ -541,15 +542,15 @@ def get_protheus_modules(
     modules = (
         db.query(ProtheusModuleMaster)
         .filter(ProtheusModuleMaster.active == True)
-        .order_by(ProtheusModuleMaster.module_code)
+        .order_by(ProtheusModuleMaster.mod_code)
         .all()
     )
     return {
         "modules": [
             {
-                "module_code": m.module_code,
-                "module_name": m.module_name,
-                "description": m.description or m.module_name or m.module_code
+                "module_code": m.mod_sigla,
+                "module_name": m.mod_name,
+                "description": m.description or ""
             }
             for m in modules
         ]
@@ -598,23 +599,24 @@ async def sync_schema(
             for r in sys_rows:
                 if not isinstance(r, dict): continue
                 c_mod = str(r.get("CODIGO_MODULO") or r.get("USR_MODULO") or "").strip()
-                c_tab = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
-                n_mod = str(r.get("NOME_MODULO") or "").strip()
-                if not c_mod: continue
+                c_sigla = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
+                n_mod = str(r.get("NOME_MODULO") or r.get("USR_NOME") or "").strip()
+                
+                if not c_mod or not c_mod.isdigit(): continue
+                c_mod_int = int(c_mod)
+                
                 existing = db.query(ProtheusModuleMaster).filter(
-                    (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
+                    ProtheusModuleMaster.mod_code == c_mod_int
                 ).first()
                 if existing:
-                    existing.module_code = c_mod
-                    existing.module_name = c_tab or existing.module_name
-                    existing.description = n_mod or existing.description
+                    existing.mod_sigla = c_sigla or existing.mod_sigla
+                    existing.mod_name = n_mod or existing.mod_name
                     existing.active      = True
                 else:
                     db.add(ProtheusModuleMaster(
-                        module_code=c_mod,
-                        module_name=c_tab or c_mod,
-                        description=n_mod,
-                        source_name="SYS_USR_MODULE",
+                        mod_code=c_mod_int,
+                        mod_sigla=c_sigla,
+                        mod_name=n_mod or c_sigla,
                         active=True
                     ))
             db.commit()
@@ -624,15 +626,16 @@ async def sync_schema(
     master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
     for m in master_rows:
-        m_code = (m.module_code or "").strip()
-        m_desc = (m.description or m.module_name or m_code).strip()
+        m_code = str(m.mod_code)
+        m_sigla = (m.mod_sigla or "").strip().upper()
+        m_desc = (m.mod_name or m_sigla).strip().upper()
 
         is_selected = False
         if not clean_modulos:
             is_selected = True
         else:
             for cm in clean_modulos:
-                if cm == m_code.upper() or cm in m_desc.upper() or cm in (m.module_name or "").upper():
+                if cm == m_sigla or cm in m_desc:
                     is_selected = True
                     break
 

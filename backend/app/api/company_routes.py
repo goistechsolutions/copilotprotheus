@@ -99,6 +99,24 @@ async def get_available_modules(
 ):
     company = get_company_or_404(db, company_id)
 
+    # 1. Tenta carregar do catálogo master primeiro (V5)
+    master_mods = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
+    if master_mods and len(master_mods) > 0:
+        return {
+            "status": "success",
+            "tenant_id": company.get("tenant_id", "default"),
+            "company_id": str(company_id),
+            "items": [
+                {
+                    "module_code": m.mod_sigla,
+                    "module_name": m.mod_name or m.mod_sigla,
+                    "description": m.description or ""
+                }
+                for m in master_mods if m.mod_sigla
+            ]
+        }
+
+    # 2. Fallback: Se estiver vazio, busca no ERP
     sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD, USR_NOME FROM SYS_USR_MODULE ORDER BY USR_MODULO"
 
     try:
@@ -117,24 +135,10 @@ async def get_available_modules(
                 query=sql
             )
     except Exception as e:
-        logger.warning(f"Aviso ao consultar módulos no Protheus REST ({company_id}): {e}. Retornando módulos do catálogo master.")
-        master_mods = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
-        if master_mods:
-            return {
-                "tenant_id": company.get("tenant_id", "default"),
-                "company_id": str(company_id),
-                "items": [
-                    {
-                        "module_code": m.module_code,
-                        "module_name": m.module_name or m.module_code,
-                        "description": m.description or ""
-                    }
-                    for m in master_mods
-                ]
-            }
+        logger.warning(f"Aviso ao consultar módulos no Protheus REST ({company_id}): {e}")
         raise HTTPException(
             status_code=502,
-            detail=f"Falha ao consultar módulos disponíveis no Protheus: {str(e)}"
+            detail=f"Catálogo mestre vazio e falha ao consultar módulos no Protheus: {str(e)}"
         )
 
     items = []
@@ -145,10 +149,7 @@ async def get_available_modules(
         module_code = str(row.get("USR_CODMOD") or "").strip().upper()
         module_name = str(row.get("USR_NOME") or row.get("USR_CODMOD") or "").strip()
 
-        if not module_code:
-            continue
-
-        if module_code in seen:
+        if not module_code or module_code in seen:
             continue
 
         seen.add(module_code)
