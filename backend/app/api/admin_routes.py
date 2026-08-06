@@ -784,24 +784,29 @@ async def sync_schema(
 
         for clean_mod in clean_modulos:
             db.execute(
-                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE modulo = :m OR codmod = :m'),
+                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE mod_sigla = :m OR CAST(mod_code AS TEXT) = :m'),
                 {"m": clean_mod}
             )
 
         for chave, meta in schema_dict.items():
+            mod_val = meta.get("x2_modulo", "")
+            mod_int = int(mod_val) if mod_val.isdigit() else 0
+            mod_sigla = meta.get("codmod") or mod_val
+            
             db.execute(
                 text(f"""
-                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, codmod, chave, tabela, nome, schema_json, updated_at)
-                    VALUES (:t, :m, :cm, :c, :tbl, :n, :j, NOW())
+                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, mod_code, mod_sigla, campo, chave, tabela, nome, schema_json, updated_at)
+                    VALUES (:t, :mc, :ms, :cmp, :c, :tbl, :n, :j, NOW())
                 """),
                 {
                     "t": clean_tenant,
-                    "m": meta["x2_modulo"],
-                    "cm": meta["codmod"],
+                    "mc": mod_int,
+                    "ms": mod_sigla,
+                    "cmp": "*",
                     "c": chave,
-                    "tbl": meta["tabela"],
-                    "n": meta["nome"],
-                    "j": json.dumps(meta)
+                    "tbl": meta.get("tabela", ""),
+                    "n": meta.get("nome", ""),
+                    "j": json.dumps(meta, ensure_ascii=False)
                 }
             )
         db.commit()
@@ -830,7 +835,7 @@ def get_schemas(
 
     try:
         rows = db.execute(
-            text(f'SELECT id, mod_code, mod_sigla, mod_name, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
+            text(f'SELECT id, mod_code, mod_sigla, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
         ).mappings().all()
 
         schemas_list = []
