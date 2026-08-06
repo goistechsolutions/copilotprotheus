@@ -398,20 +398,6 @@ def ensure_public_tables(db, force: bool = False):
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_contracts_contract_code ON public.tenant_contracts (contract_code);
         CREATE INDEX IF NOT EXISTS idx_tenant_contracts_tenant_id ON public.tenant_contracts (tenant_id);
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                  FROM information_schema.table_constraints
-                 WHERE table_schema = 'public'
-                   AND table_name = 'tenant_contracts'
-                   AND constraint_name = 'fk_tenant_contracts_plan'
-            ) THEN
-                ALTER TABLE public.tenant_contracts
-                  ADD CONSTRAINT fk_tenant_contracts_plan
-                  FOREIGN KEY (plan_id) REFERENCES public.license_plans(id);
-            END IF;
-        END $$;
         """,
         """
         CREATE TABLE IF NOT EXISTS public.query_usage_counters (
@@ -449,20 +435,6 @@ def ensure_public_tables(db, force: bool = False):
             created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_tenant_module_contracts_tenant_id ON public.tenant_module_contracts (tenant_id);
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                  FROM information_schema.table_constraints
-                 WHERE table_schema = 'public'
-                   AND table_name = 'tenant_module_contracts'
-                   AND constraint_name = 'fk_tenant_module_contracts_module'
-            ) THEN
-                ALTER TABLE public.tenant_module_contracts
-                  ADD CONSTRAINT fk_tenant_module_contracts_module
-                  FOREIGN KEY (module_id) REFERENCES public.protheus_modules_master(id);
-            END IF;
-        END $$;
         """,
         """
         CREATE TABLE IF NOT EXISTS public.audit_logs (
@@ -546,6 +518,39 @@ def ensure_public_tables(db, force: bool = False):
 
     try:
         _run_public_ddl(db, public_queries)
+
+        # FK: tenant_contracts -> license_plans (adicionada via Python para evitar DO $$ no SQLAlchemy)
+        fk1 = db.execute(text("""
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public' AND table_name = 'tenant_contracts'
+              AND constraint_name = 'fk_tenant_contracts_plan'
+        """)).first()
+        if not fk1:
+            try:
+                db.execute(text("""
+                    ALTER TABLE public.tenant_contracts
+                    ADD CONSTRAINT fk_tenant_contracts_plan
+                    FOREIGN KEY (plan_id) REFERENCES public.license_plans(id)
+                """))
+            except Exception:
+                pass  # constraint pode já existir em race condition
+
+        # FK: tenant_module_contracts -> protheus_modules_master
+        fk2 = db.execute(text("""
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public' AND table_name = 'tenant_module_contracts'
+              AND constraint_name = 'fk_tenant_module_contracts_module'
+        """)).first()
+        if not fk2:
+            try:
+                db.execute(text("""
+                    ALTER TABLE public.tenant_module_contracts
+                    ADD CONSTRAINT fk_tenant_module_contracts_module
+                    FOREIGN KEY (module_id) REFERENCES public.protheus_modules_master(id)
+                """))
+            except Exception:
+                pass  # constraint pode já existir em race condition
+
         _mark_public_bootstrap_done(db)
         _safe_commit(db)
         PUBLIC_BOOTSTRAP_DONE = True
@@ -633,20 +638,31 @@ def ensure_tenant_tables(db, clean_tenant: str):
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
         # ── Patch 1: rename encrypted_protheus_pass → encrypted_protheus_password ──
-        db.execute(text(f"""
-            DO $$$$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = '{clean_tenant}'
-                      AND table_name = 'company_info'
-                      AND column_name = 'encrypted_protheus_pass'
-                ) THEN
-                    ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password;
-                END IF;
-            END $$$$;
-        """))
+        col_exists = db.execute(text("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = :schema
+              AND table_name = 'company_info'
+              AND column_name = 'encrypted_protheus_pass'
+        """), {"schema": clean_tenant}).first()
+        if col_exists:
+            db.execute(text(f'ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password'))
+
+        # ── Patch 2: adiciona colunas introduzidas após bootstrap inicial ──
+        tbl_exists = db.execute(text("""
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = :schema AND table_name = 'company_info'
+        """), {"schema": clean_tenant}).first()
+        if tbl_exists:
+            for col_sql in [
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT \'producao\'',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url TEXT',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT',
+            ]:
+                db.execute(text(col_sql))
+        db.commit()
 
         # ── Patch 2: add columns introduzidas após o bootstrap inicial ──
         db.execute(text(f"""
