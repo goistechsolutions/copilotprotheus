@@ -398,20 +398,6 @@ def ensure_public_tables(db, force: bool = False):
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_contracts_contract_code ON public.tenant_contracts (contract_code);
         CREATE INDEX IF NOT EXISTS idx_tenant_contracts_tenant_id ON public.tenant_contracts (tenant_id);
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                  FROM information_schema.table_constraints
-                 WHERE table_schema = 'public'
-                   AND table_name = 'tenant_contracts'
-                   AND constraint_name = 'fk_tenant_contracts_plan'
-            ) THEN
-                ALTER TABLE public.tenant_contracts
-                  ADD CONSTRAINT fk_tenant_contracts_plan
-                  FOREIGN KEY (plan_id) REFERENCES public.license_plans(id);
-            END IF;
-        END $$;
         """,
         """
         CREATE TABLE IF NOT EXISTS public.query_usage_counters (
@@ -449,20 +435,6 @@ def ensure_public_tables(db, force: bool = False):
             created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_tenant_module_contracts_tenant_id ON public.tenant_module_contracts (tenant_id);
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                  FROM information_schema.table_constraints
-                 WHERE table_schema = 'public'
-                   AND table_name = 'tenant_module_contracts'
-                   AND constraint_name = 'fk_tenant_module_contracts_module'
-            ) THEN
-                ALTER TABLE public.tenant_module_contracts
-                  ADD CONSTRAINT fk_tenant_module_contracts_module
-                  FOREIGN KEY (module_id) REFERENCES public.protheus_modules_master(id);
-            END IF;
-        END $$;
         """,
         """
         CREATE TABLE IF NOT EXISTS public.audit_logs (
@@ -546,6 +518,39 @@ def ensure_public_tables(db, force: bool = False):
 
     try:
         _run_public_ddl(db, public_queries)
+
+        # FK: tenant_contracts -> license_plans (adicionada via Python para evitar DO $$ no SQLAlchemy)
+        fk1 = db.execute(text("""
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public' AND table_name = 'tenant_contracts'
+              AND constraint_name = 'fk_tenant_contracts_plan'
+        """)).first()
+        if not fk1:
+            try:
+                db.execute(text("""
+                    ALTER TABLE public.tenant_contracts
+                    ADD CONSTRAINT fk_tenant_contracts_plan
+                    FOREIGN KEY (plan_id) REFERENCES public.license_plans(id)
+                """))
+            except Exception:
+                pass  # constraint pode já existir em race condition
+
+        # FK: tenant_module_contracts -> protheus_modules_master
+        fk2 = db.execute(text("""
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public' AND table_name = 'tenant_module_contracts'
+              AND constraint_name = 'fk_tenant_module_contracts_module'
+        """)).first()
+        if not fk2:
+            try:
+                db.execute(text("""
+                    ALTER TABLE public.tenant_module_contracts
+                    ADD CONSTRAINT fk_tenant_module_contracts_module
+                    FOREIGN KEY (module_id) REFERENCES public.protheus_modules_master(id)
+                """))
+            except Exception:
+                pass  # constraint pode já existir em race condition
+
         _mark_public_bootstrap_done(db)
         _safe_commit(db)
         PUBLIC_BOOTSTRAP_DONE = True
