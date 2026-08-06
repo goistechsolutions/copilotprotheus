@@ -67,7 +67,7 @@ def verify_admin(
     # 1. Autenticação via Cookie JWT de sessão do Admin Panel
     if admin_token:
         try:
-            jwt_secret = os.getenv("ADMIN_JWT_SECRET") or os.getenv("JWT_SECRET", "elitecorp-admin-secret-change-in-prod")
+            jwt_secret = os.getenv("ADMIN_JWT_SECRET") or "elitecorp-admin-secret-change-in-prod"
             payload = jwt.decode(admin_token, jwt_secret, algorithms=["HS256"])
             if payload.get("sub") == "admin":
                 return "admin"
@@ -85,7 +85,7 @@ def verify_admin(
 
     # 3. Autenticação via Header (x-admin-key / x-api-key)
     admin_key_header = request.headers.get("x-admin-key") or request.headers.get("x-api-key")
-    expected_secret = os.getenv("ADMIN_JWT_SECRET") or os.getenv("JWT_SECRET", "elitecorp-admin-secret-change-in-prod")
+    expected_secret = os.getenv("ADMIN_JWT_SECRET") or "elitecorp-admin-secret-change-in-prod"
     if admin_key_header and (admin_key_header == expected_secret or admin_key_header == admin_pass or admin_key_header == "admin123"):
         return "admin"
 

@@ -56,7 +56,7 @@ def verify_admin_key(
     # 1. Permite acesso direto para sessões autenticadas no Painel Admin (cookie JWT)
     if admin_token:
         try:
-            jwt_secret = os.getenv("ADMIN_JWT_SECRET") or os.getenv("JWT_SECRET", "elitecorp-admin-secret-change-in-prod")
+            jwt_secret = os.getenv("ADMIN_JWT_SECRET") or "elitecorp-admin-secret-change-in-prod"
             payload = jwt.decode(admin_token, jwt_secret, algorithms=["HS256"])
             if payload.get("sub") == "admin":
                 return "admin"
