@@ -130,6 +130,10 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
 
+    # 0. Valida cota e limite diário do tenant (HTTP 429 se excedido)
+    from app.core.rate_limit import check_tenant_rate_limit
+    rate_info = check_tenant_rate_limit(db, clean_tenant)
+
     # 1. Montar e validar contexto XFILIAL
     op_context = build_protheus_context(empresa=empresa, filial=filial)
 

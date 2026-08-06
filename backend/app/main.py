@@ -106,8 +106,27 @@ async def enforce_https_scheme_middleware(request, call_next):
     response = await call_next(request)
     return response
 
-# Lê as origens do CORS a partir da env var, padrão é '*'
-allowed_origins = os.getenv("CORS_ORIGIN", "*").split(",")
+# Configuração de CORS com suporte a domínios do Cloudflare e ambiente local
+cors_origins_env = os.getenv("CORS_ORIGIN", "*")
+if cors_origins_env == "*":
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+
+cloudflare_origins = [
+    "https://copilot.elitecorp.tec.br",
+    "https://copilot-api.elitecorp.tec.br",
+    "https://copilot-admin.elitecorp.tec.br",
+    "https://copilotprotheus.pages.dev",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:8000"
+]
+for o in cloudflare_origins:
+    if o not in allowed_origins and "*" not in allowed_origins:
+        allowed_origins.append(o)
 
 app.add_middleware(
     CORSMiddleware,
@@ -240,11 +259,18 @@ async def global_exception_handler(request, exc):
         content={"detail": "Erro interno do servidor. Por favor, tente novamente mais tarde."}
     )
 
+@app.get("/admin")
+def redirect_admin_no_slash():
+    return RedirectResponse(url="/admin/")
+
 from fastapi.responses import RedirectResponse
 
 @app.get("/")
-def read_root():
-    return RedirectResponse(url="/api/launch")
+def read_root(request: Request):
+    host = request.headers.get("host", "").lower()
+    if "copilot-admin" in host or "admin" in host:
+        return RedirectResponse(url="/admin/")
+    return RedirectResponse(url="/admin/")
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):

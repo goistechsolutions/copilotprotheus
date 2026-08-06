@@ -60,16 +60,6 @@ services:
       - middleware
     restart: always
 
-  admin-frontend:
-    build:
-      context: ./admin-frontend
-      dockerfile: Dockerfile
-    container_name: copilot-protheus-admin-frontend
-    ports:
-      - "5174:80"
-    depends_on:
-      - backend
-    restart: always
 
   adminer:
     image: adminer:latest
@@ -87,16 +77,17 @@ services:
       - db
     restart: always
 
+  # Cloudflare Tunnel
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: copilot-protheus-cloudflared
-    env_file:
-      - ./.env
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    network_mode: "host"
     restart: always
+    command: tunnel --no-autoupdate run --token "eyJhIjoiNmMzNjg4YjE5ZjNiN2E3NGE0ZTVlNjE0NWFjMTU1OTMiLCJ0IjoiNDVhMTIxYTItZjUyMi00YmJmLTgxNzctOTQ3YjAwYTZlMmE5IiwicyI6IlpHTmlOV1psWVRndE5qUmlOQzAwWTJJMExUZ3paRFV0TmpNell6Tm1Namt4TVdZMiJ9"
     depends_on:
       - frontend
       - backend
+      - middleware
 
 volumes:
   pgdata:

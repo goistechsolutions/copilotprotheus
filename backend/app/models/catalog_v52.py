@@ -9,6 +9,7 @@ from app.db.database import Base
 
 class TenantDictionarySource(Base):
     __tablename__ = "tenant_dictionary_sources"
+    __table_args__ = {'extend_existing': True}
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
     company_id = Column(String(100), nullable=True, index=True)
@@ -26,6 +27,7 @@ class DictionaryTable(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id","environment_id","snapshot_code","table_name", name="uq_dictionary_tables"),
         Index("idx_dictionary_tables_lookup","tenant_id","environment_id","table_name"),
+        {'extend_existing': True}
     )
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -47,6 +49,7 @@ class DictionaryField(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id","environment_id","snapshot_code","table_name","field_name", name="uq_dictionary_fields"),
         Index("idx_dictionary_fields_lookup","tenant_id","environment_id","table_name","field_name"),
+        {'extend_existing': True}
     )
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -74,6 +77,7 @@ class DictionaryIndex(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id","environment_id","snapshot_code","table_name","index_order", name="uq_dictionary_indexes"),
         Index("idx_dictionary_indexes_lookup","tenant_id","environment_id","table_name"),
+        {'extend_existing': True}
     )
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -91,6 +95,7 @@ class DictionaryGroup(Base):
     __tablename__ = "dictionary_groups"
     __table_args__ = (
         UniqueConstraint("tenant_id","environment_id","snapshot_code","group_name", name="uq_dictionary_groups"),
+        {'extend_existing': True}
     )
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -107,6 +112,7 @@ class TenantTablePermission(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id","environment_id","role_id","table_name", name="uq_tenant_table_permissions"),
         Index("idx_perm_table_lookup","tenant_id","environment_id","role_id","table_name"),
+        {'extend_existing': True}
     )
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -126,6 +132,7 @@ class TenantFieldPermission(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id","environment_id","role_id","table_name","field_name", name="uq_tenant_field_permissions"),
         Index("idx_perm_field_lookup","tenant_id","environment_id","role_id","table_name","field_name"),
+        {'extend_existing': True}
     )
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)

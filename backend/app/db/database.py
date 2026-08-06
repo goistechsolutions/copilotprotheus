@@ -632,8 +632,42 @@ def ensure_tenant_tables(db, clean_tenant: str):
         db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{clean_tenant}"'))
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
+        # ── Patch 1: rename encrypted_protheus_pass → encrypted_protheus_password ──
+        db.execute(text(f"""
+            DO $$$$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = '{clean_tenant}'
+                      AND table_name = 'company_info'
+                      AND column_name = 'encrypted_protheus_pass'
+                ) THEN
+                    ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password;
+                END IF;
+            END $$$$;
+        """))
+
+        # ── Patch 2: add columns introduzidas após o bootstrap inicial ──
+        db.execute(text(f"""
+            DO $$$$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = '{clean_tenant}' AND table_name = 'company_info'
+                ) THEN
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS tenant_id               VARCHAR(100);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes      VARCHAR(100) DEFAULT 'producao';
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url              TEXT;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt           TEXT;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature             NUMERIC(3,2) DEFAULT 0.20;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso             TEXT;
+                END IF;
+            END $$$$;
+        """))
+        db.commit()
+
         if _tenant_schema_bootstrap_done(db, clean_tenant):
-            db.commit()
             return
 
         # 1. company_info + protheus_modules
@@ -660,6 +694,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 protheus_rest_url       TEXT,
                 protheus_usuario        VARCHAR(100),
                 encrypted_protheus_password TEXT,
+                licenca_uso             TEXT,
                 auth_mode               VARCHAR(30) DEFAULT 'basic',
                 status                  VARCHAR(20) DEFAULT 'active',
                 system_prompt           TEXT,
@@ -673,6 +708,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url TEXT;
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT;
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20;
+            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT;
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
                 id SERIAL PRIMARY KEY,

@@ -11,7 +11,7 @@ const EMPTY = {
   cnpj:'', razao_social:'', ie:'', email:'', telefone:'', endereco:'',
   protheus_grupo:'', protheus_empresa:'', protheus_unidade:'', protheus_filial:'',
   protheus_ambientes:'', protheus_usuario:'', protheus_password:'',
-  protheus_rest_url:'', protheus_webapp_url:'', licenca_uso:'', status:'ativa',
+  protheus_rest_url:'', webapp_url:'', licenca_uso:'', status:'ativa',
   tenant_id:''
 };
 
@@ -125,7 +125,7 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
             {f({ label:'Usuário REST', name:'protheus_usuario', placeholder:'admin' })}
             {f({ label:'Senha REST', name:'protheus_password', type:'password', placeholder: isNew ? 'Obrigatória' : 'Em branco = manter' })}
             {f({ label:'URL REST (API)', name:'protheus_rest_url', placeholder:'http://ip:porta/rest', span:true, mono:true })}
-            {f({ label:'URL WebApp', name:'protheus_webapp_url', placeholder:'http://ip:porta/webapp', span:true, mono:true })}
+            {f({ label:'URL WebApp', name:'webapp_url', placeholder:'http://ip:porta/webapp', span:true, mono:true })}
 
             <SectionTitle>Licença & Status</SectionTitle>
             <div className="md:col-span-2">
