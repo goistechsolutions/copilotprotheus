@@ -872,7 +872,8 @@ def get_schemas(
 
             schemas_list.append({
                 "id": s["id"],
-                "modulo": s.get("mod_sigla") or str(s.get("mod_code")),
+                "mod_code": s.get("mod_code"),
+                "mod_sigla": s.get("mod_sigla"),
                 "chave": s["chave"],
                 "tabela": s["tabela"],
                 "nome": s["nome"],

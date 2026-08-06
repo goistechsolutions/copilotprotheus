@@ -146,16 +146,18 @@ async def get_available_modules(
 
     for row in rows:
         # USR_MODULO = número sequencial; USR_CODMOD = sigla (SIGAFAT, SIGAFIN...); USR_NOME = descrição
-        module_code = str(row.get("USR_CODMOD") or "").strip().upper()
-        module_name = str(row.get("USR_NOME") or row.get("USR_CODMOD") or "").strip()
+        mod_code = str(row.get("USR_MODULO") or "").strip()
+        mod_sigla = str(row.get("USR_CODMOD") or "").strip().upper()
+        mod_name = str(row.get("USR_NOME") or mod_sigla).strip()
 
-        if not module_code or module_code in seen:
+        if not mod_sigla or mod_sigla in seen:
             continue
 
-        seen.add(module_code)
+        seen.add(mod_sigla)
         items.append({
-            "module_code": module_code,
-            "module_name": module_name,
+            "mod_code": int(mod_code) if mod_code.isdigit() else 0,
+            "mod_sigla": mod_sigla,
+            "mod_name": mod_name,
         })
 
     return {
