@@ -590,6 +590,8 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
             else:
                 clean = "default"
         except Exception:
+            if hasattr(db, "rollback"):
+                db.rollback()
             clean = "default"
 
     clean = re.sub(r'[^a-zA-Z0-9_]', '', str(clean))

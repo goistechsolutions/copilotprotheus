@@ -56,8 +56,9 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
 
         if reg:
             clean_tenant = reg.get("schema_name") or reg.get("tenant_code") or ""
-    except Exception:
-        pass
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Aviso ao buscar tenant_registry: {e}")
 
     clean_tenant = _clean(clean_tenant)
     ensure_tenant_tables(db, clean_tenant)
@@ -84,6 +85,7 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
         if row:
             return dict(row)
     except Exception as e:
+        db.rollback()
         logger.warning(f"Aviso ao buscar company_info em {clean_tenant}: {e}")
 
     if reg:
