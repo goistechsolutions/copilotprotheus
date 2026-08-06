@@ -666,7 +666,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
         # ── Patch 2: add columns introduzidas após o bootstrap inicial ──
         db.execute(text(f"""
-            DO $$$$
+            DO $$
             BEGIN
                 IF EXISTS (
                     SELECT 1 FROM information_schema.tables
@@ -679,7 +679,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature             NUMERIC(3,2) DEFAULT 0.20;
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso             TEXT;
                 END IF;
-            END $$$$;
+            END $$;
         """))
         db.commit()
 
