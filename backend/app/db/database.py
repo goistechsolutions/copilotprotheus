@@ -664,6 +664,25 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 db.execute(text(col_sql))
         db.commit()
 
+        # ── Patch 2: add columns introduzidas após o bootstrap inicial ──
+        db.execute(text(f"""
+            DO $$$$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = '{clean_tenant}' AND table_name = 'company_info'
+                ) THEN
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS tenant_id               VARCHAR(100);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes      VARCHAR(100) DEFAULT 'producao';
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url              TEXT;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt           TEXT;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature             NUMERIC(3,2) DEFAULT 0.20;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso             TEXT;
+                END IF;
+            END $$$$;
+        """))
+        db.commit()
+
         if _tenant_schema_bootstrap_done(db, clean_tenant):
             return
 

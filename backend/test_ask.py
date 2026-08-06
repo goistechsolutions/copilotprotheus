@@ -9,6 +9,5 @@ async def test():
         }, headers={"X-Tenant-Id": "empresa_01_teste"})
         print(res.status_code)
         print(res.json())
-
 if __name__ == "__main__":
     asyncio.run(test())
