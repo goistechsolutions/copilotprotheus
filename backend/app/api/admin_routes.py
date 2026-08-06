@@ -648,6 +648,13 @@ async def sync_schema(
             else:
                 mod_codes_list.add(m_code)
                 code_to_name[m_code] = m_desc
+                
+            mod_codes_list.add(m_sigla)
+            code_to_name[m_sigla] = m_desc
+            if m_sigla.startswith("SIGA"):
+                suffix = m_sigla[4:]
+                mod_codes_list.add(suffix)
+                code_to_name[suffix] = m_desc
 
     for cm in clean_modulos:
         if cm.isdigit():
@@ -656,6 +663,15 @@ async def sync_schema(
             if str(v) not in code_to_name:
                 code_to_name[str(v)] = cm
                 code_to_name[f"{v:02d}"] = cm
+        else:
+            mod_codes_list.add(cm)
+            if cm not in code_to_name:
+                code_to_name[cm] = cm
+            if cm.startswith("SIGA"):
+                suffix = cm[4:]
+                mod_codes_list.add(suffix)
+                if suffix not in code_to_name:
+                    code_to_name[suffix] = cm
 
     if mod_codes_list:
         numeric_in = ", ".join([f"'{c}'" for c in mod_codes_list])
