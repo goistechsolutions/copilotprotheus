@@ -190,7 +190,7 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
 
 def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
     from app.db.database import get_tenant_session
-    from app.models.knowledge import TenantDictionaryTable, V4TenantAllowedTable, DictionarySnapshot, QueryUsageCounter, TenantContract, Company, Tenant
+    from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable, DictionarySnapshot, QueryUsageCounter, TenantContract, Company, Tenant
     import uuid
     import re
     
@@ -220,12 +220,12 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
         
         if latest_snap:
             blocked_tables = db.query(TenantDictionaryTable.physical_name).outerjoin(
-                V4TenantAllowedTable, 
-                (V4TenantAllowedTable.table_id == TenantDictionaryTable.id) & 
-                (V4TenantAllowedTable.snapshot_id == latest_snap.id)
+                TenantAllowedTable, 
+                (TenantAllowedTable.table_id == TenantDictionaryTable.id) & 
+                (TenantAllowedTable.snapshot_id == latest_snap.id)
             ).filter(
                 TenantDictionaryTable.snapshot_id == latest_snap.id,
-                (V4TenantAllowedTable.allowed == False) | (V4TenantAllowedTable.allowed == None)
+                (TenantAllowedTable.allowed == False) | (TenantAllowedTable.allowed == None)
             ).all()
             
             upper_query = cQuery.upper()
