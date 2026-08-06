@@ -830,7 +830,7 @@ def get_schemas(
 
     try:
         rows = db.execute(
-            text(f'SELECT id, modulo, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
+            text(f'SELECT id, mod_code, mod_sigla, mod_name, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
         ).mappings().all()
 
         schemas_list = []
@@ -842,7 +842,7 @@ def get_schemas(
 
             schemas_list.append({
                 "id": s["id"],
-                "modulo": s["modulo"],
+                "modulo": s.get("mod_sigla") or str(s.get("mod_code")),
                 "chave": s["chave"],
                 "tabela": s["tabela"],
                 "nome": s["nome"],
