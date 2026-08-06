@@ -141,8 +141,8 @@ async def get_available_modules(
     seen = set()
 
     for row in rows:
-        module_code = (row.get("USR_MODULO") or row.get("USR_CODMOD") or "").strip().upper()
-        module_name = (row.get("USR_MODULO") or "").strip()
+        module_code = str(row.get("USR_MODULO") or row.get("USR_CODMOD") or "").strip().upper()
+        module_name = str(row.get("USR_MODULO") or "").strip()
 
         if not module_code or not module_name:
             continue
