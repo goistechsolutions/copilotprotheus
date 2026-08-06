@@ -122,28 +122,27 @@ export default function CompanyDictionary({ company }) {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 items-end">
-          <div className="flex-1 w-full">
+          <div className="flex-1 w-full relative">
             <label className="block text-sm font-semibold text-slate-700 mb-2">Módulos do Sistema (SYS_USR_MODULE):</label>
-            <div className="flex flex-wrap gap-2 mb-1 max-h-36 overflow-y-auto p-1 border rounded-lg bg-slate-50">
-              {moduleList.map(mod => (
-                <label key={mod} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium cursor-pointer transition-colors ${modulosInput.includes(mod) ? 'bg-brand-50 border-brand-200 text-brand-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
-                  <input 
-                    type="checkbox" 
-                    className="hidden"
-                    checked={modulosInput.includes(mod)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setModulosInput([...modulosInput, mod]);
-                      } else {
-                        setModulosInput(modulosInput.filter(m => m !== mod));
-                      }
-                    }}
-                  />
-                  {mod}
-                </label>
-              ))}
+            <div className="relative">
+              <select 
+                multiple
+                value={modulosInput}
+                onChange={(e) => {
+                  const options = [...e.target.options];
+                  const values = options.filter(option => option.selected).map(option => option.value);
+                  setModulosInput(values);
+                }}
+                className="w-full rounded-lg border border-slate-300 py-2 px-3 text-sm text-slate-800 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 h-28 custom-scrollbar bg-slate-50"
+              >
+                {moduleList.map(mod => (
+                  <option key={mod} value={mod} className="py-1 px-2 border-b border-slate-100 last:border-0 hover:bg-blue-50 cursor-pointer">
+                    {mod}
+                  </option>
+                ))}
+              </select>
             </div>
-            <p className="text-xs text-slate-500 mt-2">Selecione os módulos que deseja sincronizar.</p>
+            <p className="text-xs text-slate-500 mt-2">Segure Ctrl (ou Cmd) para selecionar múltiplos módulos.</p>
           </div>
           <button 
             onClick={handleSync}
