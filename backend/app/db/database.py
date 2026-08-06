@@ -633,38 +633,30 @@ def ensure_tenant_tables(db, clean_tenant: str):
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
         # ── Patch 1: rename encrypted_protheus_pass → encrypted_protheus_password ──
-        db.execute(text(f"""
-            DO $$$$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = '{clean_tenant}'
-                      AND table_name = 'company_info'
-                      AND column_name = 'encrypted_protheus_pass'
-                ) THEN
-                    ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password;
-                END IF;
-            END $$$$;
-        """))
+        col_exists = db.execute(text("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = :schema
+              AND table_name = 'company_info'
+              AND column_name = 'encrypted_protheus_pass'
+        """), {"schema": clean_tenant}).first()
+        if col_exists:
+            db.execute(text(f'ALTER TABLE "{clean_tenant}".company_info RENAME COLUMN encrypted_protheus_pass TO encrypted_protheus_password'))
 
-        # ── Patch 2: add columns introduzidas após o bootstrap inicial ──
-        db.execute(text(f"""
-            DO $$$$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = '{clean_tenant}' AND table_name = 'company_info'
-                ) THEN
-                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS tenant_id               VARCHAR(100);
-                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes      VARCHAR(100) DEFAULT 'producao';
-                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url              TEXT;
-                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt           TEXT;
-                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature             NUMERIC(3,2) DEFAULT 0.20;
-                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso             TEXT;
-                END IF;
-            END $$$$;
-        """))
+        # ── Patch 2: adiciona colunas introduzidas após bootstrap inicial ──
+        tbl_exists = db.execute(text("""
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = :schema AND table_name = 'company_info'
+        """), {"schema": clean_tenant}).first()
+        if tbl_exists:
+            for col_sql in [
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT \'producao\'',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url TEXT',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT',
+            ]:
+                db.execute(text(col_sql))
         db.commit()
 
         if _tenant_schema_bootstrap_done(db, clean_tenant):
