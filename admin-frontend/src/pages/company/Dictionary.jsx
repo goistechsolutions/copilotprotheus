@@ -8,7 +8,7 @@ export default function CompanyDictionary({ company }) {
   const [syncing, setSyncing] = useState(false);
   const [syncingModules, setSyncingModules] = useState(false);
   const [protheusModules, setProtheusModules] = useState([]);
-  const [modulosInput, setModulosInput] = useState(['SIGAFAT', 'SIGAFIN']);
+  const [modulosInput, setModulosInput] = useState([]);
   const [syncResult, setSyncResult] = useState(null);
 
   
