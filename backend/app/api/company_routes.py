@@ -98,27 +98,11 @@ async def get_available_modules(
     db: Session = Depends(get_db),
 ):
     company = get_company_or_404(db, company_id)
+    tenant_id = company.get("tenant_id", "default")
 
-    # 1. Tenta carregar do catálogo master primeiro (V5)
-    master_mods = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
-    if master_mods and len(master_mods) > 0:
-        return {
-            "status": "success",
-            "tenant_id": company.get("tenant_id", "default"),
-            "company_id": str(company_id),
-            "items": [
-                {
-                    "module_code": m.mod_sigla,
-                    "module_name": m.mod_name or m.mod_sigla,
-                    "description": m.description or ""
-                }
-                for m in master_mods if m.mod_sigla
-            ]
-        }
-
-    # 2. Fallback: Se estiver vazio, busca no ERP
+    # 1. Tenta buscar módulos do Protheus real (SYS_USR_MODULE)
     sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD, USR_NOME FROM SYS_USR_MODULE ORDER BY USR_MODULO"
-
+    rows = []
     try:
         if company.get("protheus_rest_url") and company.get("protheus_usuario") and company.get("encrypted_protheus_password"):
             rows = queryrest_exec(
@@ -130,41 +114,84 @@ async def get_available_modules(
         else:
             rows = await queryrest_exec_tenant(
                 db=db,
-                tenant_id=company["tenant_id"],
+                tenant_id=tenant_id,
                 company_id=company_id,
                 query=sql
             )
     except Exception as e:
-        logger.warning(f"Aviso ao consultar módulos no Protheus REST ({company_id}): {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Catálogo mestre vazio e falha ao consultar módulos no Protheus: {str(e)}"
-        )
+        logger.warning(f"Aviso ao consultar SYS_USR_MODULE ({company_id}): {e}")
 
-    items = []
-    seen = set()
+    if rows:
+        items = []
+        seen = set()
+        for row in rows:
+            # USR_MODULO = código numérico real do X2_MODULO no Protheus
+            # USR_CODMOD = sigla (SIGAFAT, SIGAFIN...)
+            # USR_NOME   = descrição
+            mod_code_raw = str(row.get("USR_MODULO") or "").strip()
+            mod_sigla    = str(row.get("USR_CODMOD") or "").strip().upper()
+            mod_name     = str(row.get("USR_NOME")   or mod_sigla).strip()
 
-    for row in rows:
-        # USR_MODULO = número sequencial; USR_CODMOD = sigla (SIGAFAT, SIGAFIN...); USR_NOME = descrição
-        mod_code = str(row.get("USR_MODULO") or "").strip()
-        mod_sigla = str(row.get("USR_CODMOD") or "").strip().upper()
-        mod_name = str(row.get("USR_NOME") or mod_sigla).strip()
+            if not mod_sigla or mod_sigla in seen:
+                continue
 
-        if not mod_sigla or mod_sigla in seen:
-            continue
+            mod_code_int = int(mod_code_raw) if mod_code_raw.isdigit() else 0
+            seen.add(mod_sigla)
+            items.append({
+                "mod_code":  mod_code_int,
+                "mod_sigla": mod_sigla,
+                "mod_name":  mod_name,
+            })
 
-        seen.add(mod_sigla)
-        items.append({
-            "mod_code": int(mod_code) if mod_code.isdigit() else 0,
-            "mod_sigla": mod_sigla,
-            "mod_name": mod_name,
-        })
+            # ── Atualiza protheus_modules_master com os códigos reais do Protheus ──
+            if mod_code_int > 0:
+                try:
+                    existing = db.query(ProtheusModuleMaster).filter(
+                        ProtheusModuleMaster.mod_sigla == mod_sigla
+                    ).first()
+                    if existing:
+                        existing.mod_code = mod_code_int
+                        existing.mod_name = mod_name or existing.mod_name
+                        existing.active   = True
+                    else:
+                        db.add(ProtheusModuleMaster(
+                            mod_code=mod_code_int,
+                            mod_sigla=mod_sigla,
+                            mod_name=mod_name,
+                            active=True
+                        ))
+                except Exception as ex_upsert:
+                    logger.warning(f"Aviso ao upsert módulo {mod_sigla}: {ex_upsert}")
 
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        return {
+            "status":     "success",
+            "tenant_id":  tenant_id,
+            "company_id": str(company_id),
+            "items":      items,
+        }
+
+    # 2. Fallback: lê do catálogo master interno (sem Protheus disponível)
+    master_mods = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
     return {
-        "status": "success",
+        "status":     "success",
+        "tenant_id":  tenant_id,
         "company_id": str(company_id),
-        "items": items,
+        "items": [
+            {
+                "mod_code":  m.mod_code,
+                "mod_sigla": m.mod_sigla,
+                "mod_name":  m.mod_name or m.mod_sigla,
+            }
+            for m in master_mods if m.mod_sigla
+        ],
     }
+
+
 
 
 @router.get("/companies/{company_id}/modules", response_model=CompanyModulesAssignedResponse)
