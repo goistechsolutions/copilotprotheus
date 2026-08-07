@@ -284,37 +284,29 @@ def get_tables(
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin),
 ):
-    """Retorna tabelas permitidas (V4: tenant_allowed_tables)."""
-    contract = _get_active_contract(db, tenant_id)
-    if not contract:
-        return {"tables": DEFAULT_TABLES, "source": "default"}
+    """Retorna tabelas carregadas no schema do tenant (V5: tenant_schemas)."""
+    from app.db.database import ensure_tenant_tables, resolve_clean_tenant
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
 
-    rows = (
-        db.query(TenantAllowedTable, TenantDictionaryTable)
-        .join(TenantDictionaryTable, TenantAllowedTable.table_id == TenantDictionaryTable.id)
-        .filter(
-            TenantAllowedTable.tenant_id == tenant_id,
-            TenantAllowedTable.contract_id == contract.id,
-            TenantAllowedTable.allowed == True,
-        )
-        .all()
-    )
+    try:
+        rows = db.execute(
+            text(f'SELECT mod_code, mod_sigla, chave, tabela, nome FROM "{clean_tenant}".tenant_schemas ORDER BY mod_code, chave')
+        ).mappings().all()
 
-    if not rows:
-        return {"tables": DEFAULT_TABLES, "source": "default"}
-
-    result = [
-        {
-            "id":          str(at.id),
-            "alias":       dt.table_key,
-            "description": dt.table_name,
-            "tipo":        dt.module_code or "",
-            "fields":      "",           # campos detalhados via /schemas
-            "access_level":at.access_level,
-        }
-        for at, dt in rows
-    ]
-    return {"tables": result, "source": "v4", "contract_id": str(contract.id)}
+        result = [
+            {
+                "mod_code":    r["mod_code"],
+                "mod_sigla":   r["mod_sigla"],
+                "alias":       r["chave"],
+                "tabela":      r["tabela"] or "",
+                "description": r["nome"] or "",
+            }
+            for r in rows
+        ]
+        return {"tables": result, "source": "v5", "tenant": clean_tenant, "total": len(result)}
+    except Exception as e:
+        logger.error(f"Erro ao buscar tabelas do schema {clean_tenant}: {e}")
+        return {"tables": [], "source": "v5", "tenant": clean_tenant, "total": 0}
 
 
 class TableItem(BaseModel):
@@ -548,8 +540,9 @@ def get_protheus_modules(
     return {
         "modules": [
             {
-                "module_code": m.mod_sigla,
-                "module_name": m.mod_name,
+                "mod_code":    m.mod_code,
+                "mod_sigla":   m.mod_sigla,
+                "mod_name":    m.mod_name,
                 "description": m.description or ""
             }
             for m in modules
@@ -626,22 +619,30 @@ async def sync_schema(
     try:
         if db.query(ProtheusModuleMaster).count() == 0:
             logger.info("Populando protheus_modules_master com módulos padrão (fallback)...")
-            default_mods = {
-                1: ("SIGAFAT", "Faturamento"),
-                2: ("SIGACOM", "Compras"),
-                4: ("SIGAEST", "Estoque/Custos"),
-                5: ("SIGAPON", "Ponto"),
-                6: ("SIGAFIN", "Financeiro"),
-                7: ("SIGAFPA", "Folha de Pagamento"),
-                9: ("SIGAFIS", "Livros Fiscais"),
-                10: ("SIGAPLS", "Plano de Saúde"),
-                12: ("SIGALOJA", "Controle de Lojas"),
-                34: ("SIGAJURI", "Jurídico"),
-                35: ("SIGAPMS", "Projetos"),
-                43: ("SIGATMS", "TMS"),
-                84: ("SIGAFRO", "Frotas")
-            }
-            for m_code, (m_sigla, m_nome) in default_mods.items():
+            # Códigos X2_MODULO conforme tabela SX2 padrão do Protheus
+            default_mods = [
+                (1,  "SIGAFAT",   "Faturamento"),
+                (2,  "SIGACOM",   "Compras"),
+                (3,  "SIGAEST",   "Estoque e Custos"),
+                (5,  "SIGAPON",   "Ponto Eletrônico"),
+                (6,  "SIGAFIN",   "Financeiro"),
+                (7,  "SIGAFPA",   "Folha de Pagamento"),
+                (8,  "SIGAGPE",   "Gestão de Pessoal"),
+                (9,  "SIGAFIS",   "Livros Fiscais"),
+                (11, "SIGAPLS",   "Plano de Saúde"),
+                (12, "SIGALOJA",  "Controle de Lojas"),
+                (17, "SIGAOFIC",  "Oficina"),
+                (18, "SIGAPCO",   "Planejamento e Controle"),
+                (22, "SIGACONT",  "Contabilidade Gerencial"),
+                (25, "SIGAATF",   "Ativo Fixo"),
+                (28, "SIGAAFV",   "Automação da Força de Vendas"),
+                (32, "SIGATMS",   "TMS - Transporte"),
+                (34, "SIGAJURI",  "Gestão Jurídica"),
+                (35, "SIGAPMS",   "Projetos"),
+                (43, "SIGAGFE",   "Gestão de Frete"),
+                (84, "SIGAFRO",   "Frotas"),
+            ]
+            for m_code, m_sigla, m_nome in default_mods:
                 db.add(ProtheusModuleMaster(mod_code=m_code, mod_sigla=m_sigla, mod_name=m_nome, active=True))
             db.commit()
     except Exception as fallback_e:
@@ -650,56 +651,38 @@ async def sync_schema(
 
     master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
+    # Monta lista de códigos NUMÉRICOS para filtrar X2.X2_MODULO
+    # X2_MODULO é um campo numérico (INTEGER) no Protheus - usar APENAS números
+    numeric_codes = set()   # valores numéricos de X2_MODULO ex: 1, 6, 7
+    sigla_map = {}          # mod_code -> mod_sigla (para gravar no tenant_schemas)
+
     for m in master_rows:
-        m_code = str(m.mod_code)
         m_sigla = (m.mod_sigla or "").strip().upper()
-        m_desc = (m.mod_name or m_sigla).strip().upper()
+        m_desc  = (m.mod_name  or m_sigla).strip().upper()
 
         is_selected = False
         if not clean_modulos:
             is_selected = True
         else:
             for cm in clean_modulos:
-                if cm == m_sigla or cm in m_desc:
+                # Usuário pode digitar sigla (SIGAFIN) ou número (6)
+                if cm == m_sigla or cm == str(m.mod_code) or cm in m_desc:
                     is_selected = True
                     break
 
         if is_selected:
-            if m_code.isdigit():
-                v = int(m_code)
-                mod_codes_list.update([str(v), f"{v:02d}"])
-                code_to_name[str(v)] = m_desc
-                code_to_name[f"{v:02d}"] = m_desc
-            else:
-                mod_codes_list.add(m_code)
-                code_to_name[m_code] = m_desc
-                
-            mod_codes_list.add(m_sigla)
-            code_to_name[m_sigla] = m_desc
-            if m_sigla.startswith("SIGA"):
-                suffix = m_sigla[4:]
-                mod_codes_list.add(suffix)
-                code_to_name[suffix] = m_desc
+            numeric_codes.add(str(m.mod_code))
+            sigla_map[str(m.mod_code)] = m_sigla
+            code_to_name[str(m.mod_code)] = m_desc
 
+    # Se usuário digitou número diretamente que não está no master, inclui mesmo assim
     for cm in clean_modulos:
-        if cm.isdigit():
-            v = int(cm)
-            mod_codes_list.update([str(v), f"{v:02d}"])
-            if str(v) not in code_to_name:
-                code_to_name[str(v)] = cm
-                code_to_name[f"{v:02d}"] = cm
-        else:
-            mod_codes_list.add(cm)
-            if cm not in code_to_name:
-                code_to_name[cm] = cm
-            if cm.startswith("SIGA"):
-                suffix = cm[4:]
-                mod_codes_list.add(suffix)
-                if suffix not in code_to_name:
-                    code_to_name[suffix] = cm
+        if cm.isdigit() and cm not in numeric_codes:
+            numeric_codes.add(cm)
+            code_to_name[cm] = cm
 
-    if mod_codes_list:
-        numeric_in = ", ".join([f"'{c}'" for c in mod_codes_list])
+    if numeric_codes:
+        numeric_in = ", ".join([f"'{c}'" for c in sorted(numeric_codes, key=lambda x: int(x) if x.isdigit() else 0)])
         where_clause = f"WHERE X2.D_E_L_E_T_<>'*' AND TRIM(X2.X2_MODULO) IN ({numeric_in})"
     else:
         where_clause = "WHERE X2.D_E_L_E_T_<>'*'"

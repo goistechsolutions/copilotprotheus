@@ -332,11 +332,11 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
 
         upsert_company_info = text(f"""
             INSERT INTO "{clean_tenant}".company_info (
-                company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
+                tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
                 protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment,
                 webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
             ) VALUES (
-                :c_code, :b_code, :c_name, :c_cnpj, :c_ie, :c_rz, :c_email, :c_tel, :c_end,
+                :tid, :c_code, :b_code, :c_name, :c_cnpj, :c_ie, :c_rz, :c_email, :c_tel, :c_end,
                 :c_grp, :c_emp, :c_und, :c_fil, :c_env,
                 :c_app, :c_rest, :c_user, :c_pass, 'basic', :c_status
             ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
@@ -360,6 +360,7 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
                 updated_at = NOW();
         """)
         db.execute(upsert_company_info, {
+            "tid": clean_tenant,
             "c_code": c_code, "b_code": b_code, "c_name": c_name, "c_cnpj": c_cnpj, "c_ie": c_ie,
             "c_rz": c_rz, "c_email": c_email, "c_tel": c_tel, "c_end": c_end,
             "c_grp": c_grp, "c_emp": c_emp, "c_und": c_und, "c_fil": c_fil, "c_env": c_env,
