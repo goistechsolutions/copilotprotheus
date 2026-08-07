@@ -13,6 +13,7 @@ Seguranca:
   - ADMIN_USER / ADMIN_PASSWORD via env.
 """
 import re
+from app.services.tenant_resolver import resolve_clean_tenant as secure_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
@@ -283,37 +284,29 @@ def get_tables(
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin),
 ):
-    """Retorna tabelas permitidas (V4: tenant_allowed_tables)."""
-    contract = _get_active_contract(db, tenant_id)
-    if not contract:
-        return {"tables": DEFAULT_TABLES, "source": "default"}
+    """Retorna tabelas carregadas no schema do tenant (V5: tenant_schemas)."""
+    from app.db.database import ensure_tenant_tables, resolve_clean_tenant
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
 
-    rows = (
-        db.query(TenantAllowedTable, TenantDictionaryTable)
-        .join(TenantDictionaryTable, TenantAllowedTable.table_id == TenantDictionaryTable.id)
-        .filter(
-            TenantAllowedTable.tenant_id == tenant_id,
-            TenantAllowedTable.contract_id == contract.id,
-            TenantAllowedTable.allowed == True,
-        )
-        .all()
-    )
+    try:
+        rows = db.execute(
+            text(f'SELECT mod_code, mod_sigla, chave, tabela, nome FROM "{clean_tenant}".tenant_schemas ORDER BY mod_code, chave')
+        ).mappings().all()
 
-    if not rows:
-        return {"tables": DEFAULT_TABLES, "source": "default"}
-
-    result = [
-        {
-            "id":          str(at.id),
-            "alias":       dt.table_key,
-            "description": dt.table_name,
-            "tipo":        dt.module_code or "",
-            "fields":      "",           # campos detalhados via /schemas
-            "access_level":at.access_level,
-        }
-        for at, dt in rows
-    ]
-    return {"tables": result, "source": "v4", "contract_id": str(contract.id)}
+        result = [
+            {
+                "mod_code":    r["mod_code"],
+                "mod_sigla":   r["mod_sigla"],
+                "alias":       r["chave"],
+                "tabela":      r["tabela"] or "",
+                "description": r["nome"] or "",
+            }
+            for r in rows
+        ]
+        return {"tables": result, "source": "v5", "tenant": clean_tenant, "total": len(result)}
+    except Exception as e:
+        logger.error(f"Erro ao buscar tabelas do schema {clean_tenant}: {e}")
+        return {"tables": [], "source": "v5", "tenant": clean_tenant, "total": 0}
 
 
 class TableItem(BaseModel):
@@ -334,7 +327,7 @@ def update_tables(
     """Atualiza tabelas permitidas no modelo V4 (tenant_allowed_tables)."""
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
+    clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -498,26 +491,27 @@ async def sync_modules(
         count = 0
         for row in result_data:
             c_mod = _val(row, "CODIGO_MODULO") or _val(row, "USR_MODULO")
-            c_tab = _val(row, "CODIGO_TABELA") or _val(row, "USR_CODMOD")
-            n_mod = _val(row, "NOME_MODULO")
-            if not c_mod:
+            c_sigla = _val(row, "CODIGO_TABELA") or _val(row, "USR_CODMOD")
+            n_mod = _val(row, "NOME_MODULO") or _val(row, "USR_NOME")
+            
+            if not c_mod or not str(c_mod).isdigit():
                 continue
+                
+            c_mod_int = int(c_mod)
 
             existing = db.query(ProtheusModuleMaster).filter(
-                (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
+                ProtheusModuleMaster.mod_code == c_mod_int
             ).first()
 
             if existing:
-                existing.module_code = c_mod
-                existing.module_name = c_tab or existing.module_name
-                existing.description = n_mod or existing.description
+                existing.mod_sigla = c_sigla or existing.mod_sigla
+                existing.mod_name = n_mod or existing.mod_name
                 existing.active      = True
             else:
                 db.add(ProtheusModuleMaster(
-                    module_code=c_mod,
-                    module_name=c_tab or c_mod,
-                    description=n_mod,
-                    source_name="SYS_USR_MODULE",
+                    mod_code=c_mod_int,
+                    mod_sigla=c_sigla,
+                    mod_name=n_mod or c_sigla,
                     active=True
                 ))
             count += 1
@@ -540,15 +534,16 @@ def get_protheus_modules(
     modules = (
         db.query(ProtheusModuleMaster)
         .filter(ProtheusModuleMaster.active == True)
-        .order_by(ProtheusModuleMaster.module_code)
+        .order_by(ProtheusModuleMaster.mod_code)
         .all()
     )
     return {
         "modules": [
             {
-                "module_code": m.module_code,
-                "module_name": m.module_name,
-                "description": m.description or m.module_name or m.module_code
+                "mod_code":    m.mod_code,
+                "mod_sigla":   m.mod_sigla,
+                "mod_name":    m.mod_name,
+                "description": m.description or ""
             }
             for m in modules
         ]
@@ -574,7 +569,7 @@ async def sync_schema(
 
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
+    clean_tenant = secure_clean_tenant(str(tenant_id))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -597,64 +592,93 @@ async def sync_schema(
             for r in sys_rows:
                 if not isinstance(r, dict): continue
                 c_mod = str(r.get("CODIGO_MODULO") or r.get("USR_MODULO") or "").strip()
-                c_tab = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
-                n_mod = str(r.get("NOME_MODULO") or "").strip()
-                if not c_mod: continue
+                c_sigla = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
+                n_mod = str(r.get("NOME_MODULO") or r.get("USR_NOME") or "").strip()
+                
+                if not c_mod or not c_mod.isdigit(): continue
+                c_mod_int = int(c_mod)
+                
                 existing = db.query(ProtheusModuleMaster).filter(
-                    (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
+                    ProtheusModuleMaster.mod_code == c_mod_int
                 ).first()
                 if existing:
-                    existing.module_code = c_mod
-                    existing.module_name = c_tab or existing.module_name
-                    existing.description = n_mod or existing.description
+                    existing.mod_sigla = c_sigla or existing.mod_sigla
+                    existing.mod_name = n_mod or existing.mod_name
                     existing.active      = True
                 else:
                     db.add(ProtheusModuleMaster(
-                        module_code=c_mod,
-                        module_name=c_tab or c_mod,
-                        description=n_mod,
-                        source_name="SYS_USR_MODULE",
+                        mod_code=c_mod_int,
+                        mod_sigla=c_sigla,
+                        mod_name=n_mod or c_sigla,
                         active=True
                     ))
             db.commit()
     except Exception as e_sys:
         logger.warning(f"Aviso ao atualizar protheus_modules_master via QueryRest: {e_sys}")
 
+    try:
+        if db.query(ProtheusModuleMaster).count() == 0:
+            logger.info("Populando protheus_modules_master com módulos padrão (fallback)...")
+            # Códigos X2_MODULO conforme tabela SX2 padrão do Protheus
+            default_mods = [
+                (1,  "SIGAATF",   "Ativo Fixo"),
+                (2,  "SIGACOM",   "Compras"),
+                (4,  "SIGAEST",   "Estoque e Custos"),
+                (5,  "SIGAFAT",   "Faturamento"),
+                (6,  "SIGAFIN",   "Financeiro"),
+                (7,  "SIGAGPE",   "Gestão de Pessoal"),
+                (9,  "SIGAFIS",   "Livros Fiscais"),
+                (10, "SIGAPCP",   "Planejamento e Controle da Produção"),
+                (12, "SIGALOJA",  "Operações de PDV e Retaguarda"),
+                (13, "SIGATMK",   "Telemarketing / Televendas"),
+                (16, "SIGAPON",   "Ponto Eletrônico"),
+                (19, "SIGAMNT",   "Manutenção de Ativos"),
+                (34, "SIGACTB",   "Contabilidade Gerencial"),
+                (43, "SIGATMS",   "TMS - Gestão de Transportes"),
+                (44, "SIGAPMS",   "Gestão de Projetos"),
+                (99, "SIGACFG",   "Configurador"),
+            ]
+            for m_code, m_sigla, m_nome in default_mods:
+                db.add(ProtheusModuleMaster(mod_code=m_code, mod_sigla=m_sigla, mod_name=m_nome, active=True))
+            db.commit()
+    except Exception as fallback_e:
+        logger.error(f"Erro ao inserir fallback de módulos: {fallback_e}")
+        db.rollback()
+
     master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
+    # Monta lista de códigos NUMÉRICOS para filtrar X2.X2_MODULO
+    # X2_MODULO é um campo numérico (INTEGER) no Protheus - usar APENAS números
+    numeric_codes = set()   # valores numéricos de X2_MODULO ex: 1, 6, 7
+    sigla_map = {}          # mod_code -> mod_sigla (para gravar no tenant_schemas)
+
     for m in master_rows:
-        m_code = (m.module_code or "").strip()
-        m_desc = (m.description or m.module_name or m_code).strip()
+        m_sigla = (m.mod_sigla or "").strip().upper()
+        m_desc  = (m.mod_name  or m_sigla).strip().upper()
 
         is_selected = False
         if not clean_modulos:
             is_selected = True
         else:
             for cm in clean_modulos:
-                if cm == m_code.upper() or cm in m_desc.upper() or cm in (m.module_name or "").upper():
+                # Usuário pode digitar sigla (SIGAFIN) ou número (6)
+                if cm == m_sigla or cm == str(m.mod_code) or cm in m_desc:
                     is_selected = True
                     break
 
         if is_selected:
-            if m_code.isdigit():
-                v = int(m_code)
-                mod_codes_list.update([str(v), f"{v:02d}"])
-                code_to_name[str(v)] = m_desc
-                code_to_name[f"{v:02d}"] = m_desc
-            else:
-                mod_codes_list.add(m_code)
-                code_to_name[m_code] = m_desc
+            numeric_codes.add(str(m.mod_code))
+            sigla_map[str(m.mod_code)] = m_sigla
+            code_to_name[str(m.mod_code)] = m_desc
 
+    # Se usuário digitou número diretamente que não está no master, inclui mesmo assim
     for cm in clean_modulos:
-        if cm.isdigit():
-            v = int(cm)
-            mod_codes_list.update([str(v), f"{v:02d}"])
-            if str(v) not in code_to_name:
-                code_to_name[str(v)] = cm
-                code_to_name[f"{v:02d}"] = cm
+        if cm.isdigit() and cm not in numeric_codes:
+            numeric_codes.add(cm)
+            code_to_name[cm] = cm
 
-    if mod_codes_list:
-        numeric_in = ", ".join([f"'{c}'" for c in mod_codes_list])
+    if numeric_codes:
+        numeric_in = ", ".join([f"'{c}'" for c in sorted(numeric_codes, key=lambda x: int(x) if x.isdigit() else 0)])
         where_clause = f"WHERE X2.D_E_L_E_T_<>'*' AND TRIM(X2.X2_MODULO) IN ({numeric_in})"
     else:
         where_clause = "WHERE X2.D_E_L_E_T_<>'*'"
@@ -758,32 +782,35 @@ async def sync_schema(
             raise Exception("Nenhuma tabela retornada pelo Protheus.")
 
         # Persiste em "{clean_tenant}".tenant_schemas (cache legivel no schema do tenant)
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
-        if not clean_tenant or clean_tenant == "public" or clean_tenant.isdigit():
-            clean_tenant = "default"
+        clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
 
         ensure_tenant_tables(db, clean_tenant)
 
         for clean_mod in clean_modulos:
             db.execute(
-                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE modulo = :m OR codmod = :m'),
+                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE mod_sigla = :m OR CAST(mod_code AS TEXT) = :m'),
                 {"m": clean_mod}
             )
 
         for chave, meta in schema_dict.items():
+            mod_val = meta.get("x2_modulo", "")
+            mod_int = int(mod_val) if mod_val.isdigit() else 0
+            mod_sigla = meta.get("codmod") or mod_val
+            
             db.execute(
                 text(f"""
-                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, modulo, codmod, chave, tabela, nome, schema_json, updated_at)
-                    VALUES (:t, :m, :cm, :c, :tbl, :n, :j, NOW())
+                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, mod_code, mod_sigla, campo, chave, tabela, nome, schema_json, updated_at)
+                    VALUES (:t, :mc, :ms, :cmp, :c, :tbl, :n, :j, NOW())
                 """),
                 {
                     "t": clean_tenant,
-                    "m": meta["x2_modulo"],
-                    "cm": meta["codmod"],
+                    "mc": mod_int,
+                    "ms": mod_sigla,
+                    "cmp": "*",
                     "c": chave,
-                    "tbl": meta["tabela"],
-                    "n": meta["nome"],
-                    "j": json.dumps(meta)
+                    "tbl": meta.get("tabela", ""),
+                    "n": meta.get("nome", ""),
+                    "j": json.dumps(meta, ensure_ascii=False)
                 }
             )
         db.commit()
@@ -806,15 +833,13 @@ def get_schemas(
     admin: str    = Depends(verify_admin),
 ):
     import re
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
-    if not clean_tenant or clean_tenant == "public":
-        clean_tenant = "default"
+    clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
 
     ensure_tenant_tables(db, clean_tenant)
 
     try:
         rows = db.execute(
-            text(f'SELECT id, modulo, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
+            text(f'SELECT id, mod_code, mod_sigla, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
         ).mappings().all()
 
         schemas_list = []
@@ -826,7 +851,8 @@ def get_schemas(
 
             schemas_list.append({
                 "id": s["id"],
-                "modulo": s["modulo"],
+                "mod_code": s.get("mod_code"),
+                "mod_sigla": s.get("mod_sigla"),
                 "chave": s["chave"],
                 "tabela": s["tabela"],
                 "nome": s["nome"],
@@ -1170,7 +1196,7 @@ def get_query_audit(
     if tenant_id:
         import re
         from sqlalchemy import text
-        clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_id)
+        clean_tenant = secure_clean_tenant(tenant_id)
         if clean_tenant and clean_tenant != "public":
             try:
                 sql = text(f'SELECT id, user_email, question, generated_sql, response_time_ms, created_at FROM "{clean_tenant}".query_audit ORDER BY created_at DESC LIMIT :lim OFFSET :skp')

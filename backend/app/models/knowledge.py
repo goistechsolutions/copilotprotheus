@@ -104,12 +104,10 @@ class ProtheusModuleMaster(Base):
     __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    mod_code = Column(String(30), unique=True)
-    module_code = Column(String(30), unique=True)
-    mod_name = Column(String(150))
-    module_name = Column(String(150))
+    mod_code = Column(Integer, nullable=False, unique=True)
+    mod_sigla = Column(String(30), unique=True)
+    mod_name = Column(String(150), nullable=False)
     description = Column(Text)
-    source_name = Column(String(60), nullable=False, default="SYS_USR_MODULE")
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
@@ -528,17 +526,15 @@ class Company(Base):
 
 
 class ProtheusModule(Base):
-    """Corresponde a \"<tenant>\".protheus_modules"""
+    """Corresponde a "<tenant>".protheus_modules"""
     __tablename__ = "protheus_modules"
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
     company_code = Column(String(60))
-    modulo = Column(String(50), nullable=False, index=True)
-    codmod = Column(String(50), nullable=False, index=True)
-    usr_modulo = Column(String(50))
-    usr_codmod = Column(String(50))
-    usr_nome = Column(String(255))
+    mod_code = Column(Integer, nullable=False, index=True)
+    mod_sigla = Column(String(50))
+    mod_name = Column(String(100))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 

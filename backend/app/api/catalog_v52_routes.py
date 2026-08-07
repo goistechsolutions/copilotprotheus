@@ -1,282 +1,260 @@
-import re
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import logging
+"""
+catalog_v52_routes.py — V5 Multi-Tenant
 
-from app.db.database import get_db
-from app.core.auth import get_current_user
+Endpoints de catálogo e dicionário de dados baseados na nova arquitetura V5.
+Na V5, cada tenant tem seu próprio schema PostgreSQL e as tabelas sincronizadas
+ficam em tenant_schemas com os campos armazenados em schema_json.
+
+Endpoints:
+  POST /api/admin/dictionary/snapshot     → Aciona sync (chama sync_schema V5)
+  GET  /api/admin/dictionary/tables       → Lista tabelas/campos de tenant_schemas
+  GET  /api/admin/snapshots               → Resumo de sincronizações por módulo
+  GET  /api/agent/catalog/allowed         → Catálogo completo para o agente (GET)
+  POST /api/agent/catalog/allowed         → Catálogo completo para o agente (POST)
+
+REMOVIDO (V4 obsoleto):
+  - GET/POST /api/admin/dictionary/permissions (controle por role desnecessário na V5)
+  - get_allowed_catalog / get_structured_catalog_by_role (substituídos por leitura direta)
+"""
+
+import json
+import logging
+from typing import List, Optional, Dict, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db, resolve_clean_tenant
 from app.api.admin_routes import verify_admin
-from app.models.catalog_v52 import (
-    TenantDictionarySource, DictionaryTable, DictionaryField, 
-    DictionaryIndex, DictionaryGroup, TenantTablePermission, TenantFieldPermission
-)
-from app.services.catalog_service_v52 import get_allowed_catalog, get_structured_catalog_by_role
-from app.services.sync_dictionary_v52 import run_snapshot
 
 logger = logging.getLogger("app.api.catalog_v52")
 
 router = APIRouter(tags=["catalog-v52-governance"])
 
-# --- Modelos de Request / Response ---
+
+# ─── Request / Response Models ───────────────────────────────────────────────
 
 class SnapshotRequest(BaseModel):
-    tenant_id: str = Field(..., description="ID do tenant (padrão 'default')")
-    environment_id: str = Field("producao", description="ID do ambiente Protheus")
-    company_id: Optional[str] = Field(None, description="ID opcional da empresa/filial")
-    snapshot_code: Optional[str] = Field(None, description="Código opcional do snapshot (timestamp por padrão)")
-    async_mode: bool = Field(False, description="Executar em segundo plano")
+    tenant_id: str       = Field(..., description="ID do tenant")
+    modulos:   List[str] = Field(..., description="Siglas dos módulos (ex: ['SIGAFIN', 'SIGAFAT'])")
 
-class FieldPermissionItem(BaseModel):
-    field_name: str
-    can_select: bool = True
-    can_filter: bool = True
-    masked_flag: bool = False
+class CatalogRequest(BaseModel):
+    tenant_id:    str           = Field(..., description="ID do tenant")
+    mod_sigla:    Optional[str] = Field(None, description="Filtrar por sigla de módulo (ex: SIGAFIN)")
+    table_filter: Optional[str] = Field(None, description="Filtrar por chave de tabela (ex: SA1)")
 
-class SaveTablePermissionRequest(BaseModel):
-    tenant_id: str
-    environment_id: str = "producao"
-    role_id: str
-    table_name: str
-    can_list: bool = True
-    can_describe: bool = True
-    can_query: bool = True
-    approved_by: Optional[str] = None
-    field_permissions: List[FieldPermissionItem] = []
 
-class AllowedCatalogRequest(BaseModel):
-    tenant_id: str
-    environment_id: str = "producao"
-    role_ids: List[str]
+# ─── Helper ──────────────────────────────────────────────────────────────────
 
-# --- Endpoints Admin (Governança e Dicionário) ---
+def _read_tenant_schemas(
+    db: Session,
+    clean_tenant: str,
+    mod_sigla: Optional[str] = None,
+    chave_filter: Optional[str] = None,
+) -> list:
+    """Lê tenant_schemas do schema do tenant com filtros opcionais."""
+    conditions = []
+    params: Dict[str, Any] = {}
 
-@router.post("/api/admin/dictionary/snapshot", summary="Dispara sincronização do dicionário SX2/SX3/SXG/SIX do Protheus Real")
-def trigger_dictionary_snapshot(
-    req: SnapshotRequest, 
-    background_tasks: BackgroundTasks, 
-    db: Session = Depends(get_db),
-    admin: str = Depends(verify_admin)
-):
-    """
-    Aciona a leitura e gravação dos metadados estruturais do ambiente Protheus.
-    Obedece estritamente às Diretrizes Globais:
-    - Não armazena dados transacionais
-    - Reporta erro se o Protheus real estiver fora do ar sem inventar dados
-    - Prioriza consulta via QueryRest se endpoints REST específicos do framework estiverem ausentes.
-    """
-    if req.async_mode:
-        background_tasks.add_task(run_snapshot, req.tenant_id, req.environment_id, req.company_id, req.snapshot_code)
-        return {"status": "processing", "message": "Job de snapshot acionado em background para o ambiente real."}
-    else:
-        try:
-            result = run_snapshot(req.tenant_id, req.environment_id, req.company_id, req.snapshot_code, session=db)
-            return result
-        except RuntimeError as rt_err:
-            logger.error(f"Erro na sincronização de dicionário: {rt_err}")
-            raise HTTPException(
-                status_code=502, 
-                detail=str(rt_err)
-            )
-        except Exception as e:
-            logger.error(f"Falha inesperada no snapshot: {e}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Erro interno ao sincronizar dicionário real: {str(e)}"
-            )
+    if mod_sigla:
+        conditions.append("mod_sigla = :mod_sigla")
+        params["mod_sigla"] = mod_sigla.strip().upper()
 
-@router.get("/api/admin/dictionary/tables", summary="Lista tabelas e campos sincronizados no catálogo")
-def get_dictionary_tables(
-    tenant_id: str = Query(..., description="ID do Tenant"),
-    environment_id: str = Query("producao", description="Ambiente"),
-    company_id: Optional[int] = Query(None, description="Filtrar por ID de empresa"),
-    module_filter: Optional[List[str]] = Query(None, description="Filtrar por códigos de módulo Protheus"),
-    table_name: Optional[str] = Query(None, description="Filtrar por tabela (ex: SC5, SD2)"),
-    db: Session = Depends(get_db),
-    admin: str = Depends(verify_admin)
-):
-    import re
-    from sqlalchemy import text
-    from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id))
-    if clean_tenant and clean_tenant != "public":
-        ensure_tenant_tables(db, clean_tenant)
-        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+    if chave_filter:
+        conditions.append("chave ILIKE :chave")
+        params["chave"] = f"%{chave_filter.strip().upper()}%"
 
-    query_tbl = db.query(DictionaryTable).filter(
-        DictionaryTable.tenant_id == tenant_id,
-        DictionaryTable.environment_id == environment_id,
-        DictionaryTable.active_flag == True
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    sql = (
+        f'SELECT id, mod_code, mod_sigla, chave, tabela, nome, schema_json, updated_at '
+        f'FROM "{clean_tenant}".tenant_schemas {where} ORDER BY mod_code, chave'
     )
-    if company_id is not None:
-        comp_str = str(company_id)
-        query_tbl = query_tbl.filter((DictionaryTable.company_id == comp_str) | (DictionaryTable.company_id == None) | (DictionaryTable.company_id == ''))
-    if module_filter:
-        query_tbl = query_tbl.filter(DictionaryTable.module_code.in_(module_filter))
-    if table_name:
-        query_tbl = query_tbl.filter(DictionaryTable.table_name.ilike(f"%{table_name.strip().upper()}%"))
-    
-    tables = query_tbl.order_by(DictionaryTable.module_code.asc(), DictionaryTable.table_name.asc()).all()
-    
+    try:
+        return list(db.execute(text(sql), params).mappings().all())
+    except Exception as e:
+        logger.error(f"Erro ao ler tenant_schemas de {clean_tenant}: {e}")
+        return []
+
+
+def _parse_schema_json(raw) -> dict:
+    if isinstance(raw, str):
+        try: return json.loads(raw)
+        except: return {}
+    return raw or {}
+
+
+# ─── Admin: Snapshot / Sincronização ─────────────────────────────────────────
+
+@router.post("/api/admin/dictionary/snapshot", summary="Aciona sincronização do dicionário Protheus (V5)")
+async def trigger_dictionary_snapshot(
+    req: SnapshotRequest,
+    db: Session = Depends(get_db),
+    admin: str  = Depends(verify_admin),
+):
+    """
+    Aciona a sincronização estrutural do dicionário Protheus via SX2/SX3.
+    Persiste em tenant_schemas com campos em schema_json.
+    Não armazena dados transacionais — apenas metadados de estrutura.
+    """
+    from app.api.admin_routes import sync_schema
+    try:
+        result = await sync_schema(tenant_id=req.tenant_id, modulos=req.modulos, db=db)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao acionar snapshot para tenant {req.tenant_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao sincronizar dicionário: {str(e)}")
+
+
+# ─── Admin: Listagem de Tabelas e Campos ──────────────────────────────────────
+
+@router.get("/api/admin/dictionary/tables", summary="Lista tabelas sincronizadas (V5: tenant_schemas)")
+def get_dictionary_tables(
+    tenant_id:  str           = Query(..., description="ID do tenant"),
+    mod_sigla:  Optional[str] = Query(None, description="Filtrar por sigla do módulo (ex: SIGAFIN)"),
+    table_name: Optional[str] = Query(None, description="Filtrar por chave da tabela (ex: SA1)"),
+    db: Session = Depends(get_db),
+    admin: str  = Depends(verify_admin),
+):
+    """
+    Retorna tabelas e campos carregados no schema do tenant.
+    Os campos individuais estão dentro de schema_json.campos[].
+    """
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
+    rows = _read_tenant_schemas(db, clean_tenant, mod_sigla=mod_sigla, chave_filter=table_name)
+
     result = []
-    for t in tables:
-        fields = db.query(DictionaryField).filter(
-            DictionaryField.tenant_id == tenant_id,
-            DictionaryField.environment_id == environment_id,
-            DictionaryField.table_name == t.table_name,
-            DictionaryField.snapshot_code == t.snapshot_code
-        ).order_by(DictionaryField.field_name.asc()).all()
-        
+    for r in rows:
+        sj = _parse_schema_json(r["schema_json"])
+        campos = sj.get("campos", [])
         result.append({
-            "table_name": t.table_name,
-            "table_alias": t.table_alias,
-            "description": t.description,
-            "module_code": t.module_code,
-            "snapshot_code": t.snapshot_code,
-            "fields": [
+            "mod_code":         r["mod_code"],
+            "mod_sigla":        r["mod_sigla"],
+            "chave":            r["chave"],
+            "tabela":           r["tabela"] or "",
+            "nome":             r["nome"] or "",
+            "compartilhamento": sj.get("compartilhamento", {}),
+            "total_campos":     len(campos),
+            "campos": [
                 {
-                    "field_name": f.field_name,
-                    "title": f.title,
-                    "type": f.field_type,
-                    "length": f.length_num,
-                    "decimal": f.decimal_num,
-                    "required": f.required_flag
+                    "campo":    c.get("campo", ""),
+                    "descricao":c.get("descricao", ""),
+                    "tipo":     c.get("tipo", ""),
+                    "tamanho":  c.get("tamanho", 0),
                 }
-                for f in fields
-            ]
+                for c in campos
+            ],
         })
+
     return {
-        "status": "success",
-        "tenant_id": tenant_id, 
-        "environment_id": environment_id, 
-        "count": len(result), 
-        "tables": result,
-        "items": result
+        "status":    "success",
+        "tenant_id": tenant_id,
+        "total":     len(result),
+        "tables":    result,
     }
 
-@router.get("/api/admin/dictionary/permissions", summary="Consulta permissões granulares configuradas para uma Role")
-def list_role_permissions(
-    tenant_id: str = Query(...),
-    role_id: str = Query(...),
-    environment_id: str = Query("producao"),
+
+# ─── Admin: Histórico de Sincronizações ──────────────────────────────────────
+
+@router.get("/api/admin/snapshots", summary="Resumo de sincronizações por módulo (V5)")
+def list_snapshots(
+    tenant_id: str = Query(..., description="ID do tenant"),
     db: Session = Depends(get_db),
-    admin: str = Depends(verify_admin)
+    admin: str  = Depends(verify_admin),
 ):
-    tables = db.query(TenantTablePermission).filter(
-        TenantTablePermission.tenant_id == tenant_id,
-        TenantTablePermission.environment_id == environment_id,
-        TenantTablePermission.role_id == role_id
-    ).all()
-    
-    res = []
-    for t in tables:
-        fields = db.query(TenantFieldPermission).filter(
-            TenantFieldPermission.tenant_id == tenant_id,
-            TenantFieldPermission.environment_id == environment_id,
-            TenantFieldPermission.role_id == role_id,
-            TenantFieldPermission.table_name == t.table_name
-        ).all()
-        res.append({
-            "table_name": t.table_name,
-            "can_list": t.can_list,
-            "can_describe": t.can_describe,
-            "can_query": t.can_query,
-            "field_permissions": [
-                {
-                    "field_name": f.field_name,
-                    "can_select": f.can_select,
-                    "can_filter": f.can_filter,
-                    "masked_flag": f.masked_flag
-                } for f in fields
-            ]
-        })
-    return {"tenant_id": tenant_id, "role_id": role_id, "environment_id": environment_id, "permissions": res}
-
-@router.post("/api/admin/dictionary/permissions", summary="Salva permissões de tabela e campo por role")
-def save_table_permission(
-    req: SaveTablePermissionRequest,
-    db: Session = Depends(get_db),
-    admin: str = Depends(verify_admin)
-):
-    table_perm = db.query(TenantTablePermission).filter(
-        TenantTablePermission.tenant_id == req.tenant_id,
-        TenantTablePermission.environment_id == req.environment_id,
-        TenantTablePermission.role_id == req.role_id,
-        TenantTablePermission.table_name == req.table_name.upper()
-    ).first()
-    
-    if not table_perm:
-        table_perm = TenantTablePermission(
-            tenant_id=req.tenant_id,
-            environment_id=req.environment_id,
-            role_id=req.role_id,
-            table_name=req.table_name.upper()
-        )
-        db.add(table_perm)
-    
-    table_perm.can_list = req.can_list
-    table_perm.can_describe = req.can_describe
-    table_perm.can_query = req.can_query
-    table_perm.approved_by = req.approved_by
-    
-    for f in req.field_permissions:
-        field_perm = db.query(TenantFieldPermission).filter(
-            TenantFieldPermission.tenant_id == req.tenant_id,
-            TenantFieldPermission.environment_id == req.environment_id,
-            TenantFieldPermission.role_id == req.role_id,
-            TenantFieldPermission.table_name == req.table_name.upper(),
-            TenantFieldPermission.field_name == f.field_name.upper()
-        ).first()
-        if not field_perm:
-            field_perm = TenantFieldPermission(
-                tenant_id=req.tenant_id,
-                environment_id=req.environment_id,
-                role_id=req.role_id,
-                table_name=req.table_name.upper(),
-                field_name=f.field_name.upper()
-            )
-            db.add(field_perm)
-        field_perm.can_select = f.can_select
-        field_perm.can_filter = f.can_filter
-        field_perm.masked_flag = f.masked_flag
-        field_perm.approved_by = req.approved_by
-        
-    db.commit()
-    return {"status": "success", "message": f"Permissões da tabela {req.table_name} atualizadas para a role {req.role_id}."}
-
-# --- Endpoints Agente (Leitura e Enforcement do Catálogo) ---
-
-@router.post("/api/agent/catalog/allowed", summary="Retorna dicionário liberado para as roles (Enforcement Pré-SQL)")
-def read_allowed_catalog_post(req: AllowedCatalogRequest, db: Session = Depends(get_db)):
     """
-    Endpoint consumido pelo Agente Copilot antes da elaboração e execução das queries SQL.
-    Expõe unicamente os tabelas, relacionamentos e campos nos quais as roles possuem autorização,
-    evitando alucinações e queries ilegais ao banco de dados Protheus Oracle.
+    Retorna resumo das sincronizações agrupadas por módulo.
+    Na V5, cada sync atualiza tenant_schemas — exibe total de tabelas e última atualização.
     """
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
     try:
-        catalog_structured = get_structured_catalog_by_role(db, req.tenant_id, req.environment_id, req.role_ids)
-        raw_rows = get_allowed_catalog(db, req.tenant_id, req.environment_id, req.role_ids)
+        rows = db.execute(
+            text(f"""
+                SELECT mod_code, mod_sigla,
+                       COUNT(DISTINCT chave) AS total_tabelas,
+                       MAX(updated_at)       AS ultima_atualizacao
+                FROM "{clean_tenant}".tenant_schemas
+                GROUP BY mod_code, mod_sigla
+                ORDER BY mod_code
+            """)
+        ).mappings().all()
+
+        snapshots = [
+            {
+                "mod_code":           r["mod_code"],
+                "mod_sigla":          r["mod_sigla"],
+                "total_tabelas":      r["total_tabelas"],
+                "ultima_atualizacao": str(r["ultima_atualizacao"]) if r["ultima_atualizacao"] else None,
+            }
+            for r in rows
+        ]
         return {
-            "status": "success",
-            "tenant_id": req.tenant_id,
-            "environment_id": req.environment_id,
-            "total_allowed_fields": len(raw_rows),
-            "catalog": catalog_structured
+            "status":         "success",
+            "tenant_id":      tenant_id,
+            "total_modulos":  len(snapshots),
+            "snapshots":      snapshots,
         }
     except Exception as e:
-        logger.error(f"Erro ao consultar catálogo liberado do agente: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao obter catálogo governado: {str(e)}")
+        logger.error(f"Erro ao listar snapshots de {clean_tenant}: {e}")
+        return {"status": "success", "tenant_id": tenant_id, "snapshots": []}
 
-@router.get("/api/agent/catalog/allowed", summary="Retorna dicionário liberado via GET (Enforcement)")
-def read_allowed_catalog_get(
-    tenant_id: str = Query(..., description="ID do tenant"),
-    environment_id: str = Query("producao", description="ID do ambiente"),
-    role_ids: str = Query(..., description="IDs de role separados por vírgula (ex: 1,admin)"),
-    db: Session = Depends(get_db)
+
+# ─── Agente: Catálogo Completo (V5) ──────────────────────────────────────────
+
+def _build_agent_catalog(db: Session, tenant_id: str, mod_sigla: Optional[str], table_filter: Optional[str]) -> Dict[str, Any]:
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
+    rows = _read_tenant_schemas(db, clean_tenant, mod_sigla=mod_sigla, chave_filter=table_filter)
+
+    catalog: Dict[str, Any] = {}
+    for r in rows:
+        sj = _parse_schema_json(r["schema_json"])
+        campos = sj.get("campos", [])
+        chave = r["chave"]
+        catalog[chave] = {
+            "mod_code":         r["mod_code"],
+            "mod_sigla":        r["mod_sigla"],
+            "tabela":           r["tabela"] or chave,
+            "descricao":        r["nome"] or "",
+            "compartilhamento": sj.get("compartilhamento", {}),
+            "campos": {
+                c.get("campo", ""): {
+                    "descricao": c.get("descricao", ""),
+                    "tipo":      c.get("tipo", ""),
+                    "tamanho":   c.get("tamanho", 0),
+                }
+                for c in campos if c.get("campo")
+            },
+        }
+
+    return {
+        "status":        "success",
+        "tenant_id":     tenant_id,
+        "total_tabelas": len(catalog),
+        "total_campos":  sum(len(v["campos"]) for v in catalog.values()),
+        "catalog":       catalog,
+    }
+
+
+@router.get("/api/agent/catalog/allowed", summary="Catálogo permitido para o Agente (V5 — GET)")
+def read_agent_catalog_get(
+    tenant_id:    str           = Query(..., description="ID do tenant"),
+    mod_sigla:    Optional[str] = Query(None, description="Filtrar por sigla do módulo"),
+    table_filter: Optional[str] = Query(None, description="Filtrar por chave de tabela"),
+    db: Session = Depends(get_db),
 ):
-    roles_list = [r.strip() for r in role_ids.split(",") if r.strip()]
-    return read_allowed_catalog_post(
-        AllowedCatalogRequest(tenant_id=tenant_id, environment_id=environment_id, role_ids=roles_list),
-        db=db
-    )
+    """
+    Retorna o catálogo de tabelas e campos para o agente Copilot.
+    Na V5, o catálogo permitido = tudo que está em tenant_schemas.
+    Sem filtro por role — o schema do tenant isola os dados por empresa.
+    """
+    return _build_agent_catalog(db, tenant_id, mod_sigla=mod_sigla, table_filter=table_filter)
+
+
+@router.post("/api/agent/catalog/allowed", summary="Catálogo permitido para o Agente (V5 — POST)")
+def read_agent_catalog_post(req: CatalogRequest, db: Session = Depends(get_db)):
+    return _build_agent_catalog(db, req.tenant_id, mod_sigla=req.mod_sigla, table_filter=req.table_filter)
+
+

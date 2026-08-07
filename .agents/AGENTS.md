@@ -64,9 +64,9 @@
 ## 9. Repositório Alvo — Regra Crítica de Desenvolvimento
 
 > [!CAUTION]
-> **SEMPRE** realizar todas as alterações de código nos arquivos do repositório local do projeto, no worktree:
-> `C:\Users\muril\.gemini\antigravity\worktrees\copilotprotheus\implement_multi_tenant_schema\`
+> **SEMPRE** realizar todas as alterações de código nos arquivos do repositório local do projeto:
+> `C:\projeto\copilotprotheus\`
 
-- Este worktree está vinculado ao repositório oficial no GitHub: **[goistechsolutions/copilotprotheus](https://github.com/goistechsolutions/copilotprotheus)** — branch `implement_multi_tenant_schema`
-- Após **cada alteração de arquivo**, obrigatoriamente executar `git commit` seguido de `git push origin implement_multi_tenant_schema`.
-- **Nunca** editar arquivos fora deste worktree. **Nunca** deixar alterações sem commit e push.
+- Este diretório está vinculado ao repositório oficial no GitHub: **[goistechsolutions/copilotprotheus](https://github.com/goistechsolutions/copilotprotheus)** — branch `main`
+- Após **cada alteração de arquivo**, obrigatoriamente executar `git commit` seguido de `git push origin main`.
+- **Nunca** editar arquivos fora deste diretório. **Nunca** deixar alterações sem commit e push.

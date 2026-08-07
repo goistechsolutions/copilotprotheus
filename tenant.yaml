@@ -1,8 +1,0 @@
-# Modelo de arquivo de importação/configuração rápida para Tenants de demonstração
-tenant:
-  name: cliente_exemplo
-  rest_url: https://protheus.cliente_exemplo.cloudtotvs.com.br:10707/rest
-  webapp_url: https://protheus.cliente_exemplo.cloudtotvs.com.br:10703/webapp/index.html
-  vscode_server_url: https://protheus.cliente_exemplo.cloudtotvs.com.br:10714
-  auth_mode: basic
-  timeout_seconds: 120

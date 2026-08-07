@@ -66,7 +66,7 @@ DICIONARIO DE DADOS (TENANT ATUAL):
 """
     try:
         from app.db.database import SessionLocal
-        from app.models.knowledge import TenantDictionaryTable, V4TenantAllowedTable, DictionarySnapshot
+        from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable, DictionarySnapshot
         
         db = SessionLocal()
         import uuid
@@ -79,12 +79,12 @@ DICIONARIO DE DADOS (TENANT ATUAL):
             # Pega o snapshot mais recente
             latest_snap = db.query(DictionarySnapshot).filter(DictionarySnapshot.tenant_id == tid, DictionarySnapshot.sync_status == 'completed').order_by(DictionarySnapshot.started_at.desc()).first()
             if latest_snap:
-                allowed_tables = db.query(V4TenantAllowedTable, TenantDictionaryTable).join(
-                    TenantDictionaryTable, V4TenantAllowedTable.table_id == TenantDictionaryTable.id
+                allowed_tables = db.query(TenantAllowedTable, TenantDictionaryTable).join(
+                    TenantDictionaryTable, TenantAllowedTable.table_id == TenantDictionaryTable.id
                 ).filter(
-                    V4TenantAllowedTable.tenant_id == tid,
-                    V4TenantAllowedTable.snapshot_id == latest_snap.id,
-                    V4TenantAllowedTable.allowed == True
+                    TenantAllowedTable.tenant_id == tid,
+                    TenantAllowedTable.snapshot_id == latest_snap.id,
+                    TenantAllowedTable.allowed == True
                 ).all()
                 
                 if allowed_tables:
