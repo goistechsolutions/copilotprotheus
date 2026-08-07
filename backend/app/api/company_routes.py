@@ -238,7 +238,7 @@ def sync_modules_dictionary(
     try:
         snapshot_result = run_snapshot(
             tenant_id=company["tenant_id"],
-            environment_id=company.get("protheus_ambientes") or "producao",
+            environment_id=company.get("protheus_ambientes"),
             company_id=str(company_id),
             session=db,
             module_filter=module_filter,
@@ -310,9 +310,9 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
     try:
         ensure_tenant_tables(db, clean_tenant)
         
-        c_code = getattr(comp, 'protheus_empresa', None) or getattr(comp, 'company_code', None) or "01"
-        b_code = getattr(comp, 'protheus_filial', None) or getattr(comp, 'protheus_branch', None) or "0101"
-        c_name = getattr(comp, 'razao_social', None) or getattr(comp, 'company_name', None) or "Empresa"
+        c_code = getattr(comp, 'protheus_empresa', None) or getattr(comp, 'company_code', None)
+        b_code = getattr(comp, 'protheus_filial', None) or getattr(comp, 'protheus_branch', None)
+        c_name = getattr(comp, 'razao_social', None) or getattr(comp, 'company_name', None)
         c_cnpj = getattr(comp, 'cnpj', None)
         c_ie   = getattr(comp, 'ie', None)
         c_rz   = getattr(comp, 'razao_social', None)
@@ -323,7 +323,7 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
         c_emp  = getattr(comp, 'protheus_empresa', None)
         c_und  = getattr(comp, 'protheus_unidade', None)
         c_fil  = getattr(comp, 'protheus_filial', None)
-        c_env  = getattr(comp, 'protheus_ambientes', None) or getattr(comp, 'protheus_env', None) or "producao"
+        c_env  = getattr(comp, 'protheus_ambientes', None) or getattr(comp, 'protheus_env', None)
         c_rest = getattr(comp, 'protheus_rest_url', None) or ""
         c_app  = getattr(comp, 'protheus_webapp_url', None) or ""
         c_user = getattr(comp, 'protheus_usuario', None) or ""
@@ -397,10 +397,10 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     if payload.protheus_password:
         enc_pass = encrypt_password(payload.protheus_password)
 
-    c_code = payload.protheus_empresa or "01"
-    b_code = payload.protheus_filial or "0101"
+    c_code = payload.protheus_empresa
+    b_code = payload.protheus_filial
     c_name = payload.razao_social
-    c_env  = payload.protheus_ambientes or "producao"
+    c_env  = payload.protheus_ambientes
 
     upsert_company_info = text(f"""
         INSERT INTO "{clean_tenant}".company_info (
@@ -489,7 +489,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
                     else:
                         db.add(ProtheusModuleMaster(
                             module_code=c_mod,
-                            module_name=c_tab or c_mod,
+                            module_name=c_tab,
                             description=n_mod,
                             source_name="SYS_USR_MODULE",
                             active=True
@@ -513,7 +513,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "protheus_empresa": payload.protheus_empresa,
         "protheus_unidade": payload.protheus_unidade,
         "protheus_filial": payload.protheus_filial,
-        "protheus_ambientes": payload.protheus_ambientes or "producao",
+        "protheus_ambientes": payload.protheus_ambientes,
         "protheus_usuario": payload.protheus_usuario,
         "protheus_rest_url": payload.protheus_rest_url,
         "webapp_url": payload.webapp_url,
@@ -527,7 +527,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 @router.put("/companies/{company_id}", response_model=CompanyResponse)
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
-    tenant_code = str(payload.tenant_id or comp_info.get("tenant_id") or "default")
+    tenant_code = str(payload.tenant_id or comp_info.get("tenant_id"))
     clean_tenant = resolve_clean_tenant(tenant_code)
 
     from app.db.database import ensure_tenant_tables
@@ -537,10 +537,10 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     if payload.protheus_password:
         enc_pass = encrypt_password(payload.protheus_password)
 
-    c_code = payload.protheus_empresa or comp_info.get("protheus_empresa") or "01"
-    b_code = payload.protheus_filial or comp_info.get("protheus_filial") or "0101"
-    c_name = payload.razao_social or comp_info.get("razao_social") or "Empresa"
-    c_env  = payload.protheus_ambientes or comp_info.get("protheus_ambientes") or "producao"
+    c_code = payload.protheus_empresa or comp_info.get("protheus_empresa")
+    b_code = payload.protheus_filial or comp_info.get("protheus_filial")
+    c_name = payload.razao_social or comp_info.get("razao_social")
+    c_env  = payload.protheus_ambientes or comp_info.get("protheus_ambientes")
 
     upsert_company_info = text(f"""
         INSERT INTO "{clean_tenant}".company_info (
@@ -600,7 +600,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "protheus_empresa": payload.protheus_empresa or comp_info.get("protheus_empresa"),
         "protheus_unidade": payload.protheus_unidade or comp_info.get("protheus_unidade"),
         "protheus_filial": payload.protheus_filial or comp_info.get("protheus_filial", ""),
-        "protheus_ambientes": payload.protheus_ambientes or comp_info.get("protheus_ambientes", "producao"),
+        "protheus_ambientes": payload.protheus_ambientes or comp_info.get("protheus_ambientes", ""),
         "protheus_usuario": payload.protheus_usuario or comp_info.get("protheus_usuario"),
         "protheus_rest_url": payload.protheus_rest_url or comp_info.get("protheus_rest_url"),
         "webapp_url": payload.webapp_url or comp_info.get("webapp_url"),
