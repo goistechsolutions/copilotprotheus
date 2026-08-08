@@ -73,7 +73,7 @@ jobs:
           cache-dependency-path: admin-frontend/package-lock.json
 
       - name: Instalar dependências
-        run: npm install --legacy-peer-deps
+        run: npm ci
 
       - name: Build de validação
         run: npm run build
@@ -83,8 +83,8 @@ jobs:
       - name: Verificar lock file sincronizado
         run: |
           if ! git diff --quiet -- package-lock.json; then
-            echo "::error::package-lock.json foi alterado pelo npm install."
-            echo "Execute localmente: cd admin-frontend && npm install --legacy-peer-deps"
+            echo "::error::package-lock.json foi alterado pelo npm ci."
+            echo "Execute localmente: cd admin-frontend && npm ci"
             echo "Depois faça commit do package-lock.json atualizado."
             git diff -- package-lock.json
             exit 1
