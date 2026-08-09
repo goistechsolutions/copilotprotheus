@@ -999,20 +999,20 @@ def ensure_all_registered_tenant_schemas(db):
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]))
     except Exception:
-        pass
+        db.rollback()
     try:
         res2 = db.execute(text("SELECT tenant_id FROM public.companies WHERE tenant_id IS NOT NULL"))
         for row in res2.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
     except Exception:
-        pass
+        db.rollback()
     try:
         res3 = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry"))
         for row in res3.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]).replace("tenant_", ""))
     except Exception:
-        pass
+        db.rollback()
 
     for tid in tenant_ids:
         clean = re.sub(r'[^a-zA-Z0-9_]', '', str(tid))
