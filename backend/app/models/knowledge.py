@@ -48,6 +48,7 @@ user_roles = Table(
     Column("tenant_id", String(100), primary_key=True),
     Column("company_id", Integer, primary_key=True),
     schema="public",
+    extend_existing=True,
 )
 
 
