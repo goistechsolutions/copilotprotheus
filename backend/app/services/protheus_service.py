@@ -190,7 +190,7 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
 
 def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
     from app.db.database import get_tenant_session
-    from app.models.knowledge import TenantAllowedTable, QueryUsageCounter, TenantContract, Company, Tenant
+    from app.models.knowledge import TenantAllowedTable, QueryUsageCounter, TenantContract, Company, Tenant, DictionaryTable
     import uuid
     import re
     
