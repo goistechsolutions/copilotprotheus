@@ -68,7 +68,6 @@ DICIONARIO DE DADOS (TENANT ATUAL):
     try:
         from app.db.database import SessionLocal
         from app.models.knowledge import TenantAllowedTable
-        from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable
         
         db = SessionLocal()
         import uuid
@@ -86,13 +85,6 @@ DICIONARIO DE DADOS (TENANT ATUAL):
             ).filter(
                 DictionaryTable.tenant_id == tid,
                 DictionaryTable.active_flag == True,
-            allowed_tables = db.query(TenantDictionaryTable).outerjoin(
-                TenantAllowedTable,
-                (TenantAllowedTable.table_name == TenantDictionaryTable.physical_name) &
-                (TenantAllowedTable.tenant_id == tid)
-            ).filter(
-                TenantDictionaryTable.tenant_id == tid,
-                TenantDictionaryTable.active_flag == True,
                 (TenantAllowedTable.id != None),
                 (TenantAllowedTable.active == True)
             ).all()

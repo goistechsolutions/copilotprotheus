@@ -33,7 +33,6 @@ from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import (
     AuditLog, Tenant, Company,
     TenantAllowedTable, TenantContract,
-    TenantAllowedTable, TenantContract, TenantDictionaryTable,
     ProtheusModuleMaster,
     User, Role, user_roles,
     TenantSchema,
