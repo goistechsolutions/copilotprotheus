@@ -692,39 +692,55 @@ async def sync_schema(
     else:
         where_clause = "WHERE X2.D_E_L_E_T_<>'*'"
 
-    tables_query = (
-        f"SELECT DISTINCT X2.X2_MODULO,X2.X2_CHAVE,X2.X2_ARQUIVO,X2.X2_NOME,"
-        f"X2.X2_TAMFIL,X2.X2_MODO,X2.X2_TAMUN,X2.X2_MODOUN,X2.X2_TAMEMP,X2.X2_MODOEMP,X2.X2_UNICO,"
-        f"CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,"
-        f"CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,"
-        f"CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL "
-        f"FROM SX2010 X2 INNER JOIN SX3010 X3 ON TRIM(X2.X2_CHAVE)=TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_<>'*' "
-        f"{where_clause} "
-        f"ORDER BY X2.X2_MODULO,X2.X2_CHAVE"
-    )
-
+    suffixes_to_try = ["010", "990", ""]
+    tables_data = None
+    last_err_msg = ""
+    
     try:
-        try:
-            response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
-        except Exception as exc:
-            err_msg = str(exc)
+        for suffix in suffixes_to_try:
+            tables_query = (
+                f"SELECT DISTINCT X2.X2_MODULO,X2.X2_CHAVE,X2.X2_ARQUIVO,X2.X2_NOME,"
+                f"X2.X2_TAMFIL,X2.X2_MODO,X2.X2_TAMUN,X2.X2_MODOUN,X2.X2_TAMEMP,X2.X2_MODOEMP,X2.X2_UNICO,"
+                f"CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,"
+                f"CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,"
+                f"CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL "
+                f"FROM SX2{suffix} X2 INNER JOIN SX3{suffix} X3 ON TRIM(X2.X2_CHAVE)=TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_<>'*' "
+                f"{where_clause} "
+                f"ORDER BY X2.X2_MODULO,X2.X2_CHAVE"
+            )
+            try:
+                response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
+                parsed_data = json.loads(fix_protheus_json(response_str))
+                
+                if isinstance(parsed_data, dict) and "error" in parsed_data:
+                    last_err_msg = parsed_data['error']
+                    continue
+                    
+                if isinstance(parsed_data, dict):
+                    temp_data = parsed_data.get("items") or parsed_data.get("data", [])
+                else:
+                    temp_data = parsed_data
+                    
+                if isinstance(temp_data, list) and len(temp_data) > 0:
+                    tables_data = temp_data
+                    break
+            except Exception as exc:
+                last_err_msg = str(exc)
+                logger.info(f"Fallback SX2{suffix} for tables_query failed: {exc}")
+                
+        if not tables_data:
+            err_msg = last_err_msg
             if "401" in err_msg or "Unauthorized" in err_msg or "authentication" in err_msg.lower():
-                detail = f"Falha de autenticação (HTTP 401) no servidor REST Protheus ({tenant_id}). Verifique se o Usuário e a Senha REST no cadastro do Tenant/Empresa estão corretos no Protheus."
+                detail = f"Falha de autenticação (HTTP 401) no servidor REST Protheus ({tenant_id}). Verifique se o Usuário e a Senha REST no cadastro do Tenant/Empresa estão corretos."
             elif "Name or service not known" in err_msg or "gaierror" in err_msg:
-                detail = f"Falha de DNS ao conectar no Protheus REST: Domínio não encontrado. Verifique a URL REST no cadastro da empresa/tenant. Erro: {err_msg}"
+                detail = f"Falha de DNS ao conectar no Protheus REST. Verifique a URL REST. Erro: {err_msg}"
             elif "Timeout" in err_msg or "timed out" in err_msg:
-                detail = f"Timeout de conexão com a API REST Protheus. Verifique se a porta e o serviço REST estão online. Erro: {err_msg}"
+                detail = f"Timeout de conexão com a API REST Protheus. Verifique se o serviço REST está online. Erro: {err_msg}"
+            elif err_msg:
+                detail = f"Falha ao buscar tabelas ou tabelas vazias no Protheus REST ({tenant_id}): {err_msg}"
             else:
-                detail = f"Falha ao comunicar com o servidor Protheus REST ({tenant_id}): {err_msg}"
+                detail = f"Nenhuma tabela encontrada para os módulos: {', '.join(clean_modulos)}"
             raise HTTPException(status_code=400, detail=detail)
-
-        tables_data = json.loads(fix_protheus_json(response_str))
-        if isinstance(tables_data, dict):
-            tables_data = tables_data.get("items") or tables_data.get("data", [])
-        if isinstance(tables_data, dict) and "error" in tables_data:
-            raise HTTPException(status_code=400, detail=f"Erro retornado pela API Protheus: {tables_data['error']}")
-        if not isinstance(tables_data, list) or not tables_data:
-            raise HTTPException(status_code=400, detail=f"Nenhuma tabela encontrada para os módulos: {', '.join(clean_modulos)}")
 
         def _fv(row: dict, key: str, default: str = "") -> str:
             if not isinstance(row, dict): return default
