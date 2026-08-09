@@ -94,10 +94,10 @@
 
     // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, não entrou no workspace
     let hasInitialModal = false;
-    const allElements = document.querySelectorAll('span, label, div');
+    const allElements = document.querySelectorAll('*');
     for (const el of allElements) {
-      if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
-        const text = el.textContent.trim().toLowerCase();
+      if (el.children.length === 0) {
+        const text = (el.textContent || "").trim().toLowerCase();
         if (text.includes("programa inicial") || text.includes("ambiente no servidor")) {
           if (isElementVisible(el)) {
             hasInitialModal = true;
