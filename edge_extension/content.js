@@ -75,22 +75,31 @@
     }
   }
 
+  function isElementVisible(el) {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    return true;
+  }
+
   function isUserLoggedIn() {
-    if (!document.body) return false; // Se o body ainda não existe, não está logado/carregado
+    if (!document.body) return false;
 
     // 1. Se tem campo de senha visível, não está logado
     const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]'));
-    const isLoginVisible = passwordInputs.some(el => el.offsetParent !== null);
+    const isLoginVisible = passwordInputs.some(el => isElementVisible(el));
     if (isLoginVisible) return false;
 
-    // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, ainda não entrou no workspace
+    // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, não entrou no workspace
     let hasInitialModal = false;
     const allElements = document.querySelectorAll('span, label, div');
     for (const el of allElements) {
       if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
         const text = el.textContent.trim().toLowerCase();
         if (text.includes("programa inicial") || text.includes("ambiente no servidor")) {
-          if (el.offsetParent !== null) {
+          if (isElementVisible(el)) {
             hasInitialModal = true;
             break;
           }
@@ -102,11 +111,12 @@
   }
 
   function injectWidget() {
-    if (widgetInjected || document.getElementById(WIDGET_ID)) return;
+    if (document.getElementById(WIDGET_ID)) return;
 
     extractProtheusSession();
 
     chrome.storage.local.get(['widget_url', 'tenant_id'], function (result) {
+      if (document.getElementById(WIDGET_ID)) return;
       const widgetBaseUrl = result.widget_url || 'https://copilot.elitecorp.tec.br/';
       const configuredTenant = result.tenant_id || '';
       
@@ -130,7 +140,6 @@
 
       const target = document.body || document.documentElement
       target.appendChild(iframe)
-      widgetInjected = true;
     });
   }
   
@@ -138,16 +147,15 @@
     const frame = document.getElementById(WIDGET_ID);
     if (frame) {
       frame.remove();
-      widgetInjected = false;
     }
   }
 
   // Monitor principal: avalia login e logout
   function checkSessionState() {
     if (isUserLoggedIn()) {
-      if (!widgetInjected) injectWidget();
+      injectWidget();
     } else {
-      if (widgetInjected) removeWidget();
+      removeWidget();
     }
   }
 
