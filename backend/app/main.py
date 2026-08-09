@@ -20,7 +20,7 @@ from app.api.leonardo_routes import router as leonardo_router
 from app.core.admin_security import require_admin
 from app.api.agent_sql_routes import router as agent_sql_router
 from app.core.logging_config import setup_logging
-from app.db.database import get_db, engine, Base, ensure_public_tables
+from app.db.database import get_db, engine, Base, ensure_public_tables, ensure_all_registered_tenant_schemas
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_user_flexible
 import app.models.knowledge

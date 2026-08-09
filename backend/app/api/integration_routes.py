@@ -12,8 +12,8 @@ def test_connection(tenant_id: str = "default"):
     try:
         r = client.ping()
         return ConnectionTestResponse(
-            ok=True, tenant=tenant_id, rest_url=config.get("rest_url"), webapp_url=config.get("webapp_url"), vscode_server_url=config.get("vscode_server_url"),
+            ok=True, tenant=tenant_id, rest_url=config.get("rest_url"), webapp_url=config.get("webapp_url"),
             status_code=r.status_code, body_preview=r.text[:500]
         )
     except Exception as e:
-        return ConnectionTestResponse(ok=False, tenant=tenant_id, rest_url=config.get("rest_url"), webapp_url=config.get("webapp_url"), vscode_server_url=config.get("vscode_server_url"), error=str(e))
+        return ConnectionTestResponse(ok=False, tenant=tenant_id, rest_url=config.get("rest_url"), webapp_url=config.get("webapp_url"), error=str(e))

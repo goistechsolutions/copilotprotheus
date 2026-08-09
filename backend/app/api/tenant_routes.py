@@ -7,6 +7,7 @@ Segurança:
 - Apenas platform_admin pode criar/deletar tenants.
 """
 import re
+from app.services.tenant_resolver import resolve_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -70,7 +71,7 @@ def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Ten
 
 def _to_tenant_dict(db: Session, t: Tenant) -> dict:
     import re
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', t.tenant_code)
+    clean_tenant = resolve_clean_tenant(t.tenant_code)
     rest_url, user, prompt, temp = None, None, None, 0.2
     if clean_tenant and clean_tenant != "public":
         try:
@@ -122,7 +123,7 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(req
 def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     import re, uuid
     raw_code = body.tenant_code or body.tenant_name or body.name or body.id or "tenant"
-    t_code = re.sub(r'[^a-z0-9_]+', '_', str(raw_code).lower().strip()).strip('_')
+    t_code = resolve_clean_tenant(str(raw_code).lower().strip())
     if not t_code:
         t_code = f"tenant_{uuid.uuid4().hex[:6]}"
 
@@ -170,7 +171,7 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(tenant)
 
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant.tenant_code)
+    clean_tenant = resolve_clean_tenant(tenant.tenant_code)
     if clean_tenant and clean_tenant != "public":
         from app.db.database import ensure_tenant_tables
         ensure_tenant_tables(db, clean_tenant)
