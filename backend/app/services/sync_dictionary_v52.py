@@ -213,7 +213,7 @@ def run_snapshot(
     do ERP Protheus, registrando apenas metadados sem dados operacionais/transacionais.
     Suporta filtragem opcional por module_filter (módulos contratados da empresa).
     """
-        own_session   = False
+    own_session = False
 
     import re
     from app.db.database import get_tenant_session, ensure_tenant_tables
