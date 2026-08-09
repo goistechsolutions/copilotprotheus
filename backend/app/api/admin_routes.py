@@ -831,6 +831,7 @@ async def sync_schema(
 
     except HTTPException as he:
         db.rollback()
+        logger.error(f"HTTP 400 Error in sync_schema: {he.detail}")
         raise he
     except Exception as e:
         db.rollback()
