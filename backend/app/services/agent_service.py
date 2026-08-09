@@ -5,7 +5,7 @@ import uuid
 import logging
 from app.models.knowledge import (
     TenantContract, QueryUsageCounter, ConcurrentSession,
-    TenantAllowedTable, TenantAllowedField, AgentQueryAudit
+    AgentQueryAudit
 )
 
 logger = logging.getLogger(__name__)
@@ -65,37 +65,10 @@ class AgentValidator:
 
         masked_fields = []
 
-        for t in tables_used:
-            t_id = t.get("table_id")
-            s_id = t.get("snapshot_id")
-            if not t_id or not s_id:
-                return self._block("table_not_allowed")
-            try:
-                allowed_t = self.db.query(TenantAllowedTable).filter(
-                    TenantAllowedTable.table_id == uuid.UUID(t_id),
-                    TenantAllowedTable.snapshot_id == uuid.UUID(s_id),
-                    TenantAllowedTable.allowed == True
-                ).first()
-            except Exception:
-                return self._block("table_not_allowed")
-            if not allowed_t:
-                return self._block("table_not_allowed")
-
-        # Campos
-        for f in fields_used:
-            f_id = f.get("field_id")
-            if f_id:
-                try:
-                    allowed_f = self.db.query(TenantAllowedField).filter(
-                        TenantAllowedField.field_id == uuid.UUID(f_id)
-                    ).first()
-                except Exception:
-                    continue
-                if allowed_f:
-                    if not allowed_f.allowed:
-                        return self._block("field_not_allowed")
-                    if allowed_f.masking_required:
-                        masked_fields.append(f.get("field_name"))
+        # Na arquitetura V5, o bloqueio estrito de tabelas/campos foi descontinuado
+        # em favor do acesso isolado pelo tenant_schemas (o prompt do Copilot exibe apenas
+        # os esquemas autorizados). Portanto, pulamos a validação nas extintas tabelas 
+        # TenantAllowedTable e TenantAllowedField.
 
         # Step E: Regras de segurança SQL
         upper_sql = sql_preview.upper()
