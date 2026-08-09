@@ -67,12 +67,6 @@ class AllowedCatalogRequest(BaseModel):
 
 # --- Endpoints Admin (Governança e Dicionário) ---
 
-@router.post("/api/admin/dictionary/snapshot", summary="Dispara sincronização do dicionário SX2/SX3/SXG/SIX do Protheus Real")
-def trigger_dictionary_snapshot(
-    req: SnapshotRequest, 
-    background_tasks: BackgroundTasks, 
-    tenant_id: str       = Field(..., description="ID do tenant")
-    modulos:   List[str] = Field(..., description="Siglas dos módulos (ex: ['SIGAFIN', 'SIGAFAT'])")
 
 class CatalogRequest(BaseModel):
     tenant_id:    str           = Field(..., description="ID do tenant")
@@ -152,16 +146,7 @@ async def trigger_dictionary_snapshot(
                 detail=f"Erro interno ao sincronizar dicionário real: {str(e)}"
             )
 
-@router.get("/api/admin/dictionary/tables", summary="Lista tabelas e campos sincronizados no catálogo")
-    from app.api.admin_routes import sync_schema
-    try:
-        result = await sync_schema(tenant_id=req.tenant_id, modulos=req.modulos, db=db)
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Erro ao acionar snapshot para tenant {req.tenant_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao sincronizar dicionário: {str(e)}")
+
 
 
 # ─── Admin: Listagem de Tabelas e Campos ──────────────────────────────────────
@@ -182,20 +167,7 @@ def get_dictionary_tables(
     rows = _read_tenant_schemas(db, clean_tenant, mod_sigla=mod_sigla, chave_filter=table_name)
 
     result = []
-    for t in tables:
-        fields = db.query(DictionaryField).filter(
-            DictionaryField.tenant_id == tenant_id,
-            DictionaryField.environment_id == environment_id,
-            DictionaryField.table_name == t.table_name,
-            True
-        ).order_by(DictionaryField.field_name.asc()).all()
-        
-        result.append({
-            "table_name": t.table_name,
-            "table_alias": t.table_alias,
-            "description": t.description,
-            "module_code": t.module_code,
-            "fields": [
+
     for r in rows:
         sj = _parse_schema_json(r["schema_json"])
         campos = sj.get("campos", [])
