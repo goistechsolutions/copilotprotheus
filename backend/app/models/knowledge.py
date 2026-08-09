@@ -444,6 +444,7 @@ class TenantDictionaryTable(Base):
     usada para controle de importação e exibição no admin.
     """
     __tablename__ = "tenant_dictionary_tables"
+    __table_args__ = {"schema": "public"}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -612,6 +613,7 @@ class DictionaryGroup(Base):
 class TenantDictionarySource(Base):
     """Corresponde a \"<tenant>\".tenant_dictionary_sources"""
     __tablename__ = "tenant_dictionary_sources"
+    __table_args__ = {"schema": "public"}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)

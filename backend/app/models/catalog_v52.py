@@ -9,7 +9,7 @@ from app.db.database import Base
 
 class TenantDictionarySource(Base):
     __tablename__ = "tenant_dictionary_sources"
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = {'extend_existing': True, 'schema': 'public'}
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
     company_id = Column(String(100), nullable=True, index=True)
