@@ -77,7 +77,7 @@ DICIONARIO DE DADOS (TENANT ATUAL):
             
         if tid:
             # Pega o snapshot mais recente
-            latest_snap = db.query(DictionarySnapshot).filter(DictionarySnapshot.tenant_id == tid, DictionarySnapshot.sync_status == 'completed').order_by(DictionarySnapshot.started_at.desc()).first()
+            latest_snap = db.query(DictionarySnapshot).filter(DictionarySnapshot.tenant_id == tid, DictionarySnapshot.snapshot_status == 'completed').order_by(DictionarySnapshot.created_at.desc()).first()
             if latest_snap:
                 allowed_tables = db.query(TenantAllowedTable, TenantDictionaryTable).join(
                     TenantDictionaryTable, TenantAllowedTable.table_id == TenantDictionaryTable.id

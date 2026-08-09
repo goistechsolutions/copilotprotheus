@@ -167,4 +167,4 @@ def list_snapshots(
     q = db.query(DictionarySnapshot)
     if tenant_id:
         q = q.filter(DictionarySnapshot.tenant_id == tenant_id)
-    return q.order_by(DictionarySnapshot.started_at.desc()).limit(50).all()
+    return q.order_by(DictionarySnapshot.created_at.desc()).limit(50).all()

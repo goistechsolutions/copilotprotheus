@@ -34,7 +34,7 @@ class DictionaryService:
             company_id=uuid.UUID(company_id) if company_id else None,
             env_id=uuid.UUID(env_id) if env_id else None,
             snapshot_code=snapshot_code,
-            sync_status='in_progress',
+            snapshot_status='in_progress',
             requested_by=uuid.UUID(user_id) if user_id else None
         )
         self.db.add(snapshot)
@@ -139,7 +139,7 @@ class DictionaryService:
                     total_indexes += 1
                 db.commit()
 
-            snapshot.sync_status = 'completed'
+            snapshot.snapshot_status = 'completed'
             snapshot.finished_at = datetime.now(timezone.utc)
             snapshot.total_tables = total_tables
             snapshot.total_fields = total_fields
@@ -149,7 +149,7 @@ class DictionaryService:
         except Exception as e:
             logger.error(f"Erro na sincronização de dicionário: {str(e)}")
             if 'snapshot' in locals() and snapshot:
-                snapshot.sync_status = 'error'
+                snapshot.snapshot_status = 'error'
                 snapshot.notes = str(e)
                 snapshot.finished_at = datetime.now(timezone.utc)
                 db.commit()

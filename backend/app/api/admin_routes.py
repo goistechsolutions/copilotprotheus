@@ -271,7 +271,7 @@ def _get_latest_snapshot(db: Session, tenant_id: str) -> Optional[DictionarySnap
         db.query(DictionarySnapshot)
         .filter(
             DictionarySnapshot.tenant_id == tenant_id,
-            DictionarySnapshot.sync_status == 'completed',
+            DictionarySnapshot.snapshot_status == 'completed',
         )
         .order_by(DictionarySnapshot.finished_at.desc())
         .first()

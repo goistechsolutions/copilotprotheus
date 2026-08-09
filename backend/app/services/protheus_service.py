@@ -215,8 +215,8 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
         # 2. Verifica tabelas
         latest_snap = db.query(DictionarySnapshot).filter(
             DictionarySnapshot.tenant_id == tid, 
-            DictionarySnapshot.sync_status == 'completed'
-        ).order_by(DictionarySnapshot.started_at.desc()).first()
+            DictionarySnapshot.snapshot_status == 'completed'
+        ).order_by(DictionarySnapshot.created_at.desc()).first()
         
         if latest_snap:
             blocked_tables = db.query(TenantDictionaryTable.physical_name).outerjoin(
