@@ -37,6 +37,40 @@ router = APIRouter(tags=["catalog-v52-governance"])
 # ─── Request / Response Models ───────────────────────────────────────────────
 
 class SnapshotRequest(BaseModel):
+    tenant_id: str = Field(..., description="ID do tenant (padrão 'default')")
+    environment_id: str = Field("producao", description="ID do ambiente Protheus")
+    company_id: Optional[str] = Field(None, description="ID opcional da empresa/filial")
+
+    async_mode: bool = Field(False, description="Executar em segundo plano")
+
+class FieldPermissionItem(BaseModel):
+    field_name: str
+    can_select: bool = True
+    can_filter: bool = True
+    masked_flag: bool = False
+
+class SaveTablePermissionRequest(BaseModel):
+    tenant_id: str
+    environment_id: str = "producao"
+    role_id: str
+    table_name: str
+    can_list: bool = True
+    can_describe: bool = True
+    can_query: bool = True
+    approved_by: Optional[str] = None
+    field_permissions: List[FieldPermissionItem] = []
+
+class AllowedCatalogRequest(BaseModel):
+    tenant_id: str
+    environment_id: str = "producao"
+    role_ids: List[str]
+
+# --- Endpoints Admin (Governança e Dicionário) ---
+
+@router.post("/api/admin/dictionary/snapshot", summary="Dispara sincronização do dicionário SX2/SX3/SXG/SIX do Protheus Real")
+def trigger_dictionary_snapshot(
+    req: SnapshotRequest, 
+    background_tasks: BackgroundTasks, 
     tenant_id: str       = Field(..., description="ID do tenant")
     modulos:   List[str] = Field(..., description="Siglas dos módulos (ex: ['SIGAFIN', 'SIGAFAT'])")
 
@@ -98,6 +132,27 @@ async def trigger_dictionary_snapshot(
     Persiste em tenant_schemas com campos em schema_json.
     Não armazena dados transacionais — apenas metadados de estrutura.
     """
+    if req.async_mode:
+        background_tasks.add_task(run_snapshot, req.tenant_id, req.environment_id, req.company_id)
+        return {"status": "processing", "message": "Job de snapshot acionado em background para o ambiente real."}
+    else:
+        try:
+            result = run_snapshot(req.tenant_id, req.environment_id, req.company_id, session=db)
+            return result
+        except RuntimeError as rt_err:
+            logger.error(f"Erro na sincronização de dicionário: {rt_err}")
+            raise HTTPException(
+                status_code=502, 
+                detail=str(rt_err)
+            )
+        except Exception as e:
+            logger.error(f"Falha inesperada no snapshot: {e}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Erro interno ao sincronizar dicionário real: {str(e)}"
+            )
+
+@router.get("/api/admin/dictionary/tables", summary="Lista tabelas e campos sincronizados no catálogo")
     from app.api.admin_routes import sync_schema
     try:
         result = await sync_schema(tenant_id=req.tenant_id, modulos=req.modulos, db=db)
@@ -127,6 +182,20 @@ def get_dictionary_tables(
     rows = _read_tenant_schemas(db, clean_tenant, mod_sigla=mod_sigla, chave_filter=table_name)
 
     result = []
+    for t in tables:
+        fields = db.query(DictionaryField).filter(
+            DictionaryField.tenant_id == tenant_id,
+            DictionaryField.environment_id == environment_id,
+            DictionaryField.table_name == t.table_name,
+            True
+        ).order_by(DictionaryField.field_name.asc()).all()
+        
+        result.append({
+            "table_name": t.table_name,
+            "table_alias": t.table_alias,
+            "description": t.description,
+            "module_code": t.module_code,
+            "fields": [
     for r in rows:
         sj = _parse_schema_json(r["schema_json"])
         campos = sj.get("campos", [])

@@ -1,3 +1,4 @@
+from app.models.catalog_v52 import DictionaryTable
 import re
 import os
 import time
@@ -66,6 +67,7 @@ DICIONARIO DE DADOS (TENANT ATUAL):
 """
     try:
         from app.db.database import SessionLocal
+        from app.models.knowledge import TenantAllowedTable
         from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable
         
         db = SessionLocal()
@@ -77,6 +79,13 @@ DICIONARIO DE DADOS (TENANT ATUAL):
             
         if tid:
             tid = str(tid)
+            allowed_tables = db.query(DictionaryTable).outerjoin(
+                TenantAllowedTable,
+                (TenantAllowedTable.table_name == DictionaryTable.physical_name) &
+                (TenantAllowedTable.tenant_id == tid)
+            ).filter(
+                DictionaryTable.tenant_id == tid,
+                DictionaryTable.active_flag == True,
             allowed_tables = db.query(TenantDictionaryTable).outerjoin(
                 TenantAllowedTable,
                 (TenantAllowedTable.table_name == TenantDictionaryTable.physical_name) &

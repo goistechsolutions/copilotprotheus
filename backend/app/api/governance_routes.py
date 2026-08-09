@@ -10,6 +10,8 @@ from app.models.knowledge import (
     Company,
     Tenant,
 )
+from app.models.catalog_v52 import DictionaryTable
+
 from typing import List, Optional
 from pydantic import BaseModel
 import uuid
@@ -118,15 +120,17 @@ def list_dictionary_tables(
             ensure_tenant_tables(db, clean_tenant)
             db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
-    q = db.query(TenantDictionaryTable)
+    q = db.query(DictionaryTable)
     if tenant_id:
-        q = q.filter(TenantDictionaryTable.tenant_id == tenant_id)
+        q = q.filter(DictionaryTable.tenant_id == tenant_id)
     if snapshot_id:
         try:
             sid = uuid.UUID(snapshot_id)
-            q = q.filter(TenantDictionaryTable.snapshot_id == sid)
+            q = q.filter(DictionaryTable.snapshot_id == sid)
         except ValueError:
             raise HTTPException(status_code=400, detail="snapshot_id inválido")
     if module_code:
+        q = q.filter(DictionaryTable.module_code == module_code.upper())
+    return q.order_by(DictionaryTable.physical_name.asc()).limit(200).all()
         q = q.filter(TenantDictionaryTable.module_code == module_code.upper())
     return q.order_by(TenantDictionaryTable.physical_name.asc()).limit(200).all()
