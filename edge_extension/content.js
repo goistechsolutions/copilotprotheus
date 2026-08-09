@@ -84,11 +84,20 @@
     if (isLoginVisible) return false;
 
     // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, ainda não entrou no workspace
-    const bodyText = document.body.innerText || "";
-    const hasInitialModal = bodyText.includes("Programa Inicial") && bodyText.includes("Ambiente no servidor");
+    let hasInitialModal = false;
+    const allElements = document.querySelectorAll('span, label, div');
+    for (const el of allElements) {
+      if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
+        const text = el.textContent.trim().toLowerCase();
+        if (text.includes("programa inicial") || text.includes("ambiente no servidor")) {
+          if (el.offsetParent !== null) {
+            hasInitialModal = true;
+            break;
+          }
+        }
+      }
+    }
     if (hasInitialModal) return false;
-
-    // Se não tem senha e não tem modal inicial, assumimos que está logado no Workspace!
     return true;
   }
 
