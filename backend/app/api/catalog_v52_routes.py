@@ -25,7 +25,7 @@ class SnapshotRequest(BaseModel):
     tenant_id: str = Field(..., description="ID do tenant (padrão 'default')")
     environment_id: str = Field("producao", description="ID do ambiente Protheus")
     company_id: Optional[str] = Field(None, description="ID opcional da empresa/filial")
-    snapshot_code: Optional[str] = Field(None, description="Código opcional do snapshot (timestamp por padrão)")
+
     async_mode: bool = Field(False, description="Executar em segundo plano")
 
 class FieldPermissionItem(BaseModel):
@@ -67,11 +67,11 @@ def trigger_dictionary_snapshot(
     - Prioriza consulta via QueryRest se endpoints REST específicos do framework estiverem ausentes.
     """
     if req.async_mode:
-        background_tasks.add_task(run_snapshot, req.tenant_id, req.environment_id, req.company_id, req.snapshot_code)
+        background_tasks.add_task(run_snapshot, req.tenant_id, req.environment_id, req.company_id)
         return {"status": "processing", "message": "Job de snapshot acionado em background para o ambiente real."}
     else:
         try:
-            result = run_snapshot(req.tenant_id, req.environment_id, req.company_id, req.snapshot_code, session=db)
+            result = run_snapshot(req.tenant_id, req.environment_id, req.company_id, session=db)
             return result
         except RuntimeError as rt_err:
             logger.error(f"Erro na sincronização de dicionário: {rt_err}")
@@ -125,7 +125,7 @@ def get_dictionary_tables(
             DictionaryField.tenant_id == tenant_id,
             DictionaryField.environment_id == environment_id,
             DictionaryField.table_name == t.table_name,
-            DictionaryField.snapshot_code == t.snapshot_code
+            True
         ).order_by(DictionaryField.field_name.asc()).all()
         
         result.append({
@@ -133,7 +133,6 @@ def get_dictionary_tables(
             "table_alias": t.table_alias,
             "description": t.description,
             "module_code": t.module_code,
-            "snapshot_code": t.snapshot_code,
             "fields": [
                 {
                     "field_name": f.field_name,

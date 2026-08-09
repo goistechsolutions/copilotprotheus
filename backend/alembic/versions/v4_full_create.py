@@ -357,7 +357,6 @@ def upgrade() -> None:
         sa.Column(\'tenant_id\',        sa.String(100), sa.ForeignKey(\'tenants.id\', ondelete=\'CASCADE\'), nullable=False),
         sa.Column(\'company_id\',       sa.String(100), nullable=True),
         sa.Column(\'environment_id\',   sa.String(100), nullable=False, server_default=\'producao\'),
-        sa.Column(\'snapshot_code\',    sa.String(60),  nullable=False),
         sa.Column(\'table_name\',       sa.String(30),  nullable=False),
         sa.Column(\'table_alias\',      sa.String(80),  nullable=True),
         sa.Column(\'module_code\',      sa.String(10),  nullable=True),
@@ -369,7 +368,6 @@ def upgrade() -> None:
         sa.Column(\'updated_at\',       sa.DateTime(timezone=True), server_default=sa.text(\'now()\')),
     )
     op.create_index(\'ix_tdt_tenant_id\', \'tenant_dictionary_tables\', [\'tenant_id\'])
-    op.create_index(\'ix_tdt_snapshot_code\', \'tenant_dictionary_tables\', [\'snapshot_code\'])
     op.create_index(\'ix_tdt_table_name\', \'tenant_dictionary_tables\', [\'table_name\'])
 
     # ── 21. tenant_allowed_tables ─────────────────────────────────────────
