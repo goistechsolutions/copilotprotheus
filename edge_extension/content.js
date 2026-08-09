@@ -84,7 +84,7 @@
     if (isLoginVisible) return false;
 
     // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, ainda não entrou no workspace
-    const bodyText = document.body.textContent || "";
+    const bodyText = document.body.innerText || "";
     const hasInitialModal = bodyText.includes("Programa Inicial") && bodyText.includes("Ambiente no servidor");
     if (hasInitialModal) return false;
 
