@@ -352,37 +352,37 @@ def upgrade() -> None:
 
     # ── 18. tenant_dictionary_tables ──────────────────────────────────────
     op.create_table(
-        \'tenant_dictionary_tables\',
-        sa.Column(\'id\',               sa.BigInteger, primary_key=True),
-        sa.Column(\'tenant_id\',        sa.String(100), sa.ForeignKey(\'tenants.id\', ondelete=\'CASCADE\'), nullable=False),
-        sa.Column(\'company_id\',       sa.String(100), nullable=True),
-        sa.Column(\'environment_id\',   sa.String(100), nullable=False, server_default=\'producao\'),
-        sa.Column(\'table_name\',       sa.String(30),  nullable=False),
-        sa.Column(\'table_alias\',      sa.String(80),  nullable=True),
-        sa.Column(\'module_code\',      sa.String(10),  nullable=True),
-        sa.Column(\'description\',      sa.Text,        nullable=True),
-        sa.Column(\'physical_name\',    sa.String(80),  nullable=True),
-        sa.Column(\'active_flag\',      sa.Boolean,     nullable=False, server_default=\'true\'),
-        sa.Column(\'raw_payload\',      postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column(\'created_at\',       sa.DateTime(timezone=True), server_default=sa.text(\'now()\')),
-        sa.Column(\'updated_at\',       sa.DateTime(timezone=True), server_default=sa.text(\'now()\')),
+        'tenant_dictionary_tables',
+        sa.Column('id',               sa.BigInteger, primary_key=True),
+        sa.Column('tenant_id',        sa.String(100), sa.ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('company_id',       sa.String(100), nullable=True),
+        sa.Column('environment_id',   sa.String(100), nullable=False, server_default='producao'),
+        sa.Column('table_name',       sa.String(30),  nullable=False),
+        sa.Column('table_alias',      sa.String(80),  nullable=True),
+        sa.Column('module_code',      sa.String(10),  nullable=True),
+        sa.Column('description',      sa.Text,        nullable=True),
+        sa.Column('physical_name',    sa.String(80),  nullable=True),
+        sa.Column('active_flag',      sa.Boolean,     nullable=False, server_default='true'),
+        sa.Column('raw_payload',      postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('created_at',       sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at',       sa.DateTime(timezone=True), server_default=sa.text('now()')),
     )
-    op.create_index(\'ix_tdt_tenant_id\', \'tenant_dictionary_tables\', [\'tenant_id\'])
-    op.create_index(\'ix_tdt_table_name\', \'tenant_dictionary_tables\', [\'table_name\'])
+    op.create_index('ix_tdt_tenant_id', 'tenant_dictionary_tables', ['tenant_id'])
+    op.create_index('ix_tdt_table_name', 'tenant_dictionary_tables', ['table_name'])
 
     # ── 21. tenant_allowed_tables ─────────────────────────────────────────
     op.create_table(
-        \'tenant_allowed_tables\',
-        sa.Column(\'id\',          UUID(as_uuid=True), primary_key=True, server_default=sa.text(\'uuid_generate_v4()\')),
-        sa.Column(\'tenant_id\',   sa.String(100), sa.ForeignKey(\'tenants.id\', ondelete=\'CASCADE\'), nullable=False),
-        sa.Column(\'table_name\',  sa.String(30),  nullable=False),
-        sa.Column(\'module_code\', sa.String(30),  nullable=True),
-        sa.Column(\'active\',      sa.Boolean,     nullable=False, server_default=\'true\'),
-        sa.Column(\'created_at\',  sa.DateTime(timezone=True), server_default=sa.text(\'now()\')),
-        sa.Column(\'updated_at\',  sa.DateTime(timezone=True), nullable=True),
+        'tenant_allowed_tables',
+        sa.Column('id',          UUID(as_uuid=True), primary_key=True, server_default=sa.text('uuid_generate_v4()')),
+        sa.Column('tenant_id',   sa.String(100), sa.ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('table_name',  sa.String(30),  nullable=False),
+        sa.Column('module_code', sa.String(30),  nullable=True),
+        sa.Column('active',      sa.Boolean,     nullable=False, server_default='true'),
+        sa.Column('created_at',  sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at',  sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(\'ix_tat_tenant_id\', \'tenant_allowed_tables\', [\'tenant_id\'])
-    op.create_index(\'ix_tat_table_name\', \'tenant_allowed_tables\', [\'table_name\'])
+    op.create_index('ix_tat_tenant_id', 'tenant_allowed_tables', ['tenant_id'])
+    op.create_index('ix_tat_table_name', 'tenant_allowed_tables', ['table_name'])
 
     # ── 23. knowledge_bases ───────────────────────────────────────────────
     op.create_table(
