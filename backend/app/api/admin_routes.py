@@ -615,6 +615,7 @@ async def sync_schema(
             db.commit()
     except Exception as e_sys:
         logger.warning(f"Aviso ao atualizar protheus_modules_master via QueryRest: {e_sys}")
+        db.rollback()
 
     try:
         if db.query(ProtheusModuleMaster).count() == 0:
@@ -647,10 +648,10 @@ async def sync_schema(
 
     master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
-    # Monta lista de códigos NUMÉRICOS para filtrar X2.X2_MODULO
-    # X2_MODULO é um campo numérico (INTEGER) no Protheus - usar APENAS números
-    numeric_codes = set()   # valores numéricos de X2_MODULO ex: 1, 6, 7
-    sigla_map = {}          # mod_code -> mod_sigla (para gravar no tenant_schemas)
+    # Monta lista de chaves para filtrar X2.X2_MODULO
+    module_keys = set()
+    sigla_map = {}
+    code_to_name = {}
 
     for m in master_rows:
         m_sigla = (m.mod_sigla or "").strip().upper()
@@ -661,31 +662,33 @@ async def sync_schema(
             is_selected = True
         else:
             for cm in clean_modulos:
-                # Usuário pode digitar sigla (SIGAFIN) ou número (6)
                 if cm == m_sigla or cm == str(m.mod_code) or cm in m_desc:
                     is_selected = True
                     break
 
         if is_selected:
-            numeric_codes.add(str(m.mod_code))
+            module_keys.add(str(m.mod_code))
+            if str(m.mod_code).isdigit():
+                module_keys.add(f"{int(m.mod_code):02d}")
+            if m_sigla:
+                module_keys.add(m_sigla)
+                if m_sigla.startswith("SIGA"):
+                    module_keys.add(m_sigla.replace("SIGA", ""))
+            
             sigla_map[str(m.mod_code)] = m_sigla
             code_to_name[str(m.mod_code)] = m_desc
 
-    # Se usuário digitou número diretamente que não está no master, inclui mesmo assim
     for cm in clean_modulos:
-        if cm.isdigit() and cm not in numeric_codes:
-            numeric_codes.add(cm)
+        if cm not in module_keys:
+            module_keys.add(cm)
+            if cm.isdigit():
+                module_keys.add(f"{int(cm):02d}")
             code_to_name[cm] = cm
 
-    if numeric_codes:
-        # Include both '5' and '05' to match Protheus X2_MODULO character field
-        in_values = []
-        for c in numeric_codes:
-            in_values.append(f"'{c}'")
-            if c.isdigit():
-                in_values.append(f"'{int(c):02d}'")
-        numeric_in = ", ".join(in_values)
-        where_clause = f"WHERE X2.D_E_L_E_T_<>'*' AND TRIM(X2.X2_MODULO) IN ({numeric_in})"
+    if module_keys:
+        in_values = [f"'{c}'" for c in module_keys]
+        module_in = ", ".join(in_values)
+        where_clause = f"WHERE X2.D_E_L_E_T_<>'*' AND TRIM(X2.X2_MODULO) IN ({module_in})"
     else:
         where_clause = "WHERE X2.D_E_L_E_T_<>'*'"
 
