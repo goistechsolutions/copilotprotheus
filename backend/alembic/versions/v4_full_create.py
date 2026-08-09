@@ -350,126 +350,41 @@ def upgrade() -> None:
     )
     op.create_index('ix_tenant_module_contracts_tenant_id', 'tenant_module_contracts', ['tenant_id'])
 
-    # ── 17. dictionary_snapshots ──────────────────────────────────────────
-    op.create_table(
-        'dictionary_snapshots',
-        sa.Column('id',             UUID(as_uuid=True), primary_key=True, server_default=sa.text('uuid_generate_v4()')),
-        sa.Column('tenant_id',      sa.String(100), sa.ForeignKey('tenants.id',      ondelete='CASCADE'),  nullable=False),
-        sa.Column('company_id',     sa.Integer,     sa.ForeignKey('companies.id',    ondelete='SET NULL'), nullable=True),
-        sa.Column('env_id',         UUID(as_uuid=True), sa.ForeignKey('environments.id'), nullable=True),
-        sa.Column('snapshot_code',  sa.String(80),  nullable=False),
-        sa.Column('source_db_type', sa.String(30),  nullable=False, server_default='oracle'),
-        sa.Column('source_label',   sa.String(150), nullable=True),
-        sa.Column('sync_mode',      sa.String(20),  nullable=False, server_default='full'),
-        sa.Column('sync_status',    sa.String(20),  nullable=False, server_default='completed'),
-        sa.Column('requested_by',   UUID(as_uuid=True), nullable=True),
-        sa.Column('started_at',     sa.DateTime(timezone=True), server_default=sa.text('now()')),
-        sa.Column('finished_at',    sa.DateTime(timezone=True), nullable=True),
-        sa.Column('total_modules',  sa.Integer, server_default='0'),
-        sa.Column('total_tables',   sa.Integer, server_default='0'),
-        sa.Column('total_fields',   sa.Integer, server_default='0'),
-        sa.Column('total_indexes',  sa.Integer, server_default='0'),
-        sa.Column('notes',          sa.Text,    nullable=True),
-    )
-    op.create_index('ix_dictionary_snapshots_tenant_id', 'dictionary_snapshots', ['tenant_id'])
-
     # ── 18. tenant_dictionary_tables ──────────────────────────────────────
     op.create_table(
-        'tenant_dictionary_tables',
-        sa.Column('id',               UUID(as_uuid=True), primary_key=True, server_default=sa.text('uuid_generate_v4()')),
-        sa.Column('snapshot_id',      UUID(as_uuid=True), sa.ForeignKey('dictionary_snapshots.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('tenant_id',        sa.String(100), sa.ForeignKey('tenants.id',   ondelete='CASCADE'),  nullable=False),
-        sa.Column('company_id',       sa.Integer,     sa.ForeignKey('companies.id', ondelete='SET NULL'), nullable=True),
-        sa.Column('env_id',           UUID(as_uuid=True), sa.ForeignKey('environments.id'), nullable=True),
-        sa.Column('module_code',      sa.String(30),  nullable=True),
-        sa.Column('table_key',        sa.String(20),  nullable=False),
-        sa.Column('physical_name',    sa.String(30),  nullable=False),
-        sa.Column('table_name',       sa.String(255), nullable=True),
-        sa.Column('unique_index_expr',sa.Text,        nullable=True),
-        sa.Column('x2_tamfil',        sa.Numeric(10,2), nullable=True),
-        sa.Column('x2_modo',          sa.String(5),   nullable=True),
-        sa.Column('x2_tamun',         sa.Numeric(10,2), nullable=True),
-        sa.Column('x2_modoun',        sa.String(5),   nullable=True),
-        sa.Column('x2_tamemp',        sa.Numeric(10,2), nullable=True),
-        sa.Column('x2_modoemp',       sa.String(5),   nullable=True),
-        sa.Column('usa_empresa',      sa.String(1),   nullable=False, server_default='N'),
-        sa.Column('usa_unidade',      sa.String(1),   nullable=False, server_default='N'),
-        sa.Column('usa_filial',       sa.String(1),   nullable=False, server_default='N'),
-        sa.Column('active',           sa.Boolean,     nullable=False, server_default='true'),
-        sa.Column('created_at',       sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        \'tenant_dictionary_tables\',
+        sa.Column(\'id\',               sa.BigInteger, primary_key=True),
+        sa.Column(\'tenant_id\',        sa.String(100), sa.ForeignKey(\'tenants.id\', ondelete=\'CASCADE\'), nullable=False),
+        sa.Column(\'company_id\',       sa.String(100), nullable=True),
+        sa.Column(\'environment_id\',   sa.String(100), nullable=False, server_default=\'producao\'),
+        sa.Column(\'snapshot_code\',    sa.String(60),  nullable=False),
+        sa.Column(\'table_name\',       sa.String(30),  nullable=False),
+        sa.Column(\'table_alias\',      sa.String(80),  nullable=True),
+        sa.Column(\'module_code\',      sa.String(10),  nullable=True),
+        sa.Column(\'description\',      sa.Text,        nullable=True),
+        sa.Column(\'physical_name\',    sa.String(80),  nullable=True),
+        sa.Column(\'active_flag\',      sa.Boolean,     nullable=False, server_default=\'true\'),
+        sa.Column(\'raw_payload\',      postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(\'created_at\',       sa.DateTime(timezone=True), server_default=sa.text(\'now()\')),
+        sa.Column(\'updated_at\',       sa.DateTime(timezone=True), server_default=sa.text(\'now()\')),
     )
-    op.create_index('ix_tdt_snapshot_id', 'tenant_dictionary_tables', ['snapshot_id'])
-    op.create_index('ix_tdt_tenant_id',   'tenant_dictionary_tables', ['tenant_id'])
-    op.create_index('ix_tdt_company_id',  'tenant_dictionary_tables', ['company_id'])
-
-    # ── 19. tenant_dictionary_fields ──────────────────────────────────────
-    op.create_table(
-        'tenant_dictionary_fields',
-        sa.Column('id',                UUID(as_uuid=True), primary_key=True, server_default=sa.text('uuid_generate_v4()')),
-        sa.Column('snapshot_id',       UUID(as_uuid=True), sa.ForeignKey('dictionary_snapshots.id',       ondelete='CASCADE'), nullable=False),
-        sa.Column('tenant_id',         sa.String(100), sa.ForeignKey('tenants.id',                        ondelete='CASCADE'), nullable=False),
-        sa.Column('table_id',          UUID(as_uuid=True), sa.ForeignKey('tenant_dictionary_tables.id',   ondelete='CASCADE'), nullable=False),
-        sa.Column('field_name',        sa.String(40),  nullable=False),
-        sa.Column('field_description', sa.String(255), nullable=True),
-        sa.Column('field_type',        sa.String(5),   nullable=True),
-        sa.Column('field_length',      sa.Numeric(10,2), nullable=True),
-        sa.Column('field_order',       sa.Integer,     nullable=True),
-        sa.Column('sxg_group',         sa.String(20),  nullable=True),
-        sa.Column('sxg_size',          sa.Numeric(10,2), nullable=True),
-        sa.Column('is_sensitive',      sa.Boolean,     nullable=False, server_default='false'),
-        sa.Column('mask_rule',         sa.String(50),  nullable=True),
-        sa.Column('active',            sa.Boolean,     nullable=False, server_default='true'),
-        sa.Column('created_at',        sa.DateTime(timezone=True), server_default=sa.text('now()')),
-    )
-    op.create_index('ix_tdf_tenant_id', 'tenant_dictionary_fields', ['tenant_id'])
-    op.create_index('ix_tdf_table_id',  'tenant_dictionary_fields', ['table_id'])
-
-    # ── 20. tenant_dictionary_indexes ─────────────────────────────────────
-    op.create_table(
-        'tenant_dictionary_indexes',
-        sa.Column('id',               UUID(as_uuid=True), primary_key=True, server_default=sa.text('uuid_generate_v4()')),
-        sa.Column('snapshot_id',      UUID(as_uuid=True), sa.ForeignKey('dictionary_snapshots.id',     ondelete='CASCADE'), nullable=False),
-        sa.Column('tenant_id',        sa.String(100), sa.ForeignKey('tenants.id',                     ondelete='CASCADE'), nullable=False),
-        sa.Column('table_id',         UUID(as_uuid=True), sa.ForeignKey('tenant_dictionary_tables.id',ondelete='CASCADE'), nullable=False),
-        sa.Column('index_order',      sa.Integer,     nullable=True),
-        sa.Column('index_nickname',   sa.String(80),  nullable=True),
-        sa.Column('index_expression', sa.Text,        nullable=False),
-        sa.Column('is_unique',        sa.Boolean,     nullable=False, server_default='false'),
-        sa.Column('is_primary_hint',  sa.Boolean,     nullable=False, server_default='false'),
-        sa.Column('active',           sa.Boolean,     nullable=False, server_default='true'),
-        sa.Column('created_at',       sa.DateTime(timezone=True), server_default=sa.text('now()')),
-    )
-    op.create_index('ix_tdi_tenant_id', 'tenant_dictionary_indexes', ['tenant_id'])
-    op.create_index('ix_tdi_table_id',  'tenant_dictionary_indexes', ['table_id'])
+    op.create_index(\'ix_tdt_tenant_id\', \'tenant_dictionary_tables\', [\'tenant_id\'])
+    op.create_index(\'ix_tdt_snapshot_code\', \'tenant_dictionary_tables\', [\'snapshot_code\'])
+    op.create_index(\'ix_tdt_table_name\', \'tenant_dictionary_tables\', [\'table_name\'])
 
     # ── 21. tenant_allowed_tables ─────────────────────────────────────────
     op.create_table(
-        'tenant_allowed_tables',
-        sa.Column('id',           UUID(as_uuid=True), primary_key=True, server_default=sa.text('uuid_generate_v4()')),
-        sa.Column('tenant_id',    sa.String(100), sa.ForeignKey('tenants.id',                     ondelete='CASCADE'), nullable=False),
-        sa.Column('contract_id',  UUID(as_uuid=True), sa.ForeignKey('tenant_contracts.id',        ondelete='CASCADE'), nullable=False),
-        sa.Column('snapshot_id',  UUID(as_uuid=True), sa.ForeignKey('dictionary_snapshots.id',    ondelete='CASCADE'), nullable=False),
-        sa.Column('table_id',     UUID(as_uuid=True), sa.ForeignKey('tenant_dictionary_tables.id',ondelete='CASCADE'), nullable=False),
-        sa.Column('access_level', sa.String(20),  nullable=False, server_default='query'),
-        sa.Column('allowed',      sa.Boolean,     nullable=False, server_default='true'),
-        sa.Column('rationale',    sa.String(255), nullable=True),
-        sa.Column('created_at',   sa.DateTime(timezone=True), server_default=sa.text('now()')),
-        sa.Column('updated_at',   sa.DateTime(timezone=True), nullable=True),
+        \'tenant_allowed_tables\',
+        sa.Column(\'id\',          UUID(as_uuid=True), primary_key=True, server_default=sa.text(\'uuid_generate_v4()\')),
+        sa.Column(\'tenant_id\',   sa.String(100), sa.ForeignKey(\'tenants.id\', ondelete=\'CASCADE\'), nullable=False),
+        sa.Column(\'table_name\',  sa.String(30),  nullable=False),
+        sa.Column(\'module_code\', sa.String(30),  nullable=True),
+        sa.Column(\'active\',      sa.Boolean,     nullable=False, server_default=\'true\'),
+        sa.Column(\'created_at\',  sa.DateTime(timezone=True), server_default=sa.text(\'now()\')),
+        sa.Column(\'updated_at\',  sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index('ix_tat_tenant_id', 'tenant_allowed_tables', ['tenant_id'])
-
-    # ── 22. tenant_allowed_fields ─────────────────────────────────────────
-    op.create_table(
-        'tenant_allowed_fields',
-        sa.Column('id',               UUID(as_uuid=True), primary_key=True, server_default=sa.text('uuid_generate_v4()')),
-        sa.Column('tenant_id',        sa.String(100), sa.ForeignKey('tenants.id',                 ondelete='CASCADE'), nullable=False),
-        sa.Column('allowed_table_id', UUID(as_uuid=True), sa.ForeignKey('tenant_allowed_tables.id',ondelete='CASCADE'), nullable=False),
-        sa.Column('field_id',         UUID(as_uuid=True), sa.ForeignKey('tenant_dictionary_fields.id',ondelete='CASCADE'), nullable=False),
-        sa.Column('allowed',          sa.Boolean, nullable=False, server_default='true'),
-        sa.Column('masking_required', sa.Boolean, nullable=False, server_default='false'),
-        sa.Column('created_at',       sa.DateTime(timezone=True), server_default=sa.text('now()')),
-    )
-    op.create_index('ix_taf_tenant_id', 'tenant_allowed_fields', ['tenant_id'])
+    op.create_index(\'ix_tat_tenant_id\', \'tenant_allowed_tables\', [\'tenant_id\'])
+    op.create_index(\'ix_tat_table_name\', \'tenant_allowed_tables\', [\'table_name\'])
 
     # ── 23. knowledge_bases ───────────────────────────────────────────────
     op.create_table(
@@ -604,7 +519,6 @@ def upgrade() -> None:
         sa.Column('env_id',                  UUID(as_uuid=True), sa.ForeignKey('environments.id'), nullable=True),
         sa.Column('user_id',                 UUID(as_uuid=True), sa.ForeignKey('users.id'),        nullable=True),
         sa.Column('contract_id',             UUID(as_uuid=True), sa.ForeignKey('tenant_contracts.id'), nullable=True),
-        sa.Column('snapshot_id',             UUID(as_uuid=True), sa.ForeignKey('dictionary_snapshots.id'), nullable=True),
         sa.Column('request_id',              sa.String(120), nullable=True),
         sa.Column('natural_language_prompt', sa.Text,        nullable=True),
         sa.Column('generated_sql',           sa.Text,        nullable=True),
@@ -676,12 +590,8 @@ def downgrade() -> None:
         'document_chunks',
         'documents',
         'knowledge_bases',
-        'tenant_allowed_fields',
         'tenant_allowed_tables',
-        'tenant_dictionary_indexes',
-        'tenant_dictionary_fields',
         'tenant_dictionary_tables',
-        'dictionary_snapshots',
         'tenant_module_contracts',
         'protheus_modules_master',
         'concurrent_sessions',

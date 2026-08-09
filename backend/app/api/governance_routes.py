@@ -6,7 +6,6 @@ from app.db.database import get_db
 from app.models.knowledge import (
     TenantAllowedTable,
     TenantDictionaryTable,
-    DictionarySnapshot,
     TenantContract,
     Company,
     Tenant,
@@ -20,23 +19,17 @@ router = APIRouter(prefix="/api/governance", tags=["governance"])
 
 class AllowTableRequest(BaseModel):
     tenant_id: str
-    contract_id: str
-    snapshot_id: str
-    table_id: str
-    access_level: Optional[str] = "query"
-    allowed: Optional[bool] = True
-    rationale: Optional[str] = None
+    table_name: str
+    module_code: Optional[str] = None
+    active: Optional[bool] = True
 
 
 class AllowTableResponse(BaseModel):
     id: str
     tenant_id: str
-    contract_id: str
-    snapshot_id: str
-    table_id: str
-    access_level: str
-    allowed: bool
-    rationale: Optional[str]
+    table_name: str
+    module_code: Optional[str]
+    active: bool
 
     class Config:
         from_attributes = True
@@ -45,14 +38,13 @@ class AllowTableResponse(BaseModel):
 @router.get("/allowed-tables")
 def list_allowed_tables(
     tenant_id: Optional[str] = None,
-    snapshot_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Lista tabelas permitidas para o tenant/snapshot."""
+    """Lista tabelas permitidas para o tenant."""
     if tenant_id:
         import re
         from sqlalchemy import text
-        from app.db.database import ensure_tenant_tables
+        from app.db.database import ensure_tenant_tables, resolve_clean_tenant
         clean_tenant = resolve_clean_tenant(tenant_id)
         if clean_tenant and clean_tenant != "public":
             ensure_tenant_tables(db, clean_tenant)
@@ -61,12 +53,6 @@ def list_allowed_tables(
     q = db.query(TenantAllowedTable)
     if tenant_id:
         q = q.filter(TenantAllowedTable.tenant_id == tenant_id)
-    if snapshot_id:
-        try:
-            sid = uuid.UUID(snapshot_id)
-            q = q.filter(TenantAllowedTable.snapshot_id == sid)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="snapshot_id inválido")
     return q.order_by(TenantAllowedTable.created_at.desc()).all()
 
 
@@ -75,11 +61,11 @@ def allow_table(
     payload: AllowTableRequest,
     db: Session = Depends(get_db)
 ):
-    """Permite ou bloqueia acesso a uma tabela do dicionário para o tenant."""
+    """Permite ou bloqueia acesso a uma tabela do dicionario para o tenant."""
     if payload.tenant_id:
         import re
         from sqlalchemy import text
-        from app.db.database import ensure_tenant_tables
+        from app.db.database import ensure_tenant_tables, resolve_clean_tenant
         clean_tenant = resolve_clean_tenant(payload.tenant_id)
         if clean_tenant and clean_tenant != "public":
             ensure_tenant_tables(db, clean_tenant)
@@ -87,17 +73,14 @@ def allow_table(
     try:
         entry = TenantAllowedTable(
             tenant_id=payload.tenant_id,
-            contract_id=uuid.UUID(payload.contract_id),
-            snapshot_id=uuid.UUID(payload.snapshot_id),
-            table_id=uuid.UUID(payload.table_id),
-            access_level=payload.access_level or "query",
-            allowed=payload.allowed if payload.allowed is not None else True,
-            rationale=payload.rationale,
+            table_name=payload.table_name,
+            module_code=payload.module_code,
+            active=payload.active if payload.active is not None else True,
         )
         db.add(entry)
         db.commit()
         db.refresh(entry)
-        return {"id": str(entry.id), "allowed": entry.allowed, "access_level": entry.access_level}
+        return {"id": str(entry.id), "active": entry.active, "table_name": entry.table_name}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Erro ao salvar permissão: {str(e)}")
@@ -147,24 +130,3 @@ def list_dictionary_tables(
     if module_code:
         q = q.filter(TenantDictionaryTable.module_code == module_code.upper())
     return q.order_by(TenantDictionaryTable.physical_name.asc()).limit(200).all()
-
-
-@router.get("/snapshots")
-def list_snapshots(
-    tenant_id: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """Lista snapshots de dicionário disponíveis."""
-    if tenant_id:
-        import re
-        from sqlalchemy import text
-        from app.db.database import ensure_tenant_tables
-        clean_tenant = resolve_clean_tenant(tenant_id)
-        if clean_tenant and clean_tenant != "public":
-            ensure_tenant_tables(db, clean_tenant)
-            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-
-    q = db.query(DictionarySnapshot)
-    if tenant_id:
-        q = q.filter(DictionarySnapshot.tenant_id == tenant_id)
-    return q.order_by(DictionarySnapshot.created_at.desc()).limit(50).all()

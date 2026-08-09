@@ -190,7 +190,7 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
 
 def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
     from app.db.database import get_tenant_session
-    from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable, DictionarySnapshot, QueryUsageCounter, TenantContract, Company, Tenant
+    from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable, QueryUsageCounter, TenantContract, Company, Tenant
     import uuid
     import re
     
@@ -213,26 +213,22 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
                 if "Quota" in str(e): raise e
 
         # 2. Verifica tabelas
-        latest_snap = db.query(DictionarySnapshot).filter(
-            DictionarySnapshot.tenant_id == tid, 
-            DictionarySnapshot.snapshot_status == 'completed'
-        ).order_by(DictionarySnapshot.created_at.desc()).first()
+        # Se a tabela est no dicionrio do tenant, ela DEVE estar na whitelist (TenantAllowedTable) e ativa
+        blocked_tables = db.query(TenantDictionaryTable.physical_name).outerjoin(
+            TenantAllowedTable, 
+            (TenantAllowedTable.table_name == TenantDictionaryTable.physical_name) & 
+            (TenantAllowedTable.tenant_id == tid)
+        ).filter(
+            TenantDictionaryTable.tenant_id == tid,
+            TenantDictionaryTable.active_flag == True,
+            (TenantAllowedTable.id == None) | (TenantAllowedTable.active == False)
+        ).all()
         
-        if latest_snap:
-            blocked_tables = db.query(TenantDictionaryTable.physical_name).outerjoin(
-                TenantAllowedTable, 
-                (TenantAllowedTable.table_id == TenantDictionaryTable.id) & 
-                (TenantAllowedTable.snapshot_id == latest_snap.id)
-            ).filter(
-                TenantDictionaryTable.snapshot_id == latest_snap.id,
-                (TenantAllowedTable.allowed == False) | (TenantAllowedTable.allowed == None)
-            ).all()
-            
-            upper_query = cQuery.upper()
-            for (ptable,) in blocked_tables:
-                if ptable and len(ptable) >= 3:
-                    if re.search(r'\b' + re.escape(ptable.upper()) + r'\b', upper_query):
-                        raise Exception(f"Acesso negado: A tabela {ptable} nao esta liberada para este tenant.")
+        upper_query = cQuery.upper()
+        for (ptable,) in blocked_tables:
+            if ptable and len(ptable) >= 3:
+                if re.search(r'\b' + re.escape(ptable.upper()) + r'\b', upper_query):
+                    raise Exception(f"Acesso negado: A tabela {ptable} nao esta liberada para este tenant.")
         
     finally:
         db.close()

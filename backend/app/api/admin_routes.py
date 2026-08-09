@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import (
     AuditLog, Tenant, Company,
-    TenantAllowedTable, TenantContract, DictionarySnapshot, TenantDictionaryTable,
+    TenantAllowedTable, TenantContract, TenantDictionaryTable,
     ProtheusModuleMaster,
     User, Role, user_roles,
     TenantSchema,
@@ -265,17 +265,7 @@ def _get_active_contract(db: Session, tenant_id: str) -> Optional[TenantContract
     )
 
 
-def _get_latest_snapshot(db: Session, tenant_id: str) -> Optional[DictionarySnapshot]:
-    """Retorna o snapshot de dicionario mais recente do tenant."""
-    return (
-        db.query(DictionarySnapshot)
-        .filter(
-            DictionarySnapshot.tenant_id == tenant_id,
-            DictionarySnapshot.snapshot_status == 'completed',
-        )
-        .order_by(DictionarySnapshot.finished_at.desc())
-        .first()
-    )
+
 
 
 @router.get("/tables")

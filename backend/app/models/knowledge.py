@@ -434,25 +434,7 @@ class TenantAllowedField(Base):
     updated_at = Column(TIMESTAMP(timezone=True))
 
 
-class DictionarySnapshot(Base):
-    """
-    Corresponde a public.dictionary_snapshots (ou schema de tenant).
-    Registra snapshots do dicionário de dados importado do Protheus.
-    """
-    __tablename__ = "dictionary_snapshots"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(String(100), nullable=False, index=True)
-    company_id = Column(String(100))
-    environment_id = Column(String(100), nullable=False, default="producao")
-    snapshot_code = Column(String(60), nullable=False, unique=True)
-    snapshot_status = Column(String(20), nullable=False, default="pending")
-    total_tables = Column(Integer, default=0)
-    total_fields = Column(Integer, default=0)
-    source_type = Column(String(30), default="api")
-    notes = Column(Text)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    finished_at = Column(TIMESTAMP(timezone=True))
 
 
 class TenantDictionaryTable(Base):

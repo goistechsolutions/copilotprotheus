@@ -66,7 +66,7 @@ DICIONARIO DE DADOS (TENANT ATUAL):
 """
     try:
         from app.db.database import SessionLocal
-        from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable, DictionarySnapshot
+        from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable
         
         db = SessionLocal()
         import uuid
@@ -76,27 +76,24 @@ DICIONARIO DE DADOS (TENANT ATUAL):
             tid = None
             
         if tid:
-            # Pega o snapshot mais recente
-            latest_snap = db.query(DictionarySnapshot).filter(DictionarySnapshot.tenant_id == tid, DictionarySnapshot.snapshot_status == 'completed').order_by(DictionarySnapshot.created_at.desc()).first()
-            if latest_snap:
-                allowed_tables = db.query(TenantAllowedTable, TenantDictionaryTable).join(
-                    TenantDictionaryTable, TenantAllowedTable.table_id == TenantDictionaryTable.id
-                ).filter(
-                    TenantAllowedTable.tenant_id == tid,
-                    TenantAllowedTable.snapshot_id == latest_snap.id,
-                    TenantAllowedTable.allowed == True
-                ).all()
-                
-                if allowed_tables:
-                    for allowed, table in allowed_tables:
-                        # Para simplificar na V4, mostramos os dados básicos mapeados
-                        base_prompt += f"- Tabela: {table.physical_name} (Chave: {table.table_key}) - {table.table_name}\n"
-                        share_str = f"Empresa={table.usa_empresa}, Unidade={table.usa_unidade}, Filial={table.usa_filial}"
-                        base_prompt += f"  Compartilhamento: {share_str} | Indice Princ: {table.unique_index_expr}\n\n"
-                else:
-                    base_prompt += "Nenhuma tabela liberada pelo administrador para consulta.\n"
+            tid = str(tid)
+            allowed_tables = db.query(TenantDictionaryTable).outerjoin(
+                TenantAllowedTable,
+                (TenantAllowedTable.table_name == TenantDictionaryTable.physical_name) &
+                (TenantAllowedTable.tenant_id == tid)
+            ).filter(
+                TenantDictionaryTable.tenant_id == tid,
+                TenantDictionaryTable.active_flag == True,
+                (TenantAllowedTable.id != None),
+                (TenantAllowedTable.active == True)
+            ).all()
+            
+            if allowed_tables:
+                for table in allowed_tables:
+                    desc = table.description or "Sem descricao"
+                    base_prompt += f"- Tabela: {table.physical_name} - {desc}\n\n"
             else:
-                base_prompt += "Nenhum dicionario sincronizado para este tenant.\n"
+                base_prompt += "Nenhuma tabela liberada pelo administrador para consulta ou nenhum dicionario sincronizado.\n"
         else:
             base_prompt += "Nenhum dicionario sincronizado para este tenant.\n"
         db.close()
