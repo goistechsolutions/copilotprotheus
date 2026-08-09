@@ -730,6 +730,19 @@ async def sync_schema(
                 
         if not tables_data:
             err_msg = last_err_msg
+            # --- DEBUG BLOCK START ---
+            try:
+                debug_query = "SELECT DISTINCT TRIM(X2_MODULO) AS M FROM SX2990 WHERE D_E_L_E_T_<>'*'"
+                debug_resp = await execute_protheus_tool("QueryRest", {"cQuery": debug_query}, tenant_id=tenant_id)
+                logger.error(f"DEBUG X2_MODULO SX2990: {debug_resp}")
+                
+                debug_query2 = "SELECT DISTINCT TRIM(X2_MODULO) AS M FROM SX2010 WHERE D_E_L_E_T_<>'*'"
+                debug_resp2 = await execute_protheus_tool("QueryRest", {"cQuery": debug_query2}, tenant_id=tenant_id)
+                logger.error(f"DEBUG X2_MODULO SX2010: {debug_resp2}")
+            except Exception as e_debug:
+                logger.error(f"DEBUG ERRO: {e_debug}")
+            # --- DEBUG BLOCK END ---
+            
             if "401" in err_msg or "Unauthorized" in err_msg or "authentication" in err_msg.lower():
                 detail = f"Falha de autenticação (HTTP 401) no servidor REST Protheus ({tenant_id}). Verifique se o Usuário e a Senha REST no cadastro do Tenant/Empresa estão corretos."
             elif "Name or service not known" in err_msg or "gaierror" in err_msg:
