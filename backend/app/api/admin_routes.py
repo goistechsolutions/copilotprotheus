@@ -678,7 +678,13 @@ async def sync_schema(
             code_to_name[cm] = cm
 
     if numeric_codes:
-        numeric_in = ", ".join([f"'{c}'" for c in sorted(numeric_codes, key=lambda x: int(x) if x.isdigit() else 0)])
+        # Include both '5' and '05' to match Protheus X2_MODULO character field
+        in_values = []
+        for c in numeric_codes:
+            in_values.append(f"'{c}'")
+            if c.isdigit():
+                in_values.append(f"'{int(c):02d}'")
+        numeric_in = ", ".join(in_values)
         where_clause = f"WHERE X2.D_E_L_E_T_<>'*' AND TRIM(X2.X2_MODULO) IN ({numeric_in})"
     else:
         where_clause = "WHERE X2.D_E_L_E_T_<>'*'"
@@ -820,6 +826,9 @@ async def sync_schema(
             "message":     f"{len(schema_dict)} tabelas sincronizadas (V4).",
         }
 
+    except HTTPException as he:
+        db.rollback()
+        raise he
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
