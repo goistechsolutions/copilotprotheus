@@ -40,6 +40,7 @@ END $$;
 -- SX2: Tabelas do sistema
 CREATE TABLE IF NOT EXISTS protheus.sx2 (
     x2_filial       VARCHAR(8)   NOT NULL DEFAULT '',
+    x2_modulo       BIGINT       NOT NULL,
     x2_chave        VARCHAR(3)   NOT NULL,
     x2_nome         VARCHAR(25)  NOT NULL DEFAULT '',
     x2_nomespa      VARCHAR(25)  NOT NULL DEFAULT '',
@@ -51,8 +52,8 @@ CREATE TABLE IF NOT EXISTS protheus.sx2 (
     r_e_c_d_e_l_    BIGINT       NOT NULL DEFAULT 0,
     CONSTRAINT pk_sx2 PRIMARY KEY (x2_chave, x2_filial)
 );
-CREATE INDEX IF NOT EXISTS idx_sx2_modo    ON protheus.sx2 (x2_modo);
-CREATE INDEX IF NOT EXISTS idx_sx2_delete  ON protheus.sx2 (d_e_l_e_t_);
+CREATE INDEX IF NOT EXISTS idx_x2_chave    ON protheus.sx2 (x2_chave);
+CREATE INDEX IF NOT EXISTS idx_sx2_modulo  ON protheus.sx2 (x2_modulo);
 COMMENT ON TABLE protheus.sx2 IS 'Tabelas do sistema — define modo (Compartilhada/Exclusiva) e path';
 
 -- SX3: Dicionário de Campos

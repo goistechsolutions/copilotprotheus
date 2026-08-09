@@ -40,6 +40,7 @@ from app.services.queryrest_service import queryrest_exec, queryrest_exec_tenant
 from app.services.sync_dictionary_v52 import run_snapshot
 from app.core.config import settings
 from app.core.security import encrypt_password
+from app.services.tenant_resolver import resolve_clean_tenant
 
 logger = logging.getLogger("app.api.company_routes")
 
@@ -97,9 +98,11 @@ async def get_available_modules(
     db: Session = Depends(get_db),
 ):
     company = get_company_or_404(db, company_id)
+    tenant_id = company.get("tenant_id", "default")
 
-    sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE ORDER BY USR_MODULO"
-
+    # 1. Tenta buscar módulos do Protheus real (SYS_USR_MODULE)
+    sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD, USR_NOME FROM SYS_USR_MODULE ORDER BY USR_MODULO"
+    rows = []
     try:
         if company.get("protheus_rest_url") and company.get("protheus_usuario") and company.get("encrypted_protheus_password"):
             rows = queryrest_exec(
@@ -111,55 +114,84 @@ async def get_available_modules(
         else:
             rows = await queryrest_exec_tenant(
                 db=db,
-                tenant_id=company["tenant_id"],
+                tenant_id=tenant_id,
                 company_id=company_id,
                 query=sql
             )
     except Exception as e:
-        logger.warning(f"Aviso ao consultar módulos no Protheus REST ({company_id}): {e}. Retornando módulos do catálogo master.")
-        master_mods = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
-        if master_mods:
-            return {
-                "tenant_id": company.get("tenant_id", "default"),
-                "company_id": str(company_id),
-                "items": [
-                    {
-                        "module_code": m.module_code,
-                        "module_name": m.module_name or m.module_code,
-                        "description": m.description or ""
-                    }
-                    for m in master_mods
-                ]
-            }
-        raise HTTPException(
-            status_code=502,
-            detail=f"Falha ao consultar módulos disponíveis no Protheus: {str(e)}"
-        )
+        logger.warning(f"Aviso ao consultar SYS_USR_MODULE ({company_id}): {e}")
 
-    items = []
-    seen = set()
+    if rows:
+        items = []
+        seen = set()
+        for row in rows:
+            # USR_MODULO = código numérico real do X2_MODULO no Protheus
+            # USR_CODMOD = sigla (SIGAFAT, SIGAFIN...)
+            # USR_NOME   = descrição
+            mod_code_raw = str(row.get("USR_MODULO") or "").strip()
+            mod_sigla    = str(row.get("USR_CODMOD") or "").strip().upper()
+            mod_name     = str(row.get("USR_NOME")   or mod_sigla).strip()
 
-    for row in rows:
-        module_code = (row.get("USR_MODULO") or row.get("USR_CODMOD") or "").strip().upper()
-        module_name = (row.get("USR_MODULO") or "").strip()
+            if not mod_sigla or mod_sigla in seen:
+                continue
 
-        if not module_code or not module_name:
-            continue
+            mod_code_int = int(mod_code_raw) if mod_code_raw.isdigit() else 0
+            seen.add(mod_sigla)
+            items.append({
+                "mod_code":  mod_code_int,
+                "mod_sigla": mod_sigla,
+                "mod_name":  mod_name,
+            })
 
-        if module_code in seen:
-            continue
+            # ── Atualiza protheus_modules_master com os códigos reais do Protheus ──
+            if mod_code_int > 0:
+                try:
+                    existing = db.query(ProtheusModuleMaster).filter(
+                        ProtheusModuleMaster.mod_sigla == mod_sigla
+                    ).first()
+                    if existing:
+                        existing.mod_code = mod_code_int
+                        existing.mod_name = mod_name or existing.mod_name
+                        existing.active   = True
+                    else:
+                        db.add(ProtheusModuleMaster(
+                            mod_code=mod_code_int,
+                            mod_sigla=mod_sigla,
+                            mod_name=mod_name,
+                            active=True
+                        ))
+                except Exception as ex_upsert:
+                    logger.warning(f"Aviso ao upsert módulo {mod_sigla}: {ex_upsert}")
 
-        seen.add(module_code)
-        items.append({
-            "module_code": module_code,
-            "module_name": module_name,
-        })
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
 
+        return {
+            "status":     "success",
+            "tenant_id":  tenant_id,
+            "company_id": str(company_id),
+            "items":      items,
+        }
+
+    # 2. Fallback: lê do catálogo master interno (sem Protheus disponível)
+    master_mods = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
     return {
-        "status": "success",
+        "status":     "success",
+        "tenant_id":  tenant_id,
         "company_id": str(company_id),
-        "items": items,
+        "items": [
+            {
+                "mod_code":  m.mod_code,
+                "mod_sigla": m.mod_sigla,
+                "mod_name":  m.mod_name or m.mod_sigla,
+            }
+            for m in master_mods if m.mod_sigla
+        ],
     }
+
+
 
 
 @router.get("/companies/{company_id}/modules", response_model=CompanyModulesAssignedResponse)
@@ -214,7 +246,7 @@ def sync_modules_dictionary(
 
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(company.get("tenant_id") or ''))
+    clean_tenant = resolve_clean_tenant(company.get("tenant_id"))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
 
@@ -233,7 +265,7 @@ def sync_modules_dictionary(
     try:
         snapshot_result = run_snapshot(
             tenant_id=company["tenant_id"],
-            environment_id=company.get("protheus_ambientes") or "producao",
+            environment_id=company.get("protheus_ambientes"),
             company_id=str(company_id),
             session=db,
             module_filter=module_filter,
@@ -298,16 +330,16 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
     from app.db.database import ensure_tenant_tables
     
     tenant_code = str(getattr(comp, 'tenant_id', None) or getattr(comp, 'protheus_grupo', None) or getattr(comp, 'company_code', None) or getattr(comp, 'cnpj', None) or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
-    if not clean_tenant or clean_tenant == "public":
+    clean_tenant = resolve_clean_tenant(tenant_code)
+    if clean_tenant == "default":
         return
 
     try:
         ensure_tenant_tables(db, clean_tenant)
         
-        c_code = getattr(comp, 'protheus_empresa', None) or getattr(comp, 'company_code', None) or "01"
-        b_code = getattr(comp, 'protheus_filial', None) or getattr(comp, 'protheus_branch', None) or "0101"
-        c_name = getattr(comp, 'razao_social', None) or getattr(comp, 'company_name', None) or "Empresa"
+        c_code = getattr(comp, 'protheus_empresa', None) or getattr(comp, 'company_code', None)
+        b_code = getattr(comp, 'protheus_filial', None) or getattr(comp, 'protheus_branch', None)
+        c_name = getattr(comp, 'razao_social', None) or getattr(comp, 'company_name', None)
         c_cnpj = getattr(comp, 'cnpj', None)
         c_ie   = getattr(comp, 'ie', None)
         c_rz   = getattr(comp, 'razao_social', None)
@@ -318,7 +350,7 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
         c_emp  = getattr(comp, 'protheus_empresa', None)
         c_und  = getattr(comp, 'protheus_unidade', None)
         c_fil  = getattr(comp, 'protheus_filial', None)
-        c_env  = getattr(comp, 'protheus_ambientes', None) or getattr(comp, 'protheus_env', None) or "producao"
+        c_env  = getattr(comp, 'protheus_ambientes', None) or getattr(comp, 'protheus_env', None)
         c_rest = getattr(comp, 'protheus_rest_url', None) or ""
         c_app  = getattr(comp, 'protheus_webapp_url', None) or ""
         c_user = getattr(comp, 'protheus_usuario', None) or ""
@@ -327,11 +359,11 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
 
         upsert_company_info = text(f"""
             INSERT INTO "{clean_tenant}".company_info (
-                company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
+                tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
                 protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment,
                 webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
             ) VALUES (
-                :c_code, :b_code, :c_name, :c_cnpj, :c_ie, :c_rz, :c_email, :c_tel, :c_end,
+                :tid, :c_code, :b_code, :c_name, :c_cnpj, :c_ie, :c_rz, :c_email, :c_tel, :c_end,
                 :c_grp, :c_emp, :c_und, :c_fil, :c_env,
                 :c_app, :c_rest, :c_user, :c_pass, 'basic', :c_status
             ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
@@ -355,6 +387,7 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
                 updated_at = NOW();
         """)
         db.execute(upsert_company_info, {
+            "tid": clean_tenant,
             "c_code": c_code, "b_code": b_code, "c_name": c_name, "c_cnpj": c_cnpj, "c_ie": c_ie,
             "c_rz": c_rz, "c_email": c_email, "c_tel": c_tel, "c_end": c_end,
             "c_grp": c_grp, "c_emp": c_emp, "c_und": c_und, "c_fil": c_fil, "c_env": c_env,
@@ -383,9 +416,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     except Exception:
         pass
 
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
-    if not clean_tenant or clean_tenant == "public":
-        clean_tenant = "default"
+    clean_tenant = resolve_clean_tenant(tenant_code)
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
@@ -394,10 +425,10 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     if payload.protheus_password:
         enc_pass = encrypt_password(payload.protheus_password)
 
-    c_code = payload.protheus_empresa or "01"
-    b_code = payload.protheus_filial or "0101"
+    c_code = payload.protheus_empresa
+    b_code = payload.protheus_filial
     c_name = payload.razao_social
-    c_env  = payload.protheus_ambientes or "producao"
+    c_env  = payload.protheus_ambientes
 
     upsert_company_info = text(f"""
         INSERT INTO "{clean_tenant}".company_info (
@@ -486,7 +517,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
                     else:
                         db.add(ProtheusModuleMaster(
                             module_code=c_mod,
-                            module_name=c_tab or c_mod,
+                            module_name=c_tab,
                             description=n_mod,
                             source_name="SYS_USR_MODULE",
                             active=True
@@ -510,7 +541,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "protheus_empresa": payload.protheus_empresa,
         "protheus_unidade": payload.protheus_unidade,
         "protheus_filial": payload.protheus_filial,
-        "protheus_ambientes": payload.protheus_ambientes or "producao",
+        "protheus_ambientes": payload.protheus_ambientes,
         "protheus_usuario": payload.protheus_usuario,
         "protheus_rest_url": payload.protheus_rest_url,
         "webapp_url": payload.webapp_url,
@@ -524,8 +555,8 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 @router.put("/companies/{company_id}", response_model=CompanyResponse)
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
-    tenant_code = str(payload.tenant_id or comp_info.get("tenant_id") or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
+    tenant_code = str(payload.tenant_id or comp_info.get("tenant_id"))
+    clean_tenant = resolve_clean_tenant(tenant_code)
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
@@ -534,10 +565,10 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     if payload.protheus_password:
         enc_pass = encrypt_password(payload.protheus_password)
 
-    c_code = payload.protheus_empresa or comp_info.get("protheus_empresa") or "01"
-    b_code = payload.protheus_filial or comp_info.get("protheus_filial") or "0101"
-    c_name = payload.razao_social or comp_info.get("razao_social") or "Empresa"
-    c_env  = payload.protheus_ambientes or comp_info.get("protheus_ambientes") or "producao"
+    c_code = payload.protheus_empresa or comp_info.get("protheus_empresa")
+    b_code = payload.protheus_filial or comp_info.get("protheus_filial")
+    c_name = payload.razao_social or comp_info.get("razao_social")
+    c_env  = payload.protheus_ambientes or comp_info.get("protheus_ambientes")
 
     upsert_company_info = text(f"""
         INSERT INTO "{clean_tenant}".company_info (
@@ -597,7 +628,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "protheus_empresa": payload.protheus_empresa or comp_info.get("protheus_empresa"),
         "protheus_unidade": payload.protheus_unidade or comp_info.get("protheus_unidade"),
         "protheus_filial": payload.protheus_filial or comp_info.get("protheus_filial", ""),
-        "protheus_ambientes": payload.protheus_ambientes or comp_info.get("protheus_ambientes", "producao"),
+        "protheus_ambientes": payload.protheus_ambientes or comp_info.get("protheus_ambientes", ""),
         "protheus_usuario": payload.protheus_usuario or comp_info.get("protheus_usuario"),
         "protheus_rest_url": payload.protheus_rest_url or comp_info.get("protheus_rest_url"),
         "webapp_url": payload.webapp_url or comp_info.get("webapp_url"),
@@ -612,7 +643,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
 def delete_company(company_id: int, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
     tenant_code = str(comp_info.get("tenant_id") or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
+    clean_tenant = resolve_clean_tenant(tenant_code)
     if clean_tenant and clean_tenant != "public":
         try:
             db.execute(text(f'DELETE FROM "{clean_tenant}".company_info WHERE id = :cid'), {"cid": company_id})
@@ -640,7 +671,7 @@ def get_company_billing(company_id: int, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
     total_queries = 0
     tenant_code = str(comp_info.get("tenant_id") or "default")
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', tenant_code)
+    clean_tenant = resolve_clean_tenant(tenant_code)
     if clean_tenant and clean_tenant != "public":
         try:
             from app.db.database import ensure_tenant_tables
