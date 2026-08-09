@@ -59,7 +59,7 @@ user_roles = Table(
 class Tenant(Base):
     """Corresponde a public.tenant_registry"""
     __tablename__ = "tenant_registry"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     tenant_code = Column(String(50), unique=True, nullable=False)
@@ -76,7 +76,7 @@ class Tenant(Base):
 class Plan(Base):
     """Corresponde a public.plans"""
     __tablename__ = "plans"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     plan_code = Column(String(50), primary_key=True)
     plan_name = Column(String(150), nullable=False)
@@ -89,7 +89,7 @@ class Plan(Base):
 class PlatformAdmin(Base):
     """Corresponde a public.platform_admins"""
     __tablename__ = "platform_admins"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     email = Column(String(150), unique=True, nullable=False)
@@ -102,7 +102,7 @@ class PlatformAdmin(Base):
 class ProtheusModuleMaster(Base):
     """Corresponde a public.protheus_modules_master"""
     __tablename__ = "protheus_modules_master"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     mod_code = Column(Integer, nullable=False, unique=True)
@@ -117,7 +117,7 @@ class ProtheusModuleMaster(Base):
 class User(Base):
     """Corresponde a public.users"""
     __tablename__ = "users"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), index=True)
@@ -133,7 +133,7 @@ class User(Base):
 class Role(Base):
     """Corresponde a public.roles"""
     __tablename__ = "roles"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     role_code = Column(String(60), nullable=False, unique=True)
@@ -145,7 +145,7 @@ class Role(Base):
 class Permission(Base):
     """Corresponde a public.permissions"""
     __tablename__ = "permissions"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     permission_code = Column(String(100), nullable=False, unique=True)
@@ -157,7 +157,7 @@ class Permission(Base):
 class RolePermission(Base):
     """Corresponde a public.role_permissions"""
     __tablename__ = "role_permissions"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     role_id = Column(UUID(as_uuid=True), ForeignKey("public.roles.id", ondelete="CASCADE"), primary_key=True)
     permission_id = Column(UUID(as_uuid=True), ForeignKey("public.permissions.id", ondelete="CASCADE"), primary_key=True)
@@ -177,7 +177,7 @@ class UserRole(Base):
 class UserCompanyAccess(Base):
     """Corresponde a public.user_company_access"""
     __tablename__ = "user_company_access"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     user_id = Column(UUID(as_uuid=True), primary_key=True)
     tenant_id = Column(String(100), primary_key=True)
@@ -188,7 +188,7 @@ class UserCompanyAccess(Base):
 class Environment(Base):
     """Corresponde a public.environments"""
     __tablename__ = "environments"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -205,7 +205,7 @@ class Environment(Base):
 class Connector(Base):
     """Corresponde a public.connectors"""
     __tablename__ = "connectors"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -224,7 +224,7 @@ class Connector(Base):
 class LicensePlan(Base):
     """Corresponde a public.license_plans"""
     __tablename__ = "license_plans"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     plan_code = Column(String(60), nullable=False, unique=True)
@@ -241,7 +241,7 @@ class LicensePlan(Base):
 class TenantContract(Base):
     """Corresponde a public.tenant_contracts"""
     __tablename__ = "tenant_contracts"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -261,7 +261,7 @@ class TenantContract(Base):
 class QueryUsageCounter(Base):
     """Corresponde a public.query_usage_counters"""
     __tablename__ = "query_usage_counters"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -276,7 +276,7 @@ class QueryUsageCounter(Base):
 class ConcurrentSession(Base):
     """Corresponde a public.concurrent_sessions"""
     __tablename__ = "concurrent_sessions"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -290,7 +290,7 @@ class ConcurrentSession(Base):
 class TenantModuleContract(Base):
     """Corresponde a public.tenant_module_contracts"""
     __tablename__ = "tenant_module_contracts"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -303,7 +303,7 @@ class TenantModuleContract(Base):
 class AuditLog(Base):
     """Corresponde a public.audit_logs (auditoria global de plataforma)"""
     __tablename__ = "audit_logs"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), index=True)
@@ -321,7 +321,7 @@ class AuditLog(Base):
 class AgentUser(Base):
     """Corresponde a public.agent_users (compatibilidade legada)"""
     __tablename__ = "agent_users"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), index=True)
@@ -336,7 +336,7 @@ class AgentUser(Base):
 class AgentRole(Base):
     """Corresponde a public.agent_roles (compatibilidade legada)"""
     __tablename__ = "agent_roles"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), index=True)
@@ -354,7 +354,7 @@ class AgentQueryAuditGlobal(Base):
     schema de tenant e é a que os serviços usam por padrão via search_path.
     """
     __tablename__ = "agent_query_audit"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -378,7 +378,7 @@ class AgentQueryAuditGlobal(Base):
 class PlatformAuditLog(Base):
     """Corresponde a public.platform_audit_log"""
     __tablename__ = "platform_audit_log"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_code = Column(String(50))
@@ -403,7 +403,7 @@ class TenantAllowedTable(Base):
     __tablename__ = "tenant_allowed_tables"
     __table_args__ = (
         UniqueConstraint("tenant_id", "table_name", name="uq_tenant_allowed_table"),
-        {"schema": "public"},
+        {"schema": "public", "extend_existing": True},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -423,7 +423,7 @@ class TenantAllowedField(Base):
     __tablename__ = "tenant_allowed_fields"
     __table_args__ = (
         UniqueConstraint("tenant_id", "table_name", "field_name", name="uq_tenant_allowed_field"),
-        {"schema": "public"},
+        {"schema": "public", "extend_existing": True},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -445,7 +445,7 @@ class TenantDictionaryTable(Base):
     usada para controle de importação e exibição no admin.
     """
     __tablename__ = "tenant_dictionary_tables"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -474,6 +474,7 @@ class TenantDictionaryTable(Base):
 class Company(Base):
     """Corresponde a \"<tenant>\".company_info"""
     __tablename__ = "company_info"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(100))
@@ -505,12 +506,14 @@ class Company(Base):
 
     __table_args__ = (
         UniqueConstraint("company_code", "branch_code", name="uq_company_info_code_branch"),
+        {"extend_existing": True},
     )
 
 
 class ProtheusModule(Base):
     """Corresponde a "<tenant>".protheus_modules"""
     __tablename__ = "protheus_modules"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -524,6 +527,7 @@ class ProtheusModule(Base):
 class TenantSchema(Base):
     """Corresponde a \"<tenant>\".tenant_schemas"""
     __tablename__ = "tenant_schemas"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
@@ -540,6 +544,7 @@ class TenantSchema(Base):
 class DictionaryTable(Base):
     """Corresponde a \"<tenant>\".dictionary_tables"""
     __tablename__ = "dictionary_tables"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -559,6 +564,7 @@ class DictionaryTable(Base):
 class DictionaryField(Base):
     """Corresponde a \"<tenant>\".dictionary_fields"""
     __tablename__ = "dictionary_fields"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -584,6 +590,7 @@ class DictionaryField(Base):
 class DictionaryIndex(Base):
     """Corresponde a \"<tenant>\".dictionary_indexes"""
     __tablename__ = "dictionary_indexes"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -600,6 +607,7 @@ class DictionaryIndex(Base):
 class DictionaryGroup(Base):
     """Corresponde a \"<tenant>\".dictionary_groups"""
     __tablename__ = "dictionary_groups"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -614,7 +622,7 @@ class DictionaryGroup(Base):
 class TenantDictionarySource(Base):
     """Corresponde a \"<tenant>\".tenant_dictionary_sources"""
     __tablename__ = "tenant_dictionary_sources"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -631,6 +639,7 @@ class TenantDictionarySource(Base):
 class TenantTablePermission(Base):
     """Corresponde a \"<tenant>\".tenant_table_permissions"""
     __tablename__ = "tenant_table_permissions"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -649,6 +658,7 @@ class TenantTablePermission(Base):
 class TenantFieldPermission(Base):
     """Corresponde a \"<tenant>\".tenant_field_permissions"""
     __tablename__ = "tenant_field_permissions"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
@@ -668,6 +678,7 @@ class TenantFieldPermission(Base):
 class Memory(Base):
     """Corresponde a \"<tenant>\".memories"""
     __tablename__ = "memories"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(100), nullable=False, default="default")
@@ -688,6 +699,7 @@ class Memory(Base):
 class Document(Base):
     """Corresponde a \"<tenant>\".documents"""
     __tablename__ = "documents"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(100), nullable=False, default="default")
@@ -714,6 +726,7 @@ class Document(Base):
 class DocumentChunk(Base):
     """Corresponde a \"<tenant>\".document_chunks"""
     __tablename__ = "document_chunks"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
@@ -735,6 +748,7 @@ class AgentQueryAudit(Base):
     search_path). Não confundir com AgentQueryAuditGlobal (public).
     """
     __tablename__ = "agent_query_audit"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(100), nullable=False)
