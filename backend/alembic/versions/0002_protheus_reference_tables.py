@@ -28,7 +28,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = '0002'
-down_revision = '0001'
+down_revision = 'v4_full_create_001'
 branch_labels = None
 depends_on = None
 

@@ -53,7 +53,6 @@ export default function CompanyDashboard() {
 
   const tabs = [
     { path: '', label: 'Geral', icon: <Settings size={18} /> },
-    { path: '/modules', label: 'Módulos', icon: <Layers size={18} /> },
     { path: '/dictionary', label: 'Dicionário (Tabelas)', icon: <Database size={18} /> },
     { path: '/users', label: 'Usuários', icon: <Users size={18} /> },
     { path: '/billing', label: 'Recursos & Custos', icon: <CreditCard size={18} /> },
@@ -119,7 +118,6 @@ export default function CompanyDashboard() {
       <div className="min-h-[400px]">
         <Routes>
           <Route path="/" element={<CompanyConfig company={company} />} />
-          <Route path="/modules" element={<CompanyModulesTab company={company} />} />
           <Route path="/dictionary" element={<CompanyDictionary company={company} />} />
           <Route path="/users" element={<CompanyUsers company={company} />} />
           <Route path="/billing" element={<CompanyBilling company={company} />} />

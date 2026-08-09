@@ -1,16 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Deploy Admin Frontend → Cloudflare Pages
-# Branch main → production   (project: copilotprotheus-admin)
-# Branch hml  → homologation (project: copilotprotheus-admin-hml)
-#
-# O workflow cria o projeto automaticamente via API se ele não existir.
-#
-# Secrets necessários:
-#   CLOUDFLARE_API_TOKEN    Token com permissão Cloudflare Pages:Edit
-#   CLOUDFLARE_ACCOUNT_ID   ID da conta Cloudflare
-#   VITE_API_BASE_URL       URL da API backend
-# ─────────────────────────────────────────────────────────────────────────────
-
 name: Deploy Admin → Cloudflare Pages
 
 on:
@@ -19,6 +6,7 @@ on:
     paths:
       - 'admin-frontend/**'
       - '.github/workflows/deploy-admin.yml'
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -29,42 +17,47 @@ jobs:
       deployments: write
 
     env:
-      APP_ENV:          ${{ github.ref_name == 'main' && 'production' || 'homologation' }}
+      APP_ENV: ${{ github.ref_name == 'main' && 'production' || 'homologation' }}
       CF_PAGES_PROJECT: ${{ github.ref_name == 'main' && 'copilotprotheus-admin' || 'copilotprotheus-admin-hml' }}
+      CF_PRODUCTION_BRANCH: ${{ github.ref_name == 'main' && 'main' || 'hml' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # ── 1. Node 24 + cache ───────────────────────────────────────────────
-      - uses: actions/setup-node@v4
+      - name: Validate project structure
+        run: |
+          test -d admin-frontend || (echo "::error::Diretório admin-frontend não encontrado." && exit 1)
+          test -f admin-frontend/package.json || (echo "::error::admin-frontend/package.json não encontrado." && exit 1)
+          test -f admin-frontend/package-lock.json || (echo "::error::admin-frontend/package-lock.json não encontrado. Faça commit do lockfile." && exit 1)
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: admin-frontend/package-lock.json
 
-      # ── 2. Instalar dependências ─────────────────────────────────────────
       - name: Install dependencies
         working-directory: admin-frontend
-        run: npm install
+        run: npm ci
 
-      # ── 3. Build ────────────────────────────────────────────────────────
       - name: Build (${{ env.APP_ENV }})
         working-directory: admin-frontend
         run: npm run build
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-          VITE_APP_ENV:      ${{ env.APP_ENV }}
+          VITE_APP_ENV: ${{ env.APP_ENV }}
 
-      # ── 4. Criar projeto no Cloudflare Pages (idempotente) ──────────────
-      # A API retorna 200 se já existir ou cria se não existir.
-      # Não usa wrangler para isso pois ele não cria projetos.
       - name: Garantir projeto Cloudflare Pages existe
         run: |
+          set -e
+
           ACCOUNT_ID="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
           API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
-          PROJECT="$CF_PAGES_PROJECT"
+          PROJECT="${CF_PAGES_PROJECT}"
+          PROD_BRANCH="${CF_PRODUCTION_BRANCH}"
 
-          # Verifica se o projeto já existe
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer $API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT")
@@ -76,11 +69,11 @@ jobs:
             RESPONSE=$(curl -s -X POST \
               -H "Authorization: Bearer $API_TOKEN" \
               -H "Content-Type: application/json" \
-              --data "{\"name\":\"$PROJECT\",\"production_branch\":\"main\"}" \
+              --data "{\"name\":\"$PROJECT\",\"production_branch\":\"$PROD_BRANCH\"}" \
               "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects")
 
-            SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('success', False))")
-            if [ "$SUCCESS" = "True" ]; then
+            SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success', False)).lower())")
+            if [ "$SUCCESS" = "true" ]; then
               echo "✅ Projeto '$PROJECT' criado com sucesso."
             else
               echo "❌ Falha ao criar projeto: $RESPONSE"
@@ -88,24 +81,23 @@ jobs:
             fi
           fi
 
-      # ── 5. Deploy via Wrangler ───────────────────────────────────────────
       - name: Deploy to Cloudflare Pages
         working-directory: admin-frontend
         run: |
           npx wrangler@3 pages deploy dist \
             --project-name="$CF_PAGES_PROJECT" \
             --branch="${{ github.ref_name }}" \
-            --commit-dirty=true
+            --commit-dirty=true \
+            --commit-hash="${{ github.sha }}" \
+            --commit-message="${{ github.event.head_commit.message }}"
         env:
-          CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      # ── 6. Resumo ────────────────────────────────────────────────────────
       - name: Resumo
         run: |
-          echo "✅ Admin [${{ env.APP_ENV }}] → project: ${{ env.CF_PAGES_PROJECT }}"
+          echo "✅ Admin [${{ env.APP_ENV }}] → project: ${{ env.CF_PAGES_PROJECT }} / branch: ${{ github.ref_name }}"
 
-      # ── 7. Notifica falha ───────────────────────────────────────────────
       - name: Notificar falha
         if: failure()
         run: |

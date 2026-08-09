@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.knowledge import (
     TenantAllowedTable,
+    TenantDictionaryTable,
     TenantContract,
     Company,
     Tenant,
@@ -131,3 +132,5 @@ def list_dictionary_tables(
     if module_code:
         q = q.filter(DictionaryTable.module_code == module_code.upper())
     return q.order_by(DictionaryTable.physical_name.asc()).limit(200).all()
+        q = q.filter(TenantDictionaryTable.module_code == module_code.upper())
+    return q.order_by(TenantDictionaryTable.physical_name.asc()).limit(200).all()

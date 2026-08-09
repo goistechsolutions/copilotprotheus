@@ -29,7 +29,6 @@ class ConnectionTestResponse(BaseModel):
     tenant: Optional[str] = Field(None, description="Alias legado — usar tenant_id")
     rest_url: Optional[str] = None
     webapp_url: Optional[str] = None
-    vscode_server_url: Optional[str] = None
     auth_type: Optional[str] = None
     http_method: Optional[str] = Field(None, description="GET | POST | HEAD usado no teste")
     status_code: Optional[int] = None
