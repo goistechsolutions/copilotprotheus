@@ -59,6 +59,43 @@ depends_on    = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    from sqlalchemy.engine.reflection import Inspector
+    import logging
+    log = logging.getLogger("alembic")
+    
+    inspector = Inspector.from_engine(conn)
+    existing_tables = inspector.get_table_names()
+    
+    existing_indexes = set()
+    for t in existing_tables:
+        try:
+            for idx in inspector.get_indexes(t):
+                existing_indexes.add(idx['name'])
+        except Exception:
+            pass
+
+    orig_create_table = op.create_table
+    def safe_create_table(table_name, *args, **kwargs):
+        if table_name not in existing_tables:
+            log.info(f"Creating table {table_name}")
+            return orig_create_table(table_name, *args, **kwargs)
+        log.info(f"Table {table_name} already exists, skipping")
+    
+    orig_create_index = op.create_index
+    def safe_create_index(index_name, table_name, *args, **kwargs):
+        if index_name not in existing_indexes:
+            try:
+                log.info(f"Creating index {index_name} on {table_name}")
+                return orig_create_index(index_name, table_name, *args, **kwargs)
+            except Exception as e:
+                log.info(f"Skipped index {index_name}: {e}")
+        else:
+            log.info(f"Index {index_name} already exists, skipping")
+
+    # Monkey patch the op object for this run
+    op.create_table = safe_create_table
+    op.create_index = safe_create_index
 
     # ── 0. Extensões obrigatórias ─────────────────────────────────────────
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
