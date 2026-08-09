@@ -87,26 +87,22 @@
   function isUserLoggedIn() {
     if (!document.body) return false;
 
-    // 1. Se tem campo de senha visível, não está logado
-    const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]'));
-    const isLoginVisible = passwordInputs.some(el => isElementVisible(el));
-    if (isLoginVisible) return false;
+    const visibleText = (document.body.innerText || "").replace(/\s+/g, ' ').toLowerCase();
 
-    // 2. Se tem a tela inicial de parâmetros (Programa Inicial, Ambiente no servidor) visível, não entrou no workspace
-    let hasInitialModal = false;
-    const allElements = document.querySelectorAll('*');
-    for (const el of allElements) {
-      if (el.children.length === 0) {
-        const text = (el.textContent || "").trim().toLowerCase();
-        if (text.includes("programa inicial") || text.includes("ambiente no servidor")) {
-          if (isElementVisible(el)) {
-            hasInitialModal = true;
-            break;
-          }
-        }
-      }
+    // 1. Tela de Login inicial
+    if (visibleText.includes("seja bem-vindo") && visibleText.includes("senha")) {
+      return false;
     }
-    if (hasInitialModal) return false;
+    
+    // Também checamos o input de senha por precaução
+    const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]'));
+    if (passwordInputs.some(el => isElementVisible(el))) return false;
+
+    // 2. Tela de parâmetros (Programa Inicial, Ambiente no servidor)
+    if (visibleText.includes("programa inicial") || visibleText.includes("ambiente no servidor")) {
+      return false;
+    }
+
     return true;
   }
 
