@@ -818,7 +818,6 @@ async def sync_schema(
         return {
             "success":     True,
             "message":     f"{len(schema_dict)} tabelas sincronizadas (V4).",
-            "snapshot_id": str(snapshot.id),
         }
 
     except Exception as e:
