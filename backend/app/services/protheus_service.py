@@ -190,7 +190,7 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
 
 def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
     from app.db.database import get_tenant_session
-    from app.models.knowledge import TenantAllowedTable, QueryUsageCounter, TenantContract, Company, Tenant, DictionaryTable
+    from app.models.knowledge import QueryUsageCounter, TenantContract, Company, Tenant
     import uuid
     import re
     
@@ -213,22 +213,10 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
                 if "Quota" in str(e): raise e
 
         # 2. Verifica tabelas
-        # Se a tabela est no dicionrio do tenant, ela DEVE estar na whitelist (TenantAllowedTable) e ativa
-        blocked_tables = db.query(DictionaryTable.physical_name).outerjoin(
-            TenantAllowedTable, 
-            (TenantAllowedTable.table_name == DictionaryTable.physical_name) & 
-            (TenantAllowedTable.tenant_id == tid)
-        ).filter(
-            DictionaryTable.tenant_id == tid,
-            DictionaryTable.active_flag == True,
-            (TenantAllowedTable.id == None) | (TenantAllowedTable.active == False)
-        ).all()
-        
-        upper_query = cQuery.upper()
-        for (ptable,) in blocked_tables:
-            if ptable and len(ptable) >= 3:
-                if re.search(r'\b' + re.escape(ptable.upper()) + r'\b', upper_query):
-                    raise Exception(f"Acesso negado: A tabela {ptable} nao esta liberada para este tenant.")
+        # 2. Na arquitetura V5 o controle de acesso por tabela via TenantAllowedTable
+        # foi descontinuado. O enforcement é garantido pelo catálogo gerado no prompt
+        # do agente, que expõe estritamente o schema_json (tenant_schemas) do tenant.
+        pass
         
     finally:
         db.close()
