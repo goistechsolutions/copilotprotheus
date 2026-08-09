@@ -32,13 +32,14 @@ logger = logging.getLogger(__name__)
 from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import (
     AuditLog, Tenant, Company,
-    TenantAllowedTable, TenantContract, TenantDictionaryTable,
+    TenantAllowedTable, TenantContract,
     ProtheusModuleMaster,
     User, Role, user_roles,
     TenantSchema,
     Memory,
     AgentQueryAudit, QueryUsageCounter,
 )
+from app.models.catalog_v52 import DictionaryTable
 from app.core.config import settings
 
 router = APIRouter()
@@ -314,7 +315,7 @@ def update_tables(
     db: Session              = Depends(get_db),
     admin: str               = Depends(verify_admin),
 ):
-    """Atualiza tabelas permitidas no modelo V4 (tenant_allowed_tables)."""
+    """Atualiza tabelas permitidas no modelo V5 (tenant_allowed_tables)."""
     import re
     from app.db.database import ensure_tenant_tables
     clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
@@ -323,42 +324,26 @@ def update_tables(
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
 
-    contract = _get_active_contract(db, tenant_id)
-    if not contract:
-        raise HTTPException(
-            status_code=400,
-            detail="Nenhum contrato ativo encontrado para o tenant. Crie um TenantContract primeiro.",
-        )
-    snapshot = _get_latest_snapshot(db, tenant_id)
-    if not snapshot:
-        raise HTTPException(
-            status_code=400,
-            detail="Nenhum snapshot de dicionario encontrado. Execute /sync-schema antes de configurar tabelas.",
-        )
-
-    # Remove permissoes antigas deste contrato
+    # Remove permissoes antigas
     db.query(TenantAllowedTable).filter(
-        TenantAllowedTable.tenant_id   == tenant_id,
-        TenantAllowedTable.contract_id == contract.id,
+        TenantAllowedTable.tenant_id == tenant_id,
     ).delete(synchronize_session=False)
 
     for t in tables:
-        # Localiza tabela no dicionario pelo alias/table_key
+        # Localiza tabela no dicionario pelo table_alias (novo DictionaryTable)
         dict_table = (
-            db.query(TenantDictionaryTable)
+            db.query(DictionaryTable)
             .filter(
-                TenantDictionaryTable.tenant_id  == tenant_id,
-                TenantDictionaryTable.snapshot_id == snapshot.id,
-                TenantDictionaryTable.table_key   == t.alias,
+                DictionaryTable.tenant_id == tenant_id,
+                DictionaryTable.table_alias == t.alias,
             )
             .first()
         )
         if not dict_table:
             # Cria entrada minima no dicionario para nao bloquear o admin
-            dict_table = TenantDictionaryTable(
-                snapshot_id=snapshot.id,
+            dict_table = DictionaryTable(
                 tenant_id=tenant_id,
-                table_key=t.alias,
+                table_alias=t.alias,
                 physical_name=t.alias[:30],
                 table_name=t.description,
                 module_code=t.tipo or None,
@@ -367,17 +352,14 @@ def update_tables(
             db.flush()
 
         db.add(TenantAllowedTable(
-            tenant_id   =tenant_id,
-            contract_id =contract.id,
-            snapshot_id =snapshot.id,
-            table_id    =dict_table.id,
-            access_level=t.access_level,
-            allowed     =True,
-            rationale   =t.description,
+            tenant_id   = tenant_id,
+            table_name  = dict_table.physical_name or dict_table.table_alias,
+            module_code = dict_table.module_code,
+            active      = True
         ))
 
     db.commit()
-    return {"success": True, "message": f"{len(tables)} tabelas atualizadas (V4)."}
+    return {"success": True, "message": f"{len(tables)} tabelas atualizadas (V5)."}
 
 
 # ─────────────────────────────────────────────────────────────

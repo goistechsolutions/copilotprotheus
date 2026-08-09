@@ -190,7 +190,7 @@ async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict
 
 def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
     from app.db.database import get_tenant_session
-    from app.models.knowledge import TenantDictionaryTable, TenantAllowedTable, QueryUsageCounter, TenantContract, Company, Tenant
+    from app.models.knowledge import TenantAllowedTable, QueryUsageCounter, TenantContract, Company, Tenant
     import uuid
     import re
     
@@ -214,13 +214,13 @@ def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
 
         # 2. Verifica tabelas
         # Se a tabela est no dicionrio do tenant, ela DEVE estar na whitelist (TenantAllowedTable) e ativa
-        blocked_tables = db.query(TenantDictionaryTable.physical_name).outerjoin(
+        blocked_tables = db.query(DictionaryTable.physical_name).outerjoin(
             TenantAllowedTable, 
-            (TenantAllowedTable.table_name == TenantDictionaryTable.physical_name) & 
+            (TenantAllowedTable.table_name == DictionaryTable.physical_name) & 
             (TenantAllowedTable.tenant_id == tid)
         ).filter(
-            TenantDictionaryTable.tenant_id == tid,
-            TenantDictionaryTable.active_flag == True,
+            DictionaryTable.tenant_id == tid,
+            DictionaryTable.active_flag == True,
             (TenantAllowedTable.id == None) | (TenantAllowedTable.active == False)
         ).all()
         
