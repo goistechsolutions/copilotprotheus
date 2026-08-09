@@ -9,13 +9,12 @@ from app.db.database import Base
 
 class TenantDictionarySource(Base):
     __tablename__ = "tenant_dictionary_sources"
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = {'extend_existing': True, 'schema': 'public'}
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
     company_id = Column(String(100), nullable=True, index=True)
     environment_id = Column(String(100), nullable=False, default='producao', index=True)
     source_type = Column(String(20), nullable=False) # SX2, SX3, SXG, SIX
-    snapshot_code = Column(String(60), nullable=False, index=True)
     status = Column(String(20), nullable=False, default="pending")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     started_at = Column(DateTime(timezone=True))
@@ -25,7 +24,7 @@ class TenantDictionarySource(Base):
 class DictionaryTable(Base):
     __tablename__ = "dictionary_tables"
     __table_args__ = (
-        UniqueConstraint("tenant_id","environment_id","snapshot_code","table_name", name="uq_dictionary_tables"),
+        UniqueConstraint("tenant_id","environment_id","table_name", name="uq_dictionary_tables"),
         Index("idx_dictionary_tables_lookup","tenant_id","environment_id","table_name"),
         {'extend_existing': True}
     )
@@ -33,7 +32,6 @@ class DictionaryTable(Base):
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100), nullable=True)
     environment_id = Column(String(100), nullable=False, default='producao')
-    snapshot_code = Column(String(60), nullable=False)
     table_name = Column(String(30), nullable=False)
     table_alias = Column(String(80))
     module_code = Column(String(10))
@@ -47,7 +45,7 @@ class DictionaryTable(Base):
 class DictionaryField(Base):
     __tablename__ = "dictionary_fields"
     __table_args__ = (
-        UniqueConstraint("tenant_id","environment_id","snapshot_code","table_name","field_name", name="uq_dictionary_fields"),
+        UniqueConstraint("tenant_id","environment_id","table_name","field_name", name="uq_dictionary_fields"),
         Index("idx_dictionary_fields_lookup","tenant_id","environment_id","table_name","field_name"),
         {'extend_existing': True}
     )
@@ -55,7 +53,6 @@ class DictionaryField(Base):
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100), nullable=True)
     environment_id = Column(String(100), nullable=False, default='producao')
-    snapshot_code = Column(String(60), nullable=False)
     table_name = Column(String(30), nullable=False)
     field_name = Column(String(30), nullable=False)
     title = Column(String(120))
@@ -75,7 +72,7 @@ class DictionaryField(Base):
 class DictionaryIndex(Base):
     __tablename__ = "dictionary_indexes"
     __table_args__ = (
-        UniqueConstraint("tenant_id","environment_id","snapshot_code","table_name","index_order", name="uq_dictionary_indexes"),
+        UniqueConstraint("tenant_id","environment_id","table_name","index_order", name="uq_dictionary_indexes"),
         Index("idx_dictionary_indexes_lookup","tenant_id","environment_id","table_name"),
         {'extend_existing': True}
     )
@@ -83,7 +80,6 @@ class DictionaryIndex(Base):
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100), nullable=True)
     environment_id = Column(String(100), nullable=False, default='producao')
-    snapshot_code = Column(String(60), nullable=False)
     table_name = Column(String(30), nullable=False)
     index_order = Column(String(10), nullable=False)
     nickname = Column(String(80))
@@ -94,14 +90,13 @@ class DictionaryIndex(Base):
 class DictionaryGroup(Base):
     __tablename__ = "dictionary_groups"
     __table_args__ = (
-        UniqueConstraint("tenant_id","environment_id","snapshot_code","group_name", name="uq_dictionary_groups"),
+        UniqueConstraint("tenant_id","environment_id","group_name", name="uq_dictionary_groups"),
         {'extend_existing': True}
     )
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100), nullable=True)
     environment_id = Column(String(100), nullable=False, default='producao')
-    snapshot_code = Column(String(60), nullable=False)
     group_name = Column(String(80), nullable=False)
     description = Column(Text)
     raw_payload = Column(JSONB)

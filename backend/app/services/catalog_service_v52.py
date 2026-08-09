@@ -30,7 +30,6 @@ def get_allowed_catalog(session, tenant_id: str, environment_id: str, role_ids: 
           LEFT JOIN dictionary_fields df
             ON df.tenant_id = dt.tenant_id
            AND df.environment_id = dt.environment_id
-           AND df.snapshot_code = dt.snapshot_code
            AND df.table_name = dt.table_name
           LEFT JOIN tenant_field_permissions tfp
             ON tfp.tenant_id = df.tenant_id

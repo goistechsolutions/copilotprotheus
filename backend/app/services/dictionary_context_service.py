@@ -2,42 +2,13 @@ from sqlalchemy import text
 from typing import Optional, List, Dict, Any, Union
 
 
-def get_latest_snapshot_code(db, tenant_id: str, company_id: Union[int, str, None] = None) -> Optional[str]:
-    """
-    Localiza o código do último snapshot do dicionário (v5.2) sincronizado
-    para o tenant/empresa e com status ativo.
-    """
-    import re
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
-    if clean_tenant and clean_tenant != "public":
-        try:
-            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-        except Exception:
-            pass
-
-    company_str = str(company_id).strip() if company_id is not None else None
-    
-    # Busca por snapshot vinculado especificamente à empresa ou ao tenant como fallback
-    row = db.execute(
-        text("""
-            SELECT snapshot_code
-            FROM dictionary_tables
-            WHERE tenant_id = :tenant_id
-              AND (:company_str IS NULL OR company_id = :company_str OR company_id IS NULL OR company_id = '')
-            ORDER BY snapshot_code DESC, id DESC
-            LIMIT 1
-        """),
-        {"tenant_id": tenant_id, "company_str": company_str}
-    ).mappings().first()
-
-    return row["snapshot_code"] if row else None
 
 
 def build_dictionary_context(
     db, 
     tenant_id: str, 
     company_id: Union[int, str, None], 
-    snapshot_code: str, 
+
     module_filter: Optional[List[str]] = None, 
     keyword: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -54,7 +25,6 @@ def build_dictionary_context(
             pass
     params = {
         "tenant_id": tenant_id,
-        "snapshot_code": snapshot_code,
     }
 
     sql_tables = """
@@ -66,7 +36,6 @@ def build_dictionary_context(
             active_flag
         FROM dictionary_tables
         WHERE tenant_id = :tenant_id
-          AND snapshot_code = :snapshot_code
           AND active_flag = TRUE
     """
 
@@ -95,13 +64,11 @@ def build_dictionary_context(
                     required_flag
                 FROM dictionary_fields
                 WHERE tenant_id = :tenant_id
-                  AND snapshot_code = :snapshot_code
                   AND table_name = :table_name
                 ORDER BY id
             """),
             {
                 "tenant_id": tenant_id,
-                "snapshot_code": snapshot_code,
                 "table_name": table["table_name"],
             }
         ).mappings().all()

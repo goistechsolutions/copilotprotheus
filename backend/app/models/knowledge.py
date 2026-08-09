@@ -444,12 +444,12 @@ class TenantDictionaryTable(Base):
     usada para controle de importação e exibição no admin.
     """
     __tablename__ = "tenant_dictionary_tables"
+    __table_args__ = {"schema": "public"}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False, index=True)
     company_id = Column(String(100))
     environment_id = Column(String(100), nullable=False, default="producao")
-    snapshot_code = Column(String(60), nullable=False, index=True)
     table_name = Column(String(30), nullable=False, index=True)
     table_alias = Column(String(80))
     module_code = Column(String(10))
@@ -544,7 +544,6 @@ class DictionaryTable(Base):
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100))
     environment_id = Column(String(100), nullable=False, default="producao")
-    snapshot_code = Column(String(60), nullable=False)
     table_name = Column(String(30), nullable=False)
     table_alias = Column(String(80))
     module_code = Column(String(10))
@@ -564,7 +563,6 @@ class DictionaryField(Base):
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100))
     environment_id = Column(String(100), nullable=False, default="producao")
-    snapshot_code = Column(String(60), nullable=False)
     table_name = Column(String(30), nullable=False)
     field_name = Column(String(30), nullable=False)
     title = Column(String(120))
@@ -590,7 +588,6 @@ class DictionaryIndex(Base):
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100))
     environment_id = Column(String(100), nullable=False, default="producao")
-    snapshot_code = Column(String(60), nullable=False)
     table_name = Column(String(30), nullable=False)
     index_order = Column(String(10), nullable=False)
     nickname = Column(String(80))
@@ -607,7 +604,6 @@ class DictionaryGroup(Base):
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100))
     environment_id = Column(String(100), nullable=False, default="producao")
-    snapshot_code = Column(String(60), nullable=False)
     group_name = Column(String(80), nullable=False)
     description = Column(Text)
     raw_payload = Column(JSONB)
@@ -617,13 +613,13 @@ class DictionaryGroup(Base):
 class TenantDictionarySource(Base):
     """Corresponde a \"<tenant>\".tenant_dictionary_sources"""
     __tablename__ = "tenant_dictionary_sources"
+    __table_args__ = {"schema": "public"}
 
     id = Column(BigInteger, primary_key=True)
     tenant_id = Column(String(100), nullable=False)
     company_id = Column(String(100))
     environment_id = Column(String(100), nullable=False, default="producao")
     source_type = Column(String(20), nullable=False)
-    snapshot_code = Column(String(60), nullable=False)
     status = Column(String(20), nullable=False, default="pending")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     started_at = Column(TIMESTAMP(timezone=True))

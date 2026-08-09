@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.core.config import settings
 from app.services.dictionary_context_service import (
-    get_latest_snapshot_code,
     build_dictionary_context,
     render_context_for_prompt,
 )
@@ -138,20 +137,12 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     # 1. Montar e validar contexto XFILIAL
     op_context = build_protheus_context(empresa=empresa, filial=filial)
 
-    # 2. Localizar código do último snapshot do dicionário da empresa
-    snapshot_code = get_latest_snapshot_code(db, str(tenant_id), company_id)
-    if not snapshot_code:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Nenhum snapshot de dicionário válido e sincronizado foi encontrado para a empresa {company_id} (tenant: {tenant_id})."
-        )
 
     # 3. Carregar as tabelas e campos do dicionário autorizados para o contexto/módulo
     context = build_dictionary_context(
         db=db,
         tenant_id=str(tenant_id),
         company_id=company_id,
-        snapshot_code=snapshot_code,
         module_filter=module_filter
     )
 
@@ -184,7 +175,6 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
         "status": "success",
         "tenant_id": str(tenant_id),
         "company_id": company_id,
-        "snapshot_code": snapshot_code,
         "context_operational": op_context,
         "tables_in_context": len(context),
         "sql": sql,

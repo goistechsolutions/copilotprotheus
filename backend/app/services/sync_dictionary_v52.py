@@ -201,7 +201,7 @@ def run_snapshot(
     tenant_id: str,
     environment_id: str = "producao",
     company_id: Optional[str] = None,
-    snapshot_code: Optional[str] = None,
+    
     session: Optional[Session] = None,
     module_filter: Optional[List[str]] = None,
     rest_url: Optional[str] = None,
@@ -213,8 +213,7 @@ def run_snapshot(
     do ERP Protheus, registrando apenas metadados sem dados operacionais/transacionais.
     Suporta filtragem opcional por module_filter (módulos contratados da empresa).
     """
-    snapshot_code = snapshot_code or datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    own_session   = False
+        own_session   = False
 
     import re
     from app.db.database import get_tenant_session, ensure_tenant_tables
@@ -242,12 +241,12 @@ def run_snapshot(
             dict_rows = data["dict_rows"]
             six_rows  = data["six_rows"]
 
-            _persist_dict_rows(session, dict_rows, tenant_id, company_id, environment_id, snapshot_code)
-            _persist_six_rows(session, six_rows, tenant_id, company_id, environment_id, snapshot_code)
+            _persist_dict_rows(session, dict_rows, tenant_id, company_id, environment_id)
+            _persist_six_rows(session, six_rows, tenant_id, company_id, environment_id)
             session.commit()
 
             return {
-                "snapshot_code": snapshot_code,
+                
                 "status": "done",
                 "mode": "curated",
                 "modules": module_filter,
@@ -258,12 +257,12 @@ def run_snapshot(
 
         # ── MODO COMPLETO: snapshot do dicionário inteiro ─────────────────────
         for source_type in ["SX2", "SX3", "SXG", "SIX"]:
-            _mark_source(session, tenant_id, company_id, environment_id, snapshot_code, source_type, "running")
+            _mark_source(session, tenant_id, company_id, environment_id, source_type, "running")
 
             try:
                 rows = fetch_rows_from_protheus(tenant_id, source_type)
             except Exception as e:
-                _mark_source(session, tenant_id, company_id, environment_id, snapshot_code, source_type, "failed", str(e))
+                _mark_source(session, tenant_id, company_id, environment_id, source_type, "failed", str(e))
                 raise e
 
             if source_type == "SX2":
@@ -275,18 +274,18 @@ def run_snapshot(
                     allowed_snapshot_tables.add(t_name)
                     session.execute(text("""
                         INSERT INTO dictionary_tables
-                        (tenant_id, company_id, environment_id, snapshot_code,
+                        (tenant_id, company_id, environment_id,
                          table_name, table_alias, module_code, description, physical_name, raw_payload)
-                        VALUES (:tenant_id,:company_id,:environment_id,:snapshot_code,
+                        VALUES (:tenant_id,:company_id,:environment_id,
                                 :table_name,:table_alias,:module_code,:description,:physical_name,
                                 CAST(:raw_payload AS JSONB))
-                        ON CONFLICT (tenant_id, environment_id, snapshot_code, table_name)
+                        ON CONFLICT (tenant_id, environment_id, table_name)
                         DO UPDATE SET
                             table_alias=EXCLUDED.table_alias, module_code=EXCLUDED.module_code,
                             description=EXCLUDED.description, physical_name=EXCLUDED.physical_name,
                             raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
                     """), {
-                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id), "snapshot_code": snapshot_code,
+                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id),
                         "table_name": t_name,
                         "table_alias": str(r.get("X2_ARQUIVO") or r.get("table_alias") or "").strip(),
                         "module_code": mod_code,
@@ -301,16 +300,16 @@ def run_snapshot(
                         continue
                     session.execute(text("""
                         INSERT INTO dictionary_fields
-                        (tenant_id, company_id, environment_id, snapshot_code,
+                        (tenant_id, company_id, environment_id,
                          table_name, field_name, title, field_type, length_num, decimal_num,
                          required_flag, browse_flag, virtual_flag,
                          validation_rule, relation_rule, when_rule, raw_payload)
-                        VALUES (:tenant_id,:company_id,:environment_id,:snapshot_code,
+                        VALUES (:tenant_id,:company_id,:environment_id,
                                 :table_name,:field_name,:title,:field_type,:length_num,:decimal_num,
                                 :required_flag,:browse_flag,:virtual_flag,
                                 :validation_rule,:relation_rule,:when_rule,
                                 CAST(:raw_payload AS JSONB))
-                        ON CONFLICT (tenant_id, environment_id, snapshot_code, table_name, field_name)
+                        ON CONFLICT (tenant_id, environment_id, table_name, field_name)
                         DO UPDATE SET
                             title=EXCLUDED.title, field_type=EXCLUDED.field_type,
                             length_num=EXCLUDED.length_num, decimal_num=EXCLUDED.decimal_num,
@@ -319,7 +318,7 @@ def run_snapshot(
                             relation_rule=EXCLUDED.relation_rule, when_rule=EXCLUDED.when_rule,
                             raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
                     """), {
-                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id), "snapshot_code": snapshot_code,
+                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id),
                         "table_name": table_name,
                         "field_name": str(r.get("X3_CAMPO") or r.get("field_name") or "").strip().upper(),
                         "title": str(r.get("X3_TITULO") or r.get("title") or "").strip(),
@@ -341,17 +340,17 @@ def run_snapshot(
                         continue
                     session.execute(text("""
                         INSERT INTO dictionary_indexes
-                        (tenant_id, company_id, environment_id, snapshot_code,
+                        (tenant_id, company_id, environment_id,
                          table_name, index_order, nickname, expression, raw_payload)
-                        VALUES (:tenant_id,:company_id,:environment_id,:snapshot_code,
+                        VALUES (:tenant_id,:company_id,:environment_id,
                                 :table_name,:index_order,:nickname,:expression,
                                 CAST(:raw_payload AS JSONB))
-                        ON CONFLICT (tenant_id, environment_id, snapshot_code, table_name, index_order)
+                        ON CONFLICT (tenant_id, environment_id, table_name, index_order)
                         DO UPDATE SET
                             nickname=EXCLUDED.nickname, expression=EXCLUDED.expression,
                             raw_payload=EXCLUDED.raw_payload
                     """), {
-                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id), "snapshot_code": snapshot_code,
+                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id),
                         "table_name": table_name,
                         "index_order": str(r.get("SIX_ORDEM") or r.get("index_order") or "").strip(),
                         "nickname": str(r.get("SIX_DESCRIC") or r.get("nickname") or "").strip(),
@@ -362,27 +361,27 @@ def run_snapshot(
                 for r in rows:
                     session.execute(text("""
                         INSERT INTO dictionary_groups
-                        (tenant_id, company_id, environment_id, snapshot_code,
+                        (tenant_id, company_id, environment_id,
                          group_name, description, raw_payload)
-                        VALUES (:tenant_id,:company_id,:environment_id,:snapshot_code,
+                        VALUES (:tenant_id,:company_id,:environment_id,
                                 :group_name,:description,CAST(:raw_payload AS JSONB))
-                        ON CONFLICT (tenant_id, environment_id, snapshot_code, group_name)
+                        ON CONFLICT (tenant_id, environment_id, group_name)
                         DO UPDATE SET description=EXCLUDED.description, raw_payload=EXCLUDED.raw_payload
                     """), {
                         "tenant_id": str(tenant_id),
                         "company_id": str(company_id) if company_id else None,
                         "environment_id": str(environment_id),
-                        "snapshot_code": snapshot_code,
+                        
                         "group_name": str(r.get("XG_GRUPO") or "").strip().upper(),
                         "description": str(r.get("XG_DESC") or "").strip(),
                         "raw_payload": json.dumps(r),
                     })
 
-            _mark_source(session, tenant_id, company_id, environment_id, snapshot_code, source_type, "done")
+            _mark_source(session, tenant_id, company_id, environment_id, source_type, "done")
             session.commit()
 
         return {
-            "snapshot_code": snapshot_code,
+            
             "status": "done",
             "mode": "full",
             "message": "Dicionário Protheus sincronizado com sucesso.",
@@ -400,34 +399,34 @@ def run_snapshot(
 # Helpers de persistência
 # ---------------------------------------------------------------------------
 
-def _mark_source(session, tenant_id, company_id, environment_id, snapshot_code, source_type, status, error=None):
+def _mark_source(session, tenant_id, company_id, environment_id, source_type, status, error=None):
     if status == "running":
         session.execute(text("""
             INSERT INTO tenant_dictionary_sources
-            (tenant_id, company_id, environment_id, source_type, snapshot_code, status, started_at)
-            VALUES (:tenant_id,:company_id,:environment_id,:source_type,:snapshot_code,'running',NOW())
+            (tenant_id, company_id, environment_id, source_type, status, started_at)
+            VALUES (:tenant_id,:company_id,:environment_id,:source_type,'running',NOW())
         """), {
             "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None,
             "environment_id": str(environment_id), "source_type": source_type,
-            "snapshot_code": snapshot_code,
+            
         })
     elif status == "failed":
         session.execute(text("""
             UPDATE tenant_dictionary_sources
             SET status='failed', finished_at=NOW(), error_message=:err
-            WHERE tenant_id=:tenant_id AND snapshot_code=:snapshot_code AND source_type=:source_type
-        """), {"tenant_id": str(tenant_id), "snapshot_code": snapshot_code,
+            WHERE tenant_id=:tenant_id AND source_type=:source_type
+        """), {"tenant_id": str(tenant_id), 
                "source_type": source_type, "err": str(error)})
     else:
         session.execute(text("""
             UPDATE tenant_dictionary_sources
             SET status='done', finished_at=NOW()
-            WHERE tenant_id=:tenant_id AND snapshot_code=:snapshot_code AND source_type=:source_type
-        """), {"tenant_id": str(tenant_id), "snapshot_code": snapshot_code, "source_type": source_type})
+            WHERE tenant_id=:tenant_id AND source_type=:source_type
+        """), {"tenant_id": str(tenant_id),  "source_type": source_type})
     session.commit()
 
 
-def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id, snapshot_code):
+def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id):
     """
     Persiste resultado da consulta unificada SX2+SX3+SXG (snapshot curado).
     Cada linha representa uma combinação tabela+campo com flags de compartilhamento.
@@ -440,17 +439,17 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id, sna
         # Upsert em dictionary_tables
         session.execute(text("""
             INSERT INTO dictionary_tables
-            (tenant_id, company_id, environment_id, snapshot_code,
+            (tenant_id, company_id, environment_id,
              table_name, table_alias, module_code, description,
              usa_empresa, usa_unidade, usa_filial,
              x2_modo, x2_tamfil, x2_modoun, x2_tamun, x2_modoemp, x2_tamemp,
              unique_index, raw_payload)
-            VALUES (:tenant_id,:company_id,:environment_id,:snapshot_code,
+            VALUES (:tenant_id,:company_id,:environment_id,
                     :table_name,:table_alias,:module_code,:description,
                     :usa_empresa,:usa_unidade,:usa_filial,
                     :x2_modo,:x2_tamfil,:x2_modoun,:x2_tamun,:x2_modoemp,:x2_tamemp,
                     :unique_index,CAST(:raw_payload AS JSONB))
-            ON CONFLICT (tenant_id, environment_id, snapshot_code, table_name)
+            ON CONFLICT (tenant_id, environment_id, table_name)
             DO UPDATE SET
                 table_alias=EXCLUDED.table_alias, module_code=EXCLUDED.module_code,
                 description=EXCLUDED.description,
@@ -463,7 +462,7 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id, sna
             "tenant_id": str(tenant_id),
             "company_id": str(company_id) if company_id else None,
             "environment_id": str(environment_id),
-            "snapshot_code": snapshot_code,
+            
             "table_name": table_key,
             "table_alias": str(r.get("X2_ARQUIVO") or "").strip(),
             "module_code": str(r.get("X2_MODULO") or "").strip(),
@@ -488,13 +487,13 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id, sna
 
         session.execute(text("""
             INSERT INTO dictionary_fields
-            (tenant_id, company_id, environment_id, snapshot_code,
+            (tenant_id, company_id, environment_id,
              table_name, field_name, title, field_type, length_num,
              sxg_group, sxg_size, raw_payload)
-            VALUES (:tenant_id,:company_id,:environment_id,:snapshot_code,
+            VALUES (:tenant_id,:company_id,:environment_id,
                     :table_name,:field_name,:title,:field_type,:length_num,
                     :sxg_group,:sxg_size,CAST(:raw_payload AS JSONB))
-            ON CONFLICT (tenant_id, environment_id, snapshot_code, table_name, field_name)
+            ON CONFLICT (tenant_id, environment_id, table_name, field_name)
             DO UPDATE SET
                 title=EXCLUDED.title, field_type=EXCLUDED.field_type,
                 length_num=EXCLUDED.length_num, sxg_group=EXCLUDED.sxg_group,
@@ -504,7 +503,7 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id, sna
             "tenant_id": str(tenant_id),
             "company_id": str(company_id) if company_id else None,
             "environment_id": str(environment_id),
-            "snapshot_code": snapshot_code,
+            
             "table_name": table_key,
             "field_name": field_name,
             "title":      str(r.get("X3_DESCRIC") or "").strip(),
@@ -516,7 +515,7 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id, sna
         })
 
 
-def _persist_six_rows(session, rows, tenant_id, company_id, environment_id, snapshot_code):
+def _persist_six_rows(session, rows, tenant_id, company_id, environment_id):
     """Persiste índices SIX do snapshot curado."""
     for r in rows:
         table_name = str(r.get("SIX_ARQUIVO") or "").strip().upper()
@@ -526,12 +525,12 @@ def _persist_six_rows(session, rows, tenant_id, company_id, environment_id, snap
 
         session.execute(text("""
             INSERT INTO dictionary_indexes
-            (tenant_id, company_id, environment_id, snapshot_code,
+            (tenant_id, company_id, environment_id,
              table_name, index_order, nickname, expression, raw_payload)
-            VALUES (:tenant_id,:company_id,:environment_id,:snapshot_code,
+            VALUES (:tenant_id,:company_id,:environment_id,
                     :table_name,:index_order,:nickname,:expression,
                     CAST(:raw_payload AS JSONB))
-            ON CONFLICT (tenant_id, environment_id, snapshot_code, table_name, index_order)
+            ON CONFLICT (tenant_id, environment_id, table_name, index_order)
             DO UPDATE SET
                 nickname=EXCLUDED.nickname, expression=EXCLUDED.expression,
                 raw_payload=EXCLUDED.raw_payload
@@ -539,7 +538,7 @@ def _persist_six_rows(session, rows, tenant_id, company_id, environment_id, snap
             "tenant_id": str(tenant_id),
             "company_id": str(company_id) if company_id else None,
             "environment_id": str(environment_id),
-            "snapshot_code": snapshot_code,
+            
             "table_name": table_name,
             "index_order": index_order,
             "nickname":    str(r.get("SIX_DESCRIC") or "").strip(),
