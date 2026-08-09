@@ -10,15 +10,13 @@
   },
   "dependencies": {
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.1.12"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.12",
     "@vitejs/plugin-react": "^6.0.0",
     "tailwindcss": "^4.1.12",
     "vite": "^8.2.1"
-  },
-  "optionalDependencies": {
-    "@tailwindcss/oxide-linux-x64-gnu": "^4.1.12"
   }
 }
