@@ -247,22 +247,18 @@ def ensure_public_tables(db, force: bool = False):
         """,
         """
         CREATE TABLE IF NOT EXISTS public.protheus_modules_master (
-            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            mod_code    VARCHAR(30) UNIQUE,
-            module_code VARCHAR(30) UNIQUE,
-            mod_name    VARCHAR(150),
-            module_name VARCHAR(150),
+            id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+            mod_code    INTEGER      NOT NULL,
+            mod_sigla   VARCHAR(30)  UNIQUE,
+            mod_name    VARCHAR(150) NOT NULL,
             description TEXT,
-            source_name VARCHAR(60) NOT NULL DEFAULT 'SYS_USR_MODULE',
-            active      BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            updated_at  TIMESTAMP WITH TIME ZONE
+            active      BOOLEAN      NOT NULL DEFAULT TRUE,
+            created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            updated_at  TIMESTAMPTZ,
+            UNIQUE(mod_code)
         );
-        UPDATE public.protheus_modules_master SET mod_code    = module_code WHERE mod_code    IS NULL AND module_code IS NOT NULL;
-        UPDATE public.protheus_modules_master SET mod_name    = module_name WHERE mod_name    IS NULL AND module_name IS NOT NULL;
-        UPDATE public.protheus_modules_master SET module_code = mod_code    WHERE module_code IS NULL AND mod_code    IS NOT NULL;
-        UPDATE public.protheus_modules_master SET module_name = mod_name    WHERE module_name IS NULL AND mod_name    IS NOT NULL;
-        DELETE FROM public.protheus_modules_master WHERE source_name = 'fallback_hardcoded';
+        CREATE INDEX IF NOT EXISTS idx_pmm_code   ON public.protheus_modules_master(mod_code);
+        CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(mod_sigla);
         """,
         """
         CREATE TABLE IF NOT EXISTS public.users (
@@ -594,6 +590,8 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
             else:
                 clean = "default"
         except Exception:
+            if hasattr(db, "rollback"):
+                db.rollback()
             clean = "default"
 
     clean = re.sub(r'[^a-zA-Z0-9_]', '', str(clean))
@@ -666,7 +664,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
         # ── Patch 2: add columns introduzidas após o bootstrap inicial ──
         db.execute(text(f"""
-            DO $$$$
+            DO $$
             BEGIN
                 IF EXISTS (
                     SELECT 1 FROM information_schema.tables
@@ -679,7 +677,27 @@ def ensure_tenant_tables(db, clean_tenant: str):
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature             NUMERIC(3,2) DEFAULT 0.20;
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso             TEXT;
                 END IF;
-            END $$$$;
+            END $$;
+        """))
+        db.commit()
+
+        # ── Patch 3: Drop legacy V4 tables to allow recreation with V5 schema ──
+        db.execute(text(f"""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{clean_tenant}' AND table_name = 'protheus_modules' AND column_name = 'modulo'
+                ) THEN
+                    DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules CASCADE;
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{clean_tenant}' AND table_name = 'tenant_schemas' AND column_name = 'modulo'
+                ) THEN
+                    DROP TABLE IF EXISTS "{clean_tenant}".tenant_schemas CASCADE;
+                END IF;
+            END $$;
         """))
         db.commit()
 
@@ -727,44 +745,45 @@ def ensure_tenant_tables(db, clean_tenant: str):
             ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT;
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
-                id SERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_code VARCHAR(60),
-                modulo VARCHAR(50) NOT NULL,
-                codmod VARCHAR(50) NOT NULL,
-                usr_modulo VARCHAR(50),
-                usr_codmod VARCHAR(50),
-                usr_nome VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                id          BIGSERIAL    PRIMARY KEY,
+                tenant_id   VARCHAR(100) NOT NULL,
+                mod_code    INTEGER      NOT NULL,
+                mod_sigla   VARCHAR(30)  NOT NULL,
+                mod_name    VARCHAR(150) NOT NULL,
+                active      BOOLEAN      NOT NULL DEFAULT TRUE,
+                created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                UNIQUE(tenant_id, mod_code)
             );
-            ALTER TABLE "{clean_tenant}".protheus_modules ADD COLUMN IF NOT EXISTS modulo VARCHAR(50);
-            ALTER TABLE "{clean_tenant}".protheus_modules ADD COLUMN IF NOT EXISTS codmod VARCHAR(50);
-            UPDATE "{clean_tenant}".protheus_modules SET modulo = usr_modulo WHERE modulo IS NULL AND usr_modulo IS NOT NULL;
-            UPDATE "{clean_tenant}".protheus_modules SET codmod = usr_codmod WHERE codmod IS NULL AND usr_codmod IS NOT NULL;
 
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_tenant ON "{clean_tenant}".protheus_modules (tenant_id);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_modulo ON "{clean_tenant}".protheus_modules (modulo);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_codmod ON "{clean_tenant}".protheus_modules (codmod);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_code  ON "{clean_tenant}".protheus_modules (mod_code);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_sigla ON "{clean_tenant}".protheus_modules (mod_sigla);
         """))
 
         # 2. tenant_schemas
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (
-                id SERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                modulo VARCHAR(50) NOT NULL,
-                codmod VARCHAR(50),
-                chave VARCHAR(10) NOT NULL,
-                tabela VARCHAR(50),
-                nome VARCHAR(255),
-                schema_json JSONB NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                id                  BIGSERIAL    PRIMARY KEY,
+                tenant_id           VARCHAR(100) NOT NULL,
+                mod_code            INTEGER      NOT NULL,
+                mod_sigla           VARCHAR(30)  NOT NULL,
+                chave               VARCHAR(10)  NOT NULL,
+                tabela              VARCHAR(20),
+                nome                VARCHAR(120),
+                campo               VARCHAR(15)  NOT NULL,
+                campo_titulo        VARCHAR(80),
+                campo_tipo          VARCHAR(5),
+                campo_tamanho       INTEGER,
+                campo_decimal       INTEGER      DEFAULT 0,
+                campo_obrigatorio   BOOLEAN      DEFAULT FALSE,
+                campo_usado         BOOLEAN      DEFAULT TRUE,
+                campo_descricao     TEXT,
+                is_customizado      BOOLEAN      DEFAULT FALSE,
+                ordem               INTEGER      DEFAULT 0,
+                schema_json         JSONB,
+                created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                updated_at          TIMESTAMPTZ
             );
-            ALTER TABLE "{clean_tenant}".tenant_schemas ADD COLUMN IF NOT EXISTS codmod VARCHAR(50);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_tenant ON "{clean_tenant}".tenant_schemas (tenant_id);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_modulo ON "{clean_tenant}".tenant_schemas (modulo);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_codmod ON "{clean_tenant}".tenant_schemas (codmod);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_mod_code ON "{clean_tenant}".tenant_schemas (mod_code);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_chave ON "{clean_tenant}".tenant_schemas (chave);
         """))
 
@@ -975,20 +994,20 @@ def ensure_all_registered_tenant_schemas(db):
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]))
     except Exception:
-        pass
+        db.rollback()
     try:
         res2 = db.execute(text("SELECT tenant_id FROM public.companies WHERE tenant_id IS NOT NULL"))
         for row in res2.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
     except Exception:
-        pass
+        db.rollback()
     try:
         res3 = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry"))
         for row in res3.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]).replace("tenant_", ""))
     except Exception:
-        pass
+        db.rollback()
 
     for tid in tenant_ids:
         clean = re.sub(r'[^a-zA-Z0-9_]', '', str(tid))

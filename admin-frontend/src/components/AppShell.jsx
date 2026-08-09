@@ -24,9 +24,7 @@ const nav = [
     { to: '/knowledge', icon: BookOpen, label: 'Memórias RAG' },
   ]},
   { section: 'Catálogo Protheus', items: [
-    { to: '/dictionary',  icon: RefreshCw,   label: 'Sincronizar Dicionário' },
     { to: '/snapshots',   icon: FileSearch,  label: 'Snapshots' },
-    { to: '/tables',      icon: Table2,      label: 'Tabelas & Campos' },
     { to: '/permissions', icon: ShieldCheck, label: 'Permissões' },
     { to: '/query-guard', icon: Database,    label: 'Query Guard' },
   ]},
