@@ -31,20 +31,43 @@ function readContextFromUrl() {
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
 
-  const context = useMemo(() => ({
-    tenant_id: externalContext.tenant_id || '',
-    company: externalContext.company || '',
-    branch: externalContext.branch || '',
-    user: externalContext.user || '',
-    profile: externalContext.profile || 'Negócio',
-    session_id: externalContext.session_id || '',
-    environment: externalContext.environment || '',
-    module: externalContext.module || '',
-  }), [externalContext]);
+  const context = useMemo(
+    () => ({
+      tenant_id: externalContext.tenant_id || '',
+      company: externalContext.company || '',
+      branch: externalContext.branch || '',
+      user: externalContext.user || '',
+      profile: externalContext.profile || 'Negócio',
+      session_id: externalContext.session_id || '',
+      environment: externalContext.environment || '',
+      module: externalContext.module || '',
+    }),
+    [externalContext]
+  );
 
-  const [state, setState] = useState({ ready: true, message: 'Contexto carregado (Validação desabilitada)' });
-  const [messages, setMessages] = useState([{ role: 'assistant', text: 'Aguardando contexto do Protheus.' }]);
-  const [history, setHistory] = useState([]);
+  const hasContext = !!(context.tenant_id || context.company || context.branch || context.user || context.module);
+
+  const [state, setState] = useState({
+    ready: true,
+    message: hasContext
+      ? 'Contexto do Protheus identificado.'
+      : 'Copilot disponível sem contexto validado do Protheus.',
+  });
+
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      text: hasContext
+        ? 'Pronto. Posso ajudar com consultas, análises e relatórios.'
+        : 'Pronto. Posso ajudar mesmo sem contexto validado do Protheus.',
+    },
+  ]);
+
+  const [history, setHistory] = useState([
+    { title: 'Faturamento do mês', date: 'Hoje' },
+    { title: 'Títulos vencendo', date: 'Ontem' },
+  ]);
+
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -71,7 +94,16 @@ export default function AgentWorkspace() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  useEffect(() => {
+    const readyMessage = hasContext
+      ? 'Contexto do Protheus identificado.'
+      : 'Copilot disponível sem contexto validado do Protheus.';
 
+    setState({
+      ready: true,
+      message: readyMessage,
+    });
+  }, [hasContext]);
 
   const send = async (text) => {
     if (!text?.trim()) return;
@@ -87,6 +119,7 @@ export default function AgentWorkspace() {
       };
 
       const res = await api.askAgent(payload);
+
       setResult(res);
       setMessages((m) => [
         ...m,
@@ -104,7 +137,7 @@ export default function AgentWorkspace() {
 
   return (
     <div className="flex h-screen w-full bg-slate-900 text-slate-100 overflow-hidden font-sans">
-      <div className="hidden xl:flex">
+      <div className="hidden md:flex">
         <HistoryRail
           items={history}
           onSelect={setSelected}
@@ -146,7 +179,7 @@ export default function AgentWorkspace() {
           <Composer
             disabled={loading}
             onSend={send}
-            placeholder={'Faça sua pergunta sobre o Protheus...'}
+            placeholder="Faça sua pergunta sobre o Protheus..."
           />
         </div>
       </main>
