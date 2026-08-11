@@ -33,7 +33,9 @@
     // Sinais definitivos de que o usuário JÁ está logado (ignora se a tela de login ainda estiver no DOM invisível)
     const strongSignals = [
       /SIGA[A-Z]{3,}/i.test(text), // Ex: SIGAFAT, SIGACOM
-      /Trocar m[oó]dulo/i.test(text),
+      /Trocar m.dulo/i.test(text),
+      /Faturamento/i.test(text),
+      /TOTVS News/i.test(text),
       /Favoritos/i.test(text) && /Consultas/i.test(text)
     ];
 
