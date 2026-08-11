@@ -3,7 +3,7 @@ const DEFAULT_CONFIG = {
   username: "",
   password: "",
   widgetUrl: "https://copilot.elitecorp.tec.br/",
-  launchUrl: "https://copilot.elitecorp.tec.br/api/launch",
+  launchUrl: "https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html",
 };
 
 const CONTENT_SCRIPT_MATCH_PATTERNS = [
