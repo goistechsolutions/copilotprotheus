@@ -77,9 +77,8 @@ export default function AgentWorkspace() {
       (!!context.company || !!context.branch || !!context.user);
 
     if (!hasMinimumContext) {
-      // setState({ ready: false, message: 'Aguardando contexto do Protheus...' });
-      // Removed block to allow interaction without validated context
-      // return;
+      // Don't validate if we don't have minimum context. Just stay ready.
+      return;
     }
 
     let alive = true;
@@ -89,12 +88,11 @@ export default function AgentWorkspace() {
         const res = await api.validateContext(context);
         if (!alive) return;
 
-        setState({
-          ready: !!res.ready,
-          message: res.message || (res.ready ? 'Contexto pronto' : 'Contexto indisponível'),
-        });
-
         if (res.ready) {
+          setState({
+            ready: true,
+            message: 'Contexto pronto',
+          });
           setMessages([{ role: 'assistant', text: 'Pronto. Posso ajudar com consultas, análises e relatórios.' }]);
           setHistory(
             res.history || [
@@ -105,7 +103,8 @@ export default function AgentWorkspace() {
         }
       } catch (e) {
         if (!alive) return;
-        setState({ ready: false, message: 'Falha ao validar contexto do Protheus' });
+        // Ignore validation errors to prevent showing the red banner and blocking the user
+        // setState({ ready: false, message: 'Falha ao validar contexto do Protheus' });
       }
     })();
 
@@ -145,7 +144,7 @@ export default function AgentWorkspace() {
 
   return (
     <div className="flex h-screen w-full bg-slate-900 text-slate-100 overflow-hidden font-sans">
-      <div className="hidden md:flex">
+      <div className="hidden xl:flex">
         <HistoryRail
           items={history}
           onSelect={setSelected}
