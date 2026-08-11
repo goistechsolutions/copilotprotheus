@@ -10,9 +10,9 @@ async function request(path, options = {}) {
   });
   
   if (!res.ok) {
-    let errMessage = 'Erro na requisição';
+    let errMessage = `Erro na requisição (Status ${res.status})`;
     try {
-      const data = await res.json();
+      const data = await res.clone().json();
       errMessage = data.detail || data.error || errMessage;
     } catch (e) {
       errMessage = await res.text();
