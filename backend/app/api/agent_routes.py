@@ -207,6 +207,8 @@ async def proxy_ask_agent(req: AskAgentRequest, db: Session = Depends(get_db)):
     try:
         config = get_tenant_config(req.tenant_id)
         rest_url = config['rest_url'].strip()
+        if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
+            rest_url = "https://" + rest_url
         if rest_url.endswith('/'): rest_url = rest_url[:-1]
         
         # Endpoint AdvPL
