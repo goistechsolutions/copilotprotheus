@@ -213,11 +213,6 @@
     const waiting = shadow.querySelector("#copilot-waiting");
     const context = extractProtheusContext();
 
-    if (!hasMinimumContext(context)) {
-      updateWaitingMessage("Login detectado, mas o contexto do Protheus ainda esta carregando...");
-      return;
-    }
-
     const nextUrl = buildIframeUrl(config, context);
 
     if (iframe.dataset.src !== nextUrl) {
@@ -261,11 +256,6 @@
 
   function evaluateSession(config) {
     if (!config?.widgetUrl) return;
-
-    if (!detectActiveSession()) {
-      deactivateWidget();
-      return;
-    }
 
     if (pollInterval) {
       clearInterval(pollInterval);
