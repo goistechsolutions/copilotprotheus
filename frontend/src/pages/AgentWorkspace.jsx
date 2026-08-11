@@ -71,47 +71,7 @@ export default function AgentWorkspace() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  useEffect(() => {
-    const hasMinimumContext =
-      !!context.tenant_id &&
-      (!!context.company || !!context.branch || !!context.user);
 
-    if (!hasMinimumContext) {
-      // Don't validate if we don't have minimum context. Just stay ready.
-      return;
-    }
-
-    let alive = true;
-
-    (async () => {
-      try {
-        const res = await api.validateContext(context);
-        if (!alive) return;
-
-        if (res.ready) {
-          setState({
-            ready: true,
-            message: 'Contexto pronto',
-          });
-          setMessages([{ role: 'assistant', text: 'Pronto. Posso ajudar com consultas, análises e relatórios.' }]);
-          setHistory(
-            res.history || [
-              { title: 'Faturamento do mês', date: 'Hoje' },
-              { title: 'Títulos vencendo', date: 'Ontem' },
-            ]
-          );
-        }
-      } catch (e) {
-        if (!alive) return;
-        // Ignore validation errors to prevent showing the red banner and blocking the user
-        // setState({ ready: false, message: 'Falha ao validar contexto do Protheus' });
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [context]);
 
   const send = async (text) => {
     if (!text?.trim()) return;
