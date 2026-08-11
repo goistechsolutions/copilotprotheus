@@ -13,7 +13,7 @@
   "options_page": "options.html",
   "content_scripts": [
     {
-      "matches": ["https://*.totvs.com/*"],
+      "matches": ["https://*.totvs.com.br/*","https://copilot.elitecorp.tec.br/*"],
       "js": ["content-script.js"],
       "css": ["widget.css"],
       "run_at": "document_idle"
@@ -26,7 +26,7 @@
     }
   },
   "permissions": ["storage", "tabs", "scripting"],
-  "host_permissions": ["https://*.totvs.com/*"],
+  "host_permissions": ["https://*.totvs.com.br/*","https://copilot.elitecorp.tec.br/*"],
   "icons": {
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
