@@ -214,18 +214,20 @@
     }, 1500);
   }
 
+  let observerTimeout = null;
   function startObserver(config) {
     if (observer) return;
 
     observer = new MutationObserver(() => {
-      evaluateSession(config);
+      if (observerTimeout) clearTimeout(observerTimeout);
+      observerTimeout = setTimeout(() => {
+        evaluateSession(config);
+      }, 300);
     });
 
     observer.observe(document.body, {
       childList: true,
-      subtree: true,
-      attributes: true,
-      characterData: true
+      subtree: true
     });
   }
 
