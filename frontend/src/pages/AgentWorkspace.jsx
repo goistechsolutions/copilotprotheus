@@ -42,7 +42,7 @@ export default function AgentWorkspace() {
     module: externalContext.module || '',
   }), [externalContext]);
 
-  const [state, setState] = useState({ ready: false, message: 'Aguardando contexto do Protheus...' });
+  const [state, setState] = useState({ ready: true, message: 'Contexto carregado (Validação desabilitada)' });
   const [messages, setMessages] = useState([{ role: 'assistant', text: 'Aguardando contexto do Protheus.' }]);
   const [history, setHistory] = useState([]);
   const [result, setResult] = useState(null);
@@ -77,8 +77,9 @@ export default function AgentWorkspace() {
       (!!context.company || !!context.branch || !!context.user);
 
     if (!hasMinimumContext) {
-      setState({ ready: false, message: 'Aguardando contexto do Protheus...' });
-      return;
+      // setState({ ready: false, message: 'Aguardando contexto do Protheus...' });
+      // Removed block to allow interaction without validated context
+      // return;
     }
 
     let alive = true;
@@ -114,7 +115,7 @@ export default function AgentWorkspace() {
   }, [context]);
 
   const send = async (text) => {
-    if (!state.ready || !text?.trim()) return;
+    if (!text?.trim()) return;
 
     setMessages((m) => [...m, { role: 'user', text }]);
     setLoading(true);
@@ -169,7 +170,7 @@ export default function AgentWorkspace() {
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-6 scroll-smooth">
           <SuggestionCards
             items={suggestions}
-            disabled={!state.ready || loading}
+            disabled={loading}
             onPick={(it) => send(it.title)}
           />
 
@@ -184,13 +185,9 @@ export default function AgentWorkspace() {
 
         <div className="p-4 border-t border-slate-700 bg-slate-800 shrink-0">
           <Composer
-            disabled={!state.ready || loading}
+            disabled={loading}
             onSend={send}
-            placeholder={
-              state.ready
-                ? 'Faça sua pergunta sobre o Protheus...'
-                : 'Aguardando contexto do Protheus...'
-            }
+            placeholder={'Faça sua pergunta sobre o Protheus...'}
           />
         </div>
       </main>
