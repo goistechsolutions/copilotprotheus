@@ -1,5 +1,5 @@
 (function () {
-  const AGENT_URL = "https://SEU-DOMINIO.pages.dev";
+  const AGENT_URL = "https://copilot.elitecorp.tec.br";
 
   const fab = document.createElement("div");
   fab.id = "copilot-fab";
