@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Copilot Protheus - Assistente",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Assistente integrado ao WebApp da TOTVS Protheus",
   "action": {
     "default_popup": "popup.html",
@@ -13,10 +13,15 @@
   "options_page": "options.html",
   "content_scripts": [
     {
-      "matches": ["https://*.totvs.com.br/*","https://copilot.elitecorp.tec.br/*","https://rodolltda195384.protheus.cloudtotvs.com.br*"],
+      "matches": [
+        "https://*.protheus.cloudtotvs.com.br/*",
+        "https://*.cloudtotvs.com.br/*",
+        "https://*.totvs.com.br/*"
+      ],
       "js": ["content-script.js"],
       "css": ["widget.css"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "commands": {
@@ -26,7 +31,11 @@
     }
   },
   "permissions": ["storage", "tabs", "scripting"],
-  "host_permissions": ["https://*.totvs.com.br/*","https://copilot.elitecorp.tec.br/*","https://rodolltda195384.protheus.cloudtotvs.com.br*"],
+  "host_permissions": [
+    "https://*.protheus.cloudtotvs.com.br/*",
+    "https://*.cloudtotvs.com.br/*",
+    "https://*.totvs.com.br/*"
+  ],
   "icons": {
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
