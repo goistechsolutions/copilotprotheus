@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Configurações — Copilot Protheus</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>✦ Copilot Protheus</h1>
+    <p class="subtitle">Configuração de conexão com o Protheus</p>
+
+    <form id="config-form">
+      <label for="tenantId">Grupo/Tenant ID (obrigatório)</label>
+      <input type="text" id="tenantId" required placeholder="ex: rodol_prod">
+
+      <label for="username">Usuário Copilot</label>
+      <input type="text" id="username" placeholder="ex: admin">
+
+      <label for="password">Senha Copilot</label>
+      <div class="password-wrapper">
+        <input type="password" id="password" placeholder="••••••••">
+        <button type="button" id="togglePassword">👁</button>
+      </div>
+
+      <label for="widgetUrl">URL do Widget (Vite/Nuvem)</label>
+      <input type="url" id="widgetUrl" required placeholder="https://copilot.elitecorp.tec.br/">
+
+      <label for="launchUrl">URL de Lançamento (FastAPI)</label>
+      <input type="url" id="launchUrl" required placeholder="https://copilot.elitecorp.tec.br/api/launch">
+
+      <div class="actions">
+        <button type="button" id="testConnection">Testar Conexão</button>
+        <button type="submit" id="saveConfig">Salvar Configurações</button>
+      </div>
+
+      <p id="statusMessage" class="status" aria-live="polite"></p>
+    </form>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
