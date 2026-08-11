@@ -8,7 +8,8 @@ const FIELDS = ["tenantId", "username", "password", "widgetUrl", "launchUrl"];
 async function loadConfig() {
   const data = await chrome.storage.local.get(FIELDS);
   FIELDS.forEach((field) => {
-    if (data[field]) document.getElementById(field).value = data[field];
+    const el = document.getElementById(field);
+    if (el && data[field]) el.value = data[field];
   });
 }
 
@@ -61,6 +62,7 @@ form.addEventListener("submit", async (e) => {
   };
 
   await chrome.storage.local.set(config);
+  chrome.runtime.sendMessage({ type: "CONFIG_UPDATED", config });
   showStatus("Configurações salvas com sucesso.");
 });
 

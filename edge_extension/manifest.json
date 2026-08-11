@@ -2,20 +2,33 @@
   "manifest_version": 3,
   "name": "Copilot Protheus - Assistente",
   "version": "1.0.0",
-  "background": { "service_worker": "background.js" },
+  "description": "Assistente integrado ao WebApp da TOTVS Protheus",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Copilot Protheus"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
   "content_scripts": [
     {
-      "matches": ["https://*.totvs.com.br/*"],
+      "matches": ["https://*.totvs.com/*"],
       "js": ["content-script.js"],
       "css": ["widget.css"],
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage"],
-  "host_permissions": ["https://*.totvs.com.br/*"]
-}
-{
-  "options_page": "options.html",
-  "permissions": ["storage"],
-  "host_permissions": ["https://*.totvs.com.br/*", "https://copilot.elitecorp.tec.br/*"]
+  "commands": {
+    "toggle-widget": {
+      "suggested_key": { "default": "Ctrl+Shift+P" },
+      "description": "Mostrar/Ocultar Widget Copilot Protheus"
+    }
+  },
+  "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": ["https://*.totvs.com/*"],
+  "icons": {
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

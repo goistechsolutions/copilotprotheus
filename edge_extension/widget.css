@@ -5,18 +5,15 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #2b6cb0;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  background: linear-gradient(135deg, #4c5fd5, #7b3fe4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   z-index: 999999;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-#copilot-fab img {
-  width: 32px;
-  height: 32px;
+  color: #fff;
+  font-size: 24px;
 }
 
 #copilot-panel {
@@ -25,16 +22,17 @@
   right: 24px;
   width: 380px;
   height: 520px;
-  background: #fff;
+  background: #ffffff;
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   z-index: 999999;
   flex-direction: column;
   overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
 }
 
 #copilot-panel-header {
-  background: #2b6cb0;
+  background: linear-gradient(135deg, #4c5fd5, #7b3fe4);
   color: #fff;
   padding: 10px 14px;
   display: flex;
