@@ -29,6 +29,18 @@
     const text = getBodyText();
 
     if (!text) return false;
+
+    // Sinais definitivos de que o usuário JÁ está logado (ignora se a tela de login ainda estiver no DOM invisível)
+    const strongSignals = [
+      /SIGA[A-Z]{3,}/i.test(text), // Ex: SIGAFAT, SIGACOM
+      /Trocar m[oó]dulo/i.test(text),
+      /Favoritos/i.test(text) && /Consultas/i.test(text)
+    ];
+
+    if (strongSignals.some(Boolean)) {
+      return true;
+    }
+
     if (hasLoginDialog(text)) return false;
 
     const signals = [
@@ -39,7 +51,6 @@
       /Favoritos/i.test(text),
       /Administrador/i.test(text),
       /Usuário/i.test(text),
-      /SIGA[A-Z]{3,}/i.test(text),
       /\/\s*[0-9]{2,}/.test(text)
     ];
 
