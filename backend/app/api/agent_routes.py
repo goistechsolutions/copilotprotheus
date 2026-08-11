@@ -8,7 +8,7 @@ import json
 
 from app.db.database import get_db
 from app.services.agent_service import AgentValidator
-from app.services.protheus_service import _execute_http_post_with_retry, get_tenant_config
+from app.services.protheus_service import _execute_http_post_with_retry, get_tenant_config, build_protheus_headers
 from app.models.knowledge import AgentQueryAudit, QueryUsageCounter
 
 router = APIRouter(prefix="/agent", tags=["agent-execution"])
@@ -82,10 +82,7 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
     if rest_url.endswith('/'): rest_url = rest_url[:-1]
     url = f"{rest_url}/QueryRest"
     
-    headers = {
-        "Authorization": f"Bearer {config['token']}",
-        "Content-Type": "application/json"
-    }
+    headers = await build_protheus_headers(req.tenant_id, config)
     
     start_time = time.time()
     try:
@@ -190,10 +187,7 @@ async def proxy_validate_context(req: ValidateContextRequest, db: Session = Depe
         # Endpoint AdvPL
         url = f"{rest_url}/copilot/validate-context"
         
-        headers = {
-            "Authorization": f"Bearer {config['token']}",
-            "Content-Type": "application/json"
-        }
+        headers = await build_protheus_headers(req.tenant_id, config)
         
         res_text = await _execute_http_post_with_retry(url, req.dict(), headers)
         return json.loads(res_text)
@@ -218,10 +212,7 @@ async def proxy_ask_agent(req: AskAgentRequest, db: Session = Depends(get_db)):
         # Endpoint AdvPL
         url = f"{rest_url}/copilot/ask"
         
-        headers = {
-            "Authorization": f"Bearer {config['token']}",
-            "Content-Type": "application/json"
-        }
+        headers = await build_protheus_headers(req.tenant_id, config)
         
         res_text = await _execute_http_post_with_retry(url, req.dict(), headers)
         return json.loads(res_text)

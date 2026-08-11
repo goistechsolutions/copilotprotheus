@@ -155,6 +155,27 @@ async def get_protheus_token(tenant_id: str, user: str = None, password: str = N
         _OAUTH2_TOKENS[cache_key] = (access_token, now + expires_in - 60)
         return access_token
 
+async def build_protheus_headers(tenant_id: str, config: dict = None) -> dict:
+    if not config:
+        config = get_tenant_config(tenant_id)
+        
+    auth_mode = config.get("auth_mode", "basic").lower()
+    
+    if auth_mode == "oauth2":
+        token = await get_protheus_token(tenant_id)
+        return {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+    else:
+        import base64
+        credentials = f"{config['user']}:{config['password']}"
+        encoded = base64.b64encode(credentials.encode()).decode()
+        return {
+            "Authorization": f"Basic {encoded}",
+            "Content-Type": "application/json"
+        }
+
 def _sanitize_response_text(text: str) -> str:
     if not text:
         return text
