@@ -5,12 +5,17 @@
   "background": { "service_worker": "background.js" },
   "content_scripts": [
     {
-      "matches": ["https://*.totvs.com/*"],
+      "matches": ["https://*.totvs.com.br/*"],
       "js": ["content-script.js"],
       "css": ["widget.css"],
       "run_at": "document_idle"
     }
   ],
   "permissions": ["storage"],
-  "host_permissions": ["https://*.totvs.com/*"]
+  "host_permissions": ["https://*.totvs.com.br/*"]
+}
+{
+  "options_page": "options.html",
+  "permissions": ["storage"],
+  "host_permissions": ["https://*.totvs.com.br/*", "https://copilot.elitecorp.tec.br/*"]
 }
