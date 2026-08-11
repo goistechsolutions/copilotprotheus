@@ -114,6 +114,7 @@ export default function AgentWorkspace() {
     try {
       const payload = {
         ...context,
+        company_id: context.company,
         request_id: `REQ-${Date.now()}`,
         prompt: text,
       };
