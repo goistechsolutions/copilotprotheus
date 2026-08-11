@@ -1,0 +1,72 @@
+* { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+
+body {
+  background: #0f1420;
+  color: #e6e8ec;
+  margin: 0;
+  padding: 32px;
+}
+
+.container {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+h1 { font-size: 22px; margin-bottom: 4px; }
+.subtitle { color: #9aa3b2; margin-bottom: 24px; font-size: 14px; }
+
+label {
+  display: block;
+  font-size: 13px;
+  color: #b8bfcc;
+  margin-top: 16px;
+  margin-bottom: 6px;
+}
+
+input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #2a3142;
+  background: #1a2030;
+  color: #fff;
+  font-size: 14px;
+}
+
+.password-wrapper { position: relative; }
+.password-wrapper input { padding-right: 40px; }
+#togglePassword {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+button[type="submit"], #testConnection {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+#testConnection { background: #2d3548; color: #e6e8ec; }
+button[type="submit"] {
+  background: linear-gradient(90deg, #4c5fd5, #7b3fe4);
+  color: #fff;
+}
+
+.status { margin-top: 16px; font-size: 13px; text-align: center; }
+.status.success { color: #4ade80; }
+.status.error { color: #f87171; }
