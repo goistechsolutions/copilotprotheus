@@ -67,6 +67,16 @@
   min-height: 0;
   overflow: hidden;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#copilot-waiting {
+  color: #9aa3b2;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
 }
 
 #copilot-iframe {

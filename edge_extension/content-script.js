@@ -1,15 +1,18 @@
 (function () {
   if (document.getElementById("copilot-fab")) return;
 
-  function extractProtheusContext() {
-    const context = {
-      company: "",
-      branch: "",
-      user: "",
-      environment: "",
-      module: "",
-    };
+  let isSessionReady = false;
+  let pollInterval = null;
 
+  function detectActiveSession() {
+    const bodyText = document.body.innerText || "";
+    const hasCompanyBranch = /Ltda[^\n]{0,10}\/[^\n]{0,40}/.test(bodyText);
+    const hasLoginDialog = /Programa Inicial/i.test(bodyText) && /Ambiente no servidor/i.test(bodyText);
+    return hasCompanyBranch && !hasLoginDialog;
+  }
+
+  function extractProtheusContext() {
+    const context = { company: "", branch: "", user: "", environment: "", module: "" };
     try {
       const bodyText = document.body.innerText || "";
 
@@ -33,7 +36,6 @@
     } catch (err) {
       console.warn("Copilot Protheus: falha ao extrair contexto do DOM.", err);
     }
-
     return context;
   }
 
@@ -50,14 +52,15 @@
       <button id="copilot-close" type="button" aria-label="Fechar">✕</button>
     </div>
     <div id="copilot-body">
-      <iframe id="copilot-iframe" src="" title="Copilot Protheus"></iframe>
+      <div id="copilot-waiting">Aguardando login no Protheus...</div>
+      <iframe id="copilot-iframe" src="" title="Copilot Protheus" style="display:none;"></iframe>
     </div>
   `;
   document.body.appendChild(panel);
 
-  function buildIframeUrl(config) {
-    if (!config?.widgetUrl) return "";
-    const context = extractProtheusContext();
+  let currentConfig = null;
+
+  function buildIframeUrl(config, context) {
     const url = new URL(config.widgetUrl);
     url.searchParams.set("tenant", config.tenantId || "");
     if (context.company) url.searchParams.set("company", context.company);
@@ -68,13 +71,16 @@
     return url.toString();
   }
 
-  function applyConfig(config) {
+  function activateWidget(config) {
     const iframe = document.getElementById("copilot-iframe");
-    if (!iframe || !config?.widgetUrl) return;
-    iframe.src = buildIframeUrl(config);
+    const waiting = document.getElementById("copilot-waiting");
+    const context = extractProtheusContext();
+
+    iframe.src = buildIframeUrl(config, context);
+    iframe.style.display = "block";
+    waiting.style.display = "none";
 
     iframe.addEventListener("load", () => {
-      const context = extractProtheusContext();
       try {
         iframe.contentWindow.postMessage(
           { type: "PROTHEUS_CONTEXT", context, tenantId: config.tenantId },
@@ -84,6 +90,32 @@
         console.warn("Copilot Protheus: falha ao enviar contexto via postMessage.", err);
       }
     }, { once: true });
+
+    isSessionReady = true;
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+  function startSessionPolling(config) {
+    if (pollInterval) return;
+    pollInterval = setInterval(() => {
+      if (detectActiveSession()) {
+        activateWidget(config);
+      }
+    }, 1500);
+  }
+
+  function applyConfig(config) {
+    currentConfig = config;
+    if (!config?.widgetUrl) return;
+
+    if (detectActiveSession()) {
+      activateWidget(config);
+    } else {
+      startSessionPolling(config);
+    }
   }
 
   chrome.runtime.sendMessage({ type: "GET_CONFIG" }, (config) => {
@@ -97,6 +129,9 @@
   fab.addEventListener("click", () => {
     panel.style.display = "flex";
     fab.style.display = "none";
+    if (!isSessionReady && currentConfig) {
+      startSessionPolling(currentConfig);
+    }
   });
 
   panel.querySelector("#copilot-close").addEventListener("click", () => {
