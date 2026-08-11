@@ -41,10 +41,6 @@ async function ensureContentScriptInjected(tabId) {
       target: { tabId },
       files: ["content-script.js"],
     });
-    await chrome.scripting.insertCSS({
-      target: { tabId },
-      files: ["widget.css"],
-    });
     return true;
   } catch (err) {
     console.warn("Copilot Protheus: falha ao injetar content-script manualmente.", err);

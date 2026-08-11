@@ -1,14 +1,24 @@
 (function () {
-  if (document.getElementById("copilot-fab")) return;
+  if (document.getElementById("copilot-protheus-host")) return;
 
   let isSessionReady = false;
   let pollInterval = null;
   let observer = null;
+  let observerTimeout = null;
   let currentConfig = null;
   let iframeLoaded = false;
+  let cachedBodyText = { text: "", timestamp: 0 };
 
+  // 1. Otimizar a leitura do DOM
   function getBodyText() {
-    return (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+    const now = Date.now();
+    // Cache de 200ms para evitar reflows multiplos na mesma avaliacao
+    if (now - cachedBodyText.timestamp < 200) {
+      return cachedBodyText.text;
+    }
+    cachedBodyText.text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+    cachedBodyText.timestamp = now;
+    return cachedBodyText.text;
   }
 
   function hasLoginDialog(text) {
@@ -47,7 +57,7 @@
     };
 
     try {
-      const bodyText = document.body.innerText || "";
+      const bodyText = getBodyText();
 
       const envMatch = bodyText.match(/TOTVS[^\n]{0,80}/i);
       if (envMatch) context.environment = envMatch[0].trim();
@@ -110,7 +120,7 @@
         }
       }
 
-      context.session_id = `protheus-${Date.now()}`;
+      context.session_id = "protheus-" + Date.now();
     } catch (err) {
       console.warn("Copilot Protheus: falha ao extrair contexto do DOM.", err);
     }
@@ -122,8 +132,40 @@
     return !!(context.company || context.branch || context.user || context.module);
   }
 
+  // 2. Usar Shadow DOM para isolamento visual
+  const host = document.createElement("div");
+  host.id = "copilot-protheus-host";
+  document.body.appendChild(host);
+
+  const shadow = host.attachShadow({ mode: "open" });
+
+  const cssUrl = chrome.runtime.getURL("widget.css");
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = cssUrl;
+  shadow.appendChild(link);
+
+  const fab = document.createElement("div");
+  fab.id = "copilot-fab";
+  fab.innerHTML = `<span>✦</span>`;
+  shadow.appendChild(fab);
+
+  const panel = document.createElement("div");
+  panel.id = "copilot-panel";
+  panel.innerHTML = `
+    <div id="copilot-panel-header">
+      <span>Copilot Protheus</span>
+      <button id="copilot-close" type="button" aria-label="Fechar">✕</button>
+    </div>
+    <div id="copilot-body">
+      <div id="copilot-waiting">Aguardando efetuar login no Protheus...</div>
+      <iframe id="copilot-iframe" src="" title="Copilot Protheus" style="display:none;"></iframe>
+    </div>
+  `;
+  shadow.appendChild(panel);
+
   function updateWaitingMessage(message) {
-    const waiting = document.getElementById("copilot-waiting");
+    const waiting = shadow.querySelector("#copilot-waiting");
     if (waiting) waiting.textContent = message;
   }
 
@@ -140,7 +182,7 @@
   }
 
   function sendContextToIframe(context) {
-    const iframe = document.getElementById("copilot-iframe");
+    const iframe = shadow.querySelector("#copilot-iframe");
     if (!iframe?.contentWindow) return;
 
     try {
@@ -154,12 +196,12 @@
   }
 
   function activateWidget(config) {
-    const iframe = document.getElementById("copilot-iframe");
-    const waiting = document.getElementById("copilot-waiting");
+    const iframe = shadow.querySelector("#copilot-iframe");
+    const waiting = shadow.querySelector("#copilot-waiting");
     const context = extractProtheusContext();
 
     if (!hasMinimumContext(context)) {
-      updateWaitingMessage("Login detectado, mas o contexto do Protheus ainda está carregando...");
+      updateWaitingMessage("Login detectado, mas o contexto do Protheus ainda esta carregando...");
       return;
     }
 
@@ -188,9 +230,19 @@
     }
 
     isSessionReady = true;
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
+  }
+
+  function deactivateWidget() {
+    isSessionReady = false;
+    updateWaitingMessage("Aguardando efetuar login no Protheus...");
+    const iframe = shadow.querySelector("#copilot-iframe");
+    const waiting = shadow.querySelector("#copilot-waiting");
+    if (iframe) iframe.style.display = "none";
+    if (waiting) waiting.style.display = "block";
+    
+    // 3. Reiniciar polling ao deslogar
+    if (!pollInterval && currentConfig) {
+      startSessionPolling(currentConfig);
     }
   }
 
@@ -198,11 +250,14 @@
     if (!config?.widgetUrl) return;
 
     if (!detectActiveSession()) {
-      isSessionReady = false;
-      updateWaitingMessage("Aguardando efetuar login no Protheus...");
+      deactivateWidget();
       return;
     }
 
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
     activateWidget(config);
   }
 
@@ -214,7 +269,6 @@
     }, 1500);
   }
 
-  let observerTimeout = null;
   function startObserver(config) {
     if (observer) return;
 
@@ -231,29 +285,10 @@
     });
   }
 
-  const fab = document.createElement("div");
-  fab.id = "copilot-fab";
-  fab.innerHTML = `<span>✦</span>`;
-  document.body.appendChild(fab);
-
-  const panel = document.createElement("div");
-  panel.id = "copilot-panel";
-  panel.innerHTML = `
-    <div id="copilot-panel-header">
-      <span>Copilot Protheus</span>
-      <button id="copilot-close" type="button" aria-label="Fechar">✕</button>
-    </div>
-    <div id="copilot-body">
-      <div id="copilot-waiting">Aguardando efetuar login no Protheus...</div>
-      <iframe id="copilot-iframe" src="" title="Copilot Protheus" style="display:none;"></iframe>
-    </div>
-  `;
-  document.body.appendChild(panel);
-
   function applyConfig(config) {
     currentConfig = config;
     if (!config?.widgetUrl) {
-      updateWaitingMessage("Widget não configurado.");
+      updateWaitingMessage("Widget nao configurado.");
       return;
     }
 
@@ -264,11 +299,10 @@
 
   chrome.runtime.sendMessage({ type: "GET_CONFIG" }, (config) => {
     if (chrome.runtime.lastError) {
-      console.warn("Copilot Protheus: falha ao obter configuração.", chrome.runtime.lastError.message);
-      updateWaitingMessage("Falha ao carregar configuração da extensão.");
+      console.warn("Copilot Protheus: falha ao obter configuracao.", chrome.runtime.lastError.message);
+      updateWaitingMessage("Falha ao carregar configuracao da extensao.");
       return;
     }
-
     applyConfig(config);
   });
 
@@ -278,12 +312,10 @@
 
     if (currentConfig) {
       evaluateSession(currentConfig);
-      startSessionPolling(currentConfig);
-      startObserver(currentConfig);
     }
   });
 
-  panel.querySelector("#copilot-close").addEventListener("click", () => {
+  shadow.querySelector("#copilot-close").addEventListener("click", () => {
     panel.style.display = "none";
     fab.style.display = "flex";
   });
@@ -304,3 +336,4 @@
     }
   });
 })();
+)
