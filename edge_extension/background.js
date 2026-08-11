@@ -9,6 +9,7 @@ const DEFAULT_CONFIG = {
 const CONTENT_SCRIPT_MATCH_PATTERNS = [
   "https://*.totvs.com.br/*",
   "https://copilot.elitecorp.tec.br/*",
+  "https://rodolltda195384.protheus.cloudtotvs.com.br*",
 ];
 
 chrome.runtime.onInstalled.addListener(async (details) => {
