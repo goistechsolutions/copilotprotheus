@@ -10,10 +10,10 @@ def build_protheus_context(empresa: Optional[str], filial: Optional[str]) -> Dic
     Garante isolamento de escopo multiempresa no banco Oracle.
     """
     if not empresa or not str(empresa).strip():
-        raise HTTPException(status_code=400, detail="O parâmetro 'empresa' é obrigatório para montagem do contexto Protheus.")
+        empresa = "01"
 
     if not filial or not str(filial).strip():
-        raise HTTPException(status_code=400, detail="O parâmetro 'filial' é obrigatório para montagem do contexto Protheus.")
+        filial = "01"
 
     emp_clean = str(empresa).strip()
     fil_clean = str(filial).strip()
