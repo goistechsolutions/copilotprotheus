@@ -133,6 +133,10 @@ jobs:
             docker compose up -d db
             sleep 5
 
+            echo "=== Sincronizando senha do banco de dados ==="
+            docker compose exec -T db psql -U postgres -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
+            docker compose exec -T db psql -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
+            
             echo "=== Executando migrations em ordem ==="
             for sql_file in $(ls database/migrations/*.sql 2>/dev/null | sort); do
               echo "→ Aplicando: $sql_file"
