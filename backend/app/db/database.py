@@ -902,8 +902,13 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 f'"{clean_tenant}".tenant_dictionary_indexes, '
                 f'"{clean_tenant}".dictionary_snapshots, '
                 f'"{clean_tenant}".tenant_allowed_tables, '
-                f'"{clean_tenant}".tenant_allowed_fields CASCADE'
+                f'"{clean_tenant}".tenant_allowed_fields CASCADE;'
             ))
+            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_tables DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
+            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_fields DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
+            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_indexes DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
+            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_groups DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
+            db.execute(text(f'ALTER TABLE "{clean_tenant}".tenant_dictionary_sources DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
             db.commit()
         except Exception:
             db.rollback()
