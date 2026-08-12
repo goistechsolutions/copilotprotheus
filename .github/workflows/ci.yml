@@ -73,21 +73,9 @@ jobs:
           cache-dependency-path: admin-frontend/package-lock.json
 
       - name: Instalar dependências
-        run: npm install
+        run: npm ci
 
       - name: Build de validação
         run: npm run build
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-
-      - name: Verificar lock file sincronizado
-        run: |
-          if ! git diff --quiet -- package-lock.json; then
-            echo "::error::package-lock.json foi alterado pelo npm install."
-            echo "Execute localmente: cd admin-frontend && npm install"
-            echo "Depois faça commit do package-lock.json atualizado."
-            git diff -- package-lock.json
-            exit 1
-          else
-            echo "✅ package-lock.json está sincronizado com package.json"
-          fi
