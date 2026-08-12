@@ -85,6 +85,9 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
     if not raw_response or not isinstance(raw_response, str):
         raise HTTPException(status_code=500, detail="Provedor LLM retornou uma resposta vazia na geração de SQL.")
 
+    if raw_response.startswith("Erro na API do Gemini:") or raw_response.startswith("Erro de conexão com a API do Gemini:") or raw_response.startswith("A inteligência artificial do Google"):
+        raise HTTPException(status_code=502, detail=raw_response)
+
     # Sanitiza blocos de markdown ou comentários ao redor da query
     clean_sql = re.sub(r'```(?:sql)?|```', '', raw_response, flags=re.IGNORECASE).strip()
     
@@ -94,6 +97,9 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
         clean_sql = clean_sql[sel_idx:].strip()
         if clean_sql.endswith(";"):
             clean_sql = clean_sql[:-1].strip()
+    else:
+        # Se não há SELECT na resposta, provável alucinação ou erro
+        raise HTTPException(status_code=500, detail=f"O provedor LLM falhou ao gerar um SELECT válido. Resposta bruta: {raw_response}")
 
     return clean_sql
 
