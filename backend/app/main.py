@@ -118,6 +118,7 @@ cloudflare_origins = [
     "https://copilot-api.elitecorp.tec.br",
     "https://copilot-admin.elitecorp.tec.br",
     "https://copilotprotheus.pages.dev",
+    "https://rodolltda195384.protheus.cloudtotvs.com.br:10703",
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
