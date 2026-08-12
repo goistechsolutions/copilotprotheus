@@ -126,29 +126,26 @@ jobs:
       - name: 🐘 Executar Migrations PostgreSQL
         if: ${{ github.event.inputs.run_migrations != 'false' }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -p ${{ secrets.VPS_PORT || 22 }} \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'MIGCMD'
-          set -e
-          cd ${{ env.DEPLOY_DIR }}
+          ssh -i ~/.ssh/id_ed25519 -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_DIR }}
+            
+            echo "=== Garantindo que o PostgreSQL está rodando ==="
+            docker compose up -d db
+            sleep 5
 
-          echo "=== Garantindo que o PostgreSQL está rodando ==="
-          docker compose up -d postgres
-          sleep 5
+            echo "=== Executando migrations em ordem ==="
+            for sql_file in $(ls database/migrations/*.sql 2>/dev/null | sort); do
+              echo "→ Aplicando: $sql_file"
+              docker compose exec -T db psql \
+                -U ${{ secrets.POSTGRES_USER }} \
+                -d ${{ secrets.POSTGRES_DB }} \
+                -f /dev/stdin < "$sql_file" \
+                && echo "  ✓ $sql_file aplicado" \
+                || echo "  ⚠ $sql_file já aplicado ou erro ignorável"
+            done
 
-          echo "=== Executando migrations em ordem ==="
-          for sql_file in $(ls database/migrations/*.sql 2>/dev/null | sort); do
-            echo "→ Aplicando: $sql_file"
-            docker compose exec -T postgres psql \
-              -U copilot \
-              -d copilotprotheus \
-              -f /dev/stdin < "$sql_file" \
-              && echo "  ✓ $sql_file aplicado" \
-              || echo "  ⚠ $sql_file já aplicado ou erro ignorável"
-          done
-
-          echo "=== Migrations concluídas ==="
-          MIGCMD
+            echo "=== Migrations concluídas ==="
+          EOF
 
       - name: 🔄 Restart containers
         run: |
