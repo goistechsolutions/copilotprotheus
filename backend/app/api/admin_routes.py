@@ -798,11 +798,23 @@ async def sync_schema(
 
         if not clean_modulos:
             db.execute(text(f'DELETE FROM "{clean_tenant}".tenant_schemas'))
+            db.execute(text(f'DELETE FROM "{clean_tenant}".dictionary_tables'))
+            db.execute(text(f'DELETE FROM "{clean_tenant}".dictionary_fields'))
         else:
             for clean_mod in clean_modulos:
                 db.execute(
                     text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE mod_sigla = :m OR CAST(mod_code AS TEXT) = :m'),
                     {"m": clean_mod}
+                )
+                db.execute(
+                    text(f'DELETE FROM "{clean_tenant}".dictionary_tables WHERE module_code = :m'),
+                    {"m": str(clean_mod)}
+                )
+            if schema_dict:
+                chaves = tuple(schema_dict.keys())
+                db.execute(
+                    text(f'DELETE FROM "{clean_tenant}".dictionary_fields WHERE table_name IN :chaves'),
+                    {"chaves": chaves}
                 )
 
         for chave, meta in schema_dict.items():
@@ -810,6 +822,7 @@ async def sync_schema(
             mod_int = int(mod_val) if mod_val.isdigit() else 0
             mod_sigla = meta.get("codmod") or mod_val
             
+            # V4: tenant_schemas
             db.execute(
                 text(f"""
                     INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, mod_code, mod_sigla, campo, chave, tabela, nome, schema_json, updated_at)
@@ -826,11 +839,50 @@ async def sync_schema(
                     "j": json.dumps(meta, ensure_ascii=False)
                 }
             )
+
+            # V5: dictionary_tables
+            db.execute(
+                text(f"""
+                    INSERT INTO "{clean_tenant}".dictionary_tables 
+                    (tenant_id, environment_id, table_name, table_alias, module_code, description, physical_name, raw_payload)
+                    VALUES (:t, 'producao', :tbl, :alias, :mc, :desc, :tbl, CAST(:j AS JSONB))
+                """),
+                {
+                    "t": clean_tenant,
+                    "tbl": chave,
+                    "alias": meta.get("tabela", ""),
+                    "mc": str(mod_int) if mod_int else mod_sigla,
+                    "desc": meta.get("nome", ""),
+                    "j": json.dumps(meta, ensure_ascii=False)
+                }
+            )
+
+            # V5: dictionary_fields
+            campos_list = meta.get("campos", [])
+            for c in campos_list:
+                db.execute(
+                    text(f"""
+                        INSERT INTO "{clean_tenant}".dictionary_fields 
+                        (tenant_id, environment_id, table_name, field_name, title, field_type, length_num, decimal_num, required_flag, raw_payload)
+                        VALUES (:t, 'producao', :tbl, :fld, :title, :type, :len, :dec, :req, CAST(:j AS JSONB))
+                    """),
+                    {
+                        "t": clean_tenant,
+                        "tbl": chave,
+                        "fld": c.get("campo", ""),
+                        "title": c.get("titulo", ""),
+                        "type": c.get("tipo", ""),
+                        "len": int(c.get("tamanho") or 0) or None,
+                        "dec": int(c.get("decimal") or 0) or None,
+                        "req": True if str(c.get("obrigatorio", "")).strip().upper() in ("S", "1", "T", "TRUE") else False,
+                        "j": json.dumps(c, ensure_ascii=False)
+                    }
+                )
         db.commit()
 
         return {
             "success":     True,
-            "message":     f"{len(schema_dict)} tabelas sincronizadas (V4).",
+            "message":     f"{len(schema_dict)} tabelas sincronizadas (V4/V5 integrados).",
         }
 
     except HTTPException as he:
