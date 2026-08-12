@@ -796,11 +796,14 @@ async def sync_schema(
 
         ensure_tenant_tables(db, clean_tenant)
 
-        for clean_mod in clean_modulos:
-            db.execute(
-                text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE mod_sigla = :m OR CAST(mod_code AS TEXT) = :m'),
-                {"m": clean_mod}
-            )
+        if not clean_modulos:
+            db.execute(text(f'DELETE FROM "{clean_tenant}".tenant_schemas'))
+        else:
+            for clean_mod in clean_modulos:
+                db.execute(
+                    text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE mod_sigla = :m OR CAST(mod_code AS TEXT) = :m'),
+                    {"m": clean_mod}
+                )
 
         for chave, meta in schema_dict.items():
             mod_val = meta.get("x2_modulo", "")
