@@ -113,6 +113,7 @@ jobs:
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           DATABASE_URL=postgresql://copilot:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/copilotprotheus
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
           CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
           CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
           ENVIRONMENT=production
