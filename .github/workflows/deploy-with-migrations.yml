@@ -163,13 +163,12 @@ jobs:
           docker compose ps
           RESTARTCMD
 
-      - name: 🏥 Health Check via Cloudflare Tunnel
+      - name: 🏥 Health Check no Backend
         run: |
-          sleep 15
-          HEALTH_URL="https://${{ secrets.CORS_ORIGINS }}/health"
-          echo "Verificando: $HEALTH_URL"
+          ssh -i ~/.ssh/id_ed25519 -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'HEALTHCMD'
+          echo "Verificando backend local (http://localhost:8000/health)..."
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health" || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "✅ Health check OK (HTTP $STATUS)"
               exit 0
@@ -178,7 +177,10 @@ jobs:
             sleep 10
           done
           echo "❌ Health check falhou após 5 tentativas"
+          echo "--- LOGS DO BACKEND ---"
+          docker compose -f ${{ env.DEPLOY_DIR }}/docker-compose.yml logs backend --tail 50
           exit 1
+          HEALTHCMD
 
       - name: 📊 Resumo do Deploy
         if: always()
