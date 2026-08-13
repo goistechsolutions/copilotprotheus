@@ -31,6 +31,8 @@ class TenantCreate(BaseModel):
     temperature:             Optional[float] = Field(0.2,     description="Temperatura LLM (0=preciso, 1=criativo)")
     status:                  Optional[str]   = Field('active',description="active | inactive | suspended")
     plan_code:               Optional[str]   = Field(None,    description="Código do plano de licença")
+    cnpj:                    Optional[str]   = Field(None,    description="CNPJ da empresa")
+    licenca_uso:             Optional[str]   = Field(None,    description="Licença de uso")
 
     @field_validator('id', mode='before')
     @classmethod
@@ -78,6 +80,8 @@ class TenantUpdate(BaseModel):
     temperature:             Optional[float] = Field(None)
     status:                  Optional[str]   = None
     plan_code:               Optional[str]   = None
+    cnpj:                    Optional[str]   = None
+    licenca_uso:             Optional[str]   = None
 
     @field_validator('temperature', mode='before')
     @classmethod
@@ -116,6 +120,8 @@ class TenantResponse(BaseModel):
     temperature:          Optional[float] = None
     status:               Optional[str]   = None
     plan_code:            Optional[str]   = None
+    cnpj:                 Optional[str]   = None
+    licenca_uso:          Optional[str]   = None
     created_at:           Optional[datetime] = None
     updated_at:           Optional[datetime] = None
 

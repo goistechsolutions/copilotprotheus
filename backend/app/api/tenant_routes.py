@@ -70,32 +70,21 @@ def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Ten
 
 
 def _to_tenant_dict(db: Session, t: Tenant) -> dict:
-    import re
-    clean_tenant = resolve_clean_tenant(t.tenant_code)
-    rest_url, user, prompt, temp = None, None, None, 0.2
-    if clean_tenant and clean_tenant != "public":
-        try:
-            res = db.execute(text(f'SELECT protheus_rest_url, protheus_usuario, system_prompt, temperature FROM "{clean_tenant}".company_info LIMIT 1')).first()
-            if res:
-                rest_url = res[0]
-                user = res[1]
-                prompt = res[2]
-                temp = float(res[3]) if res[3] is not None else 0.2
-        except Exception:
-            pass
-
     return {
         "id": t.tenant_code,
         "name": t.tenant_name,
         "tenant_code": t.tenant_code,
         "tenant_name": t.tenant_name,
-        "protheus_rest_url": rest_url,
-        "protheus_user": user,
+        "protheus_rest_url": t.apirest_url,
+        "protheus_webapp_url": t.webapp_url,
+        "protheus_user": t.protheus_user,
         "auth_mode": "basic",
-        "system_prompt": prompt,
-        "temperature": temp,
+        "system_prompt": t.system_prompt,
+        "temperature": float(t.temperature) if t.temperature is not None else 0.2,
         "status": t.status or "active",
         "plan_code": t.plan_code,
+        "cnpj": t.cnpj,
+        "licenca_uso": t.licenca_uso,
         "created_at": t.created_at,
         "updated_at": t.updated_at
     }
@@ -137,7 +126,15 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depe
             schema_name=clean_tenant,
             status=body.status or 'active',
             plan_code=body.plan_code,
+            cnpj=body.cnpj,
+            licenca_uso=body.licenca_uso,
+            apirest_url=body.protheus_rest_url,
+            webapp_url=body.protheus_webapp_url,
+            protheus_user=body.protheus_user,
+            system_prompt=body.system_prompt,
+            temperature=body.temperature,
         )
+        _apply_password(tenant, body.protheus_password)
         db.add(tenant)
         db.commit()
         db.refresh(tenant)
@@ -145,6 +142,14 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depe
         tenant.tenant_name = body.tenant_name or body.name or tenant.tenant_name
         tenant.status = body.status or tenant.status
         tenant.plan_code = body.plan_code or tenant.plan_code
+        tenant.cnpj = body.cnpj or tenant.cnpj
+        tenant.licenca_uso = body.licenca_uso or tenant.licenca_uso
+        tenant.apirest_url = body.protheus_rest_url or tenant.apirest_url
+        tenant.webapp_url = body.protheus_webapp_url or tenant.webapp_url
+        tenant.protheus_user = body.protheus_user or tenant.protheus_user
+        tenant.system_prompt = body.system_prompt or tenant.system_prompt
+        tenant.temperature = body.temperature if body.temperature is not None else tenant.temperature
+        _apply_password(tenant, body.protheus_password)
         db.commit()
         db.refresh(tenant)
 
@@ -167,6 +172,21 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
         tenant.status = body.status
     if body.plan_code:
         tenant.plan_code = body.plan_code
+    if body.cnpj is not None:
+        tenant.cnpj = body.cnpj
+    if body.licenca_uso is not None:
+        tenant.licenca_uso = body.licenca_uso
+    if body.protheus_rest_url is not None:
+        tenant.apirest_url = body.protheus_rest_url
+    if body.protheus_webapp_url is not None:
+        tenant.webapp_url = body.protheus_webapp_url
+    if body.protheus_user is not None:
+        tenant.protheus_user = body.protheus_user
+    if body.system_prompt is not None:
+        tenant.system_prompt = body.system_prompt
+    if body.temperature is not None:
+        tenant.temperature = body.temperature
+    _apply_password(tenant, body.protheus_password)
 
     db.commit()
     db.refresh(tenant)

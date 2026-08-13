@@ -181,9 +181,11 @@ function TenantModal({ tenant, onClose, onSaved }) {
                   ${isEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
             </div>
-
-            {f({ label: 'Nome de Exibição (name)', name: 'name', placeholder: 'EliteCorp Ltda' })}
-            {f({ label: 'Nome Interno (tenant_name)', name: 'tenant_name', placeholder: 'elitecorp-prod', mono: true })}
+            
+            {f({ label: 'Código (tenant_code)', name: 'tenant_code', placeholder: 'elitecorp' })}
+            {f({ label: 'CNPJ', name: 'cnpj', placeholder: '00.000.000/0001-00' })}
+            {f({ label: 'Nome de Exibição (name)', name: 'name', placeholder: 'Elite Corp' })}
+            {f({ label: 'Nome Interno (tenant_name)', name: 'tenant_name', placeholder: 'elite_corp' })}
 
             {/* ── Conexão Protheus ── */}
             <SectionDivider>Conexão Protheus</SectionDivider>
@@ -207,8 +209,18 @@ function TenantModal({ tenant, onClose, onSaved }) {
               ]}
             />
 
-            {/* ── Agente ── */}
+            {/* ── Comportamento do Agente ── */}
             <SectionDivider>Comportamento do Agente</SectionDivider>
+            <div>
+              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Licença de Uso</label>
+              <textarea
+                value={form.licenca_uso || ''}
+                onChange={e => setForm({ ...form, licenca_uso: e.target.value })}
+                placeholder="Insira a chave de licença ou token gerado..."
+                rows={2}
+                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/30 transition-all resize-y font-mono placeholder:font-sans"
+              />
+            </div>
             <div className="md:col-span-2">
               <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
                 System Prompt
