@@ -84,7 +84,7 @@ TenantBase = declarative_base()
 # BOOTSTRAP GLOBAL (schema public) — IDEMPOTENTE
 # ─────────────────────────────────────────────────────────────
 
-PUBLIC_BOOTSTRAP_FLAG = "public_schema_v4"
+PUBLIC_BOOTSTRAP_FLAG = "public_schema_v5"
 PUBLIC_BOOTSTRAP_DONE = False
 
 PUBLIC_REQUIRED_TABLES = {
