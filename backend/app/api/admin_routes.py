@@ -835,7 +835,7 @@ async def sync_schema(
             )
             
             comp_row = db.execute(text(f'SELECT id FROM "{clean_tenant}".company_info ORDER BY id ASC LIMIT 1')).first()
-            comp_id = comp_row[0] if comp_row else 1
+            comp_id = comp_row[0] if comp_row else None
 
             # V5: dictionary_tables
             db.execute(

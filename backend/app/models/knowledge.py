@@ -436,7 +436,7 @@ class AgentQueryAudit(GlobalBase):
 class DictionaryTable(TenantBase):
     __tablename__ = "dictionary_tables"
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("company_info.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("company_info.id", ondelete="CASCADE"), nullable=True)
     table_code = Column(String(10), nullable=False)
     table_name = Column(String(50), nullable=False)
     module_code = Column(String(10))

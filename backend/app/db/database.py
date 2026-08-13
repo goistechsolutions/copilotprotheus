@@ -727,6 +727,20 @@ def ensure_tenant_tables(db, clean_tenant: str):
         """))
         db.commit()
 
+        # ── Patch 4: Drop NOT NULL from company_id in dictionary_tables ──
+        db.execute(text(f"""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{clean_tenant}' AND table_name = 'dictionary_tables' AND column_name = 'company_id'
+                ) THEN
+                    ALTER TABLE "{clean_tenant}".dictionary_tables ALTER COLUMN company_id DROP NOT NULL;
+                END IF;
+            END $$;
+        """))
+        db.commit()
+
         if _tenant_schema_bootstrap_done(db, clean_tenant):
             return
 
@@ -766,7 +780,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_tables (
                 id SERIAL PRIMARY KEY,
-                company_id INT NOT NULL REFERENCES "{clean_tenant}".company_info(id) ON DELETE CASCADE,
+                company_id INT REFERENCES "{clean_tenant}".company_info(id) ON DELETE CASCADE,
                 table_code VARCHAR(10) NOT NULL,
                 table_name VARCHAR(50) NOT NULL,
                 module_code VARCHAR(10),
