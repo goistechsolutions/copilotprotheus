@@ -89,7 +89,7 @@ PUBLIC_BOOTSTRAP_DONE = False
 
 PUBLIC_REQUIRED_TABLES = {
     "app_bootstrap_flags",
-    "tenant_registry",
+    "tenant",
     "plans",
     "platform_admins",
     "protheus_modules_master",
@@ -216,7 +216,7 @@ def ensure_public_tables(db, force: bool = False):
 
     public_queries = [
         """
-        CREATE TABLE IF NOT EXISTS public.tenant_registry (
+        CREATE TABLE IF NOT EXISTS public.tenant (
             id                SERIAL PRIMARY KEY,
             tenant_code       VARCHAR(50) UNIQUE NOT NULL CHECK (tenant_code ~ '^[a-z0-9_]+$'),
             tenant_name       VARCHAR(150) NOT NULL,
@@ -224,14 +224,18 @@ def ensure_public_tables(db, force: bool = False):
             status            VARCHAR(20) NOT NULL DEFAULT 'provisioning'
                               CHECK (status IN ('provisioning','active','suspended','decommissioned')),
             plan_code         VARCHAR(50),
+            contract_info     JSONB,
+            api_access_info   JSONB,
+            version           VARCHAR(50),
+            agent_permissions JSONB,
             created_at        TIMESTAMP DEFAULT NOW(),
             updated_at        TIMESTAMP DEFAULT NOW(),
             provisioned_at    TIMESTAMP,
             decommissioned_at TIMESTAMP
         );
-        ALTER TABLE public.tenant_registry ALTER COLUMN updated_at DROP NOT NULL;
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_registry_tenant_code ON public.tenant_registry (tenant_code);
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_registry_schema_name ON public.tenant_registry (schema_name);
+        ALTER TABLE public.tenant ALTER COLUMN updated_at DROP NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_tenant_code ON public.tenant (tenant_code);
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_schema_name ON public.tenant (schema_name);
         """,
         """
         CREATE TABLE IF NOT EXISTS public.plans (
@@ -523,7 +527,7 @@ def ensure_public_tables(db, force: bool = False):
 def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
     """
     Garante que o tenant_id seja convertido em um nome de schema válido.
-    Se for numérico (ex: '1' ou 1), busca no tenant_registry ou assume o
+    Se for numérico (ex: '1' ou 1), busca no tenant ou assume o
     primeiro tenant ou 'default'. NUNCA retorna um nome de schema puramente
     numérico ou 'public'.
     """
@@ -536,13 +540,13 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
     if clean.isdigit():
         try:
             reg = db.execute(
-                text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE id = :id OR tenant_code = :tc LIMIT 1"),
+                text("SELECT tenant_code, schema_name FROM public.tenant WHERE id = :id OR tenant_code = :tc LIMIT 1"),
                 {"id": int(clean), "tc": clean}
             ).mappings().first()
 
             if not reg:
                 reg = db.execute(
-                    text("SELECT tenant_code, schema_name FROM public.tenant_registry ORDER BY id ASC LIMIT 1")
+                    text("SELECT tenant_code, schema_name FROM public.tenant ORDER BY id ASC LIMIT 1")
                 ).mappings().first()
 
             if reg and (reg.get("schema_name") or reg.get("tenant_code")):
@@ -801,13 +805,13 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
 def ensure_all_registered_tenant_schemas(db):
     """
-    Garante que todos os tenants cadastrados em public.tenant_registry
+    Garante que todos os tenants cadastrados em public.tenant
     (e, se existir, public.companies) possuam seus schemas criados no PostgreSQL.
     """
     ensure_public_tables(db)
     tenant_ids = set()
     try:
-        res1 = db.execute(text("SELECT id, tenant_code FROM public.tenant_registry"))
+        res1 = db.execute(text("SELECT id, tenant_code FROM public.tenant"))
         for row in res1.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]))
@@ -820,7 +824,7 @@ def ensure_all_registered_tenant_schemas(db):
     except Exception:
         db.rollback()
     try:
-        res3 = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry"))
+        res3 = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant"))
         for row in res3.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]).replace("tenant_", ""))

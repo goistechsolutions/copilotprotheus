@@ -42,7 +42,7 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
         reg = db.execute(
             text("""
                 SELECT id, tenant_code, tenant_name, schema_name, status
-                FROM public.tenant_registry
+                FROM public.tenant
                 WHERE id::text = :cid OR tenant_code = :cid OR schema_name = :cid
                 LIMIT 1
             """),
@@ -51,14 +51,14 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
 
         if not reg and cid_str.isdigit():
             reg = db.execute(
-                text("SELECT id, tenant_code, tenant_name, schema_name, status FROM public.tenant_registry ORDER BY id ASC LIMIT 1")
+                text("SELECT id, tenant_code, tenant_name, schema_name, status FROM public.tenant ORDER BY id ASC LIMIT 1")
             ).mappings().first()
 
         if reg:
             clean_tenant = reg.get("schema_name") or reg.get("tenant_code") or ""
     except Exception as e:
         db.rollback()
-        logger.warning(f"Aviso ao buscar tenant_registry: {e}")
+        logger.warning(f"Aviso ao buscar tenant: {e}")
 
     clean_tenant = _clean(clean_tenant)
     ensure_tenant_tables(db, clean_tenant)
@@ -109,7 +109,7 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
-    sql = "SELECT id, tenant_code, tenant_name, status, created_at, updated_at FROM public.tenant_registry WHERE 1=1"
+    sql = "SELECT id, tenant_code, tenant_name, status, created_at, updated_at FROM public.tenant WHERE 1=1"
     params: dict = {}
     if tenant_id:
         sql += " AND (tenant_code = :tenant_id OR schema_name = :tenant_id)"

@@ -16,11 +16,11 @@ def check_tenant_rate_limit(db: Session, tenant_id: str) -> dict:
     
     max_queries_day = 500  # Valor padrão de resiliência
     
-    # 1. Busca o plano e limite diário do tenant em public.tenant_registry e public.plans
+    # 1. Busca o plano e limite diário do tenant em public.tenant e public.plans
     try:
         query_plan = text("""
             SELECT p.max_queries_day
-            FROM public.tenant_registry tr
+            FROM public.tenant tr
             LEFT JOIN public.plans p ON tr.plan_code = p.plan_code
             WHERE tr.tenant_code = :clean_tenant OR tr.schema_name = :clean_tenant
             LIMIT 1

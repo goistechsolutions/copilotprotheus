@@ -23,8 +23,8 @@ from app.db.database import GlobalBase, TenantBase
 # ═══════════════════════════════════════════════════════════════
 
 class Tenant(GlobalBase):
-    """Corresponde a public.tenant_registry"""
-    __tablename__ = "tenant_registry"
+    """Corresponde a public.tenant"""
+    __tablename__ = "tenant"
     __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(Integer, primary_key=True)
@@ -33,6 +33,10 @@ class Tenant(GlobalBase):
     schema_name = Column(String(63), unique=True, nullable=False)
     status = Column(String(20), nullable=False, default="provisioning")
     plan_code = Column(String(50))
+    contract_info = Column(JSONB)
+    api_access_info = Column(JSONB)
+    version = Column(String(50))
+    agent_permissions = Column(JSONB)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     provisioned_at = Column(TIMESTAMP(timezone=True))

@@ -406,11 +406,11 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     tenant_code = raw_tenant
     try:
         if raw_tenant.isdigit():
-            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE id = :id OR tenant_code = :tc"), {"id": int(raw_tenant), "tc": raw_tenant}).mappings().first()
+            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant WHERE id = :id OR tenant_code = :tc"), {"id": int(raw_tenant), "tc": raw_tenant}).mappings().first()
             if reg:
                 tenant_code = reg["schema_name"] or reg["tenant_code"]
         else:
-            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant_registry WHERE tenant_code = :tc OR schema_name = :tc"), {"tc": raw_tenant}).mappings().first()
+            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant WHERE tenant_code = :tc OR schema_name = :tc"), {"tc": raw_tenant}).mappings().first()
             if reg:
                 tenant_code = reg["schema_name"] or reg["tenant_code"]
     except Exception:
@@ -472,8 +472,8 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "pass": enc_pass, "lic": payload.licenca_uso, "status": payload.status or "ativa"
     }).first()
 
-    upsert_tenant_registry = text("""
-        INSERT INTO public.tenant_registry (
+    upsert_tenant = text("""
+        INSERT INTO public.tenant (
             tenant_code, tenant_name, schema_name, status
         ) VALUES (
             :t_code, :c_name, :s_name, 'active'
@@ -482,7 +482,7 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
             status = EXCLUDED.status,
             updated_at = NOW();
     """)
-    db.execute(upsert_tenant_registry, {
+    db.execute(upsert_tenant, {
         "t_code": clean_tenant, "c_name": c_name, "s_name": clean_tenant
     })
 
