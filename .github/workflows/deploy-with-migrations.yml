@@ -15,8 +15,10 @@
 name: 🚀 Deploy + DB Migrations
 
 on:
-  push:
-    branches: [ main ]
+  workflow_run:
+    workflows: ["Deploy Backend"]
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       run_migrations:
@@ -40,6 +42,7 @@ jobs:
   # ----------------------------------------------------------
   lint:
     name: 🔍 Lint & Validate
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout código
