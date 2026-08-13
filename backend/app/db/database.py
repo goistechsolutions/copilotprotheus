@@ -222,8 +222,11 @@ def ensure_public_tables(db, force: bool = False):
             tenant_name       VARCHAR(150) NOT NULL,
             schema_name       VARCHAR(63) UNIQUE NOT NULL,
             cnpj              varchar(20),
-            protheus_urlweb   varchar(255) NOT NULL,
-            protheus_rest     varchar(255) NOT NULL,
+            webapp_url        text,
+            apirest_url       text,
+            protheus_user     varchar(100),
+            encrypted_protheus_password varchar(255),
+            protheus_ambientes varchar(100) default ' '::character varying, 
             status            VARCHAR(20) NOT NULL DEFAULT 'provisioning'
                               CHECK (status IN ('provisioning','active','suspended','decommissioned')),
             system_prompt     text,
