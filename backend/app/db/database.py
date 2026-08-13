@@ -279,6 +279,17 @@ def ensure_public_tables(db, force: bool = False):
         );
         ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_code INTEGER;
         ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_sigla VARCHAR(30);
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'protheus_modules_master' AND column_name = 'module_name') THEN
+                ALTER TABLE public.protheus_modules_master RENAME COLUMN module_name TO mod_name;
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'protheus_modules_master' AND column_name = 'module_code') THEN
+                -- Try to migrate string module_code to int mod_code if possible, else just drop/rename
+                -- Since mod_code is already added, let's just drop module_code to clean up
+                ALTER TABLE public.protheus_modules_master DROP COLUMN module_code;
+            END IF;
+        END $$;
         CREATE INDEX IF NOT EXISTS idx_pmm_code   ON public.protheus_modules_master(mod_code);
         CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(mod_sigla);
         """,

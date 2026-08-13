@@ -505,20 +505,27 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
                     c_tab = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
                     n_mod = str(r.get("NOME_MODULO") or "").strip()
                     if not c_mod: continue
+                    # mod_code must be int, mod_sigla is string
+                    try:
+                        int_code = int(c_tab) if c_tab.isdigit() else int(c_mod) if c_mod.isdigit() else 0
+                    except:
+                        int_code = 0
+                    
+                    sigla = c_mod if not c_mod.isdigit() else c_tab
+                    
                     existing = db.query(ProtheusModuleMaster).filter(
-                        (ProtheusModuleMaster.module_code == c_mod) | (ProtheusModuleMaster.mod_code == c_mod)
+                        (ProtheusModuleMaster.mod_code == int_code) | (ProtheusModuleMaster.mod_sigla == sigla)
                     ).first()
                     if existing:
-                        existing.module_code = c_mod
-                        existing.module_name = c_tab or existing.module_name
-                        existing.description = n_mod or existing.description
+                        existing.mod_code = int_code
+                        existing.mod_sigla = sigla or existing.mod_sigla
+                        existing.mod_name = n_mod or existing.mod_name
                         existing.active      = True
                     else:
                         db.add(ProtheusModuleMaster(
-                            module_code=c_mod,
-                            module_name=c_tab,
-                            description=n_mod,
-                            source_name="SYS_USR_MODULE",
+                            mod_code=int_code,
+                            mod_sigla=sigla,
+                            mod_name=n_mod or sigla,
                             active=True
                         ))
                 db.commit()
