@@ -673,7 +673,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
         if _tenant_schema_bootstrap_done(db, clean_tenant):
             return
 
-        # 1. company_info + protheus_modules
+        # 1. company_info
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".company_info (
                 id                      SERIAL PRIMARY KEY,
@@ -681,162 +681,74 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 company_code            VARCHAR(60) NOT NULL,
                 branch_code             VARCHAR(60) NOT NULL,
                 company_name            VARCHAR(200) NOT NULL,
-                cnpj                    VARCHAR(30),
-                ie                      VARCHAR(30),
-                razao_social            VARCHAR(255),
-                email                   VARCHAR(255),
-                telefone                VARCHAR(50),
-                endereco                VARCHAR(500),
-                protheus_grupo          VARCHAR(20),
-                protheus_empresa        VARCHAR(20),
-                protheus_unidade        VARCHAR(20),
-                protheus_filial         VARCHAR(30),
-                environment             VARCHAR(60) DEFAULT 'producao',
+                short_name              VARCHAR(100),
+                cnpj                    VARCHAR(20),
+                protheus_url            VARCHAR(255) NOT NULL,
+                protheus_rest_port      INT NOT NULL,
+                protheus_user           VARCHAR(100),
+                encrypted_protheus_password VARCHAR(255),
+                created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 protheus_ambientes      VARCHAR(100) DEFAULT 'producao',
                 webapp_url              TEXT,
-                protheus_rest_url       TEXT,
-                protheus_usuario        VARCHAR(100),
-                encrypted_protheus_password TEXT,
-                licenca_uso             TEXT,
-                auth_mode               VARCHAR(30) DEFAULT 'basic',
-                status                  VARCHAR(20) DEFAULT 'active',
                 system_prompt           TEXT,
                 temperature             NUMERIC(3,2) DEFAULT 0.20,
-                created_at              TIMESTAMP DEFAULT NOW(),
-                updated_at              TIMESTAMP DEFAULT NOW(),
-                UNIQUE (company_code, branch_code)
-            );
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_ambientes VARCHAR(100) DEFAULT 'producao';
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url TEXT;
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT;
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20;
-            ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT;
-
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".protheus_modules (
-                id          BIGSERIAL    PRIMARY KEY,
-                tenant_id   VARCHAR(100) NOT NULL,
-                mod_code    INTEGER      NOT NULL,
-                mod_sigla   VARCHAR(30)  NOT NULL,
-                mod_name    VARCHAR(150) NOT NULL,
-                active      BOOLEAN      NOT NULL DEFAULT TRUE,
-                created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                UNIQUE(tenant_id, mod_code)
+                licenca_uso             TEXT
             );
 
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_code  ON "{clean_tenant}".protheus_modules (mod_code);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_pm_sigla ON "{clean_tenant}".protheus_modules (mod_sigla);
-        """))
-
-        # 2. tenant_schemas
-        
-        # V5: Tabelas unificadas do Dicionário (Schema Dinâmico)
-        db.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (
-                id BIGSERIAL PRIMARY KEY,
-                mod_code INTEGER,
-                mod_sigla VARCHAR(30),
-                chave VARCHAR(10),
-                tabela VARCHAR(20),
-                nome VARCHAR(120),
-                campo VARCHAR(10),
-                campo_titulo VARCHAR(80),
-                campo_tipo VARCHAR(5),
-                campo_tamanho INTEGER,
-                campo_decimal INTEGER,
-                campo_obrigatorio BOOLEAN,
-                campo_usado BOOLEAN,
-                campo_descricao TEXT,
-                is_customizado BOOLEAN,
-                schema_json JSONB,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_mod_code ON "{clean_tenant}".tenant_schemas (mod_code);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_chave ON "{clean_tenant}".tenant_schemas (chave);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_tabela ON "{clean_tenant}".tenant_schemas (tabela);
-            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_campo ON "{clean_tenant}".tenant_schemas (campo);
-
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".field_rules (
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_tables (
                 id SERIAL PRIMARY KEY,
-                tabela VARCHAR(20) NOT NULL,
-                campo VARCHAR(10) NOT NULL,
-                rule_description TEXT NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".users (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                email VARCHAR(180) NOT NULL UNIQUE,
-                full_name VARCHAR(180) NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                status VARCHAR(20) NOT NULL DEFAULT 'active',
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".query_audit (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id UUID,
-                natural_language_prompt TEXT,
-                generated_sql TEXT,
-                sql_hash VARCHAR(128),
-                execution_status VARCHAR(20) NOT NULL DEFAULT 'planned',
-                rows_returned INT,
-                response_time_ms INT,
-                blocked_reason VARCHAR(255),
-                tables_used TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-        """))
-        db.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_table_permissions (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
-                role_id VARCHAR(100) NOT NULL,
-                table_name VARCHAR(30) NOT NULL,
-                can_list BOOLEAN NOT NULL DEFAULT FALSE,
-                can_describe BOOLEAN NOT NULL DEFAULT FALSE,
-                can_query BOOLEAN NOT NULL DEFAULT FALSE,
-                approved_by VARCHAR(100),
+                company_id INT NOT NULL REFERENCES "{clean_tenant}".company_info(id) ON DELETE CASCADE,
+                table_code VARCHAR(10) NOT NULL,
+                table_name VARCHAR(50) NOT NULL,
+                module_code VARCHAR(10),
+                description VARCHAR(255),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_field_permissions (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
-                role_id VARCHAR(100) NOT NULL,
-                table_name VARCHAR(30) NOT NULL,
-                field_name VARCHAR(30) NOT NULL,
-                can_select BOOLEAN NOT NULL DEFAULT FALSE,
-                can_filter BOOLEAN NOT NULL DEFAULT FALSE,
-                masked_flag BOOLEAN NOT NULL DEFAULT FALSE,
-                approved_by VARCHAR(100),
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_fields (
+                id SERIAL PRIMARY KEY,
+                table_code VARCHAR(10) NOT NULL,
+                field_name VARCHAR(50) NOT NULL,
+                title VARCHAR(100),
+                field_type VARCHAR(1),
+                length_num INT,
+                decimal_num INT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_indexes (
+                id SERIAL PRIMARY KEY,
+                table_code VARCHAR(10) NOT NULL,
+                index_order INT NOT NULL,
+                nickname VARCHAR(100),
+                expression TEXT,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """))
-
+        
         # 5. Limpeza de tabelas operacionais legadas/duplicadas no schema do tenant
         try:
             db.execute(text(
-                f'DROP TABLE IF EXISTS "{clean_tenant}".tenant_dictionary_tables, '
+                f'DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules, '
+                f'"{clean_tenant}".tenant_schemas, '
+                f'"{clean_tenant}".field_rules, '
+                f'"{clean_tenant}".users, '
+                f'"{clean_tenant}".query_audit, '
+                f'"{clean_tenant}".agent_query_audit, '
+                f'"{clean_tenant}".tenant_allowed_tables, '
+                f'"{clean_tenant}".tenant_allowed_fields, '
+                f'"{clean_tenant}".tenant_dictionary_tables, '
                 f'"{clean_tenant}".tenant_dictionary_fields, '
                 f'"{clean_tenant}".tenant_dictionary_indexes, '
-                f'"{clean_tenant}".dictionary_snapshots, '
-                f'"{clean_tenant}".tenant_allowed_tables, '
-                f'"{clean_tenant}".tenant_allowed_fields CASCADE;'
+                f'"{clean_tenant}".dictionary_groups, '
+                f'"{clean_tenant}".tenant_dictionary_sources, '
+                f'"{clean_tenant}".tenant_table_permissions, '
+                f'"{clean_tenant}".tenant_field_permissions CASCADE;'
             ))
-            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_tables DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
-            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_fields DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
-            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_indexes DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
-            db.execute(text(f'ALTER TABLE "{clean_tenant}".dictionary_groups DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
-            db.execute(text(f'ALTER TABLE "{clean_tenant}".tenant_dictionary_sources DROP COLUMN IF EXISTS snapshot_code CASCADE;'))
             db.commit()
         except Exception:
             db.rollback()
@@ -887,25 +799,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 section VARCHAR(255),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".agent_query_audit (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id INT,
-                env_id UUID,
-                user_id UUID,
-                contract_id UUID,
-                snapshot_id UUID,
-                request_id VARCHAR(120),
-                natural_language_prompt TEXT,
-                generated_sql TEXT,
-                sql_hash VARCHAR(128),
-                execution_status VARCHAR(20) NOT NULL DEFAULT 'planned',
-                rows_returned INT,
-                response_time_ms INT,
-                blocked_reason VARCHAR(255),
-                tables_used TEXT,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
+            
         """))
 
         db.commit()

@@ -30,15 +30,14 @@ async def ask(
     
     # Validar Usuário do Agente (Extensão)
     from fastapi import HTTPException
-    from app.models.knowledge import AgentUser
+    from app.models.knowledge import User
     import hashlib
     if not payload.agent_user or not payload.agent_password:
         raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot ausentes. Configure-os no menu da extensão.")
     hashed = hashlib.sha256(payload.agent_password.encode('utf-8')).hexdigest()
-    agent = db.query(AgentUser).filter(
-        AgentUser.tenant_id == tenant_id,
-        AgentUser.username == payload.agent_user,
-        AgentUser.password_hash == hashed
+    agent = db.query(User).filter(
+        User.email == payload.agent_user,
+        User.password_hash == hashed
     ).first()
     if not agent:
         raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot incorretos.")
@@ -133,15 +132,14 @@ async def ask_stream(
         
     # Validar Usuário do Agente (Extensão)
     from fastapi import HTTPException
-    from app.models.knowledge import AgentUser
+    from app.models.knowledge import User
     import hashlib
     if not payload.agent_user or not payload.agent_password:
         raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot ausentes. Configure-os no menu da extensão.")
     hashed = hashlib.sha256(payload.agent_password.encode('utf-8')).hexdigest()
-    agent = db.query(AgentUser).filter(
-        AgentUser.tenant_id == tenant_id,
-        AgentUser.username == payload.agent_user,
-        AgentUser.password_hash == hashed
+    agent = db.query(User).filter(
+        User.email == payload.agent_user,
+        User.password_hash == hashed
     ).first()
     if not agent:
         raise HTTPException(status_code=401, detail="Usuário ou senha do Copilot incorretos.")

@@ -67,7 +67,7 @@ DICIONARIO DE DADOS (TENANT ATUAL):
 """
     try:
         from app.db.database import SessionLocal
-        from app.models.knowledge import TenantSchemaV5, FieldRule
+        from app.models.knowledge import DictionaryTable, DictionaryField
         
         db = SessionLocal()
         import uuid
@@ -78,34 +78,17 @@ DICIONARIO DE DADOS (TENANT ATUAL):
             
         if tid:
             tid = str(tid)
-            # Lê o schema dinâmico
             from app.db.database import get_tenant_session
             db_tenant = get_tenant_session(tid)
             try:
-                schemas = db_tenant.query(TenantSchemaV5).all()
-                if schemas:
-                    # Agrupar por tabela
-                    tables_dict = {}
-                    for row in schemas:
-                        t = row.tabela
-                        if not t: continue
-                        if t not in tables_dict:
-                            tables_dict[t] = {"desc": row.nome or "Sem descricao", "campos": []}
-                        tables_dict[t]["campos"].append(f"{row.campo} ({row.campo_tipo}): {row.campo_descricao or ''}")
-                    
-                    for t_name, data in tables_dict.items():
-                        base_prompt += f"- Tabela: {t_name} - {data['desc']}\n"
-                        # Limitar a quantidade de campos para não estourar o contexto, ou injetar todos
-                        campos_str = ", ".join(data["campos"][:50]) # limit 50
-                        base_prompt += f"  Campos: {campos_str}\n\n"
-                    
-                    # Injetar field rules
-                    rules = db_tenant.query(FieldRule).all()
-                    if rules:
-                        base_prompt += "REGRAS DE NEGOCIO DA EMPRESA:\n"
-                        for r in rules:
-                            base_prompt += f"- {r.tabela}.{r.campo}: {r.rule_description}\n"
-                        base_prompt += "\n"
+                tables = db_tenant.query(DictionaryTable).all()
+                if tables:
+                    for t in tables:
+                        base_prompt += f"- Tabela: {t.table_name} - {t.description or 'Sem descricao'}\n"
+                        fields = db_tenant.query(DictionaryField).filter(DictionaryField.table_code == t.table_code).limit(50).all()
+                        campos_str = ", ".join([f"{f.field_name} ({f.field_type}): {f.title or ''}" for f in fields])
+                        if campos_str:
+                            base_prompt += f"  Campos: {campos_str}\n\n"
                 else:
                     base_prompt += "Nenhuma tabela liberada ou sincronizada para este tenant.\n"
             finally:

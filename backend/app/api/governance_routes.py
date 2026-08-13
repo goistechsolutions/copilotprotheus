@@ -4,12 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.knowledge import (
-    TenantAllowedTable,
     TenantContract,
     Company,
     Tenant,
+    DictionaryTable
 )
-from app.models.knowledge import TenantSchemaV5
 
 from typing import List, Optional
 from pydantic import BaseModel
@@ -41,20 +40,8 @@ def list_allowed_tables(
     tenant_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Lista tabelas permitidas para o tenant."""
-    if tenant_id:
-        import re
-        from sqlalchemy import text
-        from app.db.database import ensure_tenant_tables, resolve_clean_tenant
-        clean_tenant = resolve_clean_tenant(tenant_id)
-        if clean_tenant and clean_tenant != "public":
-            ensure_tenant_tables(db, clean_tenant)
-            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-
-    q = db.query(TenantAllowedTable)
-    if tenant_id:
-        q = q.filter(TenantAllowedTable.tenant_id == tenant_id)
-    return q.order_by(TenantAllowedTable.created_at.desc()).all()
+    """(Obsoleto) Lista tabelas permitidas para o tenant."""
+    return []
 
 
 @router.post("/allowed-tables", status_code=201)
@@ -72,7 +59,7 @@ def allow_table(
             ensure_tenant_tables(db, clean_tenant)
             db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
     try:
-        entry = TenantAllowedTable(
+        entry = DictionaryTable(
             tenant_id=payload.tenant_id,
             table_name=payload.table_name,
             module_code=payload.module_code,
@@ -94,7 +81,7 @@ def revoke_table_access(entry_id: str, db: Session = Depends(get_db)):
         eid = uuid.UUID(entry_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="entry_id inválido")
-    entry = db.query(TenantAllowedTable).filter(TenantAllowedTable.id == eid).first()
+    entry = db.query(DictionaryTable).filter(DictionaryTable.id == eid).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Permissão não encontrada")
     db.delete(entry)
@@ -109,26 +96,15 @@ def list_dictionary_tables(
     module_code: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Lista tabelas do dicionário Protheus sincronizadas."""
-    if tenant_id:
-        import re
-        from sqlalchemy import text
-        from app.db.database import ensure_tenant_tables
-        clean_tenant = resolve_clean_tenant(tenant_id)
-        if clean_tenant and clean_tenant != "public":
-            ensure_tenant_tables(db, clean_tenant)
-            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-
-    # Usa a sessão do tenant para ler do schema V5
+    """Lista tabelas do dicionario Protheus sincronizadas."""
     from app.db.database import get_tenant_session
     db_tenant = get_tenant_session(tenant_id or "default")
     try:
-        q = db_tenant.query(TenantSchemaV5.tabela, TenantSchemaV5.nome).group_by(TenantSchemaV5.tabela, TenantSchemaV5.nome)
+        q = db_tenant.query(DictionaryTable.table_code, DictionaryTable.description).group_by(DictionaryTable.table_code, DictionaryTable.description)
         if module_code:
-            q = q.filter(TenantSchemaV5.mod_code == module_code)
+            q = q.filter(DictionaryTable.module_code == module_code)
         
-        results = q.order_by(TenantSchemaV5.tabela.asc()).limit(200).all()
-        # Mockando a estrutura que a UI espera: physical_name, description
+        results = q.order_by(DictionaryTable.table_code.asc()).limit(200).all()
         return [{"physical_name": r[0], "description": r[1]} for r in results if r[0]]
     finally:
         db_tenant.close()

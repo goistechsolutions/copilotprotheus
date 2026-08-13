@@ -324,24 +324,25 @@ def update_tables(
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
 
-    # V5: Tabelas agora são atualizadas diretamente em TenantSchemaV5 (ou via FieldRule)
-    # Como a sincronização do Protheus popula o TenantSchemaV5 (SX2/SX3), 
-    # o admin pode usar essa rota para criar apelidos customizados ou adicionar descrições (FieldRule)
+    # V5: Tabelas agora são atualizadas diretamente em DictionaryTable
     
     from app.db.database import get_tenant_session
-    from app.models.knowledge import TenantSchemaV5, FieldRule
+    from app.models.knowledge import DictionaryTable
     
     db_tenant = get_tenant_session(tenant_id)
     try:
         for t in tables:
-            # Apenas verifica se existe; num cenário ideal atualizaríamos o `nome` se o admin mudasse a descrição
-            schema_entry = db_tenant.query(TenantSchemaV5).filter(TenantSchemaV5.chave == t.alias).first()
+            # Apenas verifica se existe; num cenário ideal atualizaríamos se o admin mudasse a descrição
+            schema_entry = db_tenant.query(DictionaryTable).filter(DictionaryTable.table_code == t.alias).first()
             if not schema_entry:
-                new_entry = TenantSchemaV5(
-                    chave=t.alias,
-                    tabela=t.alias[:20],
-                    nome=t.description,
-                    is_customizado=True
+                company = db_tenant.execute(text("SELECT id FROM company_info LIMIT 1")).scalar()
+                if not company:
+                    continue
+                new_entry = DictionaryTable(
+                    company_id=company,
+                    table_code=t.alias,
+                    table_name=t.alias[:20],
+                    description=t.description
                 )
                 db_tenant.add(new_entry)
         
