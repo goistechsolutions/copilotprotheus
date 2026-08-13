@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.knowledge import User, user_roles, Role, Tenant
+from app.models.knowledge import User, Role, Tenant
 from pydantic import BaseModel
 from typing import List, Optional
 import hashlib
@@ -77,7 +77,7 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
 
         role = db.query(Role).filter(Role.role_code == req.role).first()
         if role:
-            db.execute(user_roles.insert().values(
+            db.add(UserRole(
                 user_id=new_user.id,
                 role_id=role.id,
                 tenant_id=tenant_uuid,
@@ -135,8 +135,8 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
     # Buscar roles
     user_roles_list = (
         db.query(Role.role_code)
-        .join(user_roles, user_roles.c.role_id == Role.id)
-        .filter(user_roles.c.user_id == user.id)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .filter(UserRole.user_id == user.id)
         .all()
     )
     roles = [r[0] for r in user_roles_list]

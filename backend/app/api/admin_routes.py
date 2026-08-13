@@ -1022,14 +1022,12 @@ def create_user(
 
     role = db.query(Role).filter(Role.role_code == req.role_code).first()
     if role:
-        db.execute(
-            user_roles.insert().values(
-                user_id   =new_user.id,
-                role_id   =role.id,
-                tenant_id =req.tenant_id,
-                company_id=None,
-            )
-        )
+        db.add(UserRole(
+            user_id   =new_user.id,
+            role_id   =role.id,
+            tenant_id =req.tenant_id,
+            company_id=None
+        ))
     db.commit()
     return {"success": True, "id": str(new_user.id)}
 
@@ -1054,20 +1052,15 @@ def update_user(
     if req.role_code:
         role = db.query(Role).filter(Role.role_code == req.role_code).first()
         if role and user.tenant_id:
-            db.execute(
-                user_roles.delete().where(
-                    (user_roles.c.user_id   == user.id) &
-                    (user_roles.c.tenant_id == user.tenant_id)
-                )
-            )
-            db.execute(
-                user_roles.insert().values(
-                    user_id   =user.id,
-                    role_id   =role.id,
-                    tenant_id =user.tenant_id,
-                    company_id=None,
-                )
-            )
+            db.query(UserRole).filter(
+                UserRole.user_id == user.id, UserRole.tenant_id == user.tenant_id
+            ).delete()
+            db.add(UserRole(
+                user_id   =user.id,
+                role_id   =role.id,
+                tenant_id =user.tenant_id,
+                company_id=None
+            ))
     db.commit()
     return {"success": True}
 
