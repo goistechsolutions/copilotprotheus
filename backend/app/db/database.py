@@ -680,6 +680,16 @@ def ensure_tenant_tables(db, clean_tenant: str):
                         ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_url;
                         ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_rest_port;
                     END IF;
+                    
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = '{clean_tenant}' 
+                        AND table_name = 'company_info' 
+                        AND constraint_type = 'UNIQUE'
+                    ) THEN
+                        ALTER TABLE "{clean_tenant}".company_info ADD CONSTRAINT company_info_company_code_branch_code_key UNIQUE(company_code, branch_code);
+                    END IF;
                 END IF;
             END $$;
         """))
@@ -738,7 +748,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 protheus_filial         VARCHAR(30) DEFAULT '0101',
                 environment             VARCHAR(60) DEFAULT 'producao',
                 auth_mode               VARCHAR(30) DEFAULT 'basic',
-                status                  VARCHAR(20) DEFAULT 'active'
+                status                  VARCHAR(20) DEFAULT 'active',
+                UNIQUE(company_code, branch_code)
             );
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_tables (
