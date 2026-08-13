@@ -12,7 +12,7 @@ import jwt
 from app.db.database import get_db
 from app.models.knowledge import (
     Company, LicensePlan, AgentQueryAudit,
-    ProtheusModuleMaster, TenantModuleContract, TenantContract
+    ProtheusModuleMaster, TenantContract
 )
 from app.schemas.company import (
     CompanyCreate, CompanyUpdate, CompanyResponse,

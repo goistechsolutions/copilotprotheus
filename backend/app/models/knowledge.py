@@ -426,8 +426,8 @@ class DictionaryTable(TenantBase):
     table_name = Column(String(50), nullable=False)
     module_code = Column(String(10))
     description = Column(String(255))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class DictionaryField(TenantBase):
     __tablename__ = "dictionary_fields"
@@ -438,8 +438,8 @@ class DictionaryField(TenantBase):
     field_type = Column(String(1))
     length_num = Column(Integer)
     decimal_num = Column(Integer)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class DictionaryIndex(TenantBase):
     __tablename__ = "dictionary_indexes"
@@ -448,5 +448,5 @@ class DictionaryIndex(TenantBase):
     index_order = Column(Integer, nullable=False)
     nickname = Column(String(100))
     expression = Column(Text)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -32,10 +32,9 @@ logger = logging.getLogger(__name__)
 from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import (
     AuditLog, Tenant, Company,
-    TenantAllowedTable, TenantContract,
+    TenantContract,
     ProtheusModuleMaster,
-    User, Role, user_roles,
-    TenantSchema,
+    User, Role,
     Memory,
     AgentQueryAudit, QueryUsageCounter,
 )
