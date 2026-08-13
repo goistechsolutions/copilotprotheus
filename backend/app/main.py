@@ -160,6 +160,19 @@ app.include_router(infra_router)
 app.include_router(powerbi_router)   # prefixo já definido em powerbi_routes.py  (/api/powerbi)
 app.include_router(leonardo_router)  # prefixo já definido em leonardo_routes.py (/api/leonardo)
 
+@app.get("/debug-db")
+def debug_db_endpoint():
+    import traceback
+    try:
+        from app.db.database import engine, ensure_public_tables
+        with engine.connect() as conn:
+            ensure_public_tables(conn, force=True)
+            conn.commit()
+        return {"success": True, "message": "All tables created successfully"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
 import httpx
 from fastapi import Request
 from fastapi.responses import Response
