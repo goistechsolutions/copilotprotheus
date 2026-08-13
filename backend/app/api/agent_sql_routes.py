@@ -212,3 +212,22 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
             # Em observância à regra de ouro do agente, em nenhuma circunstância simulamos ou inventamos dados compensatórios.
 
     return response
+
+from fastapi.responses import StreamingResponse
+from app.core.log_streamer import stream_manager
+
+@router.get("/stream-logs")
+async def stream_logs():
+    """
+    Endpoint SSE (Server-Sent Events) para transmissão do log do backend em tempo real
+    para o chat do Copilot (quando comando /log é acionado).
+    """
+    return StreamingResponse(
+        stream_manager.subscribe(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )

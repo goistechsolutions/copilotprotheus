@@ -6,6 +6,7 @@ import HistoryRail from '../components/HistoryRail';
 import SuggestionCards from '../components/SuggestionCards';
 import Conversation from '../components/Conversation';
 import ResultPane from '../components/ResultPane';
+import LogViewer from '../components/LogViewer';
 
 const suggestions = [
   { title: 'Faturamento do mês', subtitle: 'por filial' },
@@ -30,6 +31,7 @@ function readContextFromUrl() {
 
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
+  const [isLogMode, setIsLogMode] = useState(false);
 
   const context = useMemo(
     () => ({
@@ -107,6 +109,11 @@ export default function AgentWorkspace() {
 
   const send = async (text) => {
     if (!text?.trim()) return;
+
+    if (text.trim() === '/log') {
+       setIsLogMode(true);
+       return;
+    }
 
     setMessages((m) => [...m, { role: 'user', text }]);
     setLoading(true);
@@ -195,13 +202,17 @@ export default function AgentWorkspace() {
           <Composer
             disabled={loading}
             onSend={send}
-            placeholder="Faça sua pergunta sobre o Protheus..."
+            placeholder="Faça sua pergunta sobre o Protheus... (ou digite /log)"
           />
         </div>
       </main>
 
-      <aside className={`w-full xl:w-[420px] shrink-0 bg-white border-t xl:border-t-0 xl:border-l border-slate-200 overflow-y-auto flex-col h-1/2 xl:h-auto ${result ? 'flex' : 'hidden xl:flex'}`}>
-        <ResultPane result={result} />
+      <aside className={`w-full xl:w-[420px] shrink-0 bg-white border-t xl:border-t-0 xl:border-l border-slate-200 overflow-y-auto flex-col h-1/2 xl:h-auto ${result || isLogMode ? 'flex' : 'hidden xl:flex'}`}>
+        {isLogMode ? (
+           <LogViewer onClose={() => setIsLogMode(false)} />
+        ) : (
+           <ResultPane result={result} />
+        )}
       </aside>
     </div>
   );
