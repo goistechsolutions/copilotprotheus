@@ -43,7 +43,6 @@ function SectionTitle({ children }) {
 function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
   const [form, setForm] = useState(isNew ? EMPTY : { ...company });
   const [saving, setSaving] = useState(false);
-  const [genLoading, setGenLoading] = useState(false);
   const [err, setErr] = useState('');
 
   const change = (name, val) => setForm(p => ({ ...p, [name]: val }));
@@ -58,12 +57,7 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
     finally { setSaving(false); }
   };
 
-  const generateLicense = async () => {
-    if (!form.cnpj) { setErr('Preencha o CNPJ da empresa antes de gerar a licença.'); return; }
-    setGenLoading(true); setErr('');
-    try {
-      const exp = new Date();
-      exp.setFullYear(exp.getFullYear() + 5);
+
   const f = (props) => <Field form={form} onChange={change} {...props} />;
 
   return (
