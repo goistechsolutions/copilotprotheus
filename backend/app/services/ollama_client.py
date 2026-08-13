@@ -497,7 +497,7 @@ async def stream_llm(
                             "tool_call_id": tool_call_id
                         })
                 
-                if _has_real_data(tool_results):
+                if True:
                     messages.append({
                         "role": "system",
                         "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."

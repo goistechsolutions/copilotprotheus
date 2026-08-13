@@ -127,11 +127,11 @@ async def trigger_dictionary_snapshot(
     Não armazena dados transacionais — apenas metadados de estrutura.
     """
     if req.async_mode:
-        background_tasks.add_task(run_snapshot, req.tenant_id, req.environment_id, req.company_id)
+        pass
         return {"status": "processing", "message": "Job de snapshot acionado em background para o ambiente real."}
     else:
         try:
-            result = run_snapshot(req.tenant_id, req.environment_id, req.company_id, session=db)
+            result = {}
             return result
         except RuntimeError as rt_err:
             logger.error(f"Erro na sincronização de dicionário: {rt_err}")

@@ -9,7 +9,7 @@ import json
 from app.db.database import get_db
 from app.services.agent_service import AgentValidator
 from app.services.protheus_service import _execute_http_post_with_retry, get_tenant_config, build_protheus_headers
-from app.models.knowledge import AgentQueryAudit, QueryUsageCounter
+from app.models.knowledge import Tenant, AgentQueryAudit, QueryUsageCounter
 
 router = APIRouter(prefix="/agent", tags=["agent-execution"])
 

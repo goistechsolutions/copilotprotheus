@@ -1,3 +1,4 @@
+import uuid
 """Rotas administrativas — modelo V4 canônico.
 
 Migracoes V2 -> V4:
@@ -1022,12 +1023,7 @@ def create_user(
 
     role = db.query(Role).filter(Role.role_code == req.role_code).first()
     if role:
-        db.add(UserRole(
-            user_id   =new_user.id,
-            role_id   =role.id,
-            tenant_id =req.tenant_id,
-            company_id=None
-        ))
+        new_user.role_id = role.id
     db.commit()
     return {"success": True, "id": str(new_user.id)}
 
@@ -1051,16 +1047,8 @@ def update_user(
     if req.status:     user.status        = req.status
     if req.role_code:
         role = db.query(Role).filter(Role.role_code == req.role_code).first()
-        if role and user.tenant_id:
-            db.query(UserRole).filter(
-                UserRole.user_id == user.id, UserRole.tenant_id == user.tenant_id
-            ).delete()
-            db.add(UserRole(
-                user_id   =user.id,
-                role_id   =role.id,
-                tenant_id =user.tenant_id,
-                company_id=None
-            ))
+        if role:
+            user.role_id = role.id
     db.commit()
     return {"success": True}
 

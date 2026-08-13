@@ -118,7 +118,7 @@ async def descobrir_apis_protheus(palavra_chave: str) -> str:
     reraise=True
 )
 async def get_protheus_token(tenant_id: str, user: str = None, password: str = None) -> str:
-    global _OAUTH2_TOKENS
+    
     now = time.time()
     
     if user and password:

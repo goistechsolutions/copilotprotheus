@@ -363,7 +363,7 @@ def upgrade() -> None:
         sa.Column('description',      sa.Text,        nullable=True),
         sa.Column('physical_name',    sa.String(80),  nullable=True),
         sa.Column('active_flag',      sa.Boolean,     nullable=False, server_default='true'),
-        sa.Column('raw_payload',      postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('raw_payload',      sa.JSON(), nullable=True),
         sa.Column('created_at',       sa.DateTime(timezone=True), server_default=sa.text('now()')),
         sa.Column('updated_at',       sa.DateTime(timezone=True), server_default=sa.text('now()')),
     )

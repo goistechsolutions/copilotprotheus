@@ -77,12 +77,7 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
 
         role = db.query(Role).filter(Role.role_code == req.role).first()
         if role:
-            db.add(UserRole(
-                user_id=new_user.id,
-                role_id=role.id,
-                tenant_id=tenant_uuid,
-                company_id=None
-            ))
+            new_user.role_id = role.id
 
         db.commit()
         db.refresh(new_user)
@@ -135,8 +130,7 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
     # Buscar roles
     user_roles_list = (
         db.query(Role.role_code)
-        .join(UserRole, UserRole.role_id == Role.id)
-        .filter(UserRole.user_id == user.id)
+        .filter(Role.id == user.role_id)
         .all()
     )
     roles = [r[0] for r in user_roles_list]
