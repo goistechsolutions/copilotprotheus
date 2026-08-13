@@ -219,27 +219,27 @@ def ensure_public_tables(db, force: bool = False):
             tenant_code       VARCHAR(50) UNIQUE NOT NULL CHECK (tenant_code ~ '^[a-z0-9_]+$'),
             tenant_name       VARCHAR(150) NOT NULL,
             schema_name       VARCHAR(63) UNIQUE NOT NULL,
-            cnpj              varchar(20),
-            webapp_url        text,
-            apirest_url       text,
-            protheus_user     varchar(100),
-            encrypted_protheus_password varchar(255),
-            protheus_ambientes varchar(100) default ' '::character varying, 
             status            VARCHAR(20) NOT NULL DEFAULT 'provisioning'
                               CHECK (status IN ('provisioning','active','suspended','decommissioned')),
-            system_prompt     text,
-            temperature       numeric(3,2) DEFAULT 0.20,
-            licenca_uso       text,
-            plan_code         VARCHAR(50),
-            contract_info     JSONB,
-            api_access_info   JSONB,
-            version           VARCHAR(50),
-            agent_permissions JSONB,
             created_at        TIMESTAMP DEFAULT NOW(),
             updated_at        TIMESTAMP DEFAULT NOW(),
             provisioned_at    TIMESTAMP,
             decommissioned_at TIMESTAMP
         );
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS cnpj varchar(20);
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS webapp_url text;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS apirest_url text;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS protheus_user varchar(100);
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS encrypted_protheus_password varchar(255);
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS protheus_ambientes varchar(100) default ' '::character varying;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS system_prompt text;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS temperature numeric(3,2) DEFAULT 0.20;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS licenca_uso text;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS plan_code VARCHAR(50);
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS contract_info JSONB;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS api_access_info JSONB;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS version VARCHAR(50);
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS agent_permissions JSONB;
         ALTER TABLE public.tenant ALTER COLUMN updated_at DROP NOT NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_tenant_code ON public.tenant (tenant_code);
         CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_schema_name ON public.tenant (schema_name);
