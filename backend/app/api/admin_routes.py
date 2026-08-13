@@ -807,7 +807,7 @@ async def sync_schema(
             if schema_dict:
                 chaves = tuple(schema_dict.keys())
                 db.execute(
-                    text(f'DELETE FROM "{clean_tenant}".dictionary_fields WHERE table_name IN :chaves'),
+                    text(f'DELETE FROM "{clean_tenant}".dictionary_fields WHERE table_code IN :chaves'),
                     {"chaves": chaves}
                 )
 
@@ -833,21 +833,24 @@ async def sync_schema(
                     "j": json.dumps(meta, ensure_ascii=False)
                 }
             )
+            
+            comp_row = db.execute(text(f'SELECT id FROM "{clean_tenant}".company_info ORDER BY id ASC LIMIT 1')).first()
+            comp_id = comp_row[0] if comp_row else 1
 
             # V5: dictionary_tables
             db.execute(
                 text(f"""
                     INSERT INTO "{clean_tenant}".dictionary_tables 
-                    (tenant_id, environment_id, table_name, table_alias, module_code, description, physical_name, raw_payload)
-                    VALUES (:t, 'producao', :tbl, :alias, :mc, :desc, :tbl, CAST(:j AS JSONB))
+                    (company_id, table_code, table_name, module_code, description)
+                    VALUES (:cid, :tbl, :alias, :mc, :desc)
+                    ON CONFLICT (table_code) DO NOTHING
                 """),
                 {
-                    "t": clean_tenant,
+                    "cid": comp_id,
                     "tbl": chave,
                     "alias": meta.get("tabela", ""),
                     "mc": str(mod_int) if mod_int else mod_sigla,
-                    "desc": meta.get("nome", ""),
-                    "j": json.dumps(meta, ensure_ascii=False)
+                    "desc": meta.get("nome", "")
                 }
             )
 
@@ -857,19 +860,16 @@ async def sync_schema(
                 db.execute(
                     text(f"""
                         INSERT INTO "{clean_tenant}".dictionary_fields 
-                        (tenant_id, environment_id, table_name, field_name, title, field_type, length_num, decimal_num, required_flag, raw_payload)
-                        VALUES (:t, 'producao', :tbl, :fld, :title, :type, :len, :dec, :req, CAST(:j AS JSONB))
+                        (table_code, field_name, title, field_type, length_num, decimal_num)
+                        VALUES (:tbl, :fld, :title, :type, :len, :dec)
                     """),
                     {
-                        "t": clean_tenant,
                         "tbl": chave,
                         "fld": c.get("campo", ""),
-                        "title": c.get("titulo", ""),
+                        "title": c.get("descricao", ""),
                         "type": c.get("tipo", ""),
                         "len": int(c.get("tamanho") or 0) or None,
-                        "dec": int(c.get("decimal") or 0) or None,
-                        "req": True if str(c.get("obrigatorio", "")).strip().upper() in ("S", "1", "T", "TRUE") else False,
-                        "j": json.dumps(c, ensure_ascii=False)
+                        "dec": int(c.get("decimal") or 0) or None
                     }
                 )
         db.commit()

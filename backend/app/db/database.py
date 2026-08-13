@@ -818,8 +818,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 f'DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules, '
                 f'"{clean_tenant}".field_rules, '
                 f'"{clean_tenant}".users, '
-                f'"{clean_tenant}".query_audit, '
-                f'"{clean_tenant}".agent_query_audit, '
                 f'"{clean_tenant}".tenant_allowed_tables, '
                 f'"{clean_tenant}".tenant_allowed_fields, '
                 f'"{clean_tenant}".tenant_dictionary_tables, '
@@ -880,7 +878,34 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 section VARCHAR(255),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".agent_query_audit (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id INT,
+                env_id UUID,
+                user_id UUID,
+                contract_id UUID,
+                snapshot_id UUID,
+                request_id VARCHAR(120),
+                natural_language_prompt TEXT,
+                generated_sql TEXT,
+                sql_hash VARCHAR(128),
+                execution_status VARCHAR(20) NOT NULL DEFAULT 'planned',
+                rows_returned INT,
+                response_time_ms INT,
+                blocked_reason VARCHAR(255),
+                tables_used TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
             
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".query_audit (
+                id SERIAL PRIMARY KEY,
+                user_email VARCHAR(180),
+                question TEXT,
+                generated_sql TEXT,
+                response_time_ms INT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
         """))
 
         db.commit()
