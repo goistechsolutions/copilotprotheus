@@ -796,13 +796,26 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+            
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (
+                id SERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100),
+                mod_code INTEGER,
+                mod_sigla VARCHAR(30),
+                campo VARCHAR(100),
+                chave VARCHAR(100),
+                tabela VARCHAR(100),
+                nome VARCHAR(255),
+                schema_json JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
         """))
         
         # 5. Limpeza de tabelas operacionais legadas/duplicadas no schema do tenant
         try:
             db.execute(text(
                 f'DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules, '
-                f'"{clean_tenant}".tenant_schemas, '
                 f'"{clean_tenant}".field_rules, '
                 f'"{clean_tenant}".users, '
                 f'"{clean_tenant}".query_audit, '
