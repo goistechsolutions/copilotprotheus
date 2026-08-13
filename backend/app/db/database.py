@@ -69,7 +69,15 @@ if DATABASE_URL.startswith("sqlite"):
 
 engine = create_engine(DATABASE_URL, **engine_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Base legado (não usar para novos modelos)
 Base = declarative_base()
+
+# Base para tabelas globais (schema public)
+GlobalBase = declarative_base()
+
+# Base para tabelas de tenant (schema dinâmico resolvido por search_path)
+TenantBase = declarative_base()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -450,52 +458,13 @@ def ensure_public_tables(db, force: bool = False):
         CREATE INDEX IF NOT EXISTS idx_audit_logs_company_id ON public.audit_logs (company_id);
         """,
         """
-        CREATE TABLE IF NOT EXISTS public.agent_users (
-            id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            tenant_id     VARCHAR(100),
-            email         VARCHAR(180),
-            full_name     VARCHAR(180),
-            password_hash VARCHAR(255),
-            active        BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            updated_at    TIMESTAMP WITH TIME ZONE
-        );
-        CREATE INDEX IF NOT EXISTS idx_agent_users_tenant_id ON public.agent_users (tenant_id);
+        
         """,
         """
-        CREATE TABLE IF NOT EXISTS public.agent_roles (
-            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            tenant_id   VARCHAR(100),
-            role_code   VARCHAR(60),
-            role_name   VARCHAR(120),
-            scope_level VARCHAR(30),
-            active      BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_agent_roles_tenant_id ON public.agent_roles (tenant_id);
+        
         """,
         """
-        CREATE TABLE IF NOT EXISTS public.agent_query_audit (
-            id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            tenant_id               VARCHAR(100) NOT NULL,
-            company_id              INTEGER,
-            env_id                  UUID,
-            user_id                 UUID,
-            contract_id             UUID,
-            snapshot_id             UUID,
-            request_id              VARCHAR(120),
-            natural_language_prompt TEXT,
-            generated_sql           TEXT,
-            sql_hash                VARCHAR(128),
-            execution_status        VARCHAR(20) NOT NULL DEFAULT 'planned',
-            rows_returned           INTEGER,
-            response_time_ms        INTEGER,
-            blocked_reason          VARCHAR(255),
-            tables_used             TEXT,
-            created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_agent_query_audit_tenant_id ON public.agent_query_audit (tenant_id);
-        CREATE INDEX IF NOT EXISTS idx_agent_query_audit_sql_hash ON public.agent_query_audit (sql_hash);
+        
         """,
         """
         CREATE TABLE IF NOT EXISTS public.platform_audit_log (
@@ -760,110 +729,68 @@ def ensure_tenant_tables(db, clean_tenant: str):
         """))
 
         # 2. tenant_schemas
+        
+        # V5: Tabelas unificadas do Dicionário (Schema Dinâmico)
         db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_schemas (
-                id                  BIGSERIAL    PRIMARY KEY,
-                tenant_id           VARCHAR(100) NOT NULL,
-                mod_code            INTEGER      NOT NULL,
-                mod_sigla           VARCHAR(30)  NOT NULL,
-                chave               VARCHAR(10)  NOT NULL,
-                tabela              VARCHAR(20),
-                nome                VARCHAR(120),
-                campo               VARCHAR(15)  NOT NULL,
-                campo_titulo        VARCHAR(80),
-                campo_tipo          VARCHAR(5),
-                campo_tamanho       INTEGER,
-                campo_decimal       INTEGER      DEFAULT 0,
-                campo_obrigatorio   BOOLEAN      DEFAULT FALSE,
-                campo_usado         BOOLEAN      DEFAULT TRUE,
-                campo_descricao     TEXT,
-                is_customizado      BOOLEAN      DEFAULT FALSE,
-                ordem               INTEGER      DEFAULT 0,
-                schema_json         JSONB,
-                created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-                updated_at          TIMESTAMPTZ
+                id BIGSERIAL PRIMARY KEY,
+                mod_code INTEGER,
+                mod_sigla VARCHAR(30),
+                chave VARCHAR(10),
+                tabela VARCHAR(20),
+                nome VARCHAR(120),
+                campo VARCHAR(10),
+                campo_titulo VARCHAR(80),
+                campo_tipo VARCHAR(5),
+                campo_tamanho INTEGER,
+                campo_decimal INTEGER,
+                campo_obrigatorio BOOLEAN,
+                campo_usado BOOLEAN,
+                campo_descricao TEXT,
+                is_customizado BOOLEAN,
+                schema_json JSONB,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
             );
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_mod_code ON "{clean_tenant}".tenant_schemas (mod_code);
             CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_chave ON "{clean_tenant}".tenant_schemas (chave);
-        """))
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_tabela ON "{clean_tenant}".tenant_schemas (tabela);
+            CREATE INDEX IF NOT EXISTS idx_{clean_tenant}_ts_campo ON "{clean_tenant}".tenant_schemas (campo);
 
-        # 3. dictionary_tables & fields & indexes & groups
-        db.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_tables (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
-                table_name VARCHAR(30) NOT NULL,
-                table_alias VARCHAR(80),
-                module_code VARCHAR(10),
-                description TEXT,
-                physical_name VARCHAR(80),
-                active_flag BOOLEAN NOT NULL DEFAULT TRUE,
-                raw_payload JSONB,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".field_rules (
+                id SERIAL PRIMARY KEY,
+                tabela VARCHAR(20) NOT NULL,
+                campo VARCHAR(10) NOT NULL,
+                rule_description TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
             );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_fields (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
-                table_name VARCHAR(30) NOT NULL,
-                field_name VARCHAR(30) NOT NULL,
-                title VARCHAR(120),
-                field_type VARCHAR(5),
-                length_num INT,
-                decimal_num INT,
-                required_flag BOOLEAN NOT NULL DEFAULT FALSE,
-                browse_flag BOOLEAN NOT NULL DEFAULT FALSE,
-                virtual_flag BOOLEAN NOT NULL DEFAULT FALSE,
-                validation_rule TEXT,
-                relation_rule TEXT,
-                when_rule TEXT,
-                raw_payload JSONB,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email VARCHAR(180) NOT NULL UNIQUE,
+                full_name VARCHAR(180) NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
             );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_indexes (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
-                table_name VARCHAR(30) NOT NULL,
-                index_order VARCHAR(10) NOT NULL,
-                nickname VARCHAR(80),
-                expression TEXT,
-                raw_payload JSONB,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_groups (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
-                group_name VARCHAR(80) NOT NULL,
-                description TEXT,
-                raw_payload JSONB,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".query_audit (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID,
+                natural_language_prompt TEXT,
+                generated_sql TEXT,
+                sql_hash VARCHAR(128),
+                execution_status VARCHAR(20) NOT NULL DEFAULT 'planned',
+                rows_returned INT,
+                response_time_ms INT,
+                blocked_reason VARCHAR(255),
+                tables_used TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
             );
         """))
-
-        # 4. tenant_dictionary_sources & permissions
-        db.execute(text(f"""
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_dictionary_sources (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(100) NOT NULL,
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100) NOT NULL DEFAULT 'producao',
-                source_type VARCHAR(20) NOT NULL,
-                status VARCHAR(20) NOT NULL DEFAULT 'pending',
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                started_at TIMESTAMP WITH TIME ZONE,
-                finished_at TIMESTAMP WITH TIME ZONE,
-                error_message TEXT
-            );
-            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_table_permissions (
+CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_table_permissions (
                 id BIGSERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
                 company_id VARCHAR(100),
