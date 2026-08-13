@@ -275,7 +275,18 @@ class SPAStaticFiles(StaticFiles):
             raise ex
 
 os.makedirs("static/admin", exist_ok=True)
-app.mount("/admin", SPAStaticFiles(directory="static/admin", html=True), name="admin")
+
+from fastapi.responses import FileResponse
+import os
+
+@app.get("/admin")
+def serve_admin_no_slash():
+    index_path = "static/admin/index.html"
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse(status_code=404, content={"detail": "Admin build not found"})
+
+app.mount("/admin/", SPAStaticFiles(directory="static/admin", html=True), name="admin")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
@@ -285,18 +296,12 @@ async def global_exception_handler(request, exc):
         content={"detail": "Erro interno do servidor. Por favor, tente novamente mais tarde."}
     )
 
-@app.get("/admin")
-def redirect_admin_no_slash():
-    return RedirectResponse(url="/admin/")
-
-from fastapi.responses import RedirectResponse
-
 @app.get("/")
 def read_root(request: Request):
     host = request.headers.get("host", "").lower()
     if "copilot-admin" in host or "admin" in host:
-        return RedirectResponse(url="/admin/")
-    return RedirectResponse(url="/admin/")
+        return RedirectResponse(url="/admin")
+    return RedirectResponse(url="/admin")
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
