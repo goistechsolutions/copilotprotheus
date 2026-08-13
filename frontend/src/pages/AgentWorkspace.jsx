@@ -146,7 +146,7 @@ export default function AgentWorkspace() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-slate-900 text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col xl:flex-row h-screen w-full bg-slate-900 text-slate-100 overflow-hidden font-sans">
       <div className="hidden md:flex">
         <HistoryRail
           items={history}
@@ -194,7 +194,7 @@ export default function AgentWorkspace() {
         </div>
       </main>
 
-      <aside className="w-[380px] xl:w-[420px] shrink-0 bg-slate-900 border-l border-slate-700 overflow-y-auto flex-col hidden xl:flex">
+      <aside className={`w-full xl:w-[420px] shrink-0 bg-slate-900 border-t xl:border-t-0 xl:border-l border-slate-700 overflow-y-auto flex-col h-1/2 xl:h-auto ${result ? 'flex' : 'hidden xl:flex'}`}>
         <ResultPane result={result} />
       </aside>
     </div>
