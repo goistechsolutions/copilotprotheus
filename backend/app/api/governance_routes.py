@@ -9,7 +9,7 @@ from app.models.knowledge import (
     Company,
     Tenant,
 )
-from app.models.catalog_v52 import DictionaryTable
+from app.models.knowledge import TenantSchemaV5
 
 from typing import List, Optional
 from pydantic import BaseModel
@@ -119,15 +119,16 @@ def list_dictionary_tables(
             ensure_tenant_tables(db, clean_tenant)
             db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
-    q = db.query(DictionaryTable)
-    if tenant_id:
-        q = q.filter(DictionaryTable.tenant_id == tenant_id)
-    if snapshot_id:
-        try:
-            sid = uuid.UUID(snapshot_id)
-            q = q.filter(DictionaryTable.snapshot_id == sid)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="snapshot_id inválido")
-    if module_code:
-        q = q.filter(DictionaryTable.module_code == module_code.upper())
-    return q.order_by(DictionaryTable.physical_name.asc()).limit(200).all()
+    # Usa a sessão do tenant para ler do schema V5
+    from app.db.database import get_tenant_session
+    db_tenant = get_tenant_session(tenant_id or "default")
+    try:
+        q = db_tenant.query(TenantSchemaV5.tabela, TenantSchemaV5.nome).group_by(TenantSchemaV5.tabela, TenantSchemaV5.nome)
+        if module_code:
+            q = q.filter(TenantSchemaV5.mod_code == module_code)
+        
+        results = q.order_by(TenantSchemaV5.tabela.asc()).limit(200).all()
+        # Mockando a estrutura que a UI espera: physical_name, description
+        return [{"physical_name": r[0], "description": r[1]} for r in results if r[0]]
+    finally:
+        db_tenant.close()

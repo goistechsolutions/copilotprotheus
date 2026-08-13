@@ -39,7 +39,7 @@ from app.models.knowledge import (
     Memory,
     AgentQueryAudit, QueryUsageCounter,
 )
-from app.models.catalog_v52 import DictionaryTable
+
 from app.core.config import settings
 
 router = APIRouter()
@@ -324,41 +324,34 @@ def update_tables(
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
         db.commit()
 
-    # Remove permissoes antigas
-    db.query(TenantAllowedTable).filter(
-        TenantAllowedTable.tenant_id == tenant_id,
-    ).delete(synchronize_session=False)
-
-    for t in tables:
-        # Localiza tabela no dicionario pelo table_alias (novo DictionaryTable)
-        dict_table = (
-            db.query(DictionaryTable)
-            .filter(
-                DictionaryTable.tenant_id == tenant_id,
-                DictionaryTable.table_alias == t.alias,
-            )
-            .first()
-        )
-        if not dict_table:
-            # Cria entrada minima no dicionario para nao bloquear o admin
-            dict_table = DictionaryTable(
-                tenant_id=tenant_id,
-                table_alias=t.alias,
-                physical_name=t.alias[:30],
-                table_name=t.description,
-                module_code=t.tipo or None,
-            )
-            db.add(dict_table)
-            db.flush()
-
-        db.add(TenantAllowedTable(
-            tenant_id   = tenant_id,
-            table_name  = dict_table.physical_name or dict_table.table_alias,
-            module_code = dict_table.module_code,
-            active      = True
-        ))
-
-    db.commit()
+    # V5: Tabelas agora são atualizadas diretamente em TenantSchemaV5 (ou via FieldRule)
+    # Como a sincronização do Protheus popula o TenantSchemaV5 (SX2/SX3), 
+    # o admin pode usar essa rota para criar apelidos customizados ou adicionar descrições (FieldRule)
+    
+    from app.db.database import get_tenant_session
+    from app.models.knowledge import TenantSchemaV5, FieldRule
+    
+    db_tenant = get_tenant_session(tenant_id)
+    try:
+        for t in tables:
+            # Apenas verifica se existe; num cenário ideal atualizaríamos o `nome` se o admin mudasse a descrição
+            schema_entry = db_tenant.query(TenantSchemaV5).filter(TenantSchemaV5.chave == t.alias).first()
+            if not schema_entry:
+                new_entry = TenantSchemaV5(
+                    chave=t.alias,
+                    tabela=t.alias[:20],
+                    nome=t.description,
+                    is_customizado=True
+                )
+                db_tenant.add(new_entry)
+        
+        db_tenant.commit()
+    except Exception as e:
+        db_tenant.rollback()
+        raise e
+    finally:
+        db_tenant.close()
+    
     return {"success": True, "message": f"{len(tables)} tabelas atualizadas (V5)."}
 
 
