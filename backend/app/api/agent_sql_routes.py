@@ -117,15 +117,21 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     started = time.time()
 
     tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
+        
     company_id = payload.get("company_id")
+    if company_id == "":
+        company_id = None
+        
     prompt = payload.get("prompt")
     empresa = payload.get("empresa")
     filial = payload.get("filial")
     module_filter = payload.get("module_filter")
     execute = payload.get("execute", False)
 
-    if not tenant_id or company_id is None or not prompt:
-        raise HTTPException(status_code=400, detail="Os campos tenant_id, company_id e prompt são obrigatórios na v2.")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="O campo prompt é obrigatório na v2.")
 
     import re
     from sqlalchemy import text
