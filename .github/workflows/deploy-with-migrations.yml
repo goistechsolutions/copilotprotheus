@@ -24,6 +24,11 @@ on:
         required: false
         default: 'true'
         type: boolean
+      wipe_database:
+        description: 'CUIDADO: Apagar o banco de dados atual e recriar do zero? (Destrutivo)'
+        required: false
+        default: 'false'
+        type: boolean
 
 env:
   DEPLOY_DIR: /root/copilotprotheus
@@ -128,6 +133,11 @@ EOF
         run: |
           ssh -i ~/.ssh/id_ed25519 -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ${{ env.DEPLOY_DIR }}
+            
+            if [ "${{ github.event.inputs.wipe_database }}" = "true" ]; then
+              echo "⚠️ ATENÇÃO: APAGANDO BANCO DE DADOS ATUAL!"
+              docker compose down -v db
+            fi
             
             echo "=== Garantindo que o PostgreSQL está rodando ==="
             docker compose up -d db
