@@ -520,12 +520,14 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
                         existing.mod_code = int_code
                         existing.mod_sigla = sigla or existing.mod_sigla
                         existing.mod_name = n_mod or existing.mod_name
+                        existing.description = n_mod or existing.description
                         existing.active      = True
                     else:
                         db.add(ProtheusModuleMaster(
                             mod_code=int_code,
                             mod_sigla=sigla,
                             mod_name=n_mod or sigla,
+                            description=n_mod,
                             active=True
                         ))
                 db.commit()

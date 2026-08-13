@@ -279,6 +279,7 @@ def ensure_public_tables(db, force: bool = False):
         );
         ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_code INTEGER;
         ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_sigla VARCHAR(30);
+        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS description TEXT;
         DO $$
         BEGIN
             IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'protheus_modules_master' AND column_name = 'module_name') THEN
