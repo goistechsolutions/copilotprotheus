@@ -70,12 +70,12 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
                     id,
                     '{clean_tenant}' AS tenant_id,
                     company_code      AS code,
-                    COALESCE(company_name, razao_social, 'Empresa ' || id) AS name,
-                    status,
-                    protheus_rest_url,
-                    protheus_usuario,
+                    company_name      AS name,
+                    'ativa'           AS status,
+                    protheus_url || ':' || protheus_rest_port::text AS protheus_rest_url,
+                    protheus_user     AS protheus_usuario,
                     encrypted_protheus_password,
-                    environment AS protheus_ambientes
+                    protheus_ambientes
                 FROM "{clean_tenant}".company_info
                 ORDER BY id ASC
                 LIMIT 1
@@ -129,23 +129,23 @@ def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
                 text(f"""
                     SELECT
                         id,
-                        COALESCE(tenant_id, '{clean}')                         AS tenant_id,
+                        COALESCE(tenant_id, '{clean}')                          AS tenant_id,
                         COALESCE(cnpj, '')                                      AS cnpj,
-                        ie,
-                        COALESCE(razao_social, company_name, '{r["tenant_name"]}') AS razao_social,
-                        email,
-                        telefone,
-                        endereco,
-                        COALESCE(protheus_grupo, '{clean}')                     AS protheus_grupo,
-                        protheus_empresa,
-                        protheus_unidade,
-                        COALESCE(protheus_filial, '0101')                       AS protheus_filial,
-                        COALESCE(protheus_ambientes, environment, 'producao')   AS protheus_ambientes,
-                        protheus_usuario,
-                        protheus_rest_url,
+                        ''                                                      AS ie,
+                        COALESCE(company_name, '{r["tenant_name"]}')            AS razao_social,
+                        ''                                                      AS email,
+                        ''                                                      AS telefone,
+                        ''                                                      AS endereco,
+                        COALESCE(tenant_id, '{clean}')                          AS protheus_grupo,
+                        company_code                                            AS protheus_empresa,
+                        branch_code                                             AS protheus_unidade,
+                        branch_code                                             AS protheus_filial,
+                        COALESCE(protheus_ambientes, 'producao')                AS protheus_ambientes,
+                        protheus_user                                           AS protheus_usuario,
+                        protheus_url || ':' || protheus_rest_port::text         AS protheus_rest_url,
                         webapp_url,
                         COALESCE(licenca_uso, '')                               AS licenca_uso,
-                        COALESCE(status, 'ativa')                               AS status,
+                        'ativa'                                                 AS status,
                         created_at,
                         updated_at
                     FROM "{clean}".company_info
