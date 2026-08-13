@@ -119,14 +119,21 @@ export default function AgentWorkspace() {
         filial: context.branch,
         request_id: `REQ-${Date.now()}`,
         prompt: text,
+        execute: true,
       };
 
       const res = await api.askAgent(payload);
 
       setResult(res);
+      
+      let replyMessage = 'Consulta concluída.';
+      if (res.summary) replyMessage = res.summary;
+      else if (res.message) replyMessage = res.message;
+      else if (res.answer) replyMessage = res.answer;
+      
       setMessages((m) => [
         ...m,
-        { role: 'assistant', text: res.answer || res.summary || 'Consulta concluída.' },
+        { role: 'assistant', text: replyMessage },
       ]);
     } catch (e) {
       setMessages((m) => [

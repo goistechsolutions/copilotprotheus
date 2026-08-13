@@ -1,5 +1,6 @@
 import React from 'react'
 import { Activity, Clock, Database, BarChart3 } from 'lucide-react'
+import ResultsTable from './ResultsTable'
 
 export default function ResultPane({ result }) { 
     if (!result) return (
@@ -26,13 +27,18 @@ export default function ResultPane({ result }) {
                     </div>
                 )}
                 
-                {/* Local para renderizar tabelas e graficos */}
-                <div className="flex items-center justify-center h-48 border-2 border-dashed border-slate-700 rounded-xl bg-slate-800/30 text-slate-500 text-sm">
-                    Painel Analítico
-                </div>
+                {result.data && result.data.length > 0 ? (
+                    <div className="h-[400px]">
+                        <ResultsTable rows={result.data} />
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-48 border-2 border-dashed border-slate-700 rounded-xl bg-slate-800/30 text-slate-500 text-sm">
+                        Painel Analítico
+                    </div>
+                )}
             </div>
             <footer className="p-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500 bg-slate-900">
-                <div className="flex items-center gap-1.5"><Activity size={12}/> {result.rows?.length || 0} linhas processadas</div>
+                <div className="flex items-center gap-1.5"><Activity size={12}/> {result.records || result.data?.length || 0} linhas processadas</div>
                 <div className="flex items-center gap-1.5"><Clock size={12}/> {result.response_time_ms || 0} ms</div>
             </footer>
         </div>
