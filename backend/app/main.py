@@ -296,6 +296,8 @@ async def global_exception_handler(request, exc):
         content={"detail": "Erro interno do servidor. Por favor, tente novamente mais tarde."}
     )
 
+from fastapi.responses import RedirectResponse
+
 @app.get("/")
 def read_root(request: Request):
     host = request.headers.get("host", "").lower()
