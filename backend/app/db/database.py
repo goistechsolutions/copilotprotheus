@@ -635,6 +635,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS environment VARCHAR(60) DEFAULT \'producao\'',
                 f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS auth_mode VARCHAR(30) DEFAULT \'basic\'',
                 f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT \'active\'',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_rest_url TEXT',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_usuario VARCHAR(100)',
             ]:
                 db.execute(text(col_sql))
         db.commit()
@@ -664,6 +666,20 @@ def ensure_tenant_tables(db, clean_tenant: str):
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS environment             VARCHAR(60) DEFAULT 'producao';
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS auth_mode               VARCHAR(30) DEFAULT 'basic';
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS status                  VARCHAR(20) DEFAULT 'active';
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_rest_url       TEXT;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_usuario        VARCHAR(100);
+
+                    -- Migrate data if necessary
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '{clean_tenant}' AND table_name = 'company_info' AND column_name = 'protheus_user') THEN
+                        UPDATE "{clean_tenant}".company_info SET protheus_usuario = protheus_user WHERE protheus_usuario IS NULL;
+                        ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_user;
+                    END IF;
+                    
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '{clean_tenant}' AND table_name = 'company_info' AND column_name = 'protheus_url') THEN
+                        UPDATE "{clean_tenant}".company_info SET protheus_rest_url = protheus_url || ':' || CAST(protheus_rest_port AS TEXT) WHERE protheus_rest_url IS NULL AND protheus_rest_port IS NOT NULL;
+                        ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_url;
+                        ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_rest_port;
+                    END IF;
                 END IF;
             END $$;
         """))
@@ -702,9 +718,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 company_name            VARCHAR(200) NOT NULL,
                 short_name              VARCHAR(100),
                 cnpj                    VARCHAR(20),
-                protheus_url            VARCHAR(255) NOT NULL,
-                protheus_rest_port      INT NOT NULL,
-                protheus_user           VARCHAR(100),
+                protheus_rest_url       TEXT,
+                protheus_usuario        VARCHAR(100),
                 encrypted_protheus_password VARCHAR(255),
                 created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

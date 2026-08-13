@@ -72,8 +72,8 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
                     company_code      AS code,
                     COALESCE(company_name, razao_social, 'Empresa ' || id) AS name,
                     status,
-                    protheus_url || ':' || protheus_rest_port::text AS protheus_rest_url,
-                    protheus_user     AS protheus_usuario,
+                    protheus_rest_url,
+                    protheus_usuario,
                     encrypted_protheus_password,
                     environment AS protheus_ambientes
                 FROM "{clean_tenant}".company_info
@@ -141,8 +141,8 @@ def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
                         protheus_unidade,
                         COALESCE(protheus_filial, '0101')                       AS protheus_filial,
                         COALESCE(protheus_ambientes, environment, 'producao')   AS protheus_ambientes,
-                        protheus_user                                           AS protheus_usuario,
-                        protheus_url || ':' || protheus_rest_port::text         AS protheus_rest_url,
+                        protheus_usuario,
+                        protheus_rest_url,
                         webapp_url,
                         COALESCE(status, 'ativa')                               AS status,
                         created_at,
