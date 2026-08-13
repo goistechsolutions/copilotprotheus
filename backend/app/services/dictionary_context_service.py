@@ -30,21 +30,23 @@ def build_dictionary_context(
     sql_tables = """
         SELECT
             table_name,
-            COALESCE(description, table_alias, table_name) AS table_label,
+            COALESCE(description, table_name) AS table_label,
             module_code,
-            physical_name,
-            active_flag
+            table_code
         FROM dictionary_tables
-        WHERE tenant_id = :tenant_id
-          AND active_flag = TRUE
+        WHERE 1=1
     """
+
+    if company_id is not None:
+        sql_tables += " AND (company_id = :company_id OR company_id IS NULL)"
+        params["company_id"] = company_id
 
     if module_filter and isinstance(module_filter, list) and len(module_filter) > 0:
         sql_tables += " AND module_code = ANY(:module_filter)"
         params["module_filter"] = module_filter
 
     if keyword and str(keyword).strip():
-        sql_tables += " AND (table_name ILIKE :kw OR description ILIKE :kw OR table_alias ILIKE :kw)"
+        sql_tables += " AND (table_name ILIKE :kw OR description ILIKE :kw OR table_code ILIKE :kw)"
         params["kw"] = f"%{keyword.strip()}%"
 
     sql_tables += " ORDER BY module_code, table_name"
@@ -60,16 +62,13 @@ def build_dictionary_context(
                     COALESCE(title, field_name) AS field_label,
                     field_type,
                     length_num AS field_length,
-                    decimal_num AS field_decimal,
-                    required_flag
+                    decimal_num AS field_decimal
                 FROM dictionary_fields
-                WHERE tenant_id = :tenant_id
-                  AND table_name = :table_name
+                WHERE table_code = :table_code
                 ORDER BY id
             """),
             {
-                "tenant_id": tenant_id,
-                "table_name": table["table_name"],
+                "table_code": table["table_code"],
             }
         ).mappings().all()
 
@@ -90,10 +89,11 @@ def render_context_for_prompt(context: List[Dict[str, Any]]) -> str:
 
     for item in context:
         t = item["table"]
+        t_code = t.get("table_code", "")
         t_name = t.get("table_name", "")
-        t_phys = t.get("physical_name") or f"{t_name}010"
+        t_phys = f"{t_code}010"
         parts.append(
-            f"TABLE {t_name} (Physical: {t_phys} | Desc: {t.get('table_label') or ''}) "
+            f"TABLE {t_code} - {t_name} (Physical: {t_phys} | Desc: {t.get('table_label') or ''}) "
             f"[Módulo Protheus: {t.get('module_code') or 'Geral'}]"
         )
 
