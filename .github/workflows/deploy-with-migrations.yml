@@ -144,15 +144,18 @@ jobs:
             sleep 5
 
             echo "=== Sincronizando senha do banco de dados ==="
-            docker compose exec -T db psql -U postgres -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
-            docker compose exec -T db psql -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
-            
-            echo "=== Executando migrations em ordem ==="
+            docker compose exec -T db psql -U postgres -c "ALTER USER copilot WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
+            docker compose exec -T db psql -U copilot -d copilotprotheus -c "ALTER USER copilot WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
+          DBCMD
+
+          echo "=== Executando migrations em ordem ==="
+          ssh -i ~/.ssh/id_ed25519 -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'MIGCMD'
+            cd ${{ env.DEPLOY_DIR }}
             for sql_file in $(ls database/migrations/*.sql 2>/dev/null | sort); do
               echo "→ Aplicando: $sql_file"
               docker compose exec -T db psql \
-                -U ${{ secrets.POSTGRES_USER }} \
-                -d ${{ secrets.POSTGRES_DB }} \
+                -U copilot \
+                -d copilotprotheus \
                 -f /dev/stdin < "$sql_file" \
                 && echo "  ✓ $sql_file aplicado" \
                 || echo "  ⚠ $sql_file já aplicado ou erro ignorável"
