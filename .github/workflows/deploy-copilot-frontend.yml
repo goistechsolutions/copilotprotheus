@@ -1,18 +1,25 @@
-name: Deploy Copilot Frontend
+name: Deploy Copilot Frontend → Cloudflare Pages
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'copilot-frontend/**'
+      - '.github/workflows/deploy-copilot-frontend.yml'
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build-and-deploy:
+    name: Build & Deploy (${{ github.ref_name }})
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: copilot-frontend
+    permissions:
+      contents: read
+      deployments: write
+
+    env:
+      CF_PAGES_PROJECT: 'copilot-frontend'
+      CF_PRODUCTION_BRANCH: 'main'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,17 +30,55 @@ jobs:
           node-version: '24'
 
       - name: Install Dependencies
+        working-directory: copilot-frontend
         run: npm install
 
       - name: Build
+        working-directory: copilot-frontend
         run: npm run build
 
+      - name: Garantir projeto Cloudflare Pages existe
+        run: |
+          set -e
+
+          ACCOUNT_ID="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+          API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          PROJECT="${CF_PAGES_PROJECT}"
+          PROD_BRANCH="${CF_PRODUCTION_BRANCH}"
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT")
+
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Projeto '$PROJECT' já existe."
+          else
+            echo "🔧 Projeto '$PROJECT' não encontrado (HTTP $STATUS). Criando..."
+            RESPONSE=$(curl -s -X POST \
+              -H "Authorization: Bearer $API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{\"name\":\"$PROJECT\",\"production_branch\":\"$PROD_BRANCH\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects")
+
+            SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success', False)).lower())")
+            if [ "$SUCCESS" = "true" ]; then
+              echo "✅ Projeto '$PROJECT' criado com sucesso."
+            else
+              echo "❌ Falha ao criar projeto: $RESPONSE"
+              exit 1
+            fi
+          fi
+
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: copilot-frontend
-          directory: copilot-frontend/dist
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: copilot-frontend
+        run: |
+          npx wrangler@3 pages deploy dist \
+            --project-name="$CF_PAGES_PROJECT" \
+            --branch="${{ github.ref_name }}" \
+            --commit-dirty=true \
+            --commit-hash="${{ github.sha }}" \
+            --commit-message="${{ github.event.head_commit.message }}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
