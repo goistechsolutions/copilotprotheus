@@ -165,10 +165,15 @@ def debug_db_endpoint():
     import traceback
     try:
         from app.db.database import engine, ensure_public_tables
+        from sqlalchemy import text
         with engine.connect() as conn:
+            with open('database/migrations/003_v6_schema_adjustments.sql', 'r', encoding='utf-8') as f:
+                sql = f.read()
+            conn.execute(text(sql))
+            conn.commit()
             ensure_public_tables(conn, force=True)
             conn.commit()
-        return {"success": True, "message": "All tables created successfully"}
+        return {"success": True, "message": "All tables and migrations created successfully"}
     except Exception as e:
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
