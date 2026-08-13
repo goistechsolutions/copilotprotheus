@@ -49,7 +49,6 @@ class CompanyBase(BaseModel):
     # Configuração do agente
     system_prompt: Optional[str] = None
     temperature: Optional[float] = Field(0.20, ge=0.0, le=1.0)
-    licenca_uso: Optional[str] = Field(None, description="Token JWT de licença de uso")
 
     # Controle
     tenant_id: Optional[str] = Field(None, max_length=100)
@@ -91,7 +90,6 @@ class CompanyUpdate(BaseModel):
     auth_mode: Optional[str] = None
     system_prompt: Optional[str] = None
     temperature: Optional[float] = Field(None, ge=0.0, le=1.0)
-    licenca_uso: Optional[str] = None
     status: Optional[str] = None
     tenant_id: Optional[str] = None
 

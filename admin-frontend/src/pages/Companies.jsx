@@ -11,7 +11,7 @@ const EMPTY = {
   cnpj:'', razao_social:'', ie:'', email:'', telefone:'', endereco:'',
   protheus_grupo:'', protheus_empresa:'', protheus_unidade:'', protheus_filial:'',
   protheus_ambientes:'', protheus_usuario:'', protheus_password:'',
-  protheus_rest_url:'', webapp_url:'', licenca_uso:'', status:'ativa',
+  protheus_rest_url:'', webapp_url:'', status:'ativa',
   tenant_id:''
 };
 
@@ -64,21 +64,6 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
     try {
       const exp = new Date();
       exp.setFullYear(exp.getFullYear() + 5);
-      const expirationDate = exp.toISOString().split('T')[0];
-
-      const res = await axios.post('/api/license/generate', {
-        cnpj: form.cnpj.replace(/[^0-9]/g, '') || form.cnpj,
-        expiration_date: expirationDate,
-        plan_level: 'enterprise'
-      });
-      change('licenca_uso', res.data.token);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message || 'Erro ao gerar licença');
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
   const f = (props) => <Field form={form} onChange={change} {...props} />;
 
   return (
@@ -127,23 +112,8 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
             {f({ label:'URL REST (API)', name:'protheus_rest_url', placeholder:'http://ip:porta/rest', span:true, mono:true })}
             {f({ label:'URL WebApp', name:'webapp_url', placeholder:'http://ip:porta/webapp', span:true, mono:true })}
 
-            <SectionTitle>Licença & Status</SectionTitle>
-            <div className="md:col-span-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider">Licença JWT</label>
-                <button type="button" onClick={generateLicense} disabled={genLoading}
-                  className="flex items-center gap-1.5 text-[10px] font-semibold text-[#2196F3] bg-[#1565C0]/15 hover:bg-[#1565C0]/25 border border-[#1565C0]/30 px-3 py-1.5 rounded-md transition-all disabled:opacity-50">
-                  {genLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
-                  Gerar Nova Licença
-                </button>
-              </div>
-              <textarea
-                value={form.licenca_uso || ''}
-                onChange={e => change('licenca_uso', e.target.value)}
-                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-xs font-mono h-20 resize-none focus:outline-none focus:border-[#2196F3] transition-all placeholder-[#8892A4]/40"
-                placeholder="Cole ou gere a licença JWT..."
-              />
-            </div>
+            <SectionTitle>Status</SectionTitle>
+
             <div>
               <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Status</label>
               <select
@@ -266,11 +236,6 @@ export default function Companies() {
                 {c.protheus_rest_url && (
                   <span className="hidden sm:flex items-center gap-1 text-[#2196F3] text-xs">
                     <Globe className="w-3 h-3" /> REST
-                  </span>
-                )}
-                {c.licenca_uso && (
-                  <span className="hidden sm:flex items-center gap-1 text-emerald-400 text-xs">
-                    <Lock className="w-3 h-3" /> Licença
                   </span>
                 )}
                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${

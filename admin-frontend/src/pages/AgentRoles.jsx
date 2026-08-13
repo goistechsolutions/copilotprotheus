@@ -30,7 +30,7 @@ export default function AgentRoles() {
   const fetchRoles = async () => {
     try {
       const [resRoles, resTenants, resCompanies] = await Promise.all([
-        axios.get('/api/admin/agent-roles'),
+        axios.get('/api/admin/roles'),
         axios.get('/api/tenants').catch(() => ({ data: [] })),
         axios.get('/api/companies').catch(() => ({ data: [] }))
       ]);
@@ -98,9 +98,9 @@ export default function AgentRoles() {
     
     try {
       if (editing === 'new') {
-        await axios.post('/api/admin/agent-roles', formData);
+        await axios.post('/api/admin/roles', formData);
       } else {
-        await axios.put(`/api/admin/agent-roles/${editing}`, formData);
+        await axios.put(`/api/admin/roles/${editing}`, formData);
       }
       setEditing(null);
       fetchRoles();
@@ -112,7 +112,7 @@ export default function AgentRoles() {
   const handleDelete = async (id) => {
     if (confirm("Tem certeza que deseja remover este cargo? Usuários vinculados poderão perder acesso ou herdar regras antigas.")) {
       try {
-        await axios.delete(`/api/admin/agent-roles/${id}`);
+        await axios.delete(`/api/admin/roles/${id}`);
         fetchRoles();
       } catch (error) {
         alert("Erro ao excluir cargo.");

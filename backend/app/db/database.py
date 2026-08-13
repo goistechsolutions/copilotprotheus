@@ -623,7 +623,18 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url TEXT',
                 f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt TEXT',
                 f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.20',
-                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso TEXT',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS ie VARCHAR(30)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS razao_social VARCHAR(255)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS email VARCHAR(255)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS telefone VARCHAR(50)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS endereco VARCHAR(500)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_grupo VARCHAR(20)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_empresa VARCHAR(20)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_unidade VARCHAR(20)',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_filial VARCHAR(30) DEFAULT \'0101\'',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS environment VARCHAR(60) DEFAULT \'producao\'',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS auth_mode VARCHAR(30) DEFAULT \'basic\'',
+                f'ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT \'active\'',
             ]:
                 db.execute(text(col_sql))
         db.commit()
@@ -641,7 +652,18 @@ def ensure_tenant_tables(db, clean_tenant: str):
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS webapp_url              TEXT;
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS system_prompt           TEXT;
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS temperature             NUMERIC(3,2) DEFAULT 0.20;
-                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS licenca_uso             TEXT;
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS ie                      VARCHAR(30);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS razao_social            VARCHAR(255);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS email                   VARCHAR(255);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS telefone                VARCHAR(50);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS endereco                VARCHAR(500);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_grupo          VARCHAR(20);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_empresa        VARCHAR(20);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_unidade        VARCHAR(20);
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_filial         VARCHAR(30) DEFAULT '0101';
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS environment             VARCHAR(60) DEFAULT 'producao';
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS auth_mode               VARCHAR(30) DEFAULT 'basic';
+                    ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS status                  VARCHAR(20) DEFAULT 'active';
                 END IF;
             END $$;
         """))
@@ -690,7 +712,18 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 webapp_url              TEXT,
                 system_prompt           TEXT,
                 temperature             NUMERIC(3,2) DEFAULT 0.20,
-                licenca_uso             TEXT
+                ie                      VARCHAR(30),
+                razao_social            VARCHAR(255),
+                email                   VARCHAR(255),
+                telefone                VARCHAR(50),
+                endereco                VARCHAR(500),
+                protheus_grupo          VARCHAR(20),
+                protheus_empresa        VARCHAR(20),
+                protheus_unidade        VARCHAR(20),
+                protheus_filial         VARCHAR(30) DEFAULT '0101',
+                environment             VARCHAR(60) DEFAULT 'producao',
+                auth_mode               VARCHAR(30) DEFAULT 'basic',
+                status                  VARCHAR(20) DEFAULT 'active'
             );
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_tables (
