@@ -167,8 +167,15 @@ def debug_db_endpoint():
         from app.db.database import engine, ensure_public_tables
         from sqlalchemy import text
         with engine.connect() as conn:
-            with open('database/migrations/003_v6_schema_adjustments.sql', 'r', encoding='utf-8') as f:
-                sql = f.read()
+            sql = """
+            DO $$ 
+            BEGIN
+                IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'tenant_registry') THEN
+                    ALTER TABLE public.tenant_registry RENAME TO tenant;
+                END IF;
+            END $$;
+            DELETE FROM public.app_bootstrap_flags;
+            """
             conn.execute(text(sql))
             conn.commit()
             ensure_public_tables(conn, force=True)
