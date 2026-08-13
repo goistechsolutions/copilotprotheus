@@ -269,9 +269,20 @@ def ensure_public_tables(db, force: bool = False):
         CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(mod_sigla);
         """,
         """
+        CREATE TABLE IF NOT EXISTS public.roles (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            role_code   VARCHAR(60) NOT NULL,
+            role_name   VARCHAR(120) NOT NULL,
+            scope_level VARCHAR(30) NOT NULL,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_roles_role_code ON public.roles (role_code);
+        """,
+        """
         CREATE TABLE IF NOT EXISTS public.users (
             id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id         VARCHAR(100),
+            role_id           UUID REFERENCES public.roles(id),
             email             VARCHAR(180) NOT NULL,
             full_name         VARCHAR(180) NOT NULL,
             password_hash     VARCHAR(255) NOT NULL,
@@ -282,16 +293,6 @@ def ensure_public_tables(db, force: bool = False):
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON public.users (email);
         CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON public.users (tenant_id);
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS public.roles (
-            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            role_code   VARCHAR(60) NOT NULL,
-            role_name   VARCHAR(120) NOT NULL,
-            scope_level VARCHAR(30) NOT NULL,
-            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_roles_role_code ON public.roles (role_code);
         """,
         """
         CREATE TABLE IF NOT EXISTS public.permissions (
@@ -314,17 +315,7 @@ def ensure_public_tables(db, force: bool = False):
                 FOREIGN KEY (permission_id) REFERENCES public.permissions(id) ON DELETE CASCADE
         );
         """,
-        """
-        CREATE TABLE IF NOT EXISTS public.user_roles (
-            user_id    UUID NOT NULL,
-            role_id    UUID NOT NULL,
-            tenant_id  VARCHAR(100) NOT NULL,
-            company_id INTEGER NOT NULL,
-            PRIMARY KEY (user_id, role_id, tenant_id, company_id),
-            CONSTRAINT fk_user_roles_role
-                FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE
-        );
-        """,
+
         """
         CREATE TABLE IF NOT EXISTS public.user_company_access (
             user_id    UUID NOT NULL,

@@ -83,6 +83,8 @@ class User(GlobalBase):
     __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(100), nullable=True)
+    role_id = Column(UUID(as_uuid=True), ForeignKey('public.roles.id'))
     email = Column(String(180), nullable=False, unique=True)
     full_name = Column(String(180), nullable=False)
     password_hash = Column(String(255), nullable=False)
