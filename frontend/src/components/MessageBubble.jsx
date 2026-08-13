@@ -8,13 +8,15 @@ export default function MessageBubble({ role, text }) {
   return (
     <div className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[85%] gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center shadow-sm mt-1 ${isUser ? 'bg-slate-200 text-slate-600' : 'bg-brand-600 text-white'}`}>
-          {isUser ? <User size={16} /> : <Bot size={16} />}
-        </div>
-        <div className={`px-4 py-3 text-[13px] leading-relaxed shadow-sm ${
+        {!isUser && (
+            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center shadow-sm mt-1 bg-blue-50 text-blue-600">
+            <Bot size={16} />
+            </div>
+        )}
+        <div className={`px-4 py-3 text-[14px] leading-relaxed shadow-sm ${
           isUser 
-            ? 'bg-slate-800 text-white rounded-2xl rounded-tr-sm' 
-            : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
+            ? 'bg-blue-600 text-white rounded-[20px] rounded-br-sm' 
+            : 'bg-slate-50 border border-slate-100 text-slate-800 rounded-[20px] rounded-bl-sm'
         }`}>
           {isUser ? (
             <div className="whitespace-pre-wrap">{text}</div>

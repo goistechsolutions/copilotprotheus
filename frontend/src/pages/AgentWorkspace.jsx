@@ -146,7 +146,7 @@ export default function AgentWorkspace() {
   };
 
   return (
-    <div className="flex flex-col xl:flex-row h-screen w-full bg-slate-900 text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col xl:flex-row h-screen w-full bg-slate-50 text-slate-800 overflow-hidden font-sans">
       <div className="hidden md:flex">
         <HistoryRail
           items={history}
@@ -159,17 +159,23 @@ export default function AgentWorkspace() {
         />
       </div>
 
-      <main className="flex-1 min-w-0 flex flex-col bg-slate-800 shadow-xl z-10 overflow-hidden relative">
-        <ContextBanner state={state} />
-
-        <header className="px-4 md:px-8 py-5 text-center border-b border-slate-700/50 bg-slate-800/80 backdrop-blur-sm z-10">
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-100">Workspace Analítico</h1>
-          <p className="text-slate-400 mt-2 text-sm">
-            Aqui aparecem os resultados gráficos e tabulares das suas requisições.
-          </p>
+      <main className="flex-1 min-w-0 flex flex-col bg-white shadow-xl z-10 overflow-hidden relative border-r border-slate-100">
+        
+        <header className="px-6 pt-6 pb-2 bg-white flex flex-col items-center xl:items-start z-10">
+          <div className="flex items-center gap-2 mb-2">
+             <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-bot"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+             </div>
+             <h1 className="text-xl font-bold text-slate-800">Protheus Copiloto</h1>
+          </div>
+          <ContextBanner state={state} />
+          
+          <h2 className="text-2xl mt-4 text-slate-700">
+            Olá, como posso ajudar você hoje?
+          </h2>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-6 scroll-smooth">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 flex flex-col gap-8 scroll-smooth">
           <SuggestionCards
             items={suggestions}
             disabled={loading}
@@ -179,13 +185,13 @@ export default function AgentWorkspace() {
           <Conversation messages={messages} />
 
           {selected && (
-            <div className="p-4 mx-auto w-full max-w-3xl bg-blue-500/10 text-blue-400 rounded-lg text-sm border border-blue-500/20">
+            <div className="p-4 mx-auto w-full max-w-3xl bg-blue-50 text-blue-700 rounded-lg text-sm border border-blue-100">
               Histórico selecionado: {selected.title}
             </div>
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-700 bg-slate-800 shrink-0">
+        <div className="p-4 bg-white shrink-0">
           <Composer
             disabled={loading}
             onSend={send}
@@ -194,7 +200,7 @@ export default function AgentWorkspace() {
         </div>
       </main>
 
-      <aside className={`w-full xl:w-[420px] shrink-0 bg-slate-900 border-t xl:border-t-0 xl:border-l border-slate-700 overflow-y-auto flex-col h-1/2 xl:h-auto ${result ? 'flex' : 'hidden xl:flex'}`}>
+      <aside className={`w-full xl:w-[420px] shrink-0 bg-white border-t xl:border-t-0 xl:border-l border-slate-200 overflow-y-auto flex-col h-1/2 xl:h-auto ${result ? 'flex' : 'hidden xl:flex'}`}>
         <ResultPane result={result} />
       </aside>
     </div>

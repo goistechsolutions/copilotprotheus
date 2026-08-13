@@ -7,10 +7,10 @@ export default function ContextBanner({ state }) {
     const isFail = !isOk && !isConnecting;
     
     return (
-        <div className={`w-full text-xs font-medium px-4 py-2 flex items-center gap-2 justify-center transition-colors duration-300 shadow-sm z-20 ${isOk ? 'bg-emerald-500/10 text-emerald-400 border-b border-emerald-500/20' : isFail ? 'bg-rose-500/10 text-rose-400 border-b border-rose-500/20' : 'bg-blue-500/10 text-blue-400 border-b border-blue-500/20'}`}>
-            {isOk && <CheckCircle2 size={14} />}
-            {isConnecting && <Loader2 size={14} className="animate-spin" />}
-            {isFail && <AlertCircle size={14} />}
+        <div className={`text-sm font-medium flex items-center gap-2 mb-4 ${isOk ? 'text-slate-600' : isFail ? 'text-rose-500' : 'text-blue-500'}`}>
+            {isOk && <CheckCircle2 size={16} className="text-emerald-500" />}
+            {isConnecting && <Loader2 size={16} className="animate-spin text-blue-500" />}
+            {isFail && <AlertCircle size={16} className="text-rose-500" />}
             {state.message}
         </div>
     ) 
