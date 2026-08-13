@@ -790,7 +790,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
         """))
-CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_table_permissions (
+        db.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_table_permissions (
                 id BIGSERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
                 company_id VARCHAR(100),
