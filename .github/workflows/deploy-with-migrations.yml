@@ -107,18 +107,18 @@ jobs:
             -p ${{ secrets.VPS_PORT || 22 }} \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENVCMD'
           cat > ${{ env.DEPLOY_DIR }}/.env << EOF
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          POSTGRES_DB=copilotprotheus
-          POSTGRES_USER=copilot
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          DATABASE_URL=postgresql://copilot:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/copilotprotheus
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-          CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-          ENVIRONMENT=production
-          LOG_LEVEL=INFO
-          EOF
+SECRET_KEY=${{ secrets.SECRET_KEY }}
+POSTGRES_DB=copilotprotheus
+POSTGRES_USER=copilot
+POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+DATABASE_URL=postgresql://copilot:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/copilotprotheus
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+ENVIRONMENT=production
+LOG_LEVEL=INFO
+EOF
           chmod 600 ${{ env.DEPLOY_DIR }}/.env
           echo "✓ .env criado na VPS"
           ENVCMD
