@@ -208,9 +208,7 @@ def ensure_public_tables(db, force: bool = False):
         return
 
     try:
-        if not force and _is_public_bootstrap_done(db):
-            PUBLIC_BOOTSTRAP_DONE = True
-            return
+        pass
     except Exception:
         _safe_rollback(db)
 
