@@ -843,7 +843,6 @@ async def sync_schema(
                     INSERT INTO "{clean_tenant}".dictionary_tables 
                     (company_id, table_code, table_name, module_code, description)
                     VALUES (:cid, :tbl, :alias, :mc, :desc)
-                    ON CONFLICT (table_code) DO NOTHING
                 """),
                 {
                     "cid": comp_id,
