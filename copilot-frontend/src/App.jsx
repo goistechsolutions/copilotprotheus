@@ -33,8 +33,16 @@ export default function App() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
+    // Check if context is fallback (URL params missing)
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get('module') || !params.get('branch')) {
+       console.warn('Parâmetros de contexto ausentes na URL. Usando fallback padrão.');
+       // Could add a toast here if a toast library was available
+    }
+
     // Load history
-    const saved = localStorage.getItem('cprot_history');
+    const historyKey = `cprot_history_${context.user}_${context.branch}`;
+    const saved = localStorage.getItem(historyKey);
     if (saved) {
       try {
         setHistoryItems(JSON.parse(saved));
@@ -42,6 +50,22 @@ export default function App() {
     }
 
     const handleMessage = (event) => {
+      // Segurança: Validar a origem da mensagem para evitar injeção
+      const allowedOrigins = [
+        'https://protheus.cloudtotvs.com.br', 
+        'https://elitecorp.tec.br'
+      ];
+      // Permite subdomínios dessas origens
+      const isValidOrigin = event.origin.endsWith('.protheus.cloudtotvs.com.br') || 
+                            event.origin.endsWith('.elitecorp.tec.br') || 
+                            event.origin === 'http://localhost:5173' ||
+                            allowedOrigins.includes(event.origin);
+                            
+      if (!isValidOrigin) {
+        console.warn('Mensagem bloqueada de origem não confiável:', event.origin);
+        return;
+      }
+
       // Recebendo dados do contexto (injetados pelo content.js)
       if (event.data && event.data.type === 'cprot-context-update') {
         setContext(prev => ({ ...prev, ...event.data.payload }));
@@ -102,7 +126,8 @@ export default function App() {
     
     setHistoryItems(prev => {
       const updated = [newItem, ...prev].slice(0, 20); // Mantem os ultimos 20
-      localStorage.setItem('cprot_history', JSON.stringify(updated));
+      const historyKey = `cprot_history_${context.user}_${context.branch}`;
+      localStorage.setItem(historyKey, JSON.stringify(updated));
       return updated;
     });
   };

@@ -8,7 +8,7 @@ import {
 import { Bar, Line, Pie } from 'react-chartjs-2';
 
 export default function ChatMessage({ message, isUser, profile = 'Negócio' }) {
-  const [expandedSection, setExpandedSection] = useState(null);
+  const [expandedSections, setExpandedSections] = useState(new Set());
 
   if (isUser) {
     return (
@@ -32,12 +32,23 @@ export default function ChatMessage({ message, isUser, profile = 'Negócio' }) {
     labels,
     datasets,
     insights,
-    answer
+    answer,
+    data // raw data array for export
   } = message;
 
   const toggleSection = (section) => {
-    setExpandedSection(expandedSection === section ? null : section);
+    setExpandedSections(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(section)) {
+        newSet.delete(section);
+      } else {
+        newSet.add(section);
+      }
+      return newSet;
+    });
   };
+
+  const isExpanded = (section) => expandedSections.has(section);
 
   // Cores institucionais para gráficos
   const cores = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#cbd5e1'];
@@ -83,12 +94,49 @@ export default function ChatMessage({ message, isUser, profile = 'Negócio' }) {
     }
   };
 
+  const exportToExcel = () => {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        alert("Não há dados estruturados para exportar.");
+        return;
+    }
+    
+    // Converter o array de objetos 'data' para CSV (separado por ;)
+    const headers = Object.keys(data[0]);
+    const csvContent = [
+        headers.join(';'),
+        ...data.map(row => headers.map(header => {
+            const val = row[header];
+            // Escapar aspas e campos com ponto-e-vírgula
+            if (val === null || val === undefined) return '';
+            const strVal = String(val).replace(/"/g, '""');
+            if (strVal.includes(';') || strVal.includes('\n')) return `"${strVal}"`;
+            return strVal;
+        }).join(';'))
+    ].join('\n');
+    
+    // Adicionar BOM para Excel abrir UTF-8 corretamente
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'exportacao_copilot.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleAction = (btn) => {
     // Comunicação com o WebClient do Protheus via postMessage
     if (btn.action === 'open_routine') {
       window.parent.postMessage({ type: 'cprot-open-routine', routine: btn.payload }, '*');
     }
-    // Adicionar outras ações conforme necessário
+    
+    if (btn.action === 'export_excel') {
+      exportToExcel();
+    }
   };
 
   return (
@@ -119,7 +167,7 @@ export default function ChatMessage({ message, isUser, profile = 'Negócio' }) {
         {tipo_grafico && datasets && (
           <div className="mb-4">
             {titulo && <h4 className="text-sm font-bold text-slate-800 mb-2">{titulo}</h4>}
-            <div className="h-64 flex items-center justify-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+            <div className="min-h-[200px] max-h-80 w-full flex items-center justify-center p-2 bg-slate-50 rounded-lg border border-slate-100">
               {tipo_grafico === 'bar' && <Bar data={dataConfig} options={chartOptions} />}
               {tipo_grafico === 'line' && <Line data={dataConfig} options={chartOptions} />}
               {tipo_grafico === 'pie' && <Pie data={dataConfig} options={chartOptions} />}
@@ -147,9 +195,9 @@ export default function ChatMessage({ message, isUser, profile = 'Negócio' }) {
                   <Filter className="w-4 h-4 text-slate-500" />
                   Filtros Aplicados
                 </div>
-                {expandedSection === 'filters' ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                {isExpanded('filters') ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
               </button>
-              {expandedSection === 'filters' && (
+              {isExpanded('filters') && (
                 <div className="p-3 bg-white border-t border-slate-200 flex flex-wrap gap-2">
                   {applied_filters.map((f, i) => (
                     <span key={i} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md border border-blue-100">
@@ -172,9 +220,9 @@ export default function ChatMessage({ message, isUser, profile = 'Negócio' }) {
                   <TableProperties className="w-4 h-4 text-slate-500" />
                   Detalhamento
                 </div>
-                {expandedSection === 'details' ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                {isExpanded('details') ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
               </button>
-              {expandedSection === 'details' && (
+              {isExpanded('details') && (
                 <div className="p-4 bg-white border-t border-slate-200 prose prose-sm max-w-none prose-table:w-full prose-th:bg-slate-50 prose-td:border-b prose-td:border-slate-100">
                   <ReactMarkdown>{details}</ReactMarkdown>
                 </div>
@@ -193,9 +241,9 @@ export default function ChatMessage({ message, isUser, profile = 'Negócio' }) {
                   <Database className="w-4 h-4 text-slate-500" />
                   Consulta SQL (Técnico)
                 </div>
-                {expandedSection === 'sql' ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                {isExpanded('sql') ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
               </button>
-              {expandedSection === 'sql' && (
+              {isExpanded('sql') && (
                 <div className="p-0 bg-slate-900 border-t border-slate-200">
                   <pre className="p-4 text-xs text-green-400 overflow-x-auto m-0 font-mono">
                     {technical_sql}
