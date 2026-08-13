@@ -178,8 +178,9 @@ def _mark_public_bootstrap_done(db):
 
 
 def _run_public_ddl(db, statements):
-    for stmt in statements:
-        db.execute(text(stmt))
+    for q in statements:
+        if q.strip():
+            db.execute(text(q))
 
 
 def ensure_public_tables(db, force: bool = False):
@@ -461,15 +462,7 @@ def ensure_public_tables(db, force: bool = False):
         CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id ON public.audit_logs (tenant_id);
         CREATE INDEX IF NOT EXISTS idx_audit_logs_company_id ON public.audit_logs (company_id);
         """,
-        """
-        
-        """,
-        """
-        
-        """,
-        """
-        
-        """,
+
         """
         CREATE TABLE IF NOT EXISTS public.platform_audit_log (
             id          BIGSERIAL PRIMARY KEY,
