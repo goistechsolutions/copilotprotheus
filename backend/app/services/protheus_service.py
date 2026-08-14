@@ -16,10 +16,11 @@ from app.db.database import SessionLocal
 
 _OAUTH2_TOKENS = {} # cache: {tenant_id: (token, expiry)}
 
-def get_tenant_config(tenant_id: str) -> dict:
+def get_tenant_config(tenant_id: str, company_id: int = None) -> dict:
     """
     Busca as credenciais do Protheus do tenant_id no banco de dados.
     1. Consulta na tabela company_info dentro do schema exclusivo do tenant ("{clean_tenant}".company_info)
+       (Usa o company_id específico se fornecido, caso contrário pega a primeira filial configurada)
     2. Fallback nas variáveis de ambiente globais (.env)
     """
     db = SessionLocal()
@@ -30,9 +31,17 @@ def get_tenant_config(tenant_id: str) -> dict:
         if clean_tenant and clean_tenant != "public":
             try:
                 ensure_tenant_tables(db, clean_tenant)
-                res = db.execute(
-                    text(f'SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode FROM "{clean_tenant}".company_info WHERE protheus_rest_url IS NOT NULL AND protheus_rest_url != \'\' LIMIT 1')
-                ).first()
+                
+                if company_id:
+                    res = db.execute(
+                        text(f'SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode FROM "{clean_tenant}".company_info WHERE id = :cid AND protheus_rest_url IS NOT NULL AND protheus_rest_url != \'\' LIMIT 1'),
+                        {"cid": company_id}
+                    ).first()
+                else:
+                    res = db.execute(
+                        text(f'SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode FROM "{clean_tenant}".company_info WHERE protheus_rest_url IS NOT NULL AND protheus_rest_url != \'\' LIMIT 1')
+                    ).first()
+                    
                 if res and res[0]:
                     pwd = ""
                     if res[2]:
@@ -283,7 +292,15 @@ def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, rec
         db.close()
 
 async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None) -> str:
-    config = get_tenant_config(tenant_id)
+    company_id = context.get("company_id") if context else None
+    cid = None
+    if company_id:
+        try:
+            cid = int(company_id)
+        except (ValueError, TypeError):
+            cid = None
+
+    config = get_tenant_config(tenant_id, cid)
     rest_url = config['rest_url'].strip()
     if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
         rest_url = "https://" + rest_url
