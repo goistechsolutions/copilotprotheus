@@ -125,17 +125,19 @@ Qualquer modelo de inteligência artificial gerando respostas no ecossistema Cop
 A **versão 5.2** introduz uma camada profunda de governança de dados ao backend, protegendo contra exfiltração de dados sensíveis ou acesso a campos proibidos (ex: comissões, salários ou custos sigilosos) por perfis de usuário não autorizados.
 
 ### 4.1. Tabelas SQL da Governança e Dicionário (PostgreSQL)
-Todas as chaves estrangeiras (`tenant_id`, `company_id`, `environment_id`) são modeladas como **`VARCHAR(100)`** para acomodar sem quebras tanto códigos alfanuméricos (ex: `'rodol_mg'`, `'cliente_alpha'`, `'default'`) quanto UUIDs padrão da plataforma:
 
-| Tabela | Função / Propósito Principal |
+Todas as chaves estrangeiras (`tenant_id`, `company_id`, `environment_id`) são modeladas como **`VARCHAR(100)`** para acomodar sem quebras tanto códigos alfanuméricos (ex: `'rodol_mg'`, `'cliente_alpha'`, `'default'`) quanto UUIDs padrão da plataforma.
+A arquitetura Multi-Tenant / Multi-Empresa utiliza **chaves compostas** (`tenant_id`, `company_id`, `environment_id`) em todas as tabelas (junto com os identificadores específicos) para garantir total isolamento de dados entre diferentes empresas do mesmo grupo corporativo.
+
+| Tabela | Função / Propósito Principal e Estrutura Multi-Empresa |
 | :--- | :--- |
-| **`tenant_dictionary_sources`** | Controla os agendamentos, cron jobs, carimbos de data/hora e metadados das sincronizações de dicionário contra cada cliente/tenant do Protheus. |
-| **`dictionary_tables`** | Resumo snapshot das tabelas do SX2010 do cliente (chave: `table_name`, descrição, módulo e quantidade estimada de registros). |
-| **`dictionary_fields`** | Campos individuais mapeados do SX3010 (`field_name`, `table_name`, título do campo, tipo de dado `X3_TIPO`, precisão decimal, máscara de visualização e regras de validação/contexto). |
-| **`dictionary_indexes`** | Índices físicos da tabela no ERP (mapeados a partir do SX1/SIX) para permitir à IA estruturar JOINs e pesquisas impulsionados por índices de alta perfomance. |
-| **`dictionary_groups`** | Grupos de dados (SXG) utilizados em máscaras e padronizações de largura para campos de mesmo contexto funcional. |
-| **`tenant_table_permissions`** | Conceder ou bloquear em nível de Role (papéis de usuário, ex: 'Vendas', 'Financeiro') as capacidades analíticas granulares sobre a tabela no ERP Protheus, segmentadas nas 3 flags efetivas do código: `can_list` (listagem no catálogo), `can_describe` (inspeção de estrutura/diferenciais do dicionário) e `can_query` (execução real de extração de dados e consultas SQL analíticas via `/QueryRest`). |
-| **`tenant_field_permissions`** | Controle atômico de segurança no nível de coluna do dicionário. Governado por 3 flags booleanas granulares: `can_select` (permite ler o conteúdo em queries), `can_filter` (permite utilizar a coluna como filtro em cláusulas WHERE) e `masked_flag` (indica se a coluna deve ter seu conteúdo ofuscado/mascarado antes da apresentação ao usuário ou LLM). |
+| **`tenant_dictionary_sources`** | Controla os agendamentos, cron jobs, carimbos de data/hora e metadados das sincronizações de dicionário contra cada cliente/tenant do Protheus. Vinculado a `tenant_id`, `company_id` e `environment_id`. |
+| **`dictionary_tables`** | Resumo snapshot das tabelas do SX2010 do cliente (chave composta: `tenant_id`, `environment_id`, `table_name`). Armazena descrição, módulo e quantidade estimada de registros. |
+| **`dictionary_fields`** | Campos individuais mapeados do SX3010 (chave composta: `tenant_id`, `environment_id`, `table_name`, `field_name`). Armazena título, tipo de dado `X3_TIPO`, precisão, máscara e regras de validação/contexto. |
+| **`dictionary_indexes`** | Índices físicos da tabela no ERP (mapeados do SX1/SIX) para permitir à IA estruturar JOINs impulsionados por índices (chave composta por `tenant_id`, `environment_id`, `table_name`, `index_order`). |
+| **`dictionary_groups`** | Grupos de dados (SXG) utilizados em máscaras e padronizações (chave composta: `tenant_id`, `environment_id`, `group_name`). |
+| **`tenant_table_permissions`** | Conceder ou bloquear em nível de Role (papéis de usuário, ex: 'Vendas', 'Financeiro') as capacidades analíticas granulares sobre a tabela no ERP Protheus. Segmentado pelas 3 flags efetivas: `can_list` (listagem no catálogo), `can_describe` (inspeção de estrutura) e `can_query` (execução real de extração via `/QueryRest`). |
+| **`tenant_field_permissions`** | Controle atômico de segurança no nível de coluna do dicionário. Governado por 3 flags booleanas granulares: `can_select` (permite ler o conteúdo), `can_filter` (permite utilizar a coluna em cláusulas WHERE) e `masked_flag` (ofusca o conteúdo antes da apresentação). |
 
 > **⚠️ Nota de Integridade (atualizado 26/07/2026):**  
 > A tabela `tenant_table_permissions` usa **`can_list` + `can_describe` + `can_query`** (3 flags booleanos separados).  
