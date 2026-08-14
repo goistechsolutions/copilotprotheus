@@ -120,29 +120,33 @@ Qualquer modelo de inteligência artificial gerando respostas no ecossistema Cop
 
 ---
 
-## 4. Arquitetura v5.2 — Catálogo Multi-Tenant, Snapshot e Governança (RBAC)
+## 4. Arquitetura v5 — Multi-Tenant via Schemas PostgreSQL e Governança (RBAC)
 
-A **versão 5.2** introduz uma camada profunda de governança de dados ao backend, protegendo contra exfiltração de dados sensíveis ou acesso a campos proibidos (ex: comissões, salários ou custos sigilosos) por perfis de usuário não autorizados.
+A arquitetura Multi-Tenant **(V5)** garante o isolamento físico de dados entre clientes utilizando **Schemas PostgreSQL**. Existe um schema global (`public`) para o gerenciamento da plataforma, e schemas isolados (`<tenant>`) para armazenar as configurações e o RAG de cada cliente.
 
-### 4.1. Tabelas SQL da Governança e Dicionário (PostgreSQL)
+### 4.1. Tabelas de Governança Global (Schema `public`)
+Responsáveis por gerenciar os acessos, licenças e roteamento central de todos os clientes. As tabelas herdam de `GlobalBase`.
 
-Todas as chaves estrangeiras (`tenant_id`, `company_id`, `environment_id`) são modeladas como **`VARCHAR(100)`** para acomodar sem quebras tanto códigos alfanuméricos (ex: `'rodol_mg'`, `'cliente_alpha'`, `'default'`) quanto UUIDs padrão da plataforma.
-A arquitetura Multi-Tenant / Multi-Empresa utiliza **chaves compostas** (`tenant_id`, `company_id`, `environment_id`) em todas as tabelas (junto com os identificadores específicos) para garantir total isolamento de dados entre diferentes empresas do mesmo grupo corporativo.
-
-| Tabela | Função / Propósito Principal e Estrutura Multi-Empresa |
+| Tabela | Função / Propósito Principal |
 | :--- | :--- |
-| **`tenant_dictionary_sources`** | Controla os agendamentos, cron jobs, carimbos de data/hora e metadados das sincronizações de dicionário contra cada cliente/tenant do Protheus. Vinculado a `tenant_id`, `company_id` e `environment_id`. |
-| **`dictionary_tables`** | Resumo snapshot das tabelas do SX2010 do cliente (chave composta: `tenant_id`, `environment_id`, `table_name`). Armazena descrição, módulo e quantidade estimada de registros. |
-| **`dictionary_fields`** | Campos individuais mapeados do SX3010 (chave composta: `tenant_id`, `environment_id`, `table_name`, `field_name`). Armazena título, tipo de dado `X3_TIPO`, precisão, máscara e regras de validação/contexto. |
-| **`dictionary_indexes`** | Índices físicos da tabela no ERP (mapeados do SX1/SIX) para permitir à IA estruturar JOINs impulsionados por índices (chave composta por `tenant_id`, `environment_id`, `table_name`, `index_order`). |
-| **`dictionary_groups`** | Grupos de dados (SXG) utilizados em máscaras e padronizações (chave composta: `tenant_id`, `environment_id`, `group_name`). |
-| **`tenant_table_permissions`** | Conceder ou bloquear em nível de Role (papéis de usuário, ex: 'Vendas', 'Financeiro') as capacidades analíticas granulares sobre a tabela no ERP Protheus. Segmentado pelas 3 flags efetivas: `can_list` (listagem no catálogo), `can_describe` (inspeção de estrutura) e `can_query` (execução real de extração via `/QueryRest`). |
-| **`tenant_field_permissions`** | Controle atômico de segurança no nível de coluna do dicionário. Governado por 3 flags booleanas granulares: `can_select` (permite ler o conteúdo), `can_filter` (permite utilizar a coluna em cláusulas WHERE) e `masked_flag` (ofusca o conteúdo antes da apresentação). |
+| **`tenant`** | Tabela raiz de clientes. Armazena `tenant_code`, `schema_name` e credenciais globais do ERP (`protheus_user`, `encrypted_protheus_password`). |
+| **`users` / `roles` / `permissions`** | Controle de acesso RBAC global da plataforma. |
+| **`plans` / `license_plans` / `tenant_contracts`** | Gestão de planos, limites de requisições (`max_queries_day`) e validade de licenças por tenant. |
+| **`connectors` / `environments`** | Cadastros de conexões a diferentes ambientes do Protheus por cliente. |
+| **`audit_logs` / `platform_audit_log`** | Logs centralizados de auditoria sobre ações de usuários e administradores da plataforma. |
 
-> **⚠️ Nota de Integridade (atualizado 26/07/2026):**  
-> A tabela `tenant_table_permissions` usa **`can_list` + `can_describe` + `can_query`** (3 flags booleanos separados).  
-> A tabela `tenant_field_permissions` usa **`can_select` + `can_filter` + `masked_flag`** (3 flags booleanos separados).  
-> **Não existem** os campos `can_insert` nem `field_mode` nessas tabelas — qualquer referência a esses nomes em documentações anteriores está incorreta e deve ser ignorada.
+### 4.2. Tabelas Isoladas por Cliente (Schema Dinâmico `<tenant>`)
+Os dados confidenciais, histórico e integrações de cada cliente residem em seu respectivo schema (ex: schema `rodol_mg`). Estas tabelas herdam de `TenantBase`.
+
+| Tabela | Função / Propósito Principal e Isolamento |
+| :--- | :--- |
+| **`company_info`** | Cadastro Multi-Empresa do cliente (mapeando `company_code` e `branch_code` do Protheus). Permite configurar `protheus_rest_url` específica por filial. |
+| **`documents` / `document_chunks`** | Base de Conhecimento RAG do cliente. Gerencia os arquivos anexados (PDF, TXT) e os recortes vetorizados via `pgvector` para buscas semânticas. |
+| **`memories`** | Armazenamento de preferências de longo prazo e contexto do agente IA, segmentadas por `company_id`. |
+| **`agent_query_audit`** | Histórico e telemetria operacional das requisições (SQL gerado, tokens, tempo de resposta e status da execução). |
+
+> **⚠️ Nota sobre o Dicionário e Governança:**  
+> Com o suporte retroativo da V4 e a evolução para o Multi-Tenant baseado em Schemas, tabelas legadas do dicionário (como `dictionary_tables`, `dictionary_fields`, `dictionary_indexes`) foram preservadas no escopo do Tenant (`TenantBase`) ou migradas para o schema global com chaves compostas em versões auxiliares (`catalog_v52.py`). Sempre confira em `knowledge.py` a estrutura atual (V5) ao realizar inserções.
 
 ### 4.2. Resolução de Configurações ERP do Tenant (`protheus_service.py`)
 Para garantir estabilidade ao realizar chamadas às APIs REST do Protheus para clientes em qualquer estágio de cadastro, a função `get_tenant_config(tenant_id: str)` opera em sistema de prioridades em **5 camadas**:
