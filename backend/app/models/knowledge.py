@@ -81,6 +81,7 @@ class ProtheusModuleMaster(GlobalBase):
     __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(100), primary_key=True)
     mod_code = Column(Integer, nullable=False, unique=True)
     mod_sigla = Column(String(30), unique=True)
     mod_name = Column(String(150), nullable=False)
@@ -96,7 +97,6 @@ class User(GlobalBase):
     __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(String(100), nullable=True)
     role_id = Column(UUID(as_uuid=True), ForeignKey('public.roles.id'))
     email = Column(String(180), nullable=False, unique=True)
     full_name = Column(String(180), nullable=False)
@@ -152,6 +152,7 @@ class Company(TenantBase):
     __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(100), primary_key=True)
     company_code = Column(String(60), nullable=False)
     branch_code = Column(String(60), nullable=False)
     company_name = Column(String(200), nullable=False)
@@ -168,20 +169,9 @@ class Company(TenantBase):
         {"extend_existing": True},
     )
 
-
-
-
-
-
-
-
-
-
-
-
 # RESTORED V4 CLASSES
 
-class RolePermission(GlobalBase):
+class RolePermission(TenantBase):
     """Corresponde a public.role_permissions"""
     __tablename__ = "role_permissions"
     __table_args__ = {"schema": "public", "extend_existing": True}
@@ -189,7 +179,7 @@ class RolePermission(GlobalBase):
     role_id = Column(UUID(as_uuid=True), ForeignKey("public.roles.id", ondelete="CASCADE"), primary_key=True)
     permission_id = Column(UUID(as_uuid=True), ForeignKey("public.permissions.id", ondelete="CASCADE"), primary_key=True)
 
-class UserRole(GlobalBase):
+class UserRole(TenantBase):
     """Corresponde a public.user_roles (ORM model — use a table `user_roles` para many-to-many)"""
     __tablename__ = "user_roles"
     __table_args__ = {"schema": "public", "extend_existing": True}
@@ -199,7 +189,7 @@ class UserRole(GlobalBase):
     tenant_id = Column(String(100), primary_key=True)
     company_id = Column(Integer, primary_key=True)
 
-class UserCompanyAccess(GlobalBase):
+class UserCompanyAccess(TenantBase):
     """Corresponde a public.user_company_access"""
     __tablename__ = "user_company_access"
     __table_args__ = {"schema": "public", "extend_existing": True}
@@ -387,7 +377,7 @@ class DocumentChunk(TenantBase):
 
     document = relationship("Document", back_populates="chunks")
 
-class AgentQueryAudit(GlobalBase):
+class AgentQueryAudit(TenantBase):
     """
     Corresponde a \"<tenant>\".agent_query_audit (auditoria operacional
     por tenant, é a tabela usada no dia a dia pelos serviços via
@@ -417,21 +407,6 @@ class AgentQueryAudit(GlobalBase):
 
 
 # RESTORED DEPRECATED V4 CLASSES (For backward compatibility)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 class DictionaryTable(TenantBase):
     __tablename__ = "dictionary_tables"
