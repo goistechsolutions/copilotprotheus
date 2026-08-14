@@ -182,7 +182,7 @@ def _build_messages(question, protheus_data, intent, context, history, image=Non
             
     if image:
         import re
-        match = re.match(r"data:(image/\w+);base64,(.+)", image)
+        match = re.match(r"data:([^;]+);base64,(.+)", image)
         if match:
             msgs.append({"role":"user", "content":question, "images": [match.group(2)]})
         else:

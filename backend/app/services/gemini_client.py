@@ -105,7 +105,7 @@ def _build_gemini_messages(question: str, protheus_data: Optional[dict], intent:
     
     if image:
         import re
-        match = re.match(r"data:(image/\w+);base64,(.+)", image)
+        match = re.match(r"data:([^;]+);base64,(.+)", image)
         if match:
             mime_type = match.group(1)
             b64_data = match.group(2)

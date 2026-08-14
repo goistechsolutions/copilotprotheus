@@ -25,7 +25,8 @@ async def real_llm_sql_generator(
     empresa: str, 
     filial: str, 
     xfilial: str, 
-    tenant_id: str = "default"
+    tenant_id: str = "default",
+    image: str = None
 ) -> str:
     """
     Aciona o provedor LLM oficial configurado no backend (Gemini 2.5 Flash ou Ollama)
@@ -64,7 +65,8 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
                 protheus_data=None,
                 intent="sql_generation",
                 context={"tenant_system_prompt": system_instruction, "tenant_id": tenant_id},
-                history=[]
+                history=[],
+                image=image
             )
         else:
             from app.services.ollama_client import ask_llm
@@ -73,7 +75,8 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
                 protheus_data=None,
                 intent="sql_generation",
                 context={"tenant_system_prompt": system_instruction, "tenant_id": tenant_id},
-                history=[]
+                history=[],
+                image=image
             )
     except Exception as e:
         logger.error(f"[SQL Generator] Falha ao acionar provedor LLM ({settings.llm_backend}): {e}")
@@ -129,6 +132,9 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     filial = payload.get("filial")
     module_filter = payload.get("module_filter")
     execute = payload.get("execute", False)
+    
+    file_data = payload.get("file")
+    image_b64 = file_data.get("data") if isinstance(file_data, dict) else None
 
     if not prompt:
         raise HTTPException(status_code=400, detail="O campo prompt é obrigatório na v2.")
@@ -177,7 +183,8 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
         empresa=op_context["empresa"],
         filial=op_context["filial"],
         xfilial=op_context["xfilial"],
-        tenant_id=str(tenant_id)
+        tenant_id=str(tenant_id),
+        image=image_b64
     )
 
     # 5. Garantir verificação de segurança, bloqueio de mutações, filtro D_E_L_E_T_ e escopo das tabelas
