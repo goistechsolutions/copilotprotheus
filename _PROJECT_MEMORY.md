@@ -146,7 +146,7 @@ Os dados confidenciais, histórico e integrações de cada cliente residem em se
 | **`agent_query_audit`** | Histórico e telemetria operacional das requisições (SQL gerado, tokens, tempo de resposta e status da execução). |
 
 > **⚠️ Nota sobre o Dicionário e Governança:**  
-> Com o suporte retroativo da V4 e a evolução para o Multi-Tenant baseado em Schemas, tabelas legadas do dicionário (como `dictionary_tables`, `dictionary_fields`, `dictionary_indexes`) foram preservadas no escopo do Tenant (`TenantBase`) ou migradas para o schema global com chaves compostas em versões auxiliares (`catalog_v52.py`). Sempre confira em `knowledge.py` a estrutura atual (V5) ao realizar inserções.
+> Com o suporte retroativo da V4 e a evolução para o Multi-Tenant baseado em Schemas, tabelas legadas do dicionário (como `dictionary_tables`, `dictionary_fields`, `dictionary_indexes`) foram preservadas e ajustadas no escopo do Tenant (`TenantBase`) contido no arquivo de modelos. Sempre consulte o arquivo de modelos consolidado (`knowledge.py`) como a fonte da verdade para estruturas V5 ao realizar integrações de dicionário ou catálogos.
 
 ### 4.2. Resolução de Configurações ERP do Tenant (`protheus_service.py`)
 Para garantir estabilidade ao realizar chamadas às APIs REST do Protheus para clientes em qualquer estágio de cadastro, a função `get_tenant_config(tenant_id: str)` opera em sistema de prioridades em **5 camadas**:
@@ -174,12 +174,12 @@ c:\projeto\copilotprotheus\
  │   └── package.json
  ├── backend/                    # Core Engine (API FastAPI, LangChain, RAG, Gerador SQL)
  │   ├── app/
- │   │   ├── api/                # Controladores de Rotas REST (admin_routes.py, catalog_v52_routes.py, tenant_routes.py)
- │   │   ├── core/               # Módulos vitais: Segurança JWT/Fernet, Autenticação, Configurações de .env e Logs
- │   │   ├── db/                 # Banco: Sessionmaker SQLAlchemy, Migrations DDL Automáticas e Base Engine
- │   │   ├── models/             # ORM: Tabelas knowledge.py (Tenants/Companies), catalog_v52.py (RBAC/Dicionários)
- │   │   ├── schemas/            # Pydantic Schemas de validação para input e output REST
- │   │   └── services/           # Lógica de Negócio: protheus_service.py (HTTP/REST ERP), sync_dictionary_v52.py (Jobs Snapshot), catalog_service_v52.py (Governança e Permissão por Role)
+ │   ├── api/                # Controladores de Rotas REST (admin_routes.py, tenant_routes.py)
+ │   ├── core/               # Módulos vitais: Segurança JWT/Fernet, Autenticação, Configurações de .env e Logs
+ │   ├── db/                 # Banco: Sessionmaker SQLAlchemy, Migrations DDL Automáticas e Base Engine
+ │   ├── models/             # ORM: Tabelas knowledge.py (Tenants/Companies)
+ │   ├── schemas/            # Pydantic Schemas de validação para input e output REST
+ │   └── services/           # Lógica de Negócio: protheus_service.py (HTTP/REST ERP), sync_dictionary_v52.py (Jobs Snapshot), catalog_service_v52.py (Governança e Permissão por Role)
  │   ├── scripts/                # Scripts auxiliares SQL e Shell (ex: 001_catalog_snapshot_permissions.sql)
  │   ├── Dockerfile
  │   └── requirements.txt        # Dependências Python (FastAPI, SQLAlchemy, Uvicorn, psycopg2-binary, Langchain, etc.)

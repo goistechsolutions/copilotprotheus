@@ -24,7 +24,6 @@ from app.db.database import get_db, engine, Base, ensure_public_tables, ensure_a
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_user_flexible
 import app.models.knowledge
-import app.models.catalog_v52
 import sentry_sdk
 
 # Inicializa logging JSON estruturado
