@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { api } from './services/api';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend
 } from 'chart.js';
@@ -132,7 +133,7 @@ export default function App() {
     });
   };
 
-  const handleAsk = (textToAsk) => {
+  const handleAsk = async (textToAsk) => {
     const finalQuery = textToAsk || query;
     if (!finalQuery.trim()) return;
 
@@ -145,11 +146,45 @@ export default function App() {
     // Adiciona msg de loading do bot
     setMessages(prev => [...prev, { isLoading: true, isUser: false }]);
 
-    // Manda a pergunta para a extensão fazer o Fetch
-    window.parent.postMessage({
-      type: 'cprot-request-analysis',
-      query: finalQuery
-    }, '*');
+    try {
+      const payload = {
+        query: finalQuery,
+        tenant_id: context.tenant || 'default',
+        company_id: context.company,
+        branch_id: context.branch,
+        user_id: context.user,
+        module: context.module
+      };
+      
+      const res = await api.askAgent(payload);
+      
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].isLoading) {
+          newMsgs[newMsgs.length - 1] = { ...res, isUser: false };
+        } else {
+          newMsgs.push({ ...res, isUser: false });
+        }
+        return newMsgs;
+      });
+      
+      saveToHistory(res);
+    } catch (e) {
+      setError(e.message);
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].isLoading) {
+          newMsgs[newMsgs.length - 1] = { 
+            executive_summary: `**Erro:** ${e.message}`, 
+            isUser: false,
+            kpis: [{label: 'Status', value: 'Erro', color: 'red'}]
+          };
+        }
+        return newMsgs;
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const clearChat = () => {
