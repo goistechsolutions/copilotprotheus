@@ -1,3 +1,5 @@
 /*
   X-Frame-Options: SAMEORIGIN
-  Content-Security-Policy: frame-ancestors 'self' *.protheus.cloudtotvs.com.br *.elitecorp.tec.br
+  Content-Security-Policy: frame-ancestors 'self' https://protheus.suaempresa.com.br https://webapp.protheus.com.br https://*.cloudtotvs.com.br https://*.elitecorp.tec.br
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
