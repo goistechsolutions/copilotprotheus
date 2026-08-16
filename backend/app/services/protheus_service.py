@@ -16,12 +16,12 @@ from app.db.database import SessionLocal
 
 _OAUTH2_TOKENS = {} # cache: {tenant_id: (token, expiry)}
 
-def get_tenant_config(tenant_id: str, company_id: int = None) -> dict:
+def get_tenant_config(tenant_id: str, company_id: str | int = None) -> dict:
     """
     Busca as credenciais do Protheus do tenant_id no banco de dados.
     1. Consulta na tabela company_info dentro do schema exclusivo do tenant ("{clean_tenant}".company_info)
-       (Usa o company_id específico se fornecido, caso contrário pega a primeira filial configurada)
-    2. Fallback nas variáveis de ambiente globais (.env)
+       (Usa o company_id para buscar por id, company_code ou protheus_empresa)
+    2. Fallback nas variveis de ambiente globais (.env)
     """
     db = SessionLocal()
     try:
@@ -34,12 +34,24 @@ def get_tenant_config(tenant_id: str, company_id: int = None) -> dict:
                 
                 if company_id:
                     res = db.execute(
-                        text(f'SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode FROM "{clean_tenant}".company_info WHERE id = :cid AND protheus_rest_url IS NOT NULL AND protheus_rest_url != \'\' LIMIT 1'),
-                        {"cid": company_id}
+                        text(f'''
+                            SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode, protheus_grupo, protheus_empresa, id 
+                            FROM "{clean_tenant}".company_info 
+                            WHERE (id::text = :cid OR company_code = :cid OR protheus_empresa = :cid) 
+                              AND protheus_rest_url IS NOT NULL AND protheus_rest_url != '' 
+                            LIMIT 1
+                        '''),
+                        {"cid": str(company_id)}
                     ).first()
                 else:
                     res = db.execute(
-                        text(f'SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode FROM "{clean_tenant}".company_info WHERE protheus_rest_url IS NOT NULL AND protheus_rest_url != \'\' LIMIT 1')
+                        text(f'''
+                            SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode, protheus_grupo, protheus_empresa, id 
+                            FROM "{clean_tenant}".company_info 
+                            WHERE protheus_rest_url IS NOT NULL AND protheus_rest_url != '' 
+                            ORDER BY id ASC
+                            LIMIT 1
+                        ''')
                     ).first()
                     
                 if res and res[0]:
@@ -55,7 +67,10 @@ def get_tenant_config(tenant_id: str, company_id: int = None) -> dict:
                         "vscode_server_url": "",
                         "user": res[1] or "",
                         "password": pwd,
-                        "auth_mode": res[4] or "basic"
+                        "auth_mode": res[4] or "basic",
+                        "grupo": res[5],
+                        "empresa": res[6],
+                        "company_id": res[7]
                     }
             except Exception as schema_err:
                 logger.warning(f"Aviso ao consultar company_info do schema {clean_tenant}: {schema_err}")
@@ -293,14 +308,8 @@ def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, rec
 
 async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None) -> str:
     company_id = context.get("company_id") if context else None
-    cid = None
-    if company_id:
-        try:
-            cid = int(company_id)
-        except (ValueError, TypeError):
-            cid = None
-
-    config = get_tenant_config(tenant_id, cid)
+    
+    config = get_tenant_config(tenant_id, company_id)
     rest_url = config['rest_url'].strip()
     if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
         rest_url = "https://" + rest_url
@@ -334,6 +343,9 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
         except Exception as e:
             logger.error(f"Falha na autenticacao OAuth2 do tenant {tenant_id} (user={user}): {e}")
             return json.dumps({"error": f"Falha na autenticacao OAuth2: {str(e)}"})
+            
+    if config.get("grupo") and config.get("empresa"):
+        headers["TenantId"] = f"{config['grupo']},{config['empresa']}"
     
     import urllib3
     urllib3.disable_warnings()

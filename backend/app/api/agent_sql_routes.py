@@ -13,6 +13,7 @@ from app.services.dictionary_context_service import (
     render_context_for_prompt,
 )
 from app.services.protheus_context_service import build_protheus_context, validate_query_security
+from app.services.protheus_service import get_tenant_config
 from app.services.queryrest_service import queryrest_exec_tenant
 
 logger = logging.getLogger("app.api.agent_sql")
@@ -123,11 +124,12 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     if not tenant_id or tenant_id == "default":
         return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
         
-    company_id = payload.get("company_id")
-    if company_id in ("", "default", "null", None):
-        company_id = None
-    elif isinstance(company_id, str) and company_id.isdigit():
-        company_id = int(company_id)
+    company_id_raw = payload.get("company_id")
+    if company_id_raw in ("", "default", "null", None):
+        company_id_raw = None
+        
+    config = get_tenant_config(tenant_id, company_id_raw) if tenant_id != "default" else None
+    company_id = config.get("company_id") if config else None
         
     prompt = payload.get("prompt")
     prompt = payload.get("prompt") or payload.get("query")
