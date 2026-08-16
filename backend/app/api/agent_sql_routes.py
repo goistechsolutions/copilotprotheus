@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 from app.services.tenant_resolver import resolve_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 import uuid
+import asyncio
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db, SessionLocal
@@ -237,7 +238,7 @@ async def process_agent_task(task_id: str, payload: dict):
         AGENT_TASKS[task_id] = {"status": "error", "error": str(e)}
 
 @router.post("/ask/v2")
-async def ask_v2(payload: dict, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+async def ask_v2(payload: dict) -> Dict[str, Any]:
     # Checagem rapida de tenant antes de disparar task
     tenant_id = payload.get("tenant_id")
     if not tenant_id or tenant_id == "default":
@@ -245,7 +246,7 @@ async def ask_v2(payload: dict, background_tasks: BackgroundTasks) -> Dict[str, 
 
     task_id = str(uuid.uuid4())
     AGENT_TASKS[task_id] = {"status": "processing"}
-    background_tasks.add_task(process_agent_task, task_id, payload)
+    asyncio.create_task(process_agent_task(task_id, payload))
     return {"status": "processing", "task_id": task_id}
 
 @router.get("/ask/v2/status/{task_id}")
