@@ -116,11 +116,17 @@ export default function App() {
       if (response.status === 'processing' && response.task_id) {
         let isComplete = false;
         while (!isComplete) {
-          await new Promise(r => setTimeout(r, 2000));
-          const statusRes = await getAgentTaskStatus(response.task_id);
-          if (statusRes.status === 'success' || statusRes.status === 'execution_failed' || statusRes.status === 'error') {
-            response = statusRes;
-            isComplete = true;
+          await new Promise(r => setTimeout(r, 5000)); // 5 segundos para evitar Rate Limit (429) do Cloudflare
+          try {
+            const statusRes = await getAgentTaskStatus(response.task_id);
+            if (statusRes.status === 'success' || statusRes.status === 'execution_failed' || statusRes.status === 'error') {
+              response = statusRes;
+              isComplete = true;
+            }
+          } catch (err) {
+            console.warn("Polling falhou ou sofreu interrupção de rede/CORS:", err);
+            // Em caso de WAF/Rate Limit, aguardamos mais tempo no próximo loop
+            await new Promise(r => setTimeout(r, 5000));
           }
         }
       }
