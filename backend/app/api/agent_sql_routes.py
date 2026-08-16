@@ -218,6 +218,16 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
             response["data"] = rows[:500]  # Limite máximo seguro por requisição HTTP
             if len(rows) == 0:
                 response["message"] = "A consulta ao banco Oracle do Protheus foi executada com sucesso, porém retornou zero registros (tabela vazia ou sem correspondências no período)."
+            else:
+                if isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict):
+                    headers = list(rows[0].keys())
+                    md_table = "| " + " | ".join(headers) + " |\n"
+                    md_table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+                    for row in rows[:500]:
+                        md_table += "| " + " | ".join([str(row.get(h, "")).replace("\n", " ") for h in headers]) + " |\n"
+                    response["message"] = md_table
+                else:
+                    response["message"] = f"A consulta retornou {len(rows)} registros, mas o formato é inesperado."
         except HTTPException as http_ex:
             response["status"] = "execution_failed"
             response["execution_error"] = http_ex.detail

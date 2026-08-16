@@ -88,15 +88,16 @@ export default function App() {
         response = await uploadAgentFile(formData);
       } else {
         const payload = { 
-          query: finalQuery, 
-          tenant_id: context.tenant_id || 'default', 
-          company_id: context.company_id || 'default',
-          context 
-        };
+            query: finalQuery, 
+            tenant_id: context.tenant_id || 'default', 
+            company_id: context.company_id || 'default',
+            execute: true,
+            context 
+          };
         response = await askAgent(payload);
       }
       
-      setMessages(prev => prev.map(m => m.isLoading ? { executive_summary: response.message || response.answer, ...response, isUser: false } : m));
+      setMessages(prev => prev.map(m => m.isLoading ? { executive_summary: response.message || response.answer || response.summary, ...response, isUser: false } : m));
       if (attachedFile) setAttachedFile(null);
       setIsLoading(false);
     } catch (e) {
