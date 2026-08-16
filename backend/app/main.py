@@ -2,6 +2,7 @@ import os
 import logging
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from app.middleware.dynamic_cors import DynamicCORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -17,6 +18,7 @@ from app.api.agent_routes import router as agent_router
 from app.api.admin_auth import router as admin_auth_router
 from app.api.powerbi_routes import router as powerbi_router
 from app.api.leonardo_routes import router as leonardo_router
+from app.api.agent.routes import router as agent_router_v2
 from app.core.admin_security import require_admin
 from app.api.agent_sql_routes import router as agent_sql_router
 from app.core.logging_config import setup_logging
@@ -128,6 +130,7 @@ for o in cloudflare_origins:
     if o not in allowed_origins and "*" not in allowed_origins:
         allowed_origins.append(o)
 
+app.add_middleware(DynamicCORSMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -153,6 +156,7 @@ app.include_router(admin_auth_router)
 app.include_router(governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(agent_sql_router, prefix="/api")
+app.include_router(agent_router_v2)
 app.include_router(catalog_v52_router)
 app.include_router(infra_router)
 # --- Fase 4: Power BI + Leonardo AI ---

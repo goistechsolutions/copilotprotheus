@@ -1,30 +1,45 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? '/api' : 'https://copilot-api.elitecorp.tec.br/api');
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://copilot-api.elitecorp.tec.br/api';
 
-async function request(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    },
-    ...options
-  });
-  
-  if (!res.ok) {
-    let errMessage = `Erro na requisição (Status ${res.status})`;
+async function fetchWithRetry(url, options = {}, retries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const data = await res.clone().json();
-      errMessage = data.detail || data.error || errMessage;
-    } catch (e) {
-      errMessage = await res.text();
+      const response = await fetch(url, {
+        ...options,
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(body || `HTTP ${response.status}`);
+      }
+      return response.json();
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+      }
     }
-    throw new Error(errMessage);
   }
-  
-  return res.json();
+  throw lastError;
 }
 
-export const api = {
-  validateContext: (payload) => request('/agent/validate-context', { method: 'POST', body: JSON.stringify(payload) }),
-  askAgent: (payload) => request('/agent/ask/v2', { method: 'POST', body: JSON.stringify(payload) }),
-  validateQuery: (payload) => request('/agent/validate-query', { method: 'POST', body: JSON.stringify(payload) })
-};
+export async function askAgent(payload) {
+  return fetchWithRetry(`${API_BASE}/agent/ask/v2`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function uploadAgentFile(formData) {
+  const response = await fetch(`${API_BASE}/agent/ask/v2/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
