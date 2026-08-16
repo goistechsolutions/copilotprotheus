@@ -14,15 +14,21 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [attachedFile, setAttachedFile] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
-  const [context, setContext] = useState(() => ({
-    module: 'FIN',
-    branch: '0101',
-    user: 'admin',
-    profile: 'Negócio',
-    tenant_id: 'default',
-    company_id: 'default'
-  }));
+  const [connectionStatus, setConnectionStatus] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tenant') ? 'connected' : 'connecting';
+  });
+  const [context, setContext] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      module: params.get('module') || 'FIN',
+      branch: params.get('branch') || '0101',
+      user: params.get('user') || 'admin',
+      profile: params.get('profile') || 'Negócio',
+      tenant_id: params.get('tenant') || 'default',
+      company_id: params.get('company_id') || params.get('company') || 'default'
+    };
+  });
   const [historyItems, setHistoryItems] = useState([]);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -44,7 +50,19 @@ export default function App() {
       }
     };
     window.addEventListener('message', handleMessage);
-    const timer = setTimeout(() => setConnectionStatus(prev => prev === 'connecting' ? 'error' : prev), 4000);
+    const timer = setTimeout(() => {
+      setConnectionStatus(prev => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('tenant')) return 'connected';
+        return prev === 'connecting' ? 'error' : prev;
+      });
+    }, 4000);
+    
+    // Notifica o wrapper de que o React est pronto para receber o postMessage (se existir)
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'cprot-ready' }, '*');
+    }
+    
     return () => {
       window.removeEventListener('message', handleMessage);
       clearTimeout(timer);
