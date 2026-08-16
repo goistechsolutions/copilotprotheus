@@ -145,6 +145,7 @@ except Exception as e:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex="https?://.*" if cors_origins_env == "*" else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
