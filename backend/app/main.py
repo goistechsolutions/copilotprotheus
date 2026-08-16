@@ -2,7 +2,6 @@ import os
 import logging
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from app.middleware.dynamic_cors import DynamicCORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -110,7 +109,8 @@ async def enforce_https_scheme_middleware(request, call_next):
 # Configuração de CORS com suporte a domínios do Cloudflare e ambiente local
 cors_origins_env = os.getenv("CORS_ORIGIN", "*")
 if cors_origins_env == "*":
-    allowed_origins = ["*"]
+    # Em APIs com credenciais, o FastAPI não permite ["*"], então adicionamos regex flexível
+    allowed_origins = []
 else:
     allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
 
@@ -119,24 +119,38 @@ cloudflare_origins = [
     "https://copilot-api.elitecorp.tec.br",
     "https://copilot-admin.elitecorp.tec.br",
     "https://copilotprotheus.pages.dev",
-    "https://rodolltda195384.protheus.cloudtotvs.com.br:10703",
-    "http://localhost:5173",
-    "http://localhost:5174",
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://localhost:5173",
+    "http://localhost:5174",
     "http://localhost:8000"
 ]
 for o in cloudflare_origins:
     if o not in allowed_origins and "*" not in allowed_origins:
         allowed_origins.append(o)
 
-app.add_middleware(DynamicCORSMiddleware)
+# Inicializa banco rapidamente apenas para pegar origens extras (se disponível)
+try:
+    from app.db.database import SessionLocal
+    from sqlalchemy import text
+    with SessionLocal() as db:
+        rows = db.execute(text("SELECT frontend_domain FROM public.tenant WHERE frontend_domain IS NOT NULL AND status = 'active'")).fetchall()
+        for row in rows:
+            domain = row[0].strip().rstrip("/")
+            if domain and domain not in allowed_origins:
+                allowed_origins.append(domain)
+except Exception as e:
+    logger.warning(f"Não foi possível carregar domínios do banco para CORS no startup: {e}")
+
+# Configura o Middleware Nativo do FastAPI/Starlette
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=allowed_origins if cors_origins_env != "*" else [],
+    allow_origin_regex="https?://.*" if cors_origins_env == "*" else None,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 from app.api.admin_routes import router as admin_router
 from app.api.auth_routes import router as auth_router
