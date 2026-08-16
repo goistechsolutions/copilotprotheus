@@ -6,8 +6,6 @@ import ChatMessage from './components/ChatMessage';
 import FileUploadButton from './components/FileUploadButton';
 import { askAgent, uploadAgentFile } from './services/api';
 
-const TRUSTED_ORIGINS = [window.location.origin];
-
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -31,7 +29,6 @@ export default function App() {
 
   useEffect(() => {
     const handleMessage = (event) => {
-      if (!TRUSTED_ORIGINS.includes(event.origin)) return;
       if (event.data?.type === 'cprot-context-update') {
         setContext(prev => ({ ...prev, ...event.data.payload }));
         setConnectionStatus('connected');
