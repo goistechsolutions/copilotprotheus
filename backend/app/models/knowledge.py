@@ -81,7 +81,6 @@ class ProtheusModuleMaster(GlobalBase):
     __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(String(100), primary_key=True)
     mod_code = Column(Integer, nullable=False, unique=True)
     mod_sigla = Column(String(30), unique=True)
     mod_name = Column(String(150), nullable=False)
