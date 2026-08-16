@@ -3,10 +3,11 @@ import re
 import logging
 from typing import Dict, Any, List
 from app.services.tenant_resolver import resolve_clean_tenant
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import uuid
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
+from app.db.database import get_db, SessionLocal
 from app.core.config import settings
 from app.services.dictionary_context_service import (
     build_dictionary_context,
@@ -18,6 +19,9 @@ from app.services.queryrest_service import queryrest_exec_tenant
 
 logger = logging.getLogger("app.api.agent_sql")
 router = APIRouter(prefix="/agent", tags=["agent-sql"])
+
+# Gerenciador em memória para polling de tarefas do agente
+AGENT_TASKS = {}
 
 
 async def real_llm_sql_generator(
@@ -108,132 +112,153 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
     return clean_sql
 
 
-@router.post("/ask/v2")
-async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]:
-    """
-    Endpoint v2 do agente de análise de dados no Protheus com escopo granular:
-    - Injeta contexto de empresa e filial (XFILIAL).
-    - Lê o último snapshot válido do dicionário para a empresa/tenant.
-    - Aciona o LLM para geração de SQL Oracle otimizado.
-    - Valida permissões e restrições de segurança (sem alucinações nem acessos não autorizados).
-    - Executa a consulta via /QueryRest prioritariamente se solicitado.
-    """
+
+async def process_agent_task(task_id: str, payload: dict):
     started = time.time()
-
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id or tenant_id == "default":
-        return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
+    try:
+        tenant_id = payload.get("tenant_id")
+        if not tenant_id or tenant_id == "default":
+            AGENT_TASKS[task_id] = {"status": "error", "error": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
+            return
+            
+        company_id_raw = payload.get("company_id")
+        if company_id_raw in ("", "default", "null", None):
+            company_id_raw = None
+            
+        config = get_tenant_config(tenant_id, company_id_raw) if tenant_id != "default" else None
+        company_id = config.get("company_id") if config else None
+            
+        prompt = payload.get("prompt") or payload.get("query")
+        empresa = payload.get("empresa")
+        filial = payload.get("filial")
+        module_filter = payload.get("module_filter")
+        execute = payload.get("execute", False)
         
-    company_id_raw = payload.get("company_id")
-    if company_id_raw in ("", "default", "null", None):
-        company_id_raw = None
+        file_data = payload.get("file")
+        image_b64 = file_data.get("data") if isinstance(file_data, dict) else None
+
+        if not prompt:
+            AGENT_TASKS[task_id] = {"status": "error", "error": "O campo prompt ou query é obrigatório na v2."}
+            return
+
+        import re
+        from sqlalchemy import text
+        from app.db.database import ensure_tenant_tables
         
-    config = get_tenant_config(tenant_id, company_id_raw) if tenant_id != "default" else None
-    company_id = config.get("company_id") if config else None
-        
-    prompt = payload.get("prompt")
-    prompt = payload.get("prompt") or payload.get("query")
-    empresa = payload.get("empresa")
-    filial = payload.get("filial")
-    module_filter = payload.get("module_filter")
-    execute = payload.get("execute", False)
-    
-    file_data = payload.get("file")
-    image_b64 = file_data.get("data") if isinstance(file_data, dict) else None
+        with SessionLocal() as db:
+            clean_tenant = resolve_clean_tenant(tenant_id)
+            if clean_tenant and clean_tenant != "public":
+                ensure_tenant_tables(db, clean_tenant)
+                db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+                db.commit()
 
-    if not prompt:
-        raise HTTPException(status_code=400, detail="O campo prompt ou query é obrigatório na v2.")
+            # 0. Valida cota e limite diário
+            from app.core.rate_limit import check_tenant_rate_limit
+            rate_info = check_tenant_rate_limit(db, clean_tenant)
 
-    import re
-    from sqlalchemy import text
-    from app.db.database import ensure_tenant_tables
-    clean_tenant = resolve_clean_tenant(tenant_id)
-    if clean_tenant and clean_tenant != "public":
-        ensure_tenant_tables(db, clean_tenant)
-        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-        db.commit()
+            # 1. Montar contexto XFILIAL
+            op_context = build_protheus_context(empresa=empresa, filial=filial)
 
-    # 0. Valida cota e limite diário do tenant (HTTP 429 se excedido)
-    from app.core.rate_limit import check_tenant_rate_limit
-    rate_info = check_tenant_rate_limit(db, clean_tenant)
-
-    # 1. Montar e validar contexto XFILIAL
-    op_context = build_protheus_context(empresa=empresa, filial=filial)
-
-
-    # 3. Carregar as tabelas e campos do dicionário autorizados para o contexto/módulo
-    context = build_dictionary_context(
-        db=db,
-        tenant_id=str(tenant_id),
-        company_id=company_id,
-        module_filter=module_filter
-    )
-
-    if not context:
-        raise HTTPException(
-            status_code=404, 
-            detail="Nenhuma tabela liberada ou encontrada no snapshot do dicionário para os filtros informados."
-        )
-
-    context_text = render_context_for_prompt(context)
-    allowed_table_names = {item["table"]["table_name"] for item in context}
-    for item in context:
-        if item["table"].get("physical_name"):
-            allowed_table_names.add(item["table"]["physical_name"])
-
-    # 4. Acionar provedor LLM com prompt contextualizado no Oracle e XFILIAL
-    sql = await real_llm_sql_generator(
-        prompt=str(prompt),
-        context_text=context_text,
-        empresa=op_context["empresa"],
-        filial=op_context["filial"],
-        xfilial=op_context["xfilial"],
-        tenant_id=str(tenant_id),
-        image=image_b64
-    )
-
-    # 5. Garantir verificação de segurança, bloqueio de mutações, filtro D_E_L_E_T_ e escopo das tabelas
-    validate_query_security(sql=sql, allowed_tables=allowed_table_names, filial=op_context["xfilial"])
-
-    response: Dict[str, Any] = {
-        "status": "success",
-        "tenant_id": str(tenant_id),
-        "company_id": company_id,
-        "context_operational": op_context,
-        "tables_in_context": len(context),
-        "sql": sql,
-        "response_time_ms": int((time.time() - started) * 1000)
-    }
-
-    # 6. Priorização do endpoint /QueryRest na execução real, respeitando a não alucinação de dados
-    if execute:
-        try:
-            rows = await queryrest_exec_tenant(
+            # 3. Carregar dicionário
+            context = build_dictionary_context(
                 db=db,
                 tenant_id=str(tenant_id),
                 company_id=company_id,
-                query=sql
+                module_filter=module_filter
             )
-            response["records"] = len(rows)
-            response["data"] = rows[:500]  # Limite máximo seguro por requisição HTTP
-            if len(rows) == 0:
-                response["message"] = "A consulta ao banco Oracle do Protheus foi executada com sucesso, porém retornou zero registros (tabela vazia ou sem correspondências no período)."
-            else:
-                if isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict):
-                    headers = list(rows[0].keys())
-                    md_table = "| " + " | ".join(headers) + " |\n"
-                    md_table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
-                    for row in rows[:500]:
-                        md_table += "| " + " | ".join([str(row.get(h, "")).replace("\n", " ") for h in headers]) + " |\n"
-                    response["message"] = md_table
-                else:
-                    response["message"] = f"A consulta retornou {len(rows)} registros, mas o formato é inesperado."
-        except HTTPException as http_ex:
-            response["status"] = "execution_failed"
-            response["execution_error"] = http_ex.detail
-            # Em observância à regra de ouro do agente, em nenhuma circunstância simulamos ou inventamos dados compensatórios.
 
-    return response
+            if not context:
+                AGENT_TASKS[task_id] = {"status": "error", "error": "Nenhuma tabela liberada ou encontrada no snapshot do dicionário para os filtros informados."}
+                return
+
+            context_text = render_context_for_prompt(context)
+            allowed_table_names = {item["table"]["table_name"] for item in context}
+            for item in context:
+                if item["table"].get("physical_name"):
+                    allowed_table_names.add(item["table"]["physical_name"])
+
+            # 4. LLM
+            sql = await real_llm_sql_generator(
+                prompt=str(prompt),
+                context_text=context_text,
+                empresa=op_context["empresa"],
+                filial=op_context["filial"],
+                xfilial=op_context["xfilial"],
+                tenant_id=str(tenant_id),
+                image=image_b64
+            )
+
+            # 5. Segurança
+            validate_query_security(sql=sql, allowed_tables=allowed_table_names, filial=op_context["xfilial"])
+
+            response = {
+                "status": "success",
+                "tenant_id": str(tenant_id),
+                "company_id": company_id,
+                "context_operational": op_context,
+                "tables_in_context": len(context),
+                "sql": sql,
+                "response_time_ms": int((time.time() - started) * 1000)
+            }
+
+            # 6. QueryRest
+            if execute:
+                try:
+                    rows = await queryrest_exec_tenant(
+                        db=db,
+                        tenant_id=str(tenant_id),
+                        company_id=company_id,
+                        query=sql
+                    )
+                    response["records"] = len(rows)
+                    response["data"] = rows[:500]
+                    if len(rows) == 0:
+                        response["summary"] = "A consulta ao banco Oracle do Protheus foi executada com sucesso, porém retornou zero registros (tabela vazia ou sem correspondências no período)."
+                    else:
+                        if isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict):
+                            headers = list(rows[0].keys())
+                            md_table = "| " + " | ".join(headers) + " |\n"
+                            md_table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+                            for row in rows[:500]:
+                                md_table += "| " + " | ".join([str(row.get(h, "")).replace("\n", " ") for h in headers]) + " |\n"
+                            response["summary"] = md_table
+                        else:
+                            response["summary"] = f"A consulta retornou {len(rows)} registros, mas o formato é inesperado."
+                except HTTPException as http_ex:
+                    response["status"] = "execution_failed"
+                    response["execution_error"] = http_ex.detail
+
+            AGENT_TASKS[task_id] = response
+
+    except HTTPException as e:
+        AGENT_TASKS[task_id] = {"status": "error", "error": e.detail}
+    except Exception as e:
+        logger.error(f"Erro no processamento da task {task_id}: {e}")
+        AGENT_TASKS[task_id] = {"status": "error", "error": str(e)}
+
+@router.post("/ask/v2")
+async def ask_v2(payload: dict, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    # Checagem rapida de tenant antes de disparar task
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id or tenant_id == "default":
+        return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
+
+    task_id = str(uuid.uuid4())
+    AGENT_TASKS[task_id] = {"status": "processing"}
+    background_tasks.add_task(process_agent_task, task_id, payload)
+    return {"status": "processing", "task_id": task_id}
+
+@router.get("/ask/v2/status/{task_id}")
+async def ask_v2_status(task_id: str):
+    if task_id not in AGENT_TASKS:
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+    
+    # Se erro for gerado, retornamos como JSON normal com 'summary' mapeado para o frontend renderizar
+    if AGENT_TASKS[task_id].get("status") == "error":
+        return {"status": "error", "summary": AGENT_TASKS[task_id].get("error")}
+        
+    return AGENT_TASKS[task_id]
+
 
 from fastapi.responses import StreamingResponse
 from app.core.log_streamer import stream_manager

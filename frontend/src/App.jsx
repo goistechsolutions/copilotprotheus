@@ -4,7 +4,7 @@ import ChatHistory from './components/ChatHistory';
 import QuickPrompts from './components/QuickPrompts';
 import ChatMessage from './components/ChatMessage';
 import FileUploadButton from './components/FileUploadButton';
-import { askAgent, uploadAgentFile } from './services/api';
+import { askAgent, uploadAgentFile, getAgentTaskStatus } from './services/api';
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
@@ -112,6 +112,19 @@ export default function App() {
         response = await askAgent(payload);
       }
       
+      // Polling logic
+      if (response.status === 'processing' && response.task_id) {
+        let isComplete = false;
+        while (!isComplete) {
+          await new Promise(r => setTimeout(r, 2000));
+          const statusRes = await getAgentTaskStatus(response.task_id);
+          if (statusRes.status === 'success' || statusRes.status === 'execution_failed' || statusRes.status === 'error') {
+            response = statusRes;
+            isComplete = true;
+          }
+        }
+      }
+
       setMessages(prev => prev.map(m => m.isLoading ? { executive_summary: response.message || response.answer || response.summary, ...response, isUser: false } : m));
       if (attachedFile) setAttachedFile(null);
       setIsLoading(false);

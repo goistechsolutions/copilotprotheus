@@ -43,3 +43,9 @@ export async function uploadAgentFile(formData) {
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }
+
+export async function getAgentTaskStatus(taskId) {
+  return fetchWithRetry(`${API_BASE}/agent/ask/v2/status/${taskId}`, {
+    method: 'GET',
+  });
+}
