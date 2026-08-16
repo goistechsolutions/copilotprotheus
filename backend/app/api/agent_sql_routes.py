@@ -120,12 +120,14 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     started = time.time()
 
     tenant_id = payload.get("tenant_id")
-    if not tenant_id:
+    if not tenant_id or tenant_id == "default":
         return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
         
     company_id = payload.get("company_id")
-    if company_id == "":
+    if company_id in ("", "default", "null", None):
         company_id = None
+    elif isinstance(company_id, str) and company_id.isdigit():
+        company_id = int(company_id)
         
     prompt = payload.get("prompt")
     prompt = payload.get("prompt") or payload.get("query")
