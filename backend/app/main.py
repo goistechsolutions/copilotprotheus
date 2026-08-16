@@ -109,7 +109,6 @@ async def enforce_https_scheme_middleware(request, call_next):
 # Configuração de CORS com suporte a domínios do Cloudflare e ambiente local
 cors_origins_env = os.getenv("CORS_ORIGIN", "*")
 if cors_origins_env == "*":
-    # Em APIs com credenciais, o FastAPI não permite ["*"], então adicionamos regex flexível
     allowed_origins = []
 else:
     allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
@@ -145,12 +144,10 @@ except Exception as e:
 # Configura o Middleware Nativo do FastAPI/Starlette
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if cors_origins_env != "*" else [],
-    allow_origin_regex="https?://.*" if cors_origins_env == "*" else None,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+    allow_headers=["*"]
 )
 from app.api.admin_routes import router as admin_router
 from app.api.auth_routes import router as auth_router
