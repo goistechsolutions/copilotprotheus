@@ -4,6 +4,7 @@ import ChatHistory from './components/ChatHistory';
 import QuickPrompts from './components/QuickPrompts';
 import ChatMessage from './components/ChatMessage';
 import FileUploadButton from './components/FileUploadButton';
+import { askAgent, uploadAgentFile } from './services/api';
 
 const TRUSTED_ORIGINS = [window.location.origin];
 
@@ -76,9 +77,28 @@ export default function App() {
     ]);
 
     try {
-      const payload = { type: 'cprot-request-analysis', query: finalQuery, context };
-      window.parent.postMessage(payload, '*');
+      let response;
+      if (attachedFile) {
+        const formData = new FormData();
+        formData.append('file', attachedFile);
+        formData.append('tenant_id', context.tenant_id || 'default');
+        if (context.company_id) formData.append('company_id', context.company_id);
+        formData.append('query', finalQuery);
+        formData.append('context', JSON.stringify(context));
+        response = await uploadAgentFile(formData);
+      } else {
+        const payload = { 
+          query: finalQuery, 
+          tenant_id: context.tenant_id || 'default', 
+          company_id: context.company_id || 'default',
+          context 
+        };
+        response = await askAgent(payload);
+      }
+      
+      setMessages(prev => prev.map(m => m.isLoading ? { executive_summary: response.message || response.answer, ...response, isUser: false } : m));
       if (attachedFile) setAttachedFile(null);
+      setIsLoading(false);
     } catch (e) {
       setError(e.message);
       setIsLoading(false);
