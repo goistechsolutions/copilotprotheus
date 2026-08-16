@@ -129,10 +129,17 @@ async def process_agent_task(task_id: str, payload: dict):
         config = get_tenant_config(tenant_id, company_id_raw) if tenant_id != "default" else None
         company_id = config.get("company_id") if config else None
             
+        payload_context = payload.get("context", {})
         prompt = payload.get("prompt") or payload.get("query")
-        empresa = payload.get("empresa")
-        filial = payload.get("filial")
-        module_filter = payload.get("module_filter")
+        empresa = payload.get("empresa") or payload_context.get("empresa")
+        filial = payload.get("filial") or payload_context.get("filial")
+        
+        module_val = payload.get("module_filter") or payload_context.get("module")
+        if module_val and isinstance(module_val, str):
+            module_filter = [module_val]
+        else:
+            module_filter = module_val
+            
         execute = payload.get("execute", False)
         
         file_data = payload.get("file")
