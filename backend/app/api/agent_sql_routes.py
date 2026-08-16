@@ -128,6 +128,7 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
         company_id = None
         
     prompt = payload.get("prompt")
+    prompt = payload.get("prompt") or payload.get("query")
     empresa = payload.get("empresa")
     filial = payload.get("filial")
     module_filter = payload.get("module_filter")
@@ -137,7 +138,7 @@ async def ask_v2(payload: dict, db: Session = Depends(get_db)) -> Dict[str, Any]
     image_b64 = file_data.get("data") if isinstance(file_data, dict) else None
 
     if not prompt:
-        raise HTTPException(status_code=400, detail="O campo prompt é obrigatório na v2.")
+        raise HTTPException(status_code=400, detail="O campo prompt ou query é obrigatório na v2.")
 
     import re
     from sqlalchemy import text
