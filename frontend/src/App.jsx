@@ -20,14 +20,14 @@ export default function App() {
   });
   const [context, setContext] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return {
-      module: params.get('module') || 'FIN',
-      branch: params.get('branch') || '0101',
-      user: params.get('user') || 'admin',
-      profile: params.get('profile') || 'Negócio',
-      tenant_id: params.get('tenant') || 'default',
-      company_id: params.get('company_id') || params.get('company') || 'default'
-    };
+      return {
+        module: params.get('module') || 'FAT',
+        branch: params.get('branch') || '0101',
+        user: params.get('user') || 'admin',
+        profile: params.get('profile') || 'Negócio',
+        tenant_id: params.get('tenant') || null,
+        company_id: params.get('company_id') || params.get('company') || null
+      };
   });
   const [historyItems, setHistoryItems] = useState([]);
   const messagesEndRef = useRef(null);
@@ -93,24 +93,24 @@ export default function App() {
 
     try {
       let response;
-      if (attachedFile) {
-        const formData = new FormData();
-        formData.append('file', attachedFile);
-        formData.append('tenant_id', context.tenant_id || 'default');
-        if (context.company_id) formData.append('company_id', context.company_id);
-        formData.append('query', finalQuery);
-        formData.append('context', JSON.stringify(context));
-        response = await uploadAgentFile(formData);
-      } else {
-        const payload = { 
-            query: finalQuery, 
-            tenant_id: context.tenant_id || 'default', 
-            company_id: context.company_id || 'default',
-            execute: true,
-            context 
-          };
-        response = await askAgent(payload);
-      }
+        if (attachedFile) {
+          const formData = new FormData();
+          formData.append('file', attachedFile);
+          if (context.tenant_id) formData.append('tenant_id', context.tenant_id);
+          if (context.company_id) formData.append('company_id', context.company_id);
+          formData.append('query', finalQuery);
+          formData.append('context', JSON.stringify(context));
+          response = await uploadAgentFile(formData);
+        } else {
+          const payload = { 
+              query: finalQuery, 
+              tenant_id: context.tenant_id, 
+              company_id: context.company_id,
+              execute: true,
+              context 
+            };
+          response = await askAgent(payload);
+        }
       
       // Polling logic
       if (response.status === 'processing' && response.task_id) {
