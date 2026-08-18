@@ -136,7 +136,10 @@ async def process_agent_task(task_id: str, payload: dict):
         
         module_val = payload.get("module_filter") or payload_context.get("module")
         if module_val and isinstance(module_val, str):
-            module_filter = [module_val]
+            # Mapeamento de siglas conhecidas para os códigos numéricos (X2_MODULO)
+            MOD_MAP = { "FAT": "05", "FIN": "06", "COM": "02", "EST": "04", "FIS": "09", "CTB": "34", "GPE": "07", "ATF": "07", "PCO": "08" }
+            clean_mod = module_val.upper().replace("SIGA", "")
+            module_filter = [MOD_MAP.get(clean_mod, clean_mod)]
         else:
             module_filter = module_val
             
