@@ -242,16 +242,13 @@ async def get_valid_access_token(
                 username = connection.get("protheus_username")
                 password_encrypted = connection.get("encrypted_protheus_password")
                 
-                from app.core.config import settings
-                
-                if not username or username == 'admin':
-                    # Fallback to .env if DB is empty or still using default 'admin'
-                    username = settings.protheus_user or username
+                if not username or not password_encrypted:
+                    raise ValueError(
+                        f"Credenciais OAuth2 do Protheus (usuário ou senha) não estão configuradas no banco de dados "
+                        f"para o tenant '{tenant_code}' (ambiente '{environment_code}')."
+                    )
                     
-                if password_encrypted:
-                    password = _decrypt_secret(password_encrypted)
-                else:
-                    password = settings.protheus_password
+                password = _decrypt_secret(password_encrypted)
 
                 new_token = await _request_password_token(
                     client,
