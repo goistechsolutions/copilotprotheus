@@ -29,10 +29,10 @@ mkdir -p "$BACKUP_DIR"
 
 run_pg_dump() {
   local out_file="$1"
-  if command -v pg_dump >/dev/null 2>&1; then
-    pg_dump -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f "$out_file"
-  elif command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
+  if command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
     docker exec -i "$CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" > "$out_file"
+  elif command -v pg_dump >/dev/null 2>&1; then
+    pg_dump -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f "$out_file"
   else
     echo "⚠️ pg_dump não encontrado e container $CONTAINER indisponível. Pulando backup."
   fi
@@ -40,10 +40,10 @@ run_pg_dump() {
 
 run_psql_cmd() {
   local query="$1"
-  if command -v psql >/dev/null 2>&1; then
-    psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -c "$query"
-  elif command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
+  if command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
     docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "$query"
+  elif command -v psql >/dev/null 2>&1; then
+    psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -c "$query"
   else
     echo "❌ psql não encontrado e container $CONTAINER indisponível."
     exit 1
@@ -52,10 +52,10 @@ run_psql_cmd() {
 
 run_psql_file() {
   local file_path="$1"
-  if command -v psql >/dev/null 2>&1; then
-    psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f "$file_path"
-  elif command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
+  if command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
     docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" < "$file_path"
+  elif command -v psql >/dev/null 2>&1; then
+    psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f "$file_path"
   else
     echo "❌ psql não encontrado e container $CONTAINER indisponível."
     exit 1
@@ -68,10 +68,10 @@ run_pg_dump "$BACKUP_DIR/pre_reset_${TIMESTAMP}.sql" || true
 echo "==> 2/5 Dropando todos os schemas de tenant existentes"
 SCHEMAS=""
 IF_QUERY="SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast', 'default') AND schema_name NOT LIKE 'pg_%';"
-if command -v psql >/dev/null 2>&1; then
-  SCHEMAS=$(psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -t -c "$IF_QUERY" 2>/dev/null || true)
-elif command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
+if command -v docker >/dev/null 2>&1 && docker ps 2>/dev/null | grep -q "$CONTAINER"; then
   SCHEMAS=$(docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "$IF_QUERY" 2>/dev/null || true)
+elif command -v psql >/dev/null 2>&1; then
+  SCHEMAS=$(psql -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -t -c "$IF_QUERY" 2>/dev/null || true)
 fi
 
 for schema in $SCHEMAS; do
