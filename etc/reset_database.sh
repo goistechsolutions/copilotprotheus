@@ -13,8 +13,8 @@ if [ -f .env ]; then
   set +a
 fi
 
-DB_NAME="${DB_NAME:-copilot_protheus}"
-DB_USER="${DB_USER:-postgres}"
+DB_NAME="${DB_NAME:-copilotprotheus}"
+DB_USER="${DB_USER:-copilot}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 CONTAINER="${CONTAINER_NAME:-copilot-protheus-db}"
