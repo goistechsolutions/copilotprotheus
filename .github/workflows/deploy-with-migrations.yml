@@ -147,7 +147,6 @@ jobs:
             sleep 5
 
             echo "=== Sincronizando senha do banco de dados ==="
-            docker compose exec -T db psql -U postgres -c "ALTER USER copilot WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
             docker compose exec -T db psql -U copilot -d copilotprotheus -c "ALTER USER copilot WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
           DBCMD
 

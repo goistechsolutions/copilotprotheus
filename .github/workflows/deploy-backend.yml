@@ -173,7 +173,6 @@ jobs:
             echo "🔄 Executando migrations SQL..."
             
             echo "=== Sincronizando senha do banco de dados ==="
-            docker compose exec -T db psql -U postgres -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
             docker compose exec -T db psql -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
             
             SQL_COUNT=0
