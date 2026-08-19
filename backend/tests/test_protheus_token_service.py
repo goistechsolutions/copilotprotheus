@@ -1,3 +1,6 @@
+import os
+os.environ["JWT_SECRET"] = "x" * 32
+
 from datetime import datetime, timedelta, timezone
 from app.services.protheus_token_service import _is_token_valid
 

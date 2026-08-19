@@ -26,7 +26,7 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from app.db.database import engine
 from app.services.protheus_service import get_tenant_config
-from app.services.queryrest_service import queryrest_exec
+
 
 logger = logging.getLogger("app.services.sync_dictionary")
 

@@ -36,7 +36,7 @@ from app.services.company_module_service import (
     replace_company_modules,
 )
 from app.services.license_service import generate_license, verify_license
-from app.services.queryrest_service import queryrest_exec, queryrest_exec_tenant
+from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.sync_dictionary_v52 import run_snapshot
 from app.core.config import settings
 from app.core.security import encrypt_password
@@ -104,20 +104,12 @@ async def get_available_modules(
     sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD, USR_NOME FROM SYS_USR_MODULE ORDER BY USR_MODULO"
     rows = []
     try:
-        if company.get("protheus_rest_url") and company.get("protheus_usuario") and company.get("encrypted_protheus_password"):
-            rows = queryrest_exec(
-                company["protheus_rest_url"],
-                company["protheus_usuario"],
-                company["encrypted_protheus_password"],
-                sql
-            )
-        else:
-            rows = await queryrest_exec_tenant(
-                db=db,
-                tenant_id=tenant_id,
-                company_id=company_id,
-                query=sql
-            )
+        rows = await queryrest_exec_tenant(
+            db=db,
+            tenant_id=tenant_id,
+            company_id=company_id,
+            query=sql
+        )
     except Exception as e:
         logger.warning(f"Aviso ao consultar SYS_USR_MODULE ({company_id}): {e}")
 
