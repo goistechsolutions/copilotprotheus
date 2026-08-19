@@ -29,27 +29,30 @@ def build_dictionary_context(
 
     sql_tables = """
         SELECT
-            table_name,
-            COALESCE(description, table_name) AS table_label,
-            module_code,
-            table_code
-        FROM dictionary_tables
+            dt.table_name,
+            COALESCE(dt.description, dt.table_name) AS table_label,
+            dt.module_code,
+            dt.table_code
+        FROM dictionary_tables dt
+        JOIN tenant_schemas ts 
+          ON ts.chave = dt.table_code 
+         AND ts.tabela = dt.table_name
         WHERE 1=1
     """
 
     if company_id is not None:
-        sql_tables += " AND (company_id = :company_id OR company_id IS NULL)"
+        sql_tables += " AND (dt.company_id = :company_id OR dt.company_id IS NULL)"
         params["company_id"] = company_id
 
     if module_filter and isinstance(module_filter, list) and len(module_filter) > 0:
-        sql_tables += " AND module_code = ANY(:module_filter)"
+        sql_tables += " AND dt.module_code = ANY(:module_filter)"
         params["module_filter"] = module_filter
 
     if keyword and str(keyword).strip():
-        sql_tables += " AND (table_name ILIKE :kw OR description ILIKE :kw OR table_code ILIKE :kw)"
+        sql_tables += " AND (dt.table_name ILIKE :kw OR dt.description ILIKE :kw OR dt.table_code ILIKE :kw)"
         params["kw"] = f"%{keyword.strip()}%"
 
-    sql_tables += " ORDER BY module_code, table_name"
+    sql_tables += " ORDER BY dt.module_code, dt.table_name"
 
     tables = db.execute(text(sql_tables), params).mappings().all()
 
