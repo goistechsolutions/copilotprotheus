@@ -269,22 +269,28 @@ def ensure_public_tables(db, force: bool = False):
         """,
         """
         CREATE TABLE IF NOT EXISTS public.protheus_rest_connections (
-            id SERIAL PRIMARY KEY,
-            tenant_code VARCHAR(50) NOT NULL,
-            environment_code VARCHAR(50) NOT NULL DEFAULT 'default',
-            base_rest_url VARCHAR(255) NOT NULL,
-            auth_mode VARCHAR(20) NOT NULL DEFAULT 'oauth2_password',
-            protheus_username VARCHAR(100),
-            encrypted_protheus_password VARCHAR(255),
+            id BIGSERIAL PRIMARY KEY,
+            tenant_code VARCHAR(100) NOT NULL,
+            environment_code VARCHAR(100) NOT NULL DEFAULT 'default',
+            base_rest_url VARCHAR(500) NOT NULL,
+            auth_mode VARCHAR(30) NOT NULL DEFAULT 'oauth2_password',
+            protheus_username VARCHAR(255) NOT NULL,
+            encrypted_protheus_password TEXT NOT NULL,
             encrypted_access_token TEXT,
             encrypted_refresh_token TEXT,
-            access_token_expires_at TIMESTAMP,
-            token_updated_at TIMESTAMP,
+            access_token_expires_at TIMESTAMPTZ,
+            token_updated_at TIMESTAMPTZ,
+            last_auth_error TEXT,
+            last_auth_status INTEGER,
+            last_success_at TIMESTAMPTZ,
             active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             CONSTRAINT uq_protheus_rest_tenant_env UNIQUE (tenant_code, environment_code)
         );
+        ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_auth_error TEXT;
+        ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_auth_status INTEGER;
+        ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ;
         """,
         """
         CREATE TABLE IF NOT EXISTS public.protheus_modules_master (

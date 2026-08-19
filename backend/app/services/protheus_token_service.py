@@ -150,18 +150,19 @@ async def _request_refresh_token(
 ) -> ProtheusToken:
     response = await client.post(
         _token_url(base_rest_url),
-        data={
+        params={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
         },
         headers={
             "Accept": "application/json",
+            "Content-Type": "application/json",
         },
     )
 
     if response.status_code >= 400:
         raise RuntimeError(
-            f"refresh OAuth2 Protheus falhou: HTTP {response.status_code}"
+            f"refresh OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text}"
         )
 
     return _parse_token_response(response.json())
@@ -177,20 +178,23 @@ async def _request_password_token(
 
     response = await client.post(
         _token_url(base_rest_url),
-        data={
+        params={
             "grant_type": "password",
+        },
+        json={
             "username": username,
             "password": password,
         },
         headers={
             "Accept": "application/json",
+            "Content-Type": "application/json",
             "Authorization": f"Basic {credentials}",
         },
     )
 
     if response.status_code >= 400:
         raise RuntimeError(
-            f"obtenção de token OAuth2 Protheus falhou: HTTP {response.status_code}"
+            f"obtenção de token OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text}"
         )
 
     return _parse_token_response(response.json())
