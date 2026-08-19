@@ -83,7 +83,30 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
         ).mappings().first()
 
         if row:
-            return dict(row)
+            res_dict = dict(row)
+            
+            # Merge with real connection from protheus_rest_connections
+            conn = db.execute(text('''
+                SELECT
+                    environment_code,
+                    active
+                FROM public.protheus_rest_connections
+                WHERE tenant_code = :tenant_code
+                AND active = TRUE
+                ORDER BY
+                    CASE WHEN environment_code = 'default' THEN 1 ELSE 0 END,
+                    environment_code
+                LIMIT 1
+            '''), {"tenant_code": clean_tenant}).mappings().first()
+            
+            if conn:
+                res_dict["environment_code"] = conn["environment_code"]
+                res_dict["connection_status"] = "active" if conn["active"] else "inactive"
+            else:
+                res_dict["environment_code"] = None
+                res_dict["connection_status"] = "not_found"
+                
+            return res_dict
     except Exception as e:
         db.rollback()
         logger.warning(f"Aviso ao buscar company_info em {clean_tenant}: {e}")

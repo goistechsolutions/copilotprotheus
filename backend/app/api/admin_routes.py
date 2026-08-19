@@ -424,6 +424,28 @@ FROM SYS_USR_MODULE
 WHERE D_E_L_E_T_ <> '*'         
 ORDER BY USR_MODULO"""
 
+
+def require_environment_code(payload: dict) -> str:
+    value = (
+        payload.get("environment_code")
+        or payload.get("protheus_ambiente")
+        or payload.get("ambiente")
+    )
+    if value is None:
+        raise HTTPException(status_code=400, detail="environment_code é obrigatório.")
+    
+    environment_code = str(value).strip()
+    if not environment_code:
+        raise HTTPException(status_code=400, detail="environment_code não pode ser vazio.")
+        
+    if environment_code.lower() == "none":
+        raise HTTPException(status_code=400, detail="environment_code inválido: None.")
+        
+    if environment_code.lower() == "default":
+        raise HTTPException(status_code=400, detail="Ambiente default não é permitido para este tenant.")
+        
+    return environment_code
+
 @router.post("/sync-modules")
 async def sync_modules(
     payload: dict     = Body(...),
@@ -437,12 +459,16 @@ async def sync_modules(
     tenant_id = payload.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
+    
+    environment_code = require_environment_code(payload)
 
     try:
+        logger.info("sync_modules_context tenant=%s environment=%s", tenant_id, environment_code)
+        
         client = ProtheusQueryRestClient(
             db=db,
             tenant_code=tenant_id,
-            environment_code=payload.get("environment_code") or payload.get("protheus_ambiente") or payload.get("ambiente")
+            environment_code=environment_code
         )
         
         result_data = await client.execute(
@@ -553,6 +579,8 @@ async def sync_schema(
     modulos   = payload.get("modulos", [])
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
+        
+    environment_code = require_environment_code(payload)
 
     import re
     from app.db.database import ensure_tenant_tables
@@ -571,7 +599,8 @@ async def sync_schema(
 
     # Popula / lê protheus_modules_master
     try:
-        sys_res_str = await execute_protheus_tool("QueryRest", {"cQuery": CANONICAL_MODULES_QUERY}, tenant_id=tenant_id)
+        logger.info("sync_schema_context tenant=%s environment=%s", tenant_id, environment_code)
+        sys_res_str = await execute_protheus_tool("QueryRest", {"cQuery": CANONICAL_MODULES_QUERY}, tenant_id=tenant_id, environment_code=environment_code)
         sys_rows = json.loads(fix_protheus_json(sys_res_str))
         if isinstance(sys_rows, dict):
             sys_rows = sys_rows.get("items") or sys_rows.get("data", [])
@@ -696,7 +725,7 @@ async def sync_schema(
                 f"ORDER BY X2.X2_MODULO,X2.X2_CHAVE"
             )
             try:
-                response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id)
+                response_str = await execute_protheus_tool("QueryRest", {"cQuery": tables_query}, tenant_id=tenant_id, environment_code=environment_code)
                 parsed_data = json.loads(fix_protheus_json(response_str))
                 
                 if isinstance(parsed_data, dict) and "error" in parsed_data:
@@ -720,11 +749,11 @@ async def sync_schema(
             # --- DEBUG BLOCK START ---
             try:
                 debug_query = "SELECT DISTINCT TRIM(X2_MODULO) AS M FROM SX2990 WHERE D_E_L_E_T_<>'*'"
-                debug_resp = await execute_protheus_tool("QueryRest", {"cQuery": debug_query}, tenant_id=tenant_id)
+                debug_resp = await execute_protheus_tool("QueryRest", {"cQuery": debug_query}, tenant_id=tenant_id, environment_code=environment_code)
                 logger.error(f"DEBUG X2_MODULO SX2990: {debug_resp}")
                 
                 debug_query2 = "SELECT DISTINCT TRIM(X2_MODULO) AS M FROM SX2010 WHERE D_E_L_E_T_<>'*'"
-                debug_resp2 = await execute_protheus_tool("QueryRest", {"cQuery": debug_query2}, tenant_id=tenant_id)
+                debug_resp2 = await execute_protheus_tool("QueryRest", {"cQuery": debug_query2}, tenant_id=tenant_id, environment_code=environment_code)
                 logger.error(f"DEBUG X2_MODULO SX2010: {debug_resp2}")
             except Exception as e_debug:
                 logger.error(f"DEBUG ERRO: {e_debug}")
@@ -783,7 +812,7 @@ async def sync_schema(
                 f"FROM SX3010 X3 WHERE X3.D_E_L_E_T_<>'*' AND X3.X3_ARQUIVO IN ({chaves_str}) "
                 f"ORDER BY X3.X3_ARQUIVO,X3.X3_ORDEM,X3.X3_CAMPO"
             )
-            fr_str   = await execute_protheus_tool("QueryRest", {"cQuery": fields_query}, tenant_id=tenant_id)
+            fr_str   = await execute_protheus_tool("QueryRest", {"cQuery": fields_query}, tenant_id=tenant_id, environment_code=environment_code)
             fd       = json.loads(fix_protheus_json(fr_str))
             if isinstance(fd, dict):
                 fd = fd.get("items") or fd.get("data", [])

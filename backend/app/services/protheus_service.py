@@ -179,7 +179,7 @@ async def get_protheus_token(tenant_id: str, user: str = None, password: str = N
         _OAUTH2_TOKENS[cache_key] = (access_token, now + expires_in - 60)
         return access_token
 
-async def build_protheus_headers(tenant_id: str, config: dict = None) -> dict:
+async def build_protheus_headers(tenant_id: str, config: dict = None, environment_code: str = "default") -> dict:
     if not config:
         config = get_tenant_config(tenant_id)
         
@@ -191,7 +191,7 @@ async def build_protheus_headers(tenant_id: str, config: dict = None) -> dict:
         token = await get_valid_access_token(
             db=token_session,
             tenant_code=tenant_id,
-            environment_code="default"
+            environment_code=environment_code
         )
         return {
             "Authorization": f"Bearer {token}",
@@ -306,7 +306,7 @@ def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, rec
     finally:
         db.close()
 
-async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None) -> str:
+async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None, environment_code: str = "default") -> str:
     company_id = context.get("company_id") if context else None
     
     config = get_tenant_config(tenant_id, company_id)
@@ -338,7 +338,7 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
                 token = await get_valid_access_token(
                     db=token_session,
                     tenant_code=tenant_id,
-                    environment_code="default"
+                    environment_code=environment_code
                 )
                 headers["Authorization"] = f"Bearer {token}"
             finally:

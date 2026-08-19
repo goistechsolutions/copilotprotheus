@@ -84,8 +84,10 @@ def _row_to_connection(row: Mapping[str, Any]) -> dict[str, Any]:
 def load_connection(
     db: Any,
     tenant_code: str,
-    environment_code: str = "default",
+    environment_code: str,
 ) -> dict[str, Any]:
+    if not environment_code:
+        raise ValueError("Ambiente Protheus não informado.")
     row = db.execute(
         text("""
             SELECT
@@ -199,7 +201,7 @@ async def _request_password_token(
 async def get_valid_access_token(
     db: Any,
     tenant_code: str,
-    environment_code: str = "default",
+    environment_code: str,
 ) -> str:
     connection = load_connection(db, tenant_code, environment_code)
     expires_at = connection.get("access_token_expires_at")
