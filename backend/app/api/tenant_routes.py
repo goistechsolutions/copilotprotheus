@@ -58,9 +58,25 @@ def _apply_password(tenant_obj: Tenant, plaintext: Optional[str]) -> None:
 # ── Endpoints Protegidos por Admin ─────────────────────────────
 
 
+
+def resolve_environment_code(payload: dict) -> str:
+    value = (
+        payload.get("environment_code")
+        or payload.get("protheus_ambiente")
+        or payload.get("ambiente")
+    )
+    if not value:
+        raise ValueError("O ambiente Protheus não foi informado.")
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError("Ambiente Protheus não pode ser vazio.")
+    if len(normalized) > 100:
+        raise ValueError("Ambiente Protheus excede o tamanho permitido.")
+    return normalized
+
 from app.services.protheus_token_service import invalidate_access_token, get_valid_access_token
 
-async def _sync_protheus_connection(db: Session, tenant_code: str, rest_url: str, username: str, password: Optional[str], auth_mode: str):
+async def _sync_protheus_connection(db: Session, tenant_code: str, env_code: str, rest_url: str, username: str, password: Optional[str], auth_mode: str):
     if not rest_url:
         return
         
@@ -69,7 +85,7 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, rest_url: str
             tenant_code, environment_code, base_rest_url,
             auth_mode, protheus_username, encrypted_protheus_password, active
         ) VALUES (
-            :t_code, 'default', :url, :auth, :user, :pw, TRUE
+            :t_code, :env_code, :url, :auth, :user, :pw, TRUE
         ) ON CONFLICT (tenant_code, environment_code) DO UPDATE SET
             base_rest_url = EXCLUDED.base_rest_url,
             auth_mode = EXCLUDED.auth_mode,
@@ -83,6 +99,7 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, rest_url: str
     
     db.execute(upsert_sql, {
         "t_code": tenant_code,
+        "env_code": env_code,
         "url": rest_url.rstrip("/"),
         "auth": auth_mode or "oauth2_password",
         "user": username or "admin",
@@ -92,11 +109,10 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, rest_url: str
     
     # Valida credenciais obtendo o token
     try:
-        invalidate_access_token(db, tenant_code, "default")
-        await get_valid_access_token(db, tenant_code, "default")
+        invalidate_access_token(db, tenant_code, env_code)
+        await get_valid_access_token(db, tenant_code, env_code)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao validar Conexão Protheus: {str(e)}")
-
 
 def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Tenant]:
     t_str = str(tenant_id or '').strip()
@@ -111,7 +127,7 @@ def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Ten
 
 
 def _to_tenant_dict(db: Session, t: Tenant) -> dict:
-    conn = db.execute(text("SELECT base_rest_url, auth_mode, protheus_username FROM public.protheus_rest_connections WHERE tenant_code = :tc AND environment_code = 'default'"), {"tc": t.tenant_code}).mappings().first()
+    conn = db.execute(text("SELECT base_rest_url, auth_mode, protheus_username, environment_code FROM public.protheus_rest_connections WHERE tenant_code = :tc AND active = TRUE ORDER BY id DESC LIMIT 1"), {"tc": t.tenant_code}).mappings().first()
     rest_url = conn["base_rest_url"] if conn else ""
     user = conn["protheus_username"] if conn else ""
     auth_mode = conn["auth_mode"] if conn else "oauth2_password"
@@ -199,8 +215,13 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
 
 
     if body.protheus_rest_url:
+        try:
+            env_code = resolve_environment_code(body.model_dump())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
         await _sync_protheus_connection(
-            db, clean_tenant, body.protheus_rest_url, 
+            db, clean_tenant, env_code, body.protheus_rest_url, 
             body.protheus_user, body.protheus_password, body.auth_mode
         )
 
@@ -240,8 +261,13 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
 
 
     if body.protheus_rest_url:
+        try:
+            env_code = resolve_environment_code(body.model_dump())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
         await _sync_protheus_connection(
-            db, clean_tenant, body.protheus_rest_url, 
+            db, clean_tenant, env_code, body.protheus_rest_url, 
             body.protheus_user, body.protheus_password, body.auth_mode
         )
 

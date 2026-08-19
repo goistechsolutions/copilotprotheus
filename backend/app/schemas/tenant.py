@@ -76,6 +76,9 @@ class TenantUpdate(BaseModel):
     protheus_user:           Optional[str]   = None
     protheus_password:       Optional[str]   = None   # None = não alterar senha
     auth_mode:               Optional[str]   = None
+    environment_code:        Optional[str]   = None
+    protheus_ambiente:       Optional[str]   = None
+    ambiente:                Optional[str]   = None
     system_prompt:           Optional[str]   = None
     temperature:             Optional[float] = Field(None)
     status:                  Optional[str]   = None

@@ -291,6 +291,41 @@ def ensure_public_tables(db, force: bool = False):
         ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_auth_error TEXT;
         ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_auth_status INTEGER;
         ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ;
+          """
+          ,
+          """
+          DO $$
+          BEGIN
+              CREATE OR REPLACE FUNCTION public.prevent_invalid_default_protheus_connection()
+              RETURNS TRIGGER
+              LANGUAGE plpgsql
+              AS $func$
+              BEGIN
+                  IF NEW.environment_code = 'default'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM public.protheus_rest_connections existing
+                      WHERE existing.tenant_code = NEW.tenant_code
+                        AND existing.environment_code <> 'default'
+                        AND existing.active = TRUE
+                        AND existing.id <> COALESCE(NEW.id, -1)
+                  )
+                  THEN
+                      RAISE EXCEPTION 'Não é permitido criar ambiente default para tenant que já possui ambiente explícito: %', NEW.tenant_code;
+                  END IF;
+                  RETURN NEW;
+              END;
+              $func$;
+
+              DROP TRIGGER IF EXISTS trg_prevent_invalid_default_protheus_connection ON public.protheus_rest_connections;
+              
+              CREATE TRIGGER trg_prevent_invalid_default_protheus_connection
+              BEFORE INSERT OR UPDATE
+              ON public.protheus_rest_connections
+              FOR EACH ROW
+              EXECUTE FUNCTION public.prevent_invalid_default_protheus_connection();
+          END $$;
+
         """,
         """
         CREATE TABLE IF NOT EXISTS public.protheus_modules_master (

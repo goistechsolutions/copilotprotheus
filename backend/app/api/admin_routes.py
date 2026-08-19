@@ -442,7 +442,7 @@ async def sync_modules(
         client = ProtheusQueryRestClient(
             db=db,
             tenant_code=tenant_id,
-            environment_code="default"
+            environment_code=payload.get("environment_code") or payload.get("protheus_ambiente") or payload.get("ambiente")
         )
         
         result_data = await client.execute(
