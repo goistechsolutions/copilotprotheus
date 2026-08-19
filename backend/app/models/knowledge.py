@@ -34,6 +34,7 @@ class Tenant(GlobalBase):
     cnpj = Column(String(20))
     webapp_url = Column(Text)
     apirest_url = Column(Text)
+    frontend_domain = Column(Text)
     protheus_user = Column(String(100))
     encrypted_protheus_password = Column(String(255))
     protheus_ambientes = Column(String(100), default=" ")

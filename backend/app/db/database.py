@@ -93,8 +93,8 @@ PUBLIC_REQUIRED_TABLES = {
     "plans",
     "platform_admins",
     "protheus_modules_master",
-    "users",
     "roles",
+    "users",
     "permissions",
     "environments",
     "connectors",
@@ -104,9 +104,6 @@ PUBLIC_REQUIRED_TABLES = {
     "concurrent_sessions",
     "tenant_module_contracts",
     "audit_logs",
-    "agent_users",
-    "agent_roles",
-    "agent_query_audit",
     "platform_audit_log",
 }
 
