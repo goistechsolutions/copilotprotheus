@@ -14,17 +14,14 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [attachedFile, setAttachedFile] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('tenant') ? 'connected' : 'connecting';
-  });
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [context, setContext] = useState(() => {
     const params = new URLSearchParams(window.location.search);
       return {
-        module: params.get('module') || 'FAT',
-        branch: params.get('branch') || '0101',
-        user: params.get('user') || 'admin',
-        profile: params.get('profile') || 'Negócio',
+        module: params.get('module') || null,
+        branch: params.get('branch') || null,
+        user: params.get('user') || null,
+        profile: params.get('profile') || null,
         tenant_id: params.get('tenant') || null,
         company_id: params.get('company_id') || params.get('company') || null
       };
@@ -36,8 +33,22 @@ export default function App() {
   useEffect(() => {
     const handleMessage = (event) => {
       if (event.data?.type === 'cprot-context-update') {
-        setContext(prev => ({ ...prev, ...event.data.payload }));
-        setConnectionStatus('connected');
+        const incoming = event.data.payload || {};
+        setContext(prev => ({
+          ...prev,
+          module: incoming.module || prev.module,
+          branch: incoming.branch || prev.branch,
+          user: incoming.user || prev.user,
+          profile: incoming.profile || prev.profile,
+          tenant_id: incoming.tenant_id || prev.tenant_id,
+          company_id: incoming.company_id || prev.company_id
+        }));
+
+        if (incoming.tenant_id && incoming.module && incoming.branch) {
+          setConnectionStatus('connected');
+        } else {
+          setConnectionStatus('error');
+        }
       }
       if (event.data?.type === 'cprot-dashboard-data') {
         setMessages(prev => prev.map(m => m.isLoading ? { ...event.data.payloadGemini, isUser: false } : m));
@@ -79,9 +90,33 @@ export default function App() {
     e.target.value = '';
   };
 
+  const validateContext = () => {
+    const required = ['tenant_id', 'module', 'branch'];
+    const missing = required.filter(field => !context[field]);
+    if (missing.length > 0) {
+      throw new Error(`Contexto Protheus incompleto. Campos não recebidos: ${missing.join(', ')}.`);
+    }
+  };
+
   const handleAsk = async (textToAsk) => {
     const finalQuery = textToAsk || query;
     if (!finalQuery.trim() && !attachedFile) return;
+
+    try {
+      validateContext();
+    } catch (e) {
+      setError(e.message);
+      setIsLoading(false);
+      setMessages(prev => [
+        ...prev.filter(m => !m.isLoading),
+        {
+          executive_summary: `**Contexto não disponível:** ${e.message}`,
+          isUser: false
+        }
+      ]);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setQuery('');
@@ -172,8 +207,14 @@ export default function App() {
         </div>
       </header>
       <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-shrink-0">
-        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-600 px-2 py-1 rounded-md border border-slate-200"><Building2 className="w-3 h-3" />{context.module} · Filial {context.branch}</span>
-        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-600 px-2 py-1 rounded-md border border-slate-200"><UserIcon className="w-3 h-3" />{context.user}</span>
+        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-600 px-2 py-1 rounded-md border border-slate-200">
+          <Building2 className="w-3 h-3" />
+          {context.module && context.branch ? `${context.module} - Filial ${context.branch}` : 'Contexto Protheus não identificado'}
+        </span>
+        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-600 px-2 py-1 rounded-md border border-slate-200">
+          <UserIcon className="w-3 h-3" />
+          {context.user || 'Usuário não identificado'}
+        </span>
       </div>
       <div className={`absolute inset-0 bg-white z-20 flex flex-col transition-transform duration-300 ${isHistoryOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
