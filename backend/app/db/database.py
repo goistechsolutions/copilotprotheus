@@ -197,21 +197,24 @@ def ensure_public_tables(db, force: bool = False):
     if PUBLIC_BOOTSTRAP_DONE and not force:
         return
 
+    # Try to create schema and extensions without breaking the parent transaction
     try:
+        db.execute(text("SAVEPOINT sp_ext"))
         db.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
         db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public"))
         db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-        _ensure_bootstrap_flags_table(db)
-        _safe_commit(db)
+        db.execute(text("RELEASE SAVEPOINT sp_ext"))
     except Exception as e:
-        _safe_rollback(db)
-        print(f"[DB] Aviso ao preparar schema public: {e}")
-        return
+        db.execute(text("ROLLBACK TO SAVEPOINT sp_ext"))
+        print(f"[DB] Aviso ao criar schema/extensions: {e}")
 
     try:
-        pass
-    except Exception:
-        _safe_rollback(db)
+        db.execute(text("SAVEPOINT sp_flags"))
+        _ensure_bootstrap_flags_table(db)
+        db.execute(text("RELEASE SAVEPOINT sp_flags"))
+    except Exception as e:
+        db.execute(text("ROLLBACK TO SAVEPOINT sp_flags"))
+        print(f"[DB] Aviso ao preparar bootstrap flags: {e}")
 
     public_queries = [
         """
@@ -230,6 +233,7 @@ def ensure_public_tables(db, force: bool = False):
         ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS cnpj varchar(20);
         ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS webapp_url text;
         ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS apirest_url text;
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS frontend_domain text;
         ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS protheus_user varchar(100);
         ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS encrypted_protheus_password varchar(255);
         ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS protheus_ambientes varchar(100) default ' '::character varying;
