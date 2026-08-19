@@ -28,17 +28,18 @@ def build_dictionary_context(
     }
 
     sql_tables = """
-        SELECT
-            dt.table_name,
-            COALESCE(dt.description, dt.table_name) AS table_label,
-            dt.module_code,
-            dt.table_code
-        FROM dictionary_tables dt
-        JOIN tenant_schemas ts 
-          ON ts.chave = dt.table_code 
-         AND ts.tabela = dt.table_name
-        WHERE 1=1
-    """
+    SELECT DISTINCT
+        dt.table_name,
+        COALESCE(dt.description, dt.table_name) AS table_label,
+        dt.module_code,
+        dt.table_code
+    FROM dictionary_tables dt
+    JOIN tenant_schemas ts
+      ON ts.chave = dt.table_code
+     AND ts.tabela = dt.table_name
+     AND ts.mod_code::text = dt.module_code
+    WHERE 1 = 1
+"""
 
     if company_id is not None:
         sql_tables += " AND (dt.company_id = :company_id OR dt.company_id IS NULL)"
