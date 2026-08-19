@@ -401,7 +401,7 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
 
 
 @router.post("/companies", response_model=CompanyResponse)
-def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
+async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     raw_tenant = str(payload.tenant_id or payload.protheus_grupo or payload.cnpj or "default")
     tenant_code = raw_tenant
     try:
@@ -485,33 +485,66 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "t_code": clean_tenant, "c_name": c_name, "s_name": clean_tenant
     })
 
+    if payload.protheus_rest_url and payload.protheus_usuario and enc_pass:
+        upsert_conn = text("""
+            INSERT INTO public.protheus_rest_connections (
+                tenant_code, environment_code, base_rest_url,
+                auth_mode, protheus_username, encrypted_protheus_password, active
+            ) VALUES (
+                :t_code, 'default', :url, 'oauth2_password', :user, :pw, TRUE
+            ) ON CONFLICT (tenant_code, environment_code) DO UPDATE SET
+                base_rest_url = EXCLUDED.base_rest_url,
+                protheus_username = EXCLUDED.protheus_username,
+                encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
+                active = TRUE,
+                updated_at = NOW();
+        """)
+        db.execute(upsert_conn, {
+            "t_code": clean_tenant,
+            "url": payload.protheus_rest_url.rstrip("/"),
+            "user": payload.protheus_usuario,
+            "pw": enc_pass
+        })
+
     db.commit()
 
     # Popula public.protheus_modules_master ao cadastrar empresa
     if payload.protheus_rest_url and payload.protheus_usuario and payload.protheus_password:
         try:
-            from app.api.admin_routes import CANONICAL_MODULES_QUERY
-            from app.services.protheus_service import queryrest_exec
-            rows = queryrest_exec(
-                payload.protheus_rest_url,
-                payload.protheus_usuario,
-                enc_pass or payload.protheus_password,
-                CANONICAL_MODULES_QUERY
+            from app.services.protheus_queryrest_client import ProtheusQueryRestClient
+            
+            client = ProtheusQueryRestClient(
+                db=db,
+                tenant_code=clean_tenant,
+                environment_code="default"
             )
-            if isinstance(rows, list):
-                for r in rows:
+            
+            result_data = await client.execute(
+                """
+                SELECT DISTINCT
+                    TRIM(USR_CODMOD) AS mod_sigla,
+                    USR_MODULO AS mod_code,
+                    USR_NOME AS mod_name
+                FROM SYS_USR_MODULE
+                WHERE D_E_L_E_T_ <> '*'
+                ORDER BY USR_MODULO
+                """,
+                method="POST"
+            )
+
+            if isinstance(result_data, dict):
+                result_data = result_data.get("items") or result_data.get("data", [])
+            if isinstance(result_data, list):
+                for r in result_data:
                     if not isinstance(r, dict): continue
-                    c_mod = str(r.get("CODIGO_MODULO") or r.get("USR_MODULO") or "").strip()
-                    c_tab = str(r.get("CODIGO_TABELA") or r.get("USR_CODMOD") or "").strip()
-                    n_mod = str(r.get("NOME_MODULO") or "").strip()
-                    if not c_mod: continue
-                    # mod_code must be int, mod_sigla is string
-                    try:
-                        int_code = int(c_tab) if c_tab.isdigit() else int(c_mod) if c_mod.isdigit() else 0
-                    except:
-                        int_code = 0
+                    c_mod = str(r.get("mod_code") or "").strip()
+                    sigla = str(r.get("mod_sigla") or "").strip().upper()
+                    n_mod = str(r.get("mod_name") or "").strip()
                     
-                    sigla = c_mod if not c_mod.isdigit() else c_tab
+                    if not c_mod or not c_mod.isdigit():
+                        continue
+                        
+                    int_code = int(c_mod)
                     
                     existing = db.query(ProtheusModuleMaster).filter(
                         (ProtheusModuleMaster.mod_code == int_code) | (ProtheusModuleMaster.mod_sigla == sigla)
@@ -618,6 +651,31 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
         "pass": enc_pass, "status": payload.status or "ativa"
     }).first()
+
+    rest_url = payload.protheus_rest_url or comp_info.get("protheus_rest_url")
+    user = payload.protheus_usuario or comp_info.get("protheus_usuario")
+    pw = enc_pass or comp_info.get("encrypted_protheus_password")
+
+    if rest_url and user and pw:
+        upsert_conn = text("""
+            INSERT INTO public.protheus_rest_connections (
+                tenant_code, environment_code, base_rest_url,
+                auth_mode, protheus_username, encrypted_protheus_password, active
+            ) VALUES (
+                :t_code, 'default', :url, 'oauth2_password', :user, :pw, TRUE
+            ) ON CONFLICT (tenant_code, environment_code) DO UPDATE SET
+                base_rest_url = EXCLUDED.base_rest_url,
+                protheus_username = EXCLUDED.protheus_username,
+                encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
+                active = TRUE,
+                updated_at = NOW();
+        """)
+        db.execute(upsert_conn, {
+            "t_code": clean_tenant,
+            "url": rest_url.rstrip("/"),
+            "user": user,
+            "pw": pw
+        })
 
     db.commit()
 

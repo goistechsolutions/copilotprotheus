@@ -183,22 +183,22 @@ async def build_protheus_headers(tenant_id: str, config: dict = None) -> dict:
     if not config:
         config = get_tenant_config(tenant_id)
         
-    auth_mode = config.get("auth_mode", "basic").lower()
-    
-    if auth_mode == "oauth2":
-        token = await get_protheus_token(tenant_id)
+    from app.services.protheus_token_service import get_valid_access_token
+    from app.db.database import get_tenant_session
+
+    token_session = get_tenant_session("public")
+    try:
+        token = await get_valid_access_token(
+            db=token_session,
+            tenant_code=tenant_id,
+            environment_code="default"
+        )
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
-    else:
-        import base64
-        credentials = f"{config['user']}:{config['password']}"
-        encoded = base64.b64encode(credentials.encode()).decode()
-        return {
-            "Authorization": f"Basic {encoded}",
-            "Content-Type": "application/json"
-        }
+    finally:
+        token_session.close()
 
 def _sanitize_response_text(text: str) -> str:
     if not text:
@@ -320,7 +320,7 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     password = context.get("password") if context else None
     protheus_token = context.get("protheus_token") if context else None
     
-    auth_mode = config.get("auth_mode", "basic")
+    auth_mode = config.get("auth_mode", "oauth2_password")
     headers = {
         "Content-Type": "application/json"
     }
@@ -328,20 +328,23 @@ async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: st
     if protheus_token:
         headers["Authorization"] = f"Bearer {protheus_token}"
         logger.info(f"Usando token de sessao Protheus fornecido dinamicamente para {user} no tenant {tenant_id}")
-    elif auth_mode == "basic":
-        import base64
-        u = user if user else config['user']
-        p = password if password else config['password']
-        cred = f"{u}:{p}".encode("utf-8")
-        b64_cred = base64.b64encode(cred).decode("utf-8")
-        headers["Authorization"] = f"Basic {b64_cred}"
-        logger.info(f"Usando autenticacao Basic para {u} no tenant {tenant_id}")
     else:
+        from app.services.protheus_token_service import get_valid_access_token
         try:
-            token = await get_protheus_token(tenant_id, user=user, password=password)
-            headers["Authorization"] = f"Bearer {token}"
+            from app.db.database import get_tenant_session
+            # We get a short-lived DB session here to fetch the token
+            token_session = get_tenant_session("public")
+            try:
+                token = await get_valid_access_token(
+                    db=token_session,
+                    tenant_code=tenant_id,
+                    environment_code="default"
+                )
+                headers["Authorization"] = f"Bearer {token}"
+            finally:
+                token_session.close()
         except Exception as e:
-            logger.error(f"Falha na autenticacao OAuth2 do tenant {tenant_id} (user={user}): {e}")
+            logger.error(f"Falha na autenticacao OAuth2 do tenant {tenant_id}: {e}")
             return json.dumps({"error": f"Falha na autenticacao OAuth2: {str(e)}"})
             
     if config.get("grupo") and config.get("empresa"):

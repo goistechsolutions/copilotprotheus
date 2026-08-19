@@ -431,55 +431,79 @@ async def sync_modules(
     admin: str        = Depends(verify_admin),
 ):
     """Sincroniza SYS_USR_MODULE -> protheus_modules_master usando a query canônica."""
-    from app.services.protheus_service import execute_protheus_tool
+    from app.services.protheus_queryrest_client import ProtheusQueryRestClient
+    from sqlalchemy import text
 
     tenant_id = payload.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
 
     try:
-        response_str = await execute_protheus_tool("QueryRest", {"cQuery": CANONICAL_MODULES_QUERY}, tenant_id=tenant_id)
-        result_data  = json.loads(fix_protheus_json(response_str))
+        client = ProtheusQueryRestClient(
+            db=db,
+            tenant_code=tenant_id,
+            environment_code="default"
+        )
+        
+        result_data = await client.execute(
+            """
+            SELECT DISTINCT
+                TRIM(USR_CODMOD) AS mod_sigla,
+                USR_MODULO AS mod_code,
+                USR_NOME AS mod_name
+            FROM SYS_USR_MODULE
+            WHERE D_E_L_E_T_ <> '*'
+            ORDER BY USR_MODULO
+            """,
+            method="POST"
+        )
+        
         if isinstance(result_data, dict):
             result_data = result_data.get("items") or result_data.get("data", [])
         if not isinstance(result_data, list):
             raise Exception(f"Retorno inesperado: {str(result_data)[:200]}")
 
-        def _val(row: dict, key: str) -> str:
-            if not isinstance(row, dict): return ""
-            v = row.get(key)
-            if v is not None: return str(v).strip()
-            for k, val in row.items():
-                if k.strip().upper() == key.upper():
-                    return "" if val is None else str(val).strip()
-            return ""
-
         count = 0
-        for row in result_data:
-            c_mod = _val(row, "CODIGO_MODULO") or _val(row, "USR_MODULO")
-            c_sigla = _val(row, "CODIGO_TABELA") or _val(row, "USR_CODMOD")
-            n_mod = _val(row, "NOME_MODULO") or _val(row, "USR_NOME")
-            
-            if not c_mod or not str(c_mod).isdigit():
+        for item in result_data:
+            if not item.get("mod_code"):
                 continue
-                
-            c_mod_int = int(c_mod)
 
-            existing = db.query(ProtheusModuleMaster).filter(
-                ProtheusModuleMaster.mod_code == c_mod_int
-            ).first()
+            try:
+                mod_code_int = int(item["mod_code"])
+            except ValueError:
+                continue
 
-            if existing:
-                existing.mod_sigla = c_sigla or existing.mod_sigla
-                existing.mod_name = n_mod or existing.mod_name
-                existing.active      = True
-            else:
-                db.add(ProtheusModuleMaster(
-                    mod_code=c_mod_int,
-                    mod_sigla=c_sigla,
-                    mod_name=n_mod or c_sigla,
-                    active=True
-                ))
+            db.execute(
+                text("""
+                    INSERT INTO public.protheus_modules_master (
+                        mod_code,
+                        mod_sigla,
+                        mod_name,
+                        active,
+                        source_updated_at,
+                        synced_at
+                    )
+                    VALUES (
+                        :mod_code,
+                        :mod_sigla,
+                        :mod_name,
+                        TRUE,
+                        NOW(),
+                        NOW()
+                    )
+                    ON CONFLICT (mod_code) DO UPDATE
+                    SET mod_sigla = EXCLUDED.mod_sigla,
+                        mod_name  = EXCLUDED.mod_name,
+                        active    = EXCLUDED.active,
+                        source_updated_at = EXCLUDED.source_updated_at,
+                        synced_at = NOW()
+                """),
+                {
+                    "mod_code": mod_code_int,
+                    "mod_sigla": str(item.get("mod_sigla", "")).strip().upper(),
+                    "mod_name": item.get("mod_name"),
+                },
+            )
             count += 1
 
         db.commit()

@@ -173,13 +173,13 @@ def fetch_rows_from_protheus(tenant_id: str, source_type: str) -> List[Dict[str,
 
 
 def fetch_curated_by_modules(
-    rest_url: str,
-    user: str,
-    encrypted_password: str,
+    db: Any,
+    tenant_code: str,
     modules: List[str],
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Busca dicionário CURADO pelos módulos selecionados via QueryRest direta.
+    Busca dicionário CURADO pelos módulos selecionados via QueryRest direta,
+    utilizando a nova camada Bearer Token (ProtheusQueryRestClient).
     """
     modules_in = _build_modules_in(modules)
     if not modules_in:
@@ -190,8 +190,28 @@ def fetch_curated_by_modules(
 
     logger.info(f"[Sync Curado] Buscando dicionário para módulos: {modules}")
 
-    dict_rows = queryrest_exec(rest_url, user, encrypted_password, sql_dict)
-    six_rows  = queryrest_exec(rest_url, user, encrypted_password, sql_six)
+    from app.services.protheus_queryrest_client import ProtheusQueryRestClient
+    import asyncio
+
+    client = ProtheusQueryRestClient(
+        db=db,
+        tenant_code=tenant_code,
+        environment_code="default"
+    )
+
+    # Use asyncio.run if there is no running loop, otherwise get event loop
+    try:
+        loop = asyncio.get_running_loop()
+        dict_rows = loop.run_until_complete(client.execute(sql_dict, method="POST"))
+        six_rows  = loop.run_until_complete(client.execute(sql_six, method="POST"))
+    except RuntimeError:
+        dict_rows = asyncio.run(client.execute(sql_dict, method="POST"))
+        six_rows  = asyncio.run(client.execute(sql_six, method="POST"))
+
+    if isinstance(dict_rows, dict):
+        dict_rows = dict_rows.get("items") or dict_rows.get("data") or []
+    if isinstance(six_rows, dict):
+        six_rows = six_rows.get("items") or six_rows.get("data") or []
 
     logger.info(f"[Sync Curado] Retornados {len(dict_rows)} campos e {len(six_rows)} índices.")
     return {"dict_rows": dict_rows, "six_rows": six_rows}
@@ -232,11 +252,11 @@ def run_snapshot(
     allowed_snapshot_tables = set()
     try:
         # ── MODO CURADO DIRETO: snapshot filtrado por módulos via credenciais REST informadas ────────────────────────
-        if module_filter and rest_url and protheus_user and encrypted_password:
+        if module_filter:
             logger.info(f"[Snapshot Curado via REST Direto] tenant={tenant_id} módulos={module_filter}")
 
             data = fetch_curated_by_modules(
-                rest_url, protheus_user, encrypted_password, module_filter
+                db=session, tenant_code=clean_tenant, modules=module_filter
             )
             dict_rows = data["dict_rows"]
             six_rows  = data["six_rows"]

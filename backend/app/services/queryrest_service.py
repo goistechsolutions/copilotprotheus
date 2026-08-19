@@ -53,74 +53,6 @@ def _parse_sanitized_json(text: str):
     return json.loads(clean_text)
 
 
-def queryrest_exec(
-    rest_url: str,
-    user: str,
-    encrypted_password: str,
-    sql: str,
-    timeout: int = 60,
-) -> List[Dict[str, Any]]:
-    """
-    Executa um SELECT via QueryRest do Protheus através de conexão direta por URL e credenciais REST.
-
-    Args:
-        rest_url: URL base da API REST do Protheus
-        user: usuário REST
-        encrypted_password: senha criptografada com Fernet
-        sql: SQL SELECT a executar (Oracle dialect)
-        timeout: timeout em segundos
-
-    Returns:
-        Lista de dicts com o resultado.
-    """
-    password = _decrypt(encrypted_password)
-    base = rest_url.rstrip("/")
-    url = f"{base}/QueryRest"
-
-    logger.info(f"[QueryRest Direto] GET/POST {url} — SQL: {sql[:120]}...")
-
-    resp = None
-    # 1. Tenta GET com cQuery na URL (Método padrão Protheus REST Cloud)
-    try:
-        with httpx.Client(timeout=timeout, verify=False) as client:
-            resp = client.get(
-                url,
-                params={"cQuery": sql},
-                auth=(user, password),
-            )
-            if resp.status_code == 200:
-                data = _parse_sanitized_json(resp.text)
-                if isinstance(data, list):
-                    return data
-                if isinstance(data, dict):
-                    return data.get("items") or data.get("data") or []
-    except Exception as e:
-        logger.warning(f"[QueryRest Direto] GET falhou ({e}). Tentando POST fallback...")
-
-    # 2. Fallback POST com JSON body
-    try:
-        with httpx.Client(timeout=timeout, verify=False) as client:
-            resp = client.post(
-                url,
-                json={"cQuery": sql},
-                auth=(user, password),
-                headers={"Content-Type": "application/json"},
-            )
-    except httpx.RequestError as e:
-        raise RuntimeError(f"QueryRest offline ou inacessível ({url}): {e}")
-
-    if resp.status_code != 200:
-        raise RuntimeError(
-            f"QueryRest retornou HTTP {resp.status_code} para {url}: {resp.text[:300]}"
-        )
-
-    data = _parse_sanitized_json(resp.text)
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        return data.get("items") or data.get("data") or data.get("result") or []
-    return []
-
 
 async def queryrest_exec_tenant(db: Session, tenant_id: str, company_id: int | str, query: str) -> List[Dict[str, Any]]:
     """
@@ -135,27 +67,30 @@ async def queryrest_exec_tenant(db: Session, tenant_id: str, company_id: int | s
 
     logger.info(f"[QueryRest Tenant] Executando consulta para tenant={tenant_id}, company_id={company_id}: {query[:150]}...")
     
-    try:
-        response_str = await execute_protheus_tool(
-            endpoint="QueryRest",
-            query_params={"cQuery": query},
-            tenant_id=tenant_id,
-            context={"company_id": str(company_id)}
-        )
-    except Exception as e:
-        logger.error(f"[QueryRest Tenant] Erro ao conectar ao portal REST /QueryRest (tenant={tenant_id}): {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Não foi possível se conectar à API /QueryRest do Protheus (tenant: {tenant_id}). Serviço offline ou inacessível na nuvem: {str(e)}"
-        )
+    from app.services.protheus_queryrest_client import ProtheusQueryRestClient, ProtheusQueryRestError
 
     try:
-        result_data = json.loads(response_str)
-    except Exception as e:
-        logger.error(f"[QueryRest Tenant] Resposta não-JSON retornada pelo Protheus /QueryRest: {response_str[:200]}")
+        client = ProtheusQueryRestClient(
+            db=db,
+            tenant_code=tenant_id,
+            environment_code="default"
+        )
+        
+        result_data = await client.execute(
+            query=query,
+            method="POST"
+        )
+    except ProtheusQueryRestError as e:
+        logger.error(f"[QueryRest Tenant] Erro ao conectar ao portal REST /QueryRest (tenant={tenant_id}): status {e.status_code}")
         raise HTTPException(
             status_code=502,
-            detail="Resposta inválida (não-JSON) retornada pelo servidor do ERP Protheus via /QueryRest na nuvem."
+            detail=f"Não foi possível se conectar à API /QueryRest do Protheus (tenant: {tenant_id}). Serviço offline ou inacessível."
+        )
+    except Exception as e:
+        logger.error(f"[QueryRest Tenant] Erro inesperado (tenant={tenant_id})")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Erro de conexão com QueryRest: {str(e)}"
         )
 
     if isinstance(result_data, dict):
