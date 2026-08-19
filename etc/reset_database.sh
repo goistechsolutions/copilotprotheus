@@ -7,11 +7,23 @@
 # =========================================================
 set -euo pipefail
 
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
 DB_NAME="${DB_NAME:-copilot_protheus}"
 DB_USER="${DB_USER:-postgres}"
+DB_HOST="${DB_HOST:-localhost}"
+DB_PORT="${DB_PORT:-5432}"
 CONTAINER="${CONTAINER_NAME:-copilot-protheus-db}"
 BACKUP_DIR="./backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+if [ -n "${DB_PASSWORD:-}" ]; then
+  export PGPASSWORD="$DB_PASSWORD"
+fi
 
 mkdir -p "$BACKUP_DIR"
 
