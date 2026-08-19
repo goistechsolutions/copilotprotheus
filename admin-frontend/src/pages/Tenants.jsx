@@ -1,27 +1,31 @@
 import { useState } from 'react';
 import {
   Plus, RefreshCw, Edit2, Globe, X, Save, Loader2,
-  Building2, ShieldCheck, AlertTriangle, Bot, Thermometer
+  Building2, ShieldCheck, AlertTriangle, Bot, Thermometer, Server
 } from 'lucide-react';
 import { useApi, apiCall } from '../hooks/useApi';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
 import Badge from '../components/ui/Badge';
 
-// Campos padrão alinhados ao schema real da tabela `tenant`
+// Campos padrão alinhados ao schema real da tabela `tenant` e conexão isolada
 const EMPTY = {
-  id:                   '',           // slug único — obrigatório pelo backend
-  tenant_code:          '',
-  tenant_name:          '',
-  name:                 '',
-  protheus_rest_url:    '',
-  protheus_user:        '',
-  protheus_password:    '',
-  auth_mode:            'basic',
-  system_prompt:        '',
-  temperature:          0.2,
-  plan_code:            '',
-  status:               'active',
+  id:                     '',           // slug único — obrigatório pelo backend
+  tenant_code:            '',
+  tenant_name:            '',
+  name:                   '',
+  environment_code:       '',
+  protheus_rest_url:      '',
+  protheus_user:          '',
+  protheus_rest_password: '',
+  auth_mode:              'oauth',
+  protheus_webapp_url:    '',
+  system_prompt:          '',
+  temperature:            0.2,
+  plan_code:              '',
+  status:                 'active',
+  cnpj:                   '',
+  licenca_uso:            '',
 };
 
 // Converte qualquer string em slug válido (minúsculas, só a-z 0-9 _ -)
@@ -35,7 +39,7 @@ function toSlug(v) {
 }
 
 // ─── Field helpers ────────────────────────────────────────────────────────────
-function F({ label, name, form, set, type = 'text', placeholder = '', mono = false, span = false, readOnly = false }) {
+function F({ label, name, form, set, type = 'text', placeholder = '', mono = false, span = false, readOnly = false, autoComplete = 'off' }) {
   return (
     <div className={span ? 'md:col-span-2' : ''}>
       <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
@@ -47,6 +51,7 @@ function F({ label, name, form, set, type = 'text', placeholder = '', mono = fal
         onChange={e => !readOnly && set(p => ({ ...p, [name]: e.target.value }))}
         placeholder={placeholder}
         readOnly={readOnly}
+        autoComplete={autoComplete}
         className={`w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm
           placeholder-[#8892A4]/40 focus:outline-none focus:border-[#2196F3] focus:ring-1
           focus:ring-[#2196F3]/20 transition-all ${mono ? 'font-mono' : ''}
@@ -90,7 +95,14 @@ function TenantModal({ tenant, onClose, onSaved }) {
   const isEdit = !!tenant?.id;
   const [form, setForm] = useState(
     isEdit
-      ? { ...tenant, protheus_password: '' }
+      ? {
+          ...tenant,
+          environment_code: tenant.environment_code || tenant.connection?.environment_code || '',
+          protheus_rest_url: tenant.protheus_rest_url || tenant.connection?.base_rest_url || '',
+          protheus_user: tenant.protheus_user || tenant.connection?.protheus_username || '',
+          auth_mode: tenant.auth_mode || tenant.connection?.auth_mode || 'oauth',
+          protheus_rest_password: '',
+        }
       : { ...EMPTY }
   );
   const [saving, setSaving] = useState(false);
@@ -108,17 +120,43 @@ function TenantModal({ tenant, onClose, onSaved }) {
 
   const save = async (e) => {
     e.preventDefault();
-    setSaving(true); setErr('');
+    setSaving(true);
+    setErr('');
 
-    const payload = { ...form };
-    if (isEdit && !payload.protheus_password) delete payload.protheus_password;
+    const payload = {
+      id: form.id,
+      name: form.name || form.tenant_name || form.id,
+      tenant_code: form.tenant_code || form.id,
+      tenant_name: form.tenant_name || form.name || form.id,
+      cnpj: form.cnpj || null,
+      status: form.status || 'active',
+      plan_code: form.plan_code || null,
+      licenca_uso: form.licenca_uso || null,
+      protheus_webapp_url: form.protheus_webapp_url || null,
+      system_prompt: form.system_prompt || null,
+      temperature: form.temperature,
+      connection: {
+        environment_code: String(form.environment_code || '').trim(),
+        base_rest_url: String(form.protheus_rest_url || '').trim(),
+        auth_mode: form.auth_mode || 'oauth',
+        protheus_username: String(form.protheus_user || '').trim(),
+      }
+    };
+
+    const restPassword = String(form.protheus_rest_password || '').trim();
+    if (restPassword) {
+      payload.connection.protheus_password = restPassword;
+    }
 
     try {
       if (isEdit) await apiCall(`/api/tenants/${form.id}`, 'PUT', payload);
       else        await apiCall('/api/tenants/', 'POST', payload);
       onSaved();
-    } catch (e) { setErr(e.message); }
-    finally { setSaving(false); }
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const f = (props) => <F form={form} set={setForm} {...props} />;
@@ -148,19 +186,20 @@ function TenantModal({ tenant, onClose, onSaved }) {
             {/* ── Identificação ── */}
             <SectionDivider>Identificação</SectionDivider>
 
-            {/* tenant_code: digitado pelo usuário; id: derivado automaticamente */}
+            {/* tenant_code */}
             <div>
               <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
-                Código (tenant_code)
+                Código (tenant_code) *
               </label>
               <input
                 type="text"
                 value={form.tenant_code}
                 onChange={handleTenantCode}
-                placeholder="elitecorp"
+                placeholder="rodol_prod"
                 className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5
                   text-white text-sm font-mono placeholder-[#8892A4]/40
                   focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/20 transition-all"
+                required
               />
             </div>
 
@@ -173,7 +212,7 @@ function TenantModal({ tenant, onClose, onSaved }) {
                 type="text"
                 value={form.id}
                 onChange={e => !isEdit && setForm(p => ({ ...p, id: toSlug(e.target.value) }))}
-                placeholder="elitecorp"
+                placeholder="rodol_prod"
                 readOnly={isEdit}
                 className={`w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5
                   text-white text-sm font-mono placeholder-[#8892A4]/40
@@ -182,36 +221,50 @@ function TenantModal({ tenant, onClose, onSaved }) {
               />
             </div>
             
-            {f({ label: 'Código (tenant_code)', name: 'tenant_code', placeholder: 'elitecorp' })}
             {f({ label: 'CNPJ', name: 'cnpj', placeholder: '00.000.000/0001-00' })}
-            {f({ label: 'Nome de Exibição (name)', name: 'name', placeholder: 'Elite Corp' })}
-            {f({ label: 'Nome Interno (tenant_name)', name: 'tenant_name', placeholder: 'elite_corp' })}
+            {f({ label: 'Nome de Exibição (name)', name: 'name', placeholder: 'Rodol Ltda' })}
+            {f({ label: 'Nome Interno (tenant_name)', name: 'tenant_name', placeholder: 'rodol_prod' })}
 
             {/* ── Conexão Protheus ── */}
             <SectionDivider>Conexão Protheus</SectionDivider>
-            {f({ label: 'URL REST Protheus', name: 'protheus_rest_url', placeholder: 'http://ip:porta/rest', mono: true, span: true })}
-            {f({ label: 'Usuário REST (protheus_user)', name: 'protheus_user', placeholder: 'admin' })}
-            {f({
-              label: isEdit ? 'Senha REST (em branco = manter)' : 'Senha REST',
-              name: 'protheus_password',
-              type: 'password',
-              placeholder: isEdit ? '••••••••' : 'Senha opcional',
-            })}
+            {f({ label: 'Ambiente Protheus (environment_code) *', name: 'environment_code', placeholder: 'c8te0u_prod', mono: true, span: true })}
+            {f({ label: 'URL REST Protheus', name: 'protheus_rest_url', placeholder: 'https://rodolltda...:10707/rest', mono: true, span: true })}
+            {f({ label: 'URL WebApp Protheus', name: 'protheus_webapp_url', placeholder: 'https://rodolltda...:10703/webapp/index.html', mono: true, span: true })}
+            {f({ label: 'Usuário REST (protheus_username)', name: 'protheus_user', placeholder: 'admin' })}
+            
+            {/* Campo Exclusivo de Senha REST (Isolado de credenciais do painel) */}
+            <div>
+              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
+                {isEdit ? 'Senha REST (em branco = manter)' : 'Senha REST Protheus'}
+              </label>
+              <input
+                type="password"
+                name="protheus_rest_password"
+                value={form.protheus_rest_password ?? ''}
+                onChange={e => setForm(p => ({ ...p, protheus_rest_password: e.target.value }))}
+                placeholder={isEdit ? '••••••••' : 'Senha do usuário REST'}
+                autoComplete="new-password"
+                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm
+                  placeholder-[#8892A4]/40 focus:outline-none focus:border-[#2196F3] focus:ring-1
+                  focus:ring-[#2196F3]/20 transition-all font-mono"
+              />
+            </div>
+
             <Sel
               label="Modo de Autenticação (auth_mode)"
               name="auth_mode"
               form={form}
               set={setForm}
               options={[
+                { value: 'oauth',  label: 'OAuth 2.0 (Recomendado)' },
                 { value: 'basic',  label: 'Basic Auth (usuário + senha)' },
                 { value: 'token',  label: 'Bearer Token' },
-                { value: 'oauth',  label: 'OAuth 2.0' },
               ]}
             />
 
             {/* ── Comportamento do Agente ── */}
             <SectionDivider>Comportamento do Agente</SectionDivider>
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Licença de Uso</label>
               <textarea
                 value={form.licenca_uso || ''}
@@ -228,7 +281,7 @@ function TenantModal({ tenant, onClose, onSaved }) {
               <textarea
                 value={form.system_prompt || ''}
                 onChange={e => setForm(p => ({ ...p, system_prompt: e.target.value }))}
-                rows={4}
+                rows={3}
                 placeholder="Você é um assistente Protheus para a empresa X. Responda sempre em português..."
                 className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm
                   resize-none placeholder-[#8892A4]/40 focus:outline-none focus:border-[#2196F3] transition-all"
@@ -265,7 +318,7 @@ function TenantModal({ tenant, onClose, onSaved }) {
               ]}
             />
 
-            {/* Timestamps (somente leitura no edit) */}
+            {/* Timestamps */}
             {isEdit && (
               <>
                 <SectionDivider>Auditoria</SectionDivider>
@@ -339,38 +392,49 @@ export default function Tenants() {
       )
     },
     {
-      key: 'protheus_rest_url', label: 'URL REST',
-      render: v => v
-        ? <span className="flex items-center gap-1 text-[#2196F3] text-xs font-mono">
-            <Globe className="w-3 h-3 shrink-0" />
-            {v.length > 38 ? v.slice(0, 38) + '…' : v}
+      key: 'environment_code', label: 'Ambiente',
+      render: (v, row) => {
+        const env = v || row.connection?.environment_code;
+        return env ? (
+          <span className="flex items-center gap-1 text-emerald-400 text-xs font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            <Server className="w-3 h-3 shrink-0" />
+            {env}
           </span>
-        : <span className="text-[#8892A4] text-xs">—</span>
+        ) : <span className="text-[#8892A4] text-xs">—</span>;
+      }
+    },
+    {
+      key: 'protheus_rest_url', label: 'URL REST',
+      render: (v, row) => {
+        const url = v || row.connection?.base_rest_url;
+        return url ? (
+          <span className="flex items-center gap-1 text-[#2196F3] text-xs font-mono">
+            <Globe className="w-3 h-3 shrink-0" />
+            {url.length > 35 ? url.slice(0, 35) + '…' : url}
+          </span>
+        ) : <span className="text-[#8892A4] text-xs">—</span>;
+      }
     },
     {
       key: 'auth_mode', label: 'Auth',
-      render: v => <span className="text-[10px] bg-[#0F1117] border border-[#1E2535] text-[#8892A4] px-2 py-0.5 rounded font-mono">{v || 'basic'}</span>
+      render: (v, row) => {
+        const auth = v || row.connection?.auth_mode || 'oauth';
+        return <span className="text-[10px] bg-[#0F1117] border border-[#1E2535] text-[#8892A4] px-2 py-0.5 rounded font-mono uppercase">{auth}</span>;
+      }
     },
     {
-      key: 'temperature', label: 'Temp.',
-      render: v => <span className="text-[#8892A4] text-xs">{v ?? '—'}</span>
+      key: 'plan_code', label: 'Plano',
+      render: v => v ? <Badge variant="blue">{v}</Badge> : '—'
     },
-    { key: 'plan_code', label: 'Plano', render: v => v ? <Badge variant="blue">{v}</Badge> : '—' },
     {
       key: 'status', label: 'Status',
       render: v => <Badge variant={statusVariant[v] || 'default'}>{statusLabel[v] || v}</Badge>
     },
     {
-      key: 'updated_at', label: 'Atualizado',
-      render: v => v
-        ? <span className="text-[#8892A4] text-xs">{new Date(v).toLocaleDateString('pt-BR')}</span>
-        : '—'
-    },
-    {
       key: 'id', label: '',
       render: (_, row) => (
         <button onClick={() => setModal(row)}
-          className="p-1.5 text-[#8892A4] hover:text-[#2196F3] hover:bg-[#1565C0]/10 rounded-md transition-all">
+          className="p-1.5 text-[#8892A4] hover:text-[#2196F3] hover:bg-[#1565C0]/10 rounded-md transition-all" title="Editar Tenant">
           <Edit2 className="w-3.5 h-3.5" />
         </button>
       )
@@ -381,11 +445,11 @@ export default function Tenants() {
     <div>
       <PageHeader
         title="Tenants"
-        description="Gerencie os tenants e suas configurações de conexão Protheus."
+        description="Gerencie os tenants e suas credenciais de conexão Protheus REST."
         actions={
           <>
             <button onClick={refetch}
-              className="p-2 text-[#8892A4] hover:text-white hover:bg-[#1E2535] rounded-lg transition-all">
+              className="p-2 text-[#8892A4] hover:text-white hover:bg-[#1E2535] rounded-lg transition-all" title="Atualizar">
               <RefreshCw className="w-4 h-4" />
             </button>
             <button onClick={() => setModal('new')}
@@ -399,9 +463,9 @@ export default function Tenants() {
       {/* KPI mini */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         {[
-          { label: 'Total',     value: total,     icon: Building2,     bg: 'bg-[#1565C0]/15',    ring: 'ring-[#1565C0]/30',    txt: 'text-[#60A5FA]' },
-          { label: 'Ativos',   value: active,    icon: ShieldCheck,   bg: 'bg-emerald-500/15',  ring: 'ring-emerald-500/30',  txt: 'text-emerald-400' },
-          { label: 'Suspensos',value: suspended, icon: AlertTriangle, bg: 'bg-amber-500/15',    ring: 'ring-amber-500/30',    txt: 'text-amber-400' },
+          { label: 'Total',      value: total,     icon: Building2,     bg: 'bg-[#1565C0]/15',    ring: 'ring-[#1565C0]/30',    txt: 'text-[#60A5FA]' },
+          { label: 'Ativos',    value: active,    icon: ShieldCheck,   bg: 'bg-emerald-500/15',  ring: 'ring-emerald-500/30',  txt: 'text-emerald-400' },
+          { label: 'Suspensos', value: suspended, icon: AlertTriangle, bg: 'bg-amber-500/15',    ring: 'ring-amber-500/30',    txt: 'text-amber-400' },
         ].map(({ label, value, icon: Icon, bg, ring, txt }) => (
           <div key={label} className="bg-[#161B27] border border-[#1E2535] rounded-xl px-4 py-3 flex items-center gap-3">
             <div className={`w-8 h-8 ${bg} ring-1 ${ring} rounded-lg flex items-center justify-center`}>
@@ -431,6 +495,5 @@ export default function Tenants() {
         />
       )}
     </div>
-
   );
 }

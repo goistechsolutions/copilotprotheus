@@ -11,14 +11,25 @@ export default function CompanyDictionary({ company }) {
   const [modulosInput, setModulosInput] = useState([]);
   const [syncResult, setSyncResult] = useState(null);
 
-  
-
   useEffect(() => {
     if (company?.tenant_id) {
       fetchSchemas(company.tenant_id);
       fetchProtheusModules(company.tenant_id);
     }
   }, [company]);
+
+  const resolveEnvironmentCode = async (comp) => {
+    let env = comp?.environment_code || comp?.protheus_ambiente || comp?.protheus_ambientes || comp?.ambiente || comp?.environment;
+    if (!env && comp?.tenant_id) {
+      try {
+        const res = await axios.get(`/api/tenants/${comp.tenant_id}`);
+        env = res.data?.environment_code || res.data?.connection?.environment_code;
+      } catch (err) {
+        console.warn("Não foi possível buscar environment_code do tenant:", err);
+      }
+    }
+    return String(env || '').trim();
+  };
 
   const fetchProtheusModules = async (tenantId) => {
     try {
@@ -34,7 +45,16 @@ export default function CompanyDictionary({ company }) {
     setSyncingModules(true);
     setSyncResult(null);
     try {
-      const res = await axios.post('/api/admin/sync-modules', { tenant_id: company.tenant_id });
+      const envCode = await resolveEnvironmentCode(company);
+      if (!envCode) {
+        throw new Error("Ambiente Protheus (environment_code) não está configurado para este Tenant. Salve o cadastro do Tenant primeiro.");
+      }
+
+      const res = await axios.post('/api/admin/sync-modules', {
+        tenant_id: company.tenant_id,
+        tenant_code: company.tenant_id,
+        environment_code: envCode
+      });
       setSyncResult({ type: 'success', message: res.data.message });
       fetchProtheusModules(company.tenant_id);
     } catch (error) {
@@ -63,7 +83,7 @@ export default function CompanyDictionary({ company }) {
       alert("Empresa não possui tenant vinculado!");
       return;
     }
-    if (!confirm(`Tem certeza que deseja sincronizar o schema do Protheus para ${company.razao_social}? Isso pode demorar alguns minutos.`)) {
+    if (!confirm(`Tem certeza que deseja sincronizar o schema do Protheus para ${company.razao_social || company.name || company.tenant_id}? Isso pode demorar alguns minutos.`)) {
       return;
     }
     setSyncing(true);
@@ -71,13 +91,22 @@ export default function CompanyDictionary({ company }) {
     
     if (modulosInput.length === 0) {
       setSyncResult({ type: 'error', message: 'Selecione ao menos um módulo para iniciar a sincronização.' });
+      setSyncing(false);
       return;
     }
     const modulosArray = modulosInput;
     try {
+      const envCode = await resolveEnvironmentCode(company);
+      if (!envCode) {
+        throw new Error("Ambiente Protheus (environment_code) não está configurado para este Tenant. Salve o cadastro do Tenant primeiro.");
+      }
+
       const res = await axios.post('/api/admin/sync-schema', { 
         tenant_id: company.tenant_id,
-        modulos: modulosArray
+        tenant_code: company.tenant_id,
+        environment_code: envCode,
+        modulos: modulosArray,
+        modules: modulosArray
       });
       
       setSyncResult({ type: 'success', message: res.data.message });

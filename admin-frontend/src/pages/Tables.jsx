@@ -43,7 +43,21 @@ export default function Tables() {
     setSyncing(true); setSyncResult(null);
     const modulos = modulosInput.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
     try {
-      const res = await axios.post('/api/admin/sync-schema', { tenant_id: selectedTenant, modulos });
+      const target = tenants.find(t => (t.tenant_id || t.protheus_grupo || t.id) === selectedTenant);
+      let envCode = target?.environment_code || target?.protheus_ambiente || target?.protheus_ambientes || target?.ambiente || '';
+      if (!envCode && selectedTenant !== 'default') {
+        try {
+          const resT = await axios.get(`/api/tenants/${selectedTenant}`);
+          envCode = resT.data?.environment_code || resT.data?.connection?.environment_code;
+        } catch {}
+      }
+      const res = await axios.post('/api/admin/sync-schema', {
+        tenant_id: selectedTenant,
+        tenant_code: selectedTenant,
+        environment_code: envCode,
+        modulos,
+        modules: modulos
+      });
       setSyncResult({ type: 'success', message: res.data.message });
       fetchSchemas(selectedTenant);
     } catch (e) {

@@ -1,30 +1,32 @@
-"""Rotas CRUD para Tenant — modelo V4 canônico.
+"""Rotas CRUD para Tenant — modelo V4 canônico e isolamento de conexões Protheus.
 
 Segurança:
 - Protegido via Depends(require_admin).
 - encrypted_protheus_password NUNCA é retornado em nenhum endpoint.
-- Senha recebida como protheus_password (plaintext) → criptografada antes de persistir.
-- Apenas platform_admin pode criar/deletar tenants.
+- Senha recebida como protheus_password (plaintext) → criptografada antes de persistir na tabela protheus_rest_connections.
+- Senha do painel administrativo é estritamente isolada e rejeitada neste contexto.
 """
+import base64
+import hashlib
+import os
 import re
-from app.services.tenant_resolver import resolve_clean_tenant
+from datetime import datetime
+from typing import List, Optional
+
+from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from cryptography.fernet import Fernet
-import os
 
-from app.db.database import get_db
+from app.core.admin_security import require_admin, require_admin_flexible
+from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
-from app.core.admin_security import require_admin, require_admin_flexible
-from typing import List, Optional
+from app.services.protheus_token_service import invalidate_access_token, get_valid_access_token
+from app.services.tenant_resolver import resolve_clean_tenant
 
-# prefix só com /tenants — main.py já adiciona /api
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
-import base64
-import hashlib
 
 # ── Criptografia da senha REST Protheus ──────────────────────
 
@@ -35,7 +37,6 @@ def _get_fernet() -> Fernet:
             return Fernet(key)
         except Exception:
             pass
-    # Derivação determinística de 32 bytes se FERNET_KEY não for configurada no .env
     secret = os.getenv("JWT_SECRET") or os.getenv("ADMIN_JWT_SECRET") or "copilot-protheus-fernet-fallback-key"
     key_32bytes = hashlib.sha256(secret.encode()).digest()
     fallback_key = base64.urlsafe_b64encode(key_32bytes)
@@ -47,39 +48,76 @@ def encrypt_password(plaintext: str) -> str:
     return _get_fernet().encrypt(plaintext.encode()).decode()
 
 
-# ── Helpers ──────────────────────────────────────────────────
+# ── Helpers de Conexão e Validação ───────────────────────────
 
-def _apply_password(tenant_obj: Tenant, plaintext: Optional[str]) -> None:
-    """Criptografa e persiste a senha somente se plaintext foi fornecido."""
-    if plaintext:
-        tenant_obj.encrypted_protheus_password = encrypt_password(plaintext)
+def validate_tenant_raw_dict(raw: dict) -> None:
+    """Bloqueia a mistura indevida de senhas do painel administrativo no cadastro do tenant."""
+    if "password" in raw and raw["password"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Senha do painel administrativo não pode ser enviada no cadastro do tenant."
+        )
+    conn = raw.get("connection")
+    if isinstance(conn, dict) and "password" in conn and conn["password"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Use somente connection.protheus_password para a senha REST Protheus."
+        )
 
+def extract_connection_info(body: TenantCreate | TenantUpdate) -> Optional[dict]:
+    """Extrai e normaliza informações de conexão Protheus da requisição."""
+    raw = body.model_dump(exclude_unset=False)
+    validate_tenant_raw_dict(raw)
 
-# ── Endpoints Protegidos por Admin ─────────────────────────────
+    conn = body.connection
+    if conn:
+        url = conn.base_rest_url or conn.protheus_rest_url or body.protheus_rest_url
+        env = conn.environment_code or conn.protheus_ambiente or conn.ambiente or body.environment_code or body.protheus_ambiente or body.ambiente
+        user = conn.protheus_username or conn.protheus_user or body.protheus_user
+        pw = conn.protheus_password or body.protheus_password
+        auth = conn.auth_mode or body.auth_mode or "oauth"
+    else:
+        url = body.protheus_rest_url
+        env = body.environment_code or body.protheus_ambiente or body.ambiente
+        user = body.protheus_user
+        pw = body.protheus_password
+        auth = body.auth_mode or "oauth"
 
+    if not url or not str(url).strip():
+        return None
 
+    if not env or not str(env).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Ambiente Protheus (environment_code) é obrigatório para configurar a conexão."
+        )
 
-def resolve_environment_code(payload: dict) -> str:
-    value = (
-        payload.get("environment_code")
-        or payload.get("protheus_ambiente")
-        or payload.get("ambiente")
-    )
-    if not value:
-        raise ValueError("O ambiente Protheus não foi informado.")
-    normalized = str(value).strip()
-    if not normalized:
-        raise ValueError("Ambiente Protheus não pode ser vazio.")
-    if len(normalized) > 100:
-        raise ValueError("Ambiente Protheus excede o tamanho permitido.")
-    return normalized
+    env_str = str(env).strip()
+    if env_str.lower() == "none":
+        raise HTTPException(status_code=400, detail="Ambiente Protheus inválido: None.")
+    if env_str.lower() == "default":
+        raise HTTPException(status_code=400, detail="Ambiente default não é permitido para este tenant.")
+    if len(env_str) > 100:
+        raise HTTPException(status_code=400, detail="Ambiente Protheus excede o tamanho permitido.")
 
-from app.services.protheus_token_service import invalidate_access_token, get_valid_access_token
+    return {
+        "env_code": env_str,
+        "rest_url": str(url).strip().rstrip("/"),
+        "username": str(user).strip() if user else "admin",
+        "password": str(pw).strip() if pw else None,
+        "auth_mode": str(auth).strip() if auth else "oauth"
+    }
 
-async def _sync_protheus_connection(db: Session, tenant_code: str, env_code: str, rest_url: str, username: str, password: Optional[str], auth_mode: str):
-    if not rest_url:
-        return
-        
+async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: dict):
+    """Grava na tabela public.protheus_rest_connections e valida a autenticação."""
+    env_code = conn_info["env_code"]
+    rest_url = conn_info["rest_url"]
+    username = conn_info["username"]
+    password = conn_info["password"]
+    auth_mode = conn_info["auth_mode"]
+
+    enc_pw = encrypt_password(password) if password else None
+
     upsert_sql = text('''
         INSERT INTO public.protheus_rest_connections (
             tenant_code, environment_code, base_rest_url,
@@ -94,25 +132,27 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, env_code: str
             active = TRUE,
             updated_at = NOW();
     ''')
-    
-    enc_pw = encrypt_password(password) if password else None
-    
+
     db.execute(upsert_sql, {
         "t_code": tenant_code,
         "env_code": env_code,
-        "url": rest_url.rstrip("/"),
-        "auth": auth_mode or "oauth2_password",
-        "user": username or "admin",
+        "url": rest_url,
+        "auth": auth_mode,
+        "user": username,
         "pw": enc_pw
     })
     db.commit()
-    
-    # Valida credenciais obtendo o token
+
+    # Valida credenciais obtendo o token OAuth2
     try:
         invalidate_access_token(db, tenant_code, env_code)
         await get_valid_access_token(db, tenant_code, env_code)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Erro ao validar Conexão Protheus: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Erro ao validar Conexão Protheus ({tenant_code}/{env_code}): {str(e)}"
+        )
+
 
 def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Tenant]:
     t_str = str(tenant_id or '').strip()
@@ -127,11 +167,40 @@ def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Ten
 
 
 def _to_tenant_dict(db: Session, t: Tenant) -> dict:
-    conn = db.execute(text("SELECT base_rest_url, auth_mode, protheus_username, environment_code FROM public.protheus_rest_connections WHERE tenant_code = :tc AND active = TRUE ORDER BY id DESC LIMIT 1"), {"tc": t.tenant_code}).mappings().first()
+    conn = db.execute(text("""
+        SELECT 
+            base_rest_url, 
+            auth_mode, 
+            protheus_username, 
+            environment_code,
+            encrypted_protheus_password,
+            encrypted_access_token,
+            access_token_expires_at,
+            active
+        FROM public.protheus_rest_connections 
+        WHERE tenant_code = :tc AND active = TRUE 
+        ORDER BY id DESC 
+        LIMIT 1
+    """), {"tc": t.tenant_code}).mappings().first()
+
     rest_url = conn["base_rest_url"] if conn else ""
     user = conn["protheus_username"] if conn else ""
-    auth_mode = conn["auth_mode"] if conn else "oauth2_password"
-    
+    auth_mode = conn["auth_mode"] if conn else "oauth"
+    env_code = conn["environment_code"] if conn else ""
+    has_pw = bool(conn and conn["encrypted_protheus_password"] and conn["encrypted_protheus_password"].strip())
+    has_tok = bool(conn and conn["encrypted_access_token"] and conn["encrypted_access_token"].strip())
+    exp_at = conn["access_token_expires_at"].isoformat() if (conn and conn["access_token_expires_at"]) else None
+
+    conn_obj = {
+        "environment_code": env_code,
+        "base_rest_url": rest_url,
+        "auth_mode": auth_mode,
+        "protheus_username": user,
+        "has_password": has_pw,
+        "has_access_token": has_tok,
+        "access_token_expires_at": exp_at
+    } if conn else None
+
     return {
         "id": t.tenant_code,
         "name": t.tenant_name,
@@ -141,6 +210,8 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
         "protheus_webapp_url": t.webapp_url,
         "protheus_user": user,
         "auth_mode": auth_mode,
+        "environment_code": env_code,
+        "connection": conn_obj,
         "system_prompt": t.system_prompt,
         "temperature": float(t.temperature) if t.temperature is not None else 0.2,
         "status": t.status or "active",
@@ -172,7 +243,7 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(req
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
-    import re, uuid
+    import uuid
     raw_code = body.tenant_code or body.tenant_name or body.name or body.id or "tenant"
     t_code = resolve_clean_tenant(str(raw_code).lower().strip())
     if not t_code:
@@ -209,21 +280,13 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
         db.commit()
         db.refresh(tenant)
 
-    # Cria schema isolado para o tenant
-    from app.db.database import ensure_tenant_tables
+    # Garante o schema isolado
     ensure_tenant_tables(db, clean_tenant)
 
-
-    if body.protheus_rest_url:
-        try:
-            env_code = resolve_environment_code(body.model_dump())
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        
-        await _sync_protheus_connection(
-            db, clean_tenant, env_code, body.protheus_rest_url, 
-            body.protheus_user, body.protheus_password, body.auth_mode
-        )
+    # Processa e valida conexão REST Protheus
+    conn_info = extract_connection_info(body)
+    if conn_info:
+        await _sync_protheus_connection(db, clean_tenant, conn_info)
 
     return _to_tenant_dict(db, tenant)
 
@@ -250,26 +313,18 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
         tenant.system_prompt = body.system_prompt
     if body.temperature is not None:
         tenant.temperature = body.temperature
-    
+
     db.commit()
     db.refresh(tenant)
 
     clean_tenant = resolve_clean_tenant(tenant.tenant_code)
     if clean_tenant and clean_tenant != "public":
-        from app.db.database import ensure_tenant_tables
         ensure_tenant_tables(db, clean_tenant)
 
-
-    if body.protheus_rest_url:
-        try:
-            env_code = resolve_environment_code(body.model_dump())
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        
-        await _sync_protheus_connection(
-            db, clean_tenant, env_code, body.protheus_rest_url, 
-            body.protheus_user, body.protheus_password, body.auth_mode
-        )
+    # Processa e valida conexão REST Protheus
+    conn_info = extract_connection_info(body)
+    if conn_info:
+        await _sync_protheus_connection(db, clean_tenant, conn_info)
 
     return _to_tenant_dict(db, tenant)
 
