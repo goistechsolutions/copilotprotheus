@@ -174,8 +174,6 @@ async def _request_password_token(
     username: str,
     password: str,
 ) -> ProtheusToken:
-    credentials = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
-
     response = await client.post(
         _token_url(base_rest_url),
         params={
@@ -188,7 +186,6 @@ async def _request_password_token(
         headers={
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "Authorization": f"Basic {credentials}",
         },
     )
 
@@ -242,11 +239,24 @@ async def get_valid_access_token(
                     )
 
             if new_token is None:
-                password = _decrypt_secret(connection["encrypted_protheus_password"])
+                username = connection.get("protheus_username")
+                password_encrypted = connection.get("encrypted_protheus_password")
+                
+                from app.core.config import settings
+                
+                if not username or username == 'admin':
+                    # Fallback to .env if DB is empty or still using default 'admin'
+                    username = settings.protheus_user or username
+                    
+                if password_encrypted:
+                    password = _decrypt_secret(password_encrypted)
+                else:
+                    password = settings.protheus_password
+
                 new_token = await _request_password_token(
                     client,
                     base_url,
-                    connection["protheus_username"],
+                    username,
                     password,
                 )
 
