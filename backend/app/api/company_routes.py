@@ -413,10 +413,6 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
 
-    enc_pass = None
-    if payload.protheus_password:
-        enc_pass = encrypt_password(payload.protheus_password)
-
     c_code = payload.protheus_empresa
     b_code = payload.protheus_filial
     c_name = payload.razao_social
@@ -477,26 +473,7 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "t_code": clean_tenant, "c_name": c_name, "s_name": clean_tenant
     })
 
-    if payload.protheus_rest_url and payload.protheus_usuario and enc_pass:
-        upsert_conn = text("""
-            INSERT INTO public.protheus_rest_connections (
-                tenant_code, environment_code, base_rest_url,
-                auth_mode, protheus_username, encrypted_protheus_password, active
-            ) VALUES (
-                :t_code, 'default', :url, 'oauth2_password', :user, :pw, TRUE
-            ) ON CONFLICT (tenant_code, environment_code) DO UPDATE SET
-                base_rest_url = EXCLUDED.base_rest_url,
-                protheus_username = EXCLUDED.protheus_username,
-                encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
-                active = TRUE,
-                updated_at = NOW();
-        """)
-        db.execute(upsert_conn, {
-            "t_code": clean_tenant,
-            "url": payload.protheus_rest_url.rstrip("/"),
-            "user": payload.protheus_usuario,
-            "pw": enc_pass
-        })
+
 
     db.commit()
 
@@ -594,10 +571,6 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
 
-    enc_pass = None
-    if payload.protheus_password:
-        enc_pass = encrypt_password(payload.protheus_password)
-
     c_code = payload.protheus_empresa or comp_info.get("protheus_empresa")
     b_code = payload.protheus_filial or comp_info.get("protheus_filial")
     c_name = payload.razao_social or comp_info.get("razao_social")
@@ -645,29 +618,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
     }).first()
 
     rest_url = payload.protheus_rest_url or comp_info.get("protheus_rest_url")
-    user = payload.protheus_usuario or comp_info.get("protheus_usuario")
-    pw = enc_pass or comp_info.get("encrypted_protheus_password")
 
-    if rest_url and user and pw:
-        upsert_conn = text("""
-            INSERT INTO public.protheus_rest_connections (
-                tenant_code, environment_code, base_rest_url,
-                auth_mode, protheus_username, encrypted_protheus_password, active
-            ) VALUES (
-                :t_code, 'default', :url, 'oauth2_password', :user, :pw, TRUE
-            ) ON CONFLICT (tenant_code, environment_code) DO UPDATE SET
-                base_rest_url = EXCLUDED.base_rest_url,
-                protheus_username = EXCLUDED.protheus_username,
-                encrypted_protheus_password = EXCLUDED.encrypted_protheus_password,
-                active = TRUE,
-                updated_at = NOW();
-        """)
-        db.execute(upsert_conn, {
-            "t_code": clean_tenant,
-            "url": rest_url.rstrip("/"),
-            "user": user,
-            "pw": pw
-        })
 
     db.commit()
 

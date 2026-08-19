@@ -70,15 +70,20 @@ def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Ten
 
 
 def _to_tenant_dict(db: Session, t: Tenant) -> dict:
+    conn = db.execute(text("SELECT base_rest_url, auth_mode, protheus_username FROM public.protheus_rest_connections WHERE tenant_code = :tc AND environment_code = 'default'"), {"tc": t.tenant_code}).mappings().first()
+    rest_url = conn["base_rest_url"] if conn else ""
+    user = conn["protheus_username"] if conn else ""
+    auth_mode = conn["auth_mode"] if conn else "oauth2_password"
+    
     return {
         "id": t.tenant_code,
         "name": t.tenant_name,
         "tenant_code": t.tenant_code,
         "tenant_name": t.tenant_name,
-        "protheus_rest_url": t.apirest_url,
+        "protheus_rest_url": rest_url,
         "protheus_webapp_url": t.webapp_url,
-        "protheus_user": t.protheus_user,
-        "auth_mode": "basic",
+        "protheus_user": user,
+        "auth_mode": auth_mode,
         "system_prompt": t.system_prompt,
         "temperature": float(t.temperature) if t.temperature is not None else 0.2,
         "status": t.status or "active",
@@ -104,12 +109,19 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(req
     tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
+
+    if body.protheus_rest_url:
+        await _sync_protheus_connection(
+            db, clean_tenant, body.protheus_rest_url, 
+            body.protheus_user, body.protheus_password, body.auth_mode
+        )
+
     return _to_tenant_dict(db, tenant)
 
 
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED, include_in_schema=False)
-def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
+async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     import re, uuid
     raw_code = body.tenant_code or body.tenant_name or body.name or body.id or "tenant"
     t_code = resolve_clean_tenant(str(raw_code).lower().strip())
@@ -128,14 +140,11 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depe
             plan_code=body.plan_code,
             cnpj=body.cnpj,
             licenca_uso=body.licenca_uso,
-            apirest_url=body.protheus_rest_url,
-            webapp_url=body.protheus_webapp_url,
-            protheus_user=body.protheus_user,
-            system_prompt=body.system_prompt,
+                        webapp_url=body.protheus_webapp_url,
+                        system_prompt=body.system_prompt,
             temperature=body.temperature,
         )
-        _apply_password(tenant, body.protheus_password)
-        db.add(tenant)
+                db.add(tenant)
         db.commit()
         db.refresh(tenant)
     else:
@@ -144,24 +153,28 @@ def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depe
         tenant.plan_code = body.plan_code or tenant.plan_code
         tenant.cnpj = body.cnpj or tenant.cnpj
         tenant.licenca_uso = body.licenca_uso or tenant.licenca_uso
-        tenant.apirest_url = body.protheus_rest_url or tenant.apirest_url
-        tenant.webapp_url = body.protheus_webapp_url or tenant.webapp_url
-        tenant.protheus_user = body.protheus_user or tenant.protheus_user
-        tenant.system_prompt = body.system_prompt or tenant.system_prompt
+                tenant.webapp_url = body.protheus_webapp_url or tenant.webapp_url
+                tenant.system_prompt = body.system_prompt or tenant.system_prompt
         tenant.temperature = body.temperature if body.temperature is not None else tenant.temperature
-        _apply_password(tenant, body.protheus_password)
-        db.commit()
+                db.commit()
         db.refresh(tenant)
 
     # Cria schema isolado para o tenant
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
 
+
+    if body.protheus_rest_url:
+        await _sync_protheus_connection(
+            db, clean_tenant, body.protheus_rest_url, 
+            body.protheus_user, body.protheus_password, body.auth_mode
+        )
+
     return _to_tenant_dict(db, tenant)
 
 
 @router.put("/{tenant_id}", response_model=dict)
-def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
+async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
@@ -176,18 +189,13 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
         tenant.cnpj = body.cnpj
     if body.licenca_uso is not None:
         tenant.licenca_uso = body.licenca_uso
-    if body.protheus_rest_url is not None:
-        tenant.apirest_url = body.protheus_rest_url
     if body.protheus_webapp_url is not None:
         tenant.webapp_url = body.protheus_webapp_url
-    if body.protheus_user is not None:
-        tenant.protheus_user = body.protheus_user
     if body.system_prompt is not None:
         tenant.system_prompt = body.system_prompt
     if body.temperature is not None:
         tenant.temperature = body.temperature
-    _apply_password(tenant, body.protheus_password)
-
+    
     db.commit()
     db.refresh(tenant)
 
@@ -195,6 +203,13 @@ def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_
     if clean_tenant and clean_tenant != "public":
         from app.db.database import ensure_tenant_tables
         ensure_tenant_tables(db, clean_tenant)
+
+
+    if body.protheus_rest_url:
+        await _sync_protheus_connection(
+            db, clean_tenant, body.protheus_rest_url, 
+            body.protheus_user, body.protheus_password, body.auth_mode
+        )
 
     return _to_tenant_dict(db, tenant)
 
