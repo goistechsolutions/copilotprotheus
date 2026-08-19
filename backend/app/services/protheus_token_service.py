@@ -150,13 +150,12 @@ async def _request_refresh_token(
 ) -> ProtheusToken:
     response = await client.post(
         _token_url(base_rest_url),
-        params={
+        data={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
         },
         headers={
             "Accept": "application/json",
-            "Content-Type": "application/json",
         },
     )
 
@@ -174,18 +173,18 @@ async def _request_password_token(
     username: str,
     password: str,
 ) -> ProtheusToken:
+    credentials = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+
     response = await client.post(
         _token_url(base_rest_url),
-        params={
+        data={
             "grant_type": "password",
-        },
-        json={
             "username": username,
             "password": password,
         },
         headers={
             "Accept": "application/json",
-            "Content-Type": "application/json",
+            "Authorization": f"Basic {credentials}",
         },
     )
 
