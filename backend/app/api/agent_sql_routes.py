@@ -117,66 +117,78 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
 async def process_agent_task(task_id: str, payload: dict):
     started = time.time()
     try:
-        tenant_id = payload.get("tenant_id")
-        if not tenant_id or tenant_id == "default":
-            AGENT_TASKS[task_id] = {"status": "error", "error": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
-            return
-            
-        company_id_raw = payload.get("company_id")
-        if company_id_raw in ("", "default", "null", None):
-            company_id_raw = None
-            
-        config = get_tenant_config(tenant_id, company_id_raw) if tenant_id != "default" else None
-        company_id = config.get("company_id") if config else None
-            
-        payload_context = payload.get("context", {})
-        prompt = payload.get("prompt") or payload.get("query")
-        empresa = payload.get("empresa") or payload_context.get("empresa")
-        filial = payload.get("filial") or payload_context.get("filial")
-        
-        module_val = payload.get("module_filter") or payload_context.get("module")
-        if module_val and isinstance(module_val, str):
-            # Mapeamento de siglas conhecidas para os códigos numéricos (X2_MODULO)
-            MOD_MAP = { "FAT": "05", "FIN": "06", "COM": "02", "EST": "04", "FIS": "09", "CTB": "34", "GPE": "07", "ATF": "07", "PCO": "08" }
-            clean_mod = module_val.upper().replace("SIGA", "")
-            module_filter = [MOD_MAP.get(clean_mod, clean_mod)]
-        else:
-            module_filter = module_val
-            
         execute = payload.get("execute", False)
         
-        file_data = payload.get("file")
-        image_b64 = file_data.get("data") if isinstance(file_data, dict) else None
-
+        prompt = payload.get("prompt") or payload.get("query")
         if not prompt:
             AGENT_TASKS[task_id] = {"status": "error", "error": "O campo prompt ou query é obrigatório na v2."}
             return
 
+        file_data = payload.get("file")
+        image_b64 = file_data.get("data") if isinstance(file_data, dict) else None
+
         import re
         from sqlalchemy import text
         from app.db.database import ensure_tenant_tables
+        from app.db.database import resolve_clean_tenant
+        from app.services.protheus_context_resolver import resolve_context
+        from app.services.protheus_module_catalog import filter_allowed_dictionary_tables
         
         with SessionLocal() as db:
-            clean_tenant = resolve_clean_tenant(tenant_id)
+            try:
+                # 1. Resolve o contexto de forma segura (Tenant, Schema, Módulo, Branch)
+                ctx = resolve_context(db, payload)
+            except ValueError as ve:
+                AGENT_TASKS[task_id] = {"status": "error", "error": str(ve)}
+                return
+
+            clean_tenant = ctx.schema_name
             if clean_tenant and clean_tenant != "public":
                 ensure_tenant_tables(db, clean_tenant)
-                db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+                db.execute(text(f'SET search_path TO {clean_tenant}, public'))
                 db.commit()
 
-            # 0. Valida cota e limite diário
+            # 2. Valida cota e limite diário
             from app.core.rate_limit import check_tenant_rate_limit
             rate_info = check_tenant_rate_limit(db, clean_tenant)
 
-            # 1. Montar contexto XFILIAL
-            op_context = build_protheus_context(empresa=empresa, filial=filial)
+            # 3. Montar contexto XFILIAL
+            # O build_protheus_context legada continua operando para gerar a string xfilial
+            op_context = build_protheus_context(empresa=ctx.company_code or "", filial=ctx.branch)
+            # Para evitar erro nas variáveis, injetamos empresa
+            op_context["empresa"] = ctx.company_code or ""
+            op_context["filial"] = ctx.branch
 
-            # 3. Carregar dicionário
-            context = build_dictionary_context(
+            # 4. Carregar dicionário SEGURO (usando o filter novo)
+            tables = filter_allowed_dictionary_tables(
                 db=db,
-                tenant_id=str(tenant_id),
-                company_id=company_id,
-                module_filter=module_filter
+                tenant_schema=ctx.schema_name,
+                module_codes=[ctx.module_code],
+                company_id=ctx.company_id
             )
+
+            # O LLM precisa dos campos também. Precisamos enriquecer as tabelas com seus fields
+            context = []
+            for t in tables:
+                fields = db.execute(
+                    text("""
+                        SELECT
+                            field_name,
+                            COALESCE(title, field_name) AS field_label,
+                            field_type,
+                            length_num AS field_length,
+                            decimal_num AS field_decimal
+                        FROM dictionary_fields
+                        WHERE table_code = :table_code
+                        ORDER BY id
+                    """),
+                    {"table_code": t["table_code"]}
+                ).mappings().all()
+                
+                context.append({
+                    "table": dict(t),
+                    "fields": [dict(f) for f in fields]
+                })
 
             if not context:
                 AGENT_TASKS[task_id] = {"status": "error", "error": "Nenhuma tabela liberada ou encontrada no snapshot do dicionário para os filtros informados."}
@@ -195,7 +207,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 empresa=op_context["empresa"],
                 filial=op_context["filial"],
                 xfilial=op_context["xfilial"],
-                tenant_id=str(tenant_id),
+                tenant_id=str(ctx.tenant_id),
                 image=image_b64
             )
 
@@ -204,8 +216,8 @@ async def process_agent_task(task_id: str, payload: dict):
 
             response = {
                 "status": "success",
-                "tenant_id": str(tenant_id),
-                "company_id": company_id,
+                "tenant_id": str(ctx.tenant_id),
+                "company_id": ctx.company_id,
                 "context_operational": op_context,
                 "tables_in_context": len(context),
                 "sql": sql,
@@ -217,8 +229,8 @@ async def process_agent_task(task_id: str, payload: dict):
                 try:
                     rows = await queryrest_exec_tenant(
                         db=db,
-                        tenant_id=str(tenant_id),
-                        company_id=company_id,
+                        tenant_id=str(ctx.tenant_id),
+                        company_id=ctx.company_id,
                         query=sql
                     )
                     response["records"] = len(rows)
