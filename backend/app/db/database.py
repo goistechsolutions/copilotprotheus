@@ -105,6 +105,7 @@ PUBLIC_REQUIRED_TABLES = {
     "tenant_module_contracts",
     "audit_logs",
     "platform_audit_log",
+    "protheus_rest_connections",
 }
 
 
@@ -264,6 +265,25 @@ def ensure_public_tables(db, force: bool = False):
             is_superadmin BOOLEAN DEFAULT FALSE,
             active        BOOLEAN DEFAULT TRUE,
             created_at    TIMESTAMP DEFAULT NOW()
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS public.protheus_rest_connections (
+            id SERIAL PRIMARY KEY,
+            tenant_code VARCHAR(50) NOT NULL,
+            environment_code VARCHAR(50) NOT NULL DEFAULT 'default',
+            base_rest_url VARCHAR(255) NOT NULL,
+            auth_mode VARCHAR(20) NOT NULL DEFAULT 'oauth2_password',
+            protheus_username VARCHAR(100),
+            encrypted_protheus_password VARCHAR(255),
+            encrypted_access_token TEXT,
+            encrypted_refresh_token TEXT,
+            access_token_expires_at TIMESTAMP,
+            token_updated_at TIMESTAMP,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_protheus_rest_tenant_env UNIQUE (tenant_code, environment_code)
         );
         """,
         """
