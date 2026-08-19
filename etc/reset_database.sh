@@ -97,4 +97,15 @@ fi
 
 run_psql_file "$CORE_SQL"
 
+echo "==> 4.5/5 Aplicando novas migrations (database/migrations/*.sql)"
+MIGRATIONS_DIR="./database/migrations"
+if [ -d "$MIGRATIONS_DIR" ]; then
+  for migration_file in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
+    echo "   - Aplicando migration: $migration_file"
+    run_psql_file "$migration_file"
+  done
+else
+  echo "   - Diretorio $MIGRATIONS_DIR nao encontrado. Nenhuma migration aplicada."
+fi
+
 echo "==> 5/5 Reset concluído com sucesso!"
