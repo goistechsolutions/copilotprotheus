@@ -480,23 +480,20 @@ async def sync_modules(
                         mod_sigla,
                         mod_name,
                         active,
-                        source_updated_at,
-                        synced_at
+                        updated_at
                     )
                     VALUES (
                         :mod_code,
                         :mod_sigla,
                         :mod_name,
                         TRUE,
-                        NOW(),
                         NOW()
                     )
                     ON CONFLICT (mod_code) DO UPDATE
                     SET mod_sigla = EXCLUDED.mod_sigla,
                         mod_name  = EXCLUDED.mod_name,
                         active    = EXCLUDED.active,
-                        source_updated_at = EXCLUDED.source_updated_at,
-                        synced_at = NOW()
+                        source_updated_at = EXCLUDED.updated_at = NOW()
                 """),
                 {
                     "mod_code": mod_code_int,
