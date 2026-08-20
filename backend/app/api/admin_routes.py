@@ -738,16 +738,24 @@ async def sync_schema(
 
             
             if "401" in err_msg or "Unauthorized" in err_msg or "authentication" in err_msg.lower():
-                detail = f"Falha de autenticação (HTTP 401) no servidor REST Protheus ({tenant_id}). Verifique se o Usuário e a Senha REST no cadastro do Tenant/Empresa estão corretos."
+                status_code = 401
+                detail = f"Falha de autenticação no REST Protheus ({tenant_id}). Verifique a conexão OAuth2 e a autorização do usuário técnico."
+            elif "403" in err_msg or "Forbidden" in err_msg:
+                status_code = 403
+                detail = f"Usuário REST sem autorização para consultar o dicionário Protheus ({tenant_id})."
             elif "Name or service not known" in err_msg or "gaierror" in err_msg:
-                detail = f"Falha de DNS ao conectar no Protheus REST. Verifique a URL REST. Erro: {err_msg}"
-            elif "Timeout" in err_msg or "timed out" in err_msg:
-                detail = f"Timeout de conexão com a API REST Protheus. Verifique se o serviço REST está online. Erro: {err_msg}"
+                status_code = 502
+                detail = "Falha de DNS ao conectar no Protheus REST. Verifique a URL da conexão."
+            elif "504" in err_msg or "Timeout" in err_msg or "timed out" in err_msg:
+                status_code = 504
+                detail = "Timeout na consulta do dicionário Protheus. Reduza o lote de módulos ou verifique a disponibilidade do AppServer."
             elif err_msg:
-                detail = f"Falha ao buscar tabelas ou tabelas vazias no Protheus REST ({tenant_id}): {err_msg}"
+                status_code = 502
+                detail = f"Falha ao buscar tabelas no Protheus REST ({tenant_id})."
             else:
+                status_code = 200
                 detail = f"Nenhuma tabela encontrada para os módulos: {', '.join(clean_modulos)}"
-            raise HTTPException(status_code=400, detail=detail)
+            raise HTTPException(status_code=status_code, detail=detail)
 
         def _fv(row: dict, key: str, default: str = "") -> str:
             if not isinstance(row, dict): return default
