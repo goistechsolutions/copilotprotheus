@@ -703,7 +703,7 @@ async def sync_schema(
                 f"CASE WHEN X2.X2_MODOEMP='E' AND NVL(X2.X2_TAMEMP,0)>0 THEN 'S' ELSE 'N' END AS USA_EMPRESA,"
                 f"CASE WHEN X2.X2_MODOUN='E' AND NVL(X2.X2_TAMUN,0)>0 THEN 'S' ELSE 'N' END AS USA_UNIDADE,"
                 f"CASE WHEN X2.X2_MODO='E' AND NVL(X2.X2_TAMFIL,0)>0 THEN 'S' ELSE 'N' END AS USA_FILIAL "
-                f"FROM SX2{suffix} X2 INNER JOIN SX3{suffix} X3 ON TRIM(X2.X2_CHAVE)=TRIM(X3.X3_ARQUIVO) AND X3.D_E_L_E_T_<>'*' "
+                f"FROM SX2{suffix} X2 "
                 f"{where_clause} "
                 f"ORDER BY X2.X2_MODULO,X2.X2_CHAVE"
             )
@@ -712,9 +712,12 @@ async def sync_schema(
                 parsed_data = json.loads(fix_protheus_json(response_str))
                 
                 if isinstance(parsed_data, dict) and "error" in parsed_data:
-                    last_err_msg = parsed_data['error']
+                    last_err_msg = str(parsed_data['error'])
+                    status_code = parsed_data.get('status_code')
+                    if status_code in {408, 504} or 'timeout' in last_err_msg.lower() or 'timed out' in last_err_msg.lower():
+                        break
                     continue
-                    
+
                 if isinstance(parsed_data, dict):
                     temp_data = parsed_data.get("items") or parsed_data.get("data", [])
                 else:
@@ -725,8 +728,10 @@ async def sync_schema(
                     break
             except Exception as exc:
                 last_err_msg = str(exc)
-                logger.info(f"Fallback SX2{suffix} for tables_query failed: {exc}")
-                
+                logger.info("Fallback SX2%s falhou para consulta de tabelas; tipo=%s", suffix, type(exc).__name__)
+                if 'timeout' in last_err_msg.lower() or 'timed out' in last_err_msg.lower():
+                    break
+
         if not tables_data:
             err_msg = last_err_msg
             # Não registrar respostas brutas do ERP: podem conter dados corporativos.
@@ -775,8 +780,9 @@ async def sync_schema(
                 "campos": [],
             }
 
-        # Busca campos em lotes de 15
-        chunk_size = 15
+                # Busca campos em lotes maiores para manter o request abaixo do limite do proxy.
+        chunk_size = 50
+
         for i in range(0, len(chaves_list), chunk_size):
             chunk       = chaves_list[i:i + chunk_size]
             chaves_str  = ", ".join([f"'{c}'" for c in chunk])
