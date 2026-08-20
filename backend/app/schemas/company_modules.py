@@ -56,7 +56,16 @@ class CompanyModulesSaveRequest(BaseModel):
 
 
 class CompanyModulesSyncRequest(BaseModel):
+    environment_code: str = Field(..., min_length=1, max_length=100)
     force_full_reload: bool = False
+
+    @field_validator("environment_code")
+    @classmethod
+    def validate_environment_code(cls, value: str) -> str:
+        normalized = value.strip()
+        if normalized.lower() in {"default", "none", "null"}:
+            raise ValueError("environment_code deve identificar um ambiente Protheus real")
+        return normalized
 
 
 class CompanyModulesAvailableResponse(BaseModel):

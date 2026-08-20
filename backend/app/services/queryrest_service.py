@@ -54,7 +54,13 @@ def _parse_sanitized_json(text: str):
 
 
 
-async def queryrest_exec_tenant(db: Session, tenant_id: str, company_id: int | str, query: str) -> List[Dict[str, Any]]:
+async def queryrest_exec_tenant(
+    db: Session,
+    tenant_id: str,
+    company_id: int | str,
+    query: str,
+    environment_code: str,
+) -> List[Dict[str, Any]]:
     """
     Executa uma consulta SQL nativa no Oracle do Protheus através do endpoint /QueryRest contextualizado por Tenant/Empresa.
     Conforme Diretrizes Globais do Agente no ambiente Cloud:
@@ -64,8 +70,10 @@ async def queryrest_exec_tenant(db: Session, tenant_id: str, company_id: int | s
     """
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id é obrigatório para execução via QueryRest.")
+    if not environment_code or str(environment_code).strip().lower() in {"default", "none", "null"}:
+        raise HTTPException(status_code=400, detail="environment_code é obrigatório para execução via QueryRest.")
 
-    logger.info(f"[QueryRest Tenant] Executando consulta para tenant={tenant_id}, company_id={company_id}: {query[:150]}...")
+    logger.info("[QueryRest Tenant] Executando consulta tenant=%s ambiente=%s company_id=%s", tenant_id, environment_code, company_id)
     
     from app.services.protheus_queryrest_client import ProtheusQueryRestClient, ProtheusQueryRestError
 
@@ -73,7 +81,7 @@ async def queryrest_exec_tenant(db: Session, tenant_id: str, company_id: int | s
         client = ProtheusQueryRestClient(
             db=db,
             tenant_code=tenant_id,
-            environment_code="default"
+            environment_code=str(environment_code).strip()
         )
         
         result_data = await client.execute(
@@ -86,11 +94,11 @@ async def queryrest_exec_tenant(db: Session, tenant_id: str, company_id: int | s
             status_code=502,
             detail=f"Não foi possível se conectar à API /QueryRest do Protheus (tenant: {tenant_id}). Serviço offline ou inacessível."
         )
-    except Exception as e:
-        logger.error(f"[QueryRest Tenant] Erro inesperado (tenant={tenant_id})")
+    except Exception:
+        logger.error("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s", tenant_id, environment_code)
         raise HTTPException(
             status_code=502,
-            detail=f"Erro de conexão com QueryRest: {str(e)}"
+            detail="Erro de conexão com QueryRest do Protheus."
         )
 
     if isinstance(result_data, dict):
