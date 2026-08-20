@@ -14,18 +14,18 @@ Regras obrigatórias (Base_Conhecimento.pdf):
 - Sempre respeitar D_E_L_E_T_ <> '*'.
 - JOINs baseados em SIX/X2_UNICO, nunca em X3_RELACAO.
 """
-import re
-import os
+import asyncio
 import json
-import requests
 import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from sqlalchemy import text
-from sqlalchemy.orm import sessionmaker, Session
 
-from app.db.database import engine
-from app.services.protheus_service import get_tenant_config
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.services.protheus_service import execute_queryrest
 
 
 logger = logging.getLogger("app.services.sync_dictionary")
@@ -33,13 +33,6 @@ logger = logging.getLogger("app.services.sync_dictionary")
 # ---------------------------------------------------------------------------
 # SQLs de fallback para snapshot COMPLETO (sem filtro de módulo)
 # ---------------------------------------------------------------------------
-SX_ENDPOINTS = {
-    "SX2": "/api/framework/v1/query?table=SX2",
-    "SX3": "/api/framework/v1/query?table=SX3",
-    "SXG": "/api/framework/v1/query?table=SXG",
-    "SIX": "/api/framework/v1/query?table=SIX",
-}
-
 SX_SQL_FALLBACK = {
     "SX2": "SELECT X2_MODULO, X2_CHAVE, X2_ARQUIVO, X2_NOME, X2_UNICO FROM SX2010 WHERE D_E_L_E_T_ <> '*'",
     "SX3": "SELECT X3_ARQUIVO, X3_CAMPO, X3_TITULO, X3_TIPO, X3_TAMANHO, X3_DECIMAL, X3_OBRIGAT, X3_VISUAL, X3_CONTEXT, X3_VALID, X3_RELACAO, X3_WHEN FROM SX3010 WHERE D_E_L_E_T_ <> '*'",
@@ -118,63 +111,49 @@ def _build_modules_in(modules: List[str]) -> str:
     return ", ".join(f"'{m.strip().upper()}'" for m in modules if m.strip())
 
 
-def fetch_rows_from_protheus(tenant_id: str, source_type: str) -> List[Dict[str, Any]]:
-    """
-    Obtém metadados do Protheus real do cliente (snapshot COMPLETO).
-    Prioriza API Framework; fallback para QueryRest SQL nativo.
-    Nunca inventa valores.
-    """
-    try:
-        config   = get_tenant_config(tenant_id)
-        base_url = config.get("rest_url", "").strip()
-        token    = config.get("token", "").strip()
-    except Exception:
-        base_url = os.getenv("PROTHEUS_REST_BASE", "").strip()
-        token    = os.getenv("PROTHEUS_TOKEN", "").strip()
+def _run_async(coroutine):
+    """Executa uma chamada assíncrona a partir do snapshot síncrono."""
 
-    if not base_url:
-        raise RuntimeError(
-            f"Configuração REST não encontrada para o tenant '{tenant_id}'. "
-            "Conforme regra de Fidelidade aos Dados Reais, dados simulados não são permitidos."
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coroutine)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(asyncio.run, coroutine).result()
+
+
+def fetch_rows_from_protheus(
+    db: Session,
+    tenant_code: str,
+    environment_code: str,
+    source_type: str,
+) -> List[Dict[str, Any]]:
+    """Obtém metadados reais pelo QueryRest OAuth2 centralizado."""
+
+    if source_type not in SX_SQL_FALLBACK:
+        raise ValueError(f"Tipo de fonte de dicionário não suportado: {source_type}")
+
+    result = _run_async(
+        execute_queryrest(
+            db=db,
+            tenant_code=tenant_code,
+            environment_code=environment_code,
+            query=SX_SQL_FALLBACK[source_type],
+            method="POST",
         )
-
-    base_url = base_url.rstrip("/")
-    headers  = {"Content-Type": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    # Tentativa 1: API Framework
-    url_fw = f"{base_url}{SX_ENDPOINTS[source_type]}"
-    try:
-        res = requests.get(url_fw, headers=headers, timeout=30)
-        if res.status_code == 200:
-            data  = res.json()
-            items = data.get("items") or data.get("result") or (data if isinstance(data, list) else [])
-            logger.info(f"[Sync] Framework OK {url_fw}: {len(items)} registros.")
-            return items
-    except requests.exceptions.RequestException as e:
-        logger.warning(f"[Sync] Framework indisponível ({url_fw}): {e}. Tentando QueryRest...")
-
-    # Tentativa 2: QueryRest SQL nativo
-    url_qr = f"{base_url}/QueryRest"
-    sql     = SX_SQL_FALLBACK[source_type]
-    try:
-        res2 = requests.post(url_qr, json={"cQuery": sql}, headers=headers, timeout=45)
-        if res2.status_code == 200:
-            data2  = res2.json()
-            items2 = data2.get("items") or data2.get("result") or (data2 if isinstance(data2, list) else [])
-            logger.info(f"[Sync] QueryRest OK {source_type}: {len(items2)} registros.")
-            return items2
-        raise RuntimeError(f"QueryRest HTTP {res2.status_code}: {res2.text[:300]}")
-    except Exception as e2:
-        raise RuntimeError(
-            f"Falha total na sincronização de {source_type} ({base_url}): {e2}"
-        )
+    )
+    if isinstance(result, dict):
+        return result.get("items") or result.get("data") or result.get("result") or []
+    if isinstance(result, list):
+        return result
+    raise RuntimeError(f"Retorno inesperado do QueryRest para {source_type}.")
 
 
 def fetch_curated_by_modules(
-    db: Any,
+    db: Session,
     tenant_code: str,
+    environment_code: str,
     modules: List[str],
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
@@ -191,22 +170,15 @@ def fetch_curated_by_modules(
     logger.info(f"[Sync Curado] Buscando dicionário para módulos: {modules}")
 
     from app.services.protheus_queryrest_client import ProtheusQueryRestClient
-    import asyncio
 
     client = ProtheusQueryRestClient(
         db=db,
         tenant_code=tenant_code,
-        environment_code="default"
+        environment_code=environment_code,
     )
 
-    # Use asyncio.run if there is no running loop, otherwise get event loop
-    try:
-        loop = asyncio.get_running_loop()
-        dict_rows = loop.run_until_complete(client.execute(sql_dict, method="POST"))
-        six_rows  = loop.run_until_complete(client.execute(sql_six, method="POST"))
-    except RuntimeError:
-        dict_rows = asyncio.run(client.execute(sql_dict, method="POST"))
-        six_rows  = asyncio.run(client.execute(sql_six, method="POST"))
+    dict_rows = _run_async(client.execute(sql_dict, method="POST"))
+    six_rows = _run_async(client.execute(sql_six, method="POST"))
 
     if isinstance(dict_rows, dict):
         dict_rows = dict_rows.get("items") or dict_rows.get("data") or []
@@ -219,14 +191,10 @@ def fetch_curated_by_modules(
 
 def run_snapshot(
     tenant_id: str,
-    environment_id: str = "producao",
+    environment_code: str,
     company_id: Optional[str] = None,
-    
     session: Optional[Session] = None,
     module_filter: Optional[List[str]] = None,
-    rest_url: Optional[str] = None,
-    protheus_user: Optional[str] = None,
-    encrypted_password: Optional[str] = None,
 ):
     """
     Executa a sincronização do dicionário estrutural (SX2, SX3, SXG, SIX)
@@ -237,9 +205,12 @@ def run_snapshot(
 
     import re
     from app.db.database import get_tenant_session, ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
-    if not clean_tenant:
-        clean_tenant = "default"
+    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
+    environment_code = str(environment_code or '').strip()
+    if not clean_tenant or clean_tenant.lower() == "public":
+        raise ValueError("tenant_code válido é obrigatório para sincronização do dicionário.")
+    if not environment_code or environment_code.lower() in {"default", "none", "null"}:
+        raise ValueError("environment_code real é obrigatório para sincronização do dicionário.")
 
     if session is None:
         session      = get_tenant_session(clean_tenant)
@@ -256,13 +227,16 @@ def run_snapshot(
             logger.info(f"[Snapshot Curado via REST Direto] tenant={tenant_id} módulos={module_filter}")
 
             data = fetch_curated_by_modules(
-                db=session, tenant_code=clean_tenant, modules=module_filter
+                db=session,
+                tenant_code=clean_tenant,
+                environment_code=environment_code,
+                modules=module_filter,
             )
             dict_rows = data["dict_rows"]
             six_rows  = data["six_rows"]
 
-            _persist_dict_rows(session, dict_rows, tenant_id, company_id, environment_id)
-            _persist_six_rows(session, six_rows, tenant_id, company_id, environment_id)
+            _persist_dict_rows(session, dict_rows, tenant_id, company_id, environment_code)
+            _persist_six_rows(session, six_rows, tenant_id, company_id, environment_code)
             session.commit()
 
             return {
@@ -277,12 +251,12 @@ def run_snapshot(
 
         # ── MODO COMPLETO: snapshot do dicionário inteiro ─────────────────────
         for source_type in ["SX2", "SX3", "SXG", "SIX"]:
-            _mark_source(session, tenant_id, company_id, environment_id, source_type, "running")
+            _mark_source(session, tenant_id, company_id, environment_code, source_type, "running")
 
             try:
-                rows = fetch_rows_from_protheus(tenant_id, source_type)
+                rows = fetch_rows_from_protheus(session, tenant_id, environment_code, source_type)
             except Exception as e:
-                _mark_source(session, tenant_id, company_id, environment_id, source_type, "failed", str(e))
+                _mark_source(session, tenant_id, company_id, environment_code, source_type, "failed", str(e))
                 raise e
 
             if source_type == "SX2":
@@ -397,7 +371,7 @@ def run_snapshot(
                         "raw_payload": json.dumps(r),
                     })
 
-            _mark_source(session, tenant_id, company_id, environment_id, source_type, "done")
+            _mark_source(session, tenant_id, company_id, environment_code, source_type, "done")
             session.commit()
 
         return {
