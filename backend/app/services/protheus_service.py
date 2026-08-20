@@ -1,400 +1,353 @@
-import os
-import re
+"""Fachada única para integração REST do Protheus.
+
+A conexão operacional é resolvida exclusivamente por
+``tenant_code + environment_code`` em ``public.protheus_rest_connections``.
+Consultas QueryRest são delegadas ao cliente OAuth2 central, que controla
+Bearer, renovação única após 401 e isolamento da conexão.
+"""
+
+from __future__ import annotations
+
 import json
-import time
-import httpx
 import logging
-import uuid
-from sqlalchemy import text
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import os
+import time
+from pathlib import Path
+from typing import Any, Mapping
+
+import httpx
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.db.database import SessionLocal
+from app.services.protheus_queryrest_client import (
+    ProtheusQueryRestClient,
+    ProtheusQueryRestError,
+)
+from app.services.protheus_token_service import (
+    ProtheusAuthError,
+    get_valid_access_token,
+    load_connection,
+)
 
 logger = logging.getLogger("app.protheus")
 
-from app.core.security import decrypt_password
-from app.db.database import SessionLocal
 
-_OAUTH2_TOKENS = {} # cache: {tenant_id: (token, expiry)}
+class ProtheusServiceError(RuntimeError):
+    """Erro de integração sem conteúdo sensível da resposta externa."""
 
-def get_tenant_config(tenant_id: str, company_id: str | int = None) -> dict:
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _require_context(tenant_code: str, environment_code: str | None) -> tuple[str, str]:
+    tenant = str(tenant_code or "").strip()
+    environment = str(environment_code or "").strip()
+
+    if not tenant:
+        raise ProtheusServiceError("tenant_code é obrigatório.", status_code=400)
+    if not environment or environment.lower() in {"default", "none", "null"}:
+        raise ProtheusServiceError(
+            "environment_code Protheus é obrigatório e deve ser real.",
+            status_code=400,
+        )
+    return tenant, environment
+
+
+def _public_db_session() -> Session:
+    """Abre uma sessão no schema público, onde ficam as conexões OAuth2."""
+
+    return SessionLocal()
+
+
+def get_tenant_config(tenant_code: str, environment_code: str) -> dict[str, Any]:
+    """Retorna somente metadados não sensíveis da conexão solicitada.
+
+    A função mantém o nome histórico para compatibilidade de importação, mas
+    não consulta mais ``company_info``, ``tenant`` ou variáveis de ambiente.
+    Senhas e tokens nunca fazem parte do retorno.
     """
-    Busca as credenciais do Protheus do tenant_id no banco de dados.
-    1. Consulta na tabela company_info dentro do schema exclusivo do tenant ("{clean_tenant}".company_info)
-       (Usa o company_id para buscar por id, company_code ou protheus_empresa)
-    2. Fallback nas variveis de ambiente globais (.env)
-    """
-    db = SessionLocal()
+
+    tenant, environment = _require_context(tenant_code, environment_code)
+    db = _public_db_session()
     try:
-        from app.db.database import ensure_tenant_tables, resolve_clean_tenant
-        clean_tenant = resolve_clean_tenant(db, tenant_id)
-
-        if clean_tenant and clean_tenant != "public":
-            try:
-                ensure_tenant_tables(db, clean_tenant)
-                
-                if company_id:
-                    res = db.execute(
-                        text(f'''
-                            SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode, protheus_grupo, protheus_empresa, id 
-                            FROM "{clean_tenant}".company_info 
-                            WHERE (id::text = :cid OR company_code = :cid OR protheus_empresa = :cid) 
-                              AND protheus_rest_url IS NOT NULL AND protheus_rest_url != '' 
-                            LIMIT 1
-                        '''),
-                        {"cid": str(company_id)}
-                    ).first()
-                else:
-                    res = db.execute(
-                        text(f'''
-                            SELECT protheus_rest_url, protheus_usuario, encrypted_protheus_password, webapp_url, auth_mode, protheus_grupo, protheus_empresa, id 
-                            FROM "{clean_tenant}".company_info 
-                            WHERE protheus_rest_url IS NOT NULL AND protheus_rest_url != '' 
-                            ORDER BY id ASC
-                            LIMIT 1
-                        ''')
-                    ).first()
-                    
-                if res and res[0]:
-                    pwd = ""
-                    if res[2]:
-                        try:
-                            pwd = decrypt_password(res[2])
-                        except Exception:
-                            pwd = res[2]
-                    return {
-                        "rest_url": res[0].rstrip("/"),
-                        "webapp_url": res[3] or "",
-                        "vscode_server_url": "",
-                        "user": res[1] or "",
-                        "password": pwd,
-                        "auth_mode": res[4] or "basic",
-                        "grupo": res[5],
-                        "empresa": res[6],
-                        "company_id": res[7]
-                    }
-            except Exception as schema_err:
-                logger.warning(f"Aviso ao consultar company_info do schema {clean_tenant}: {schema_err}")
-
-        # Fallback nas variáveis de ambiente (.env / Globais)
-        if getattr(settings, "protheus_rest_url", None):
-            return {
-                "rest_url": settings.protheus_rest_url.rstrip("/"),
-                "webapp_url": getattr(settings, "protheus_webapp_url", "") or "",
-                "vscode_server_url": "",
-                "user": getattr(settings, "protheus_usuario", "") or "",
-                "password": getattr(settings, "protheus_password", "") or "",
-                "auth_mode": getattr(settings, "protheus_auth_mode", "basic") or "basic"
-            }
+        try:
+            connection = load_connection(db, tenant, environment)
+        except ValueError as exc:
+            raise ProtheusServiceError(str(exc), status_code=404) from exc
 
         return {
-            "rest_url": "",
+            "tenant_code": tenant,
+            "environment_code": environment,
+            "rest_url": str(connection["base_rest_url"]).rstrip("/"),
+            "auth_mode": connection["auth_mode"],
+            "user": connection["protheus_username"],
             "webapp_url": "",
             "vscode_server_url": "",
-            "user": "",
-            "password": "",
-            "auth_mode": "basic"
-        }
-    except Exception as err:
-        logger.error(f"Erro ao buscar configuracoes do tenant {tenant_id}: {err}")
-        return {
-            "rest_url": "",
-            "webapp_url": "",
-            "vscode_server_url": "",
-            "user": "",
-            "password": "",
-            "auth_mode": "basic"
         }
     finally:
         db.close()
+
+
+async def get_protheus_token(tenant_code: str, environment_code: str) -> str:
+    """Obtém token válido pelo serviço OAuth2 centralizado."""
+
+    tenant, environment = _require_context(tenant_code, environment_code)
+    db = _public_db_session()
+    try:
+        try:
+            return await get_valid_access_token(db, tenant, environment)
+        except ProtheusAuthError:
+            raise
+        except ValueError as exc:
+            raise ProtheusServiceError(str(exc), status_code=404) from exc
+    finally:
+        db.close()
+
+
+async def build_protheus_headers(
+    tenant_code: str,
+    config: Mapping[str, Any] | None = None,
+    environment_code: str | None = None,
+) -> dict[str, str]:
+    """Monta headers Bearer para endpoints não-QueryRest.
+
+    O token sempre vem da conexão persistida pelo par exato tenant/ambiente;
+    ``config`` é aceito apenas como compatibilidade de assinatura e não pode
+    fornecer credenciais, URL alternativa ou token dinâmico.
+    """
+
+    configured_environment = (
+        environment_code
+        or (config or {}).get("environment_code")
+    )
+    tenant, environment = _require_context(tenant_code, configured_environment)
+    token = await get_protheus_token(tenant, environment)
+    if not token:
+        raise ProtheusServiceError(
+            "Access token Protheus vazio após resolução.",
+            status_code=401,
+        )
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def _sanitize_response_text(value: str) -> str:
+    """Remove controles de texto sem registrar ou ampliar conteúdo sensível."""
+
+    if not value:
+        return value
+    return "".join(char if ord(char) >= 32 or char in "\n\r\t" else " " for char in value)
+
+
+async def _execute_http_get_with_retry(
+    url: str,
+    params: Mapping[str, Any],
+    headers: Mapping[str, str],
+) -> str:
+    """Executa endpoint REST auxiliar sem transportar credenciais próprias."""
+
+    async with httpx.AsyncClient(
+        timeout=settings.timeout_seconds,
+        follow_redirects=False,
+    ) as client:
+        response = await client.get(url, params=dict(params), headers=dict(headers))
+        response.raise_for_status()
+        return _sanitize_response_text(response.text)
+
+
+async def _execute_http_post_with_retry(
+    url: str,
+    json_data: Mapping[str, Any],
+    headers: Mapping[str, str],
+) -> str:
+    """Executa endpoint REST auxiliar com headers Bearer já resolvidos."""
+
+    async with httpx.AsyncClient(
+        timeout=settings.timeout_seconds,
+        follow_redirects=False,
+    ) as client:
+        response = await client.post(
+            url,
+            json=dict(json_data),
+            headers=dict(headers),
+        )
+        response.raise_for_status()
+        return _sanitize_response_text(response.text)
+
+
+async def execute_queryrest(
+    db: Session,
+    tenant_code: str,
+    environment_code: str,
+    query: str,
+    *,
+    method: str = "POST",
+    payload: Mapping[str, Any] | None = None,
+) -> Any:
+    """Executa SQL Oracle no QueryRest por meio do cliente OAuth2 central."""
+
+    tenant, environment = _require_context(tenant_code, environment_code)
+    client = ProtheusQueryRestClient(
+        db=db,
+        tenant_code=tenant,
+        environment_code=environment,
+    )
+    try:
+        return await client.execute(
+            query,
+            method=method,
+            payload=payload,
+        )
+    except ProtheusQueryRestError as exc:
+        raise ProtheusServiceError(str(exc), status_code=exc.status_code) from exc
+
 
 async def descobrir_apis_protheus(palavra_chave: str) -> str:
-    cache_path = os.path.join(os.path.dirname(__file__), "endpoints_cache.json")
-    if not os.path.exists(cache_path):
-        return json.dumps({"error": "Cache de endpoints nao encontrado."})
-    
+    """Pesquisa somente o catálogo local de endpoints, sem acessar credenciais."""
+
+    cache_path = Path(__file__).with_name("endpoints_cache.json")
+    if not cache_path.exists():
+        return json.dumps({"error": "Cache de endpoints não encontrado."}, ensure_ascii=False)
+
     try:
-        with open(cache_path, "r", encoding="utf-8") as f:
-            endpoints = json.load(f)
-        
-        resultados = []
-        palavra_chave = palavra_chave.lower()
-        for ep in endpoints:
-            ep_path = ep.get("endpoint", "").lower()
-            if palavra_chave in ep_path:
-                resultados.append({
-                    "endpoint": ep.get("endpoint"),
-                    "methods": [m.get("method") for m in ep.get("methods", [])]
-                })
-                if len(resultados) >= 15:
-                    break
-                    
-        if not resultados:
-            return json.dumps({"message": f"Nenhuma API encontrada para o termo '{palavra_chave}'"})
-            
-        return json.dumps(resultados)
-    except Exception as e:
-        return json.dumps({"error": f"Erro ao ler cache: {str(e)}"})
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=6),
-    retry=retry_if_exception_type(httpx.HTTPError),
-    reraise=True
-)
-async def get_protheus_token(tenant_id: str, user: str = None, password: str = None) -> str:
-    
-    now = time.time()
-    
-    if user and password:
-        cache_key = f"{tenant_id}:{user}:{password}"
-    else:
-        cache_key = tenant_id
-
-    if cache_key in _OAUTH2_TOKENS:
-        token, expiry = _OAUTH2_TOKENS[cache_key]
-        if now < expiry:
-            return token
-            
-    config = get_tenant_config(tenant_id)
-    rest_url = config['rest_url'].strip()
-    if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
-        rest_url = "https://" + rest_url
-    token_url = f"{rest_url.rstrip('/')}/api/oauth2/v1/token"
-    payload = {
-        "grant_type": "password",
-        "username": user if user else config['user'],
-        "password": password if password else config['password']
-    }
-    
-    import urllib3
-    urllib3.disable_warnings()
-    
-    logger.info(f"Obtendo novo token OAuth2 do Protheus para o tenant {tenant_id} (user={payload['username']})...")
-    async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
-        resp = await client.post(token_url, data=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        access_token = data.get("access_token")
-        expires_in = data.get("expires_in", 3600)
-        _OAUTH2_TOKENS[cache_key] = (access_token, now + expires_in - 60)
-        return access_token
-
-async def build_protheus_headers(tenant_id: str, config: dict = None, environment_code: str = "default") -> dict:
-    if not config:
-        config = get_tenant_config(tenant_id)
-        
-    from app.services.protheus_token_service import get_valid_access_token
-    from app.db.database import get_tenant_session
-
-    token_session = get_tenant_session("public")
-    try:
-        token = await get_valid_access_token(
-            db=token_session,
-            tenant_code=tenant_id,
-            environment_code=environment_code
-        )
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-    finally:
-        token_session.close()
-
-def _sanitize_response_text(text: str) -> str:
-    if not text:
-        return text
-    import re
-    return re.sub(r'[\x00-\x1f]', lambda m: '\\n' if m.group(0) in ('\n', '\r') else ('\\t' if m.group(0) == '\t' else f'\\u{ord(m.group(0)):04x}'), text)
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=6),
-    retry=retry_if_exception_type(httpx.HTTPError),
-    reraise=True
-)
-async def _execute_http_get_with_retry(url: str, params: dict, headers: dict) -> str:
-    logger.info(f"Chamando endpoint Protheus (GET) com retry: {url}")
-    async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
-        resp = await client.get(url, params=params, headers=headers)
-        resp.raise_for_status()
-        return _sanitize_response_text(resp.text)
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=6),
-    retry=retry_if_exception_type(httpx.HTTPError),
-    reraise=True
-)
-async def _execute_http_post_with_retry(url: str, json_data: dict, headers: dict) -> str:
-    logger.info(f"Chamando endpoint Protheus (POST) com retry: {url}")
-    async with httpx.AsyncClient(timeout=settings.timeout_seconds, verify=False) as client:
-        resp = await client.post(url, json=json_data, headers=headers)
-        resp.raise_for_status()
-        return _sanitize_response_text(resp.text)
-
-
-def _enforce_query_rules(cQuery: str, tenant_id: str, context: dict = None):
-    from app.db.database import get_tenant_session
-    from app.models.knowledge import QueryUsageCounter, TenantContract, Company, Tenant
-    import uuid
-    import re
-    
-    db = get_tenant_session(tenant_id)
-    try:
-        tid = str(tenant_id).strip() if tenant_id else "default"
-        tenant = db.query(Tenant).filter(Tenant.tenant_code == tid).first()
-        if not tenant and tid.isdigit():
-            tenant = db.query(Tenant).filter(Tenant.id == int(tid)).first()
-        if tenant:
-            tid = str(tenant.tenant_code)
-            
-        # 1. Verifica quota
-        if tid:
-            try:
-                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == tid).first()
-                if usage and usage.total_queries >= (usage.overage_queries or 999999):
-                    raise Exception(f"Quota de consultas atingida ({usage.total_queries}).")
-            except Exception as e:
-                if "Quota" in str(e): raise e
-
-        # 2. Verifica tabelas
-        # 2. Na arquitetura V5 o controle de acesso por tabela via TenantAllowedTable
-        # foi descontinuado. O enforcement é garantido pelo catálogo gerado no prompt
-        # do agente, que expõe estritamente o schema_json (tenant_schemas) do tenant.
-        pass
-        
-    finally:
-        db.close()
-
-
-def _log_query_audit(tenant_id: str, context: dict, query: str, status: str, records_returned: int, response_time_ms: int, error_msg: str = None):
-    from app.db.database import get_tenant_session
-    from app.models.knowledge import AgentQueryAudit, QueryUsageCounter
-    
-    db = get_tenant_session(tenant_id)
-    try:
-        tid = str(tenant_id).strip() if tenant_id else "default"
-        company_id = context.get("company_id") if context else None
-        cid = None
-        if company_id:
-            try:
-                cid = int(company_id)
-            except (ValueError, TypeError):
-                cid = None
-            
-        if tid:
-            audit = AgentQueryAudit(
-                tenant_id=tid,
-                company_id=cid,
-                user_id=None,
-                generated_sql=query,
-                execution_status=status,
-                rows_returned=records_returned,
-                response_time_ms=response_time_ms,
-                blocked_reason=error_msg[:250] if error_msg else None
-            )
-            db.add(audit)
-            
-            if status == "success":
-                usage = db.query(QueryUsageCounter).filter(QueryUsageCounter.tenant_id == tid).first()
-                if usage:
-                    usage.total_queries += 1
-            
-            db.commit()
-    except Exception as e:
-        logger.error(f"Erro ao registrar auditoria de query: {e}")
-    finally:
-        db.close()
-
-async def execute_protheus_tool(endpoint: str, query_params: dict, tenant_id: str = "default", context: dict = None, environment_code: str = "default") -> str:
-    company_id = context.get("company_id") if context else None
-    
-    config = get_tenant_config(tenant_id, company_id)
-    rest_url = config['rest_url'].strip()
-    if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
-        rest_url = "https://" + rest_url
-        
-    url = f"{rest_url.rstrip('/')}/{endpoint.lstrip('/')}"
-    
-    user = context.get("user") if context else None
-    password = context.get("password") if context else None
-    protheus_token = context.get("protheus_token") if context else None
-    
-    auth_mode = config.get("auth_mode", "oauth2_password")
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
-    if protheus_token:
-        headers["Authorization"] = f"Bearer {protheus_token}"
-        logger.info(f"Usando token de sessao Protheus fornecido dinamicamente para {user} no tenant {tenant_id}")
-    else:
-        from app.services.protheus_token_service import get_valid_access_token
-        try:
-            from app.db.database import get_tenant_session
-            # We get a short-lived DB session here to fetch the token
-            token_session = get_tenant_session("public")
-            try:
-                token = await get_valid_access_token(
-                    db=token_session,
-                    tenant_code=tenant_id,
-                    environment_code=environment_code
+        endpoints = json.loads(cache_path.read_text(encoding="utf-8"))
+        term = str(palavra_chave or "").strip().lower()
+        results = []
+        for endpoint in endpoints:
+            endpoint_path = str(endpoint.get("endpoint", "")).lower()
+            if term in endpoint_path:
+                results.append(
+                    {
+                        "endpoint": endpoint.get("endpoint"),
+                        "methods": [
+                            method.get("method")
+                            for method in endpoint.get("methods", [])
+                        ],
+                    }
                 )
-                headers["Authorization"] = f"Bearer {token}"
-            finally:
-                token_session.close()
-        except Exception as e:
-            logger.error(f"Falha na autenticacao OAuth2 do tenant {tenant_id}: {e}")
-            return json.dumps({"error": f"Falha na autenticacao OAuth2: {str(e)}"})
-            
-    if config.get("grupo") and config.get("empresa"):
-        headers["TenantId"] = f"{config['grupo']},{config['empresa']}"
-    
-    import urllib3
-    urllib3.disable_warnings()
-    
+            if len(results) >= 15:
+                break
+        if not results:
+            return json.dumps(
+                {"message": f"Nenhuma API encontrada para o termo '{term}'"},
+                ensure_ascii=False,
+            )
+        return json.dumps(results, ensure_ascii=False)
+    except (OSError, ValueError, TypeError) as exc:
+        logger.error("Falha ao ler catálogo local de endpoints: %s", type(exc).__name__)
+        return json.dumps({"error": "Falha ao ler o catálogo local de endpoints."}, ensure_ascii=False)
+
+
+def _extract_environment(
+    environment_code: str | None,
+    context: Mapping[str, Any] | None,
+) -> str | None:
+    return environment_code or (context or {}).get("environment_code")
+
+
+def _extract_query(query_params: Mapping[str, Any]) -> str:
+    query = (
+        query_params.get("cQuery")
+        or query_params.get("query")
+        or query_params.get("cquery")
+    )
+    if not isinstance(query, str) or not query.strip():
+        raise ProtheusServiceError(
+            "QueryRest exige cQuery ou query não vazio.",
+            status_code=400,
+        )
+    return query.strip()
+
+
+async def execute_protheus_tool(
+    endpoint: str,
+    query_params: Mapping[str, Any] | None,
+    *,
+    tenant_id: str,
+    context: Mapping[str, Any] | None = None,
+    environment_code: str | None = None,
+) -> str:
+    """Executa uma ferramenta Protheus com contexto explícito.
+
+    QueryRest é sempre delegado ao cliente OAuth2 central. Endpoints auxiliares
+    usam a mesma conexão e o mesmo token, sem aceitar senha/token no contexto.
+    """
+
+    environment = _extract_environment(environment_code, context)
+    tenant, environment = _require_context(tenant_id, environment)
+    params = dict(query_params or {})
+    endpoint_name = str(endpoint or "").strip().strip("/")
+
+    if endpoint_name.lower() == "queryrest":
+        query = _extract_query(params)
+        db = _public_db_session()
+        try:
+            result = await execute_queryrest(
+                db,
+                tenant,
+                environment,
+                query,
+                method="POST",
+                payload=params,
+            )
+            return json.dumps(result, ensure_ascii=False, default=str)
+        except ProtheusServiceError as exc:
+            logger.warning(
+                "QueryRest falhou tenant=%s ambiente=%s status=%s",
+                tenant,
+                environment,
+                exc.status_code,
+            )
+            return json.dumps(
+                {
+                    "error": str(exc),
+                    "status_code": exc.status_code,
+                },
+                ensure_ascii=False,
+            )
+        finally:
+            db.close()
+
+    config = get_tenant_config(tenant, environment)
+    base_url = config["rest_url"]
+    url = f"{base_url}/{endpoint_name}"
+    headers = await build_protheus_headers(
+        tenant,
+        config,
+        environment_code=environment,
+    )
+
     try:
-        if endpoint.lower() == "queryrest" or endpoint.lower().endswith("/queryrest"):
-            cQuery = query_params.get("cQuery", "") or query_params.get("query", "") or query_params.get("cquery", "")
-            if cQuery:
-                try:
-                    _enforce_query_rules(cQuery, tenant_id, context)
-                except Exception as enforce_err:
-                    _log_query_audit(tenant_id, context or {}, cQuery, "blocked", 0, 0, str(enforce_err))
-                    return json.dumps({"error": str(enforce_err)})
-            
-            start_t = time.time()
-            try:
-                # Tenta GET primeiro com cQuery via Query String (padrão canônico do Protheus REST em Cloud)
-                try:
-                    res_text = await _execute_http_get_with_retry(url, {"cQuery": cQuery}, headers)
-                except Exception as get_err:
-                    logger.warning(f"QueryRest GET falhou ({get_err}). Tentando POST fallback...")
-                    res_text = await _execute_http_post_with_retry(url, query_params, headers)
-                elapsed = int((time.time() - start_t) * 1000)
-                
-                records = 0
-                try:
-                    parsed = json.loads(res_text)
-                    if isinstance(parsed, dict) and "items" in parsed:
-                        records = len(parsed["items"])
-                    elif isinstance(parsed, list):
-                        records = len(parsed)
-                except:
-                    pass
-                
-                _log_query_audit(tenant_id, context or {}, cQuery, "success", records, elapsed)
-                return res_text
-            except Exception as req_err:
-                elapsed = int((time.time() - start_t) * 1000)
-                _log_query_audit(tenant_id, context or {}, cQuery, "error", 0, elapsed, str(req_err))
-                raise req_err
-        else:
-            return await _execute_http_get_with_retry(url, query_params, headers)
-    except httpx.HTTPStatusError as e:
-        error_body = e.response.text
-        logger.error(f"Falha HTTP {e.response.status_code} ao chamar Protheus ({url}): {error_body}")
-        return json.dumps({"error": f"Erro {e.response.status_code} do Protheus: {error_body}"})
-    except Exception as e:
-        logger.error(f"Falha após retries ao chamar Protheus ({url}) para o tenant {tenant_id}: {e}")
-        return json.dumps({"error": f"Falha persistente ao chamar Protheus ({url}): {str(e)}"})
+        return await _execute_http_post_with_retry(url, params, headers)
+    except httpx.HTTPStatusError as exc:
+        logger.warning(
+            "Endpoint Protheus falhou tenant=%s ambiente=%s status=%s",
+            tenant,
+            environment,
+            exc.response.status_code,
+        )
+        return json.dumps(
+            {
+                "error": f"Falha no endpoint Protheus (HTTP {exc.response.status_code}).",
+                "status_code": exc.response.status_code,
+            },
+            ensure_ascii=False,
+        )
+    except httpx.RequestError:
+        logger.warning(
+            "Endpoint Protheus indisponível tenant=%s ambiente=%s",
+            tenant,
+            environment,
+        )
+        return json.dumps(
+            {
+                "error": "Endpoint Protheus indisponível.",
+                "status_code": 504,
+            },
+            ensure_ascii=False,
+        )
