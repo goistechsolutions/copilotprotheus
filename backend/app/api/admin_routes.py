@@ -682,6 +682,7 @@ async def sync_schema(
             module_keys.add(cm)
             if cm.isdigit():
                 module_keys.add(f"{int(cm):02d}")
+            sigla_map[cm] = cm
             code_to_name[cm] = cm
 
     if module_keys:
@@ -772,7 +773,8 @@ async def sync_schema(
             if not chave: continue
             chaves_list.append(chave)
             x2_mod   = _fv(row, "X2_MODULO")
-            cod_sigla = code_to_name.get(x2_mod, clean_modulos[0] if clean_modulos else "")
+            cod_sigla = sigla_map.get(x2_mod, clean_modulos[0] if clean_modulos else "")
+
             schema_dict[chave] = {
                 "x2_modulo": x2_mod,
                 "modulo":    x2_mod,
