@@ -642,34 +642,8 @@ async def sync_schema(
         logger.warning(f"Aviso ao atualizar protheus_modules_master via QueryRest: {e_sys}")
         db.rollback()
 
-    try:
-        if db.query(ProtheusModuleMaster).count() == 0:
-            logger.info("Populando protheus_modules_master com módulos padrão (fallback)...")
-            # Códigos X2_MODULO conforme tabela SX2 padrão do Protheus
-            default_mods = [
-                (1,  "SIGAATF",   "Ativo Fixo"),
-                (2,  "SIGACOM",   "Compras"),
-                (4,  "SIGAEST",   "Estoque e Custos"),
-                (5,  "SIGAFAT",   "Faturamento"),
-                (6,  "SIGAFIN",   "Financeiro"),
-                (7,  "SIGAGPE",   "Gestão de Pessoal"),
-                (9,  "SIGAFIS",   "Livros Fiscais"),
-                (10, "SIGAPCP",   "Planejamento e Controle da Produção"),
-                (12, "SIGALOJA",  "Operações de PDV e Retaguarda"),
-                (13, "SIGATMK",   "Telemarketing / Televendas"),
-                (16, "SIGAPON",   "Ponto Eletrônico"),
-                (19, "SIGAMNT",   "Manutenção de Ativos"),
-                (34, "SIGACTB",   "Contabilidade Gerencial"),
-                (43, "SIGATMS",   "TMS - Gestão de Transportes"),
-                (44, "SIGAPMS",   "Gestão de Projetos"),
-                (99, "SIGACFG",   "Configurador"),
-            ]
-            for m_code, m_sigla, m_nome in default_mods:
-                db.add(ProtheusModuleMaster(mod_code=m_code, mod_sigla=m_sigla, mod_name=m_nome, active=True))
-            db.commit()
-    except Exception as fallback_e:
-        logger.error(f"Erro ao inserir fallback de módulos: {fallback_e}")
-        db.rollback()
+    if db.query(ProtheusModuleMaster).count() == 0:
+        logger.info("Catálogo global de módulos ainda está vazio após a sincronização real.")
 
     master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
@@ -755,18 +729,8 @@ async def sync_schema(
                 
         if not tables_data:
             err_msg = last_err_msg
-            # --- DEBUG BLOCK START ---
-            try:
-                debug_query = "SELECT DISTINCT TRIM(X2_MODULO) AS M FROM SX2990 WHERE D_E_L_E_T_<>'*'"
-                debug_resp = await execute_protheus_tool("QueryRest", {"cQuery": debug_query}, tenant_id=tenant_id, environment_code=environment_code)
-                logger.error(f"DEBUG X2_MODULO SX2990: {debug_resp}")
-                
-                debug_query2 = "SELECT DISTINCT TRIM(X2_MODULO) AS M FROM SX2010 WHERE D_E_L_E_T_<>'*'"
-                debug_resp2 = await execute_protheus_tool("QueryRest", {"cQuery": debug_query2}, tenant_id=tenant_id, environment_code=environment_code)
-                logger.error(f"DEBUG X2_MODULO SX2010: {debug_resp2}")
-            except Exception as e_debug:
-                logger.error(f"DEBUG ERRO: {e_debug}")
-            # --- DEBUG BLOCK END ---
+            # Não registrar respostas brutas do ERP: podem conter dados corporativos.
+
             
             if "401" in err_msg or "Unauthorized" in err_msg or "authentication" in err_msg.lower():
                 detail = f"Falha de autenticação (HTTP 401) no servidor REST Protheus ({tenant_id}). Verifique se o Usuário e a Senha REST no cadastro do Tenant/Empresa estão corretos."
