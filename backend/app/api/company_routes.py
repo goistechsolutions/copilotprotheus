@@ -95,10 +95,15 @@ def get_companies_list(
 @router.get("/companies/{company_id}/modules/available", response_model=CompanyModulesAvailableResponse)
 async def get_available_modules(
     company_id: str,
+    environment_code: str = Query(..., min_length=1, max_length=100),
     db: Session = Depends(get_db),
 ):
     company = get_company_or_404(db, company_id)
-    tenant_id = company.get("tenant_id", "default")
+    tenant_id = company.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=404, detail="Tenant da empresa não encontrado")
+    if environment_code.strip().lower() in {"default", "none", "null"}:
+        raise HTTPException(status_code=400, detail="environment_code deve identificar um ambiente real")
 
     # 1. Tenta buscar módulos do Protheus real (SYS_USR_MODULE)
     sql = "SELECT DISTINCT USR_MODULO, USR_CODMOD, USR_NOME FROM SYS_USR_MODULE ORDER BY USR_MODULO"
@@ -107,8 +112,10 @@ async def get_available_modules(
         rows = await queryrest_exec_tenant(
             db=db,
             tenant_id=tenant_id,
-            company_id=company_id,
-            query=sql
+                        company_id=company_id,
+            query=sql,
+            environment_code=environment_code.strip(),
+
         )
     except Exception as e:
         logger.warning(f"Aviso ao consultar SYS_USR_MODULE ({company_id}): {e}")
@@ -257,13 +264,10 @@ def sync_modules_dictionary(
     try:
         snapshot_result = run_snapshot(
             tenant_id=company["tenant_id"],
-            environment_id=company.get("protheus_ambientes"),
+            environment_code=payload.environment_code,
             company_id=str(company_id),
             session=db,
             module_filter=module_filter,
-            rest_url=company.get("protheus_rest_url"),
-            protheus_user=company.get("protheus_usuario"),
-            encrypted_password=company.get("encrypted_protheus_password"),
         )
         if not isinstance(snapshot_result, dict):
             snapshot_result = {"result": str(snapshot_result), "status": "completed"}
