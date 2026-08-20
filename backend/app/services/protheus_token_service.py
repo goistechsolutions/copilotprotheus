@@ -150,8 +150,13 @@ async def _request_refresh_token(
     base_rest_url: str,
     refresh_token: str,
 ) -> ProtheusToken:
+    token_url = _token_url(base_rest_url)
     response = await client.post(
-        _token_url(base_rest_url),
+        token_url,
+        params={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        },
         data={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
@@ -175,10 +180,16 @@ async def _request_password_token(
     username: str,
     password: str,
 ) -> ProtheusToken:
-    credentials = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    token_url = _token_url(base_rest_url)
 
+    # 1. Tenta envio com params e form-data (padrão Protheus REST Cloud)
     response = await client.post(
-        _token_url(base_rest_url),
+        token_url,
+        params={
+            "grant_type": "password",
+            "username": username,
+            "password": password,
+        },
         data={
             "grant_type": "password",
             "username": username,
@@ -186,9 +197,28 @@ async def _request_password_token(
         },
         headers={
             "Accept": "application/json",
-            "Authorization": f"Basic {credentials}",
         },
     )
+
+    # 2. Fallback para JSON body se retornar 400 (algumas versões do REST Protheus esperam JSON)
+    if response.status_code == 400 and ("username" in response.text.lower() or "invalid_grant" in response.text.lower()):
+        try:
+            response_json = await client.post(
+                token_url,
+                params={"grant_type": "password"},
+                json={
+                    "username": username,
+                    "password": password,
+                },
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+            )
+            if response_json.status_code < 400:
+                response = response_json
+        except Exception:
+            pass
 
     if response.status_code >= 400:
         raise RuntimeError(

@@ -26,6 +26,16 @@ class ProtheusQueryRestError(RuntimeError):
         self.status_code = status_code
 
 
+def require_bearer_headers(headers: dict[str, str]) -> dict[str, str]:
+    authorization = headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        raise RuntimeError("Requisição Protheus sem Authorization Bearer.")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise RuntimeError("Requisição Protheus com Bearer vazio.")
+    return headers
+
+
 class ProtheusQueryRestClient:
     def __init__(
         self,
@@ -59,6 +69,12 @@ class ProtheusQueryRestClient:
             self.environment_code,
         )
 
+        if not token:
+            raise ProtheusQueryRestError(
+                "Access token Protheus vazio após resolução.",
+                status_code=401,
+            )
+
         response = await self._send(
             url,
             token,
@@ -87,6 +103,12 @@ class ProtheusQueryRestClient:
                 self.environment_code,
             )
 
+            if not token:
+                raise ProtheusQueryRestError(
+                    "Access token Protheus vazio após renovação.",
+                    status_code=401,
+                )
+
             response = await self._send(
                 url,
                 token,
@@ -95,15 +117,28 @@ class ProtheusQueryRestClient:
                 payload,
             )
 
+        if response.status_code == 403:
+            logger.error(
+                "QueryRest 403 Forbidden tenant=%s ambiente=%s",
+                self.tenant_code,
+                self.environment_code,
+            )
+            raise ProtheusQueryRestError(
+                "Protheus recusou a autorização para QueryRest (HTTP 403). "
+                "Confirme permissões do usuário REST no Protheus e o header Bearer.",
+                status_code=403,
+            )
+
         if response.status_code >= 400:
             logger.error(
-                "QueryRest falhou tenant=%s ambiente=%s status=%s",
+                "QueryRest falhou tenant=%s ambiente=%s status=%s body=%s",
                 self.tenant_code,
                 self.environment_code,
                 response.status_code,
+                response.text[:200],
             )
             raise ProtheusQueryRestError(
-                "Falha na execução do QueryRest Protheus.",
+                f"Falha na execução do QueryRest Protheus (HTTP {response.status_code}).",
                 response.status_code,
             )
 
@@ -123,24 +158,40 @@ class ProtheusQueryRestClient:
         query: str,
         payload: Mapping[str, Any] | None,
     ) -> httpx.Response:
-        headers = {
+        headers = require_bearer_headers({
             "Accept": "application/json",
             "Content-Type": "application/json",
             "Authorization": f"Bearer {access_token}",
+        })
+
+        safe_auth_debug = {
+            "tenant_code": self.tenant_code,
+            "environment_code": self.environment_code,
+            "url": url,
+            "auth_header_present": bool(headers.get("Authorization")),
+            "auth_scheme": (
+                headers.get("Authorization", "").split(" ", 1)[0]
+                if headers.get("Authorization")
+                else None
+            ),
+            "token_length": len(access_token) if access_token else 0,
         }
+        logger.info("queryrest_auth_context %s", safe_auth_debug)
 
         request_payload: dict[str, Any] = dict(payload or {})
         request_payload.setdefault("query", query)
+        request_payload.setdefault("cQuery", query)
 
         async with httpx.AsyncClient(
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=False,
+            verify=False,
         ) as client:
             if method.upper() == "GET":
                 return await client.get(
                     url,
                     headers=headers,
-                    params={"query": query},
+                    params={"cQuery": query, "query": query},
                 )
 
             return await client.post(

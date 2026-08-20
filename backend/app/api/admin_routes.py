@@ -519,7 +519,7 @@ async def sync_modules(
                     SET mod_sigla = EXCLUDED.mod_sigla,
                         mod_name  = EXCLUDED.mod_name,
                         active    = EXCLUDED.active,
-                        source_updated_at = EXCLUDED.updated_at = NOW()
+                        updated_at = NOW()
                 """),
                 {
                     "mod_code": mod_code_int,
@@ -532,6 +532,15 @@ async def sync_modules(
         db.commit()
         return {"success": True, "message": f"{count} modulos sincronizados em protheus_modules_master."}
 
+    except ProtheusQueryRestError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.status_code or 502,
+            detail=str(exc),
+        )
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
