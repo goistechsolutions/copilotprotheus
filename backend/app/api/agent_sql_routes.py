@@ -30,9 +30,10 @@ async def real_llm_sql_generator(
     context_text: str, 
     empresa: str, 
     filial: str, 
-    xfilial: str, 
-    tenant_id: str = "default",
-    image: str = None
+    xfilial: str,
+    tenant_id: str,
+    environment_code: str,
+    image: str = None,
 ) -> str:
     """
     Aciona o provedor LLM oficial configurado no backend (Gemini 2.5 Flash ou Ollama)
@@ -70,7 +71,11 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
                 question=user_query,
                 protheus_data=None,
                 intent="sql_generation",
-                context={"tenant_system_prompt": system_instruction, "tenant_id": tenant_id},
+                context={
+                    "tenant_system_prompt": system_instruction,
+                    "tenant_id": tenant_id,
+                    "environment_code": environment_code,
+                },
                 history=[],
                 image=image
             )
@@ -80,7 +85,11 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
                 question=user_query,
                 protheus_data=None,
                 intent="sql_generation",
-                context={"tenant_system_prompt": system_instruction, "tenant_id": tenant_id},
+                context={
+                    "tenant_system_prompt": system_instruction,
+                    "tenant_id": tenant_id,
+                    "environment_code": environment_code,
+                },
                 history=[],
                 image=image
             )
@@ -124,7 +133,20 @@ async def process_agent_task(task_id: str, payload: dict):
             AGENT_TASKS[task_id] = {"status": "error", "error": "O campo prompt ou query é obrigatório na v2."}
             return
 
+        environment_code = str(
+            payload.get("environment_code")
+            or (payload.get("context") or {}).get("environment_code")
+            or ""
+        ).strip()
+        if not environment_code or environment_code.lower() in {"default", "none", "null"}:
+            AGENT_TASKS[task_id] = {
+                "status": "error",
+                "error": "environment_code real é obrigatório para execução no Protheus.",
+            }
+            return
+
         file_data = payload.get("file")
+
         image_b64 = file_data.get("data") if isinstance(file_data, dict) else None
 
         import re
@@ -208,7 +230,10 @@ async def process_agent_task(task_id: str, payload: dict):
                 filial=op_context["filial"],
                 xfilial=op_context["xfilial"],
                 tenant_id=str(ctx.tenant_id),
-                image=image_b64
+                environment_code=environment_code,
+                image=image_b64,
+
+
             )
 
             # 5. Segurança
@@ -231,7 +256,10 @@ async def process_agent_task(task_id: str, payload: dict):
                         db=db,
                         tenant_id=str(ctx.tenant_id),
                         company_id=ctx.company_id,
-                        query=sql
+                        query=sql,
+                        environment_code=environment_code,
+
+
                     )
                     response["records"] = len(rows)
                     response["data"] = rows[:500]
@@ -263,7 +291,12 @@ async def process_agent_task(task_id: str, payload: dict):
 async def ask_v2(payload: dict) -> Dict[str, Any]:
     # Checagem rapida de tenant antes de disparar task
     tenant_id = payload.get("tenant_id")
-    if not tenant_id or tenant_id == "default":
+    environment_code = str(
+        payload.get("environment_code")
+        or (payload.get("context") or {}).get("environment_code")
+        or ""
+    ).strip()
+    if not tenant_id or tenant_id == "default" or environment_code.lower() in {"", "default", "none", "null"}:
         return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
 
     task_id = str(uuid.uuid4())
