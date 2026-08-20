@@ -41,11 +41,15 @@ class ProtheusQueryRestClient:
         self,
         db: Any,
         tenant_code: str,
-        environment_code: str = "default",
+        environment_code: str,
     ) -> None:
         self.db = db
-        self.tenant_code = tenant_code
-        self.environment_code = environment_code
+        self.tenant_code = str(tenant_code or "").strip()
+        self.environment_code = str(environment_code or "").strip()
+        if not self.tenant_code:
+            raise ValueError("tenant_code é obrigatório para QueryRest.")
+        if not self.environment_code or self.environment_code.lower() in {"default", "none", "null"}:
+            raise ValueError("environment_code Protheus é obrigatório e deve ser real.")
 
     async def execute(
         self,
