@@ -64,7 +64,7 @@ def validate_tenant_raw_dict(raw: dict) -> None:
             detail="Use somente connection.protheus_password para a senha REST Protheus."
         )
 
-def extract_connection_info(body: TenantCreate | TenantUpdate) -> Optional[dict]:
+def extract_connection_info(body: TenantCreate | TenantUpdate, db: Optional[Session] = None, tenant_code: Optional[str] = None) -> Optional[dict]:
     """Extrai e normaliza informações de conexão Protheus da requisição."""
     raw = body.model_dump(exclude_unset=False)
     validate_tenant_raw_dict(raw)
@@ -85,6 +85,16 @@ def extract_connection_info(body: TenantCreate | TenantUpdate) -> Optional[dict]
 
     if not url or not str(url).strip():
         return None
+
+    if (not env or not str(env).strip()) and db and tenant_code:
+        # Busca o environment_code já cadastrado anteriormente se não veio no form
+        existing_conn = db.execute(text("""
+            SELECT environment_code FROM public.protheus_rest_connections
+            WHERE tenant_code = :tc AND active = TRUE
+            ORDER BY id DESC LIMIT 1
+        """), {"tc": tenant_code}).mappings().first()
+        if existing_conn and existing_conn.get("environment_code"):
+            env = existing_conn["environment_code"]
 
     if not env or not str(env).strip():
         raise HTTPException(
@@ -284,7 +294,7 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
     ensure_tenant_tables(db, clean_tenant)
 
     # Processa e valida conexão REST Protheus
-    conn_info = extract_connection_info(body)
+    conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
     if conn_info:
         await _sync_protheus_connection(db, clean_tenant, conn_info)
 
@@ -322,7 +332,7 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
         ensure_tenant_tables(db, clean_tenant)
 
     # Processa e valida conexão REST Protheus
-    conn_info = extract_connection_info(body)
+    conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
     if conn_info:
         await _sync_protheus_connection(db, clean_tenant, conn_info)
 

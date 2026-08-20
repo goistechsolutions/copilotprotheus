@@ -153,7 +153,7 @@ function TenantModal({ tenant, onClose, onSaved }) {
       else        await apiCall('/api/tenants/', 'POST', payload);
       onSaved();
     } catch (e) {
-      setErr(e.message);
+      setErr(e.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
