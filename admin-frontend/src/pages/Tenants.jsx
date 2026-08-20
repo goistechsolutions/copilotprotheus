@@ -15,10 +15,10 @@ const EMPTY = {
   tenant_name:            '',
   name:                   '',
   environment_code:       '',
-  protheus_rest_url:      '',
-  protheus_user:          '',
+  base_rest_url:          '',
+  protheus_username:      '',
   protheus_rest_password: '',
-  auth_mode:              'oauth',
+  auth_mode:              'oauth2_password',
   protheus_webapp_url:    '',
   system_prompt:          '',
   temperature:            0.2,
@@ -97,10 +97,10 @@ function TenantModal({ tenant, onClose, onSaved }) {
     isEdit
       ? {
           ...tenant,
-          environment_code: tenant.environment_code || tenant.connection?.environment_code || '',
-          protheus_rest_url: tenant.protheus_rest_url || tenant.connection?.base_rest_url || '',
-          protheus_user: tenant.protheus_user || tenant.connection?.protheus_username || '',
-          auth_mode: tenant.auth_mode || tenant.connection?.auth_mode || 'oauth',
+          environment_code: tenant.connection?.environment_code || '',
+          base_rest_url: tenant.connection?.base_rest_url || '',
+          protheus_username: tenant.connection?.protheus_username || '',
+          auth_mode: 'oauth2_password',
           protheus_rest_password: '',
         }
       : { ...EMPTY }
@@ -137,9 +137,9 @@ function TenantModal({ tenant, onClose, onSaved }) {
       temperature: form.temperature,
       connection: {
         environment_code: String(form.environment_code || '').trim(),
-        base_rest_url: String(form.protheus_rest_url || '').trim(),
-        auth_mode: form.auth_mode || 'oauth',
-        protheus_username: String(form.protheus_user || '').trim(),
+        base_rest_url: String(form.base_rest_url || '').trim(),
+        auth_mode: 'oauth2_password',
+        protheus_username: String(form.protheus_username || '').trim(),
       }
     };
 
@@ -228,9 +228,9 @@ function TenantModal({ tenant, onClose, onSaved }) {
             {/* ── Conexão Protheus ── */}
             <SectionDivider>Conexão Protheus</SectionDivider>
             {f({ label: 'Ambiente Protheus (environment_code) *', name: 'environment_code', placeholder: 'c8te0u_prod', mono: true, span: true })}
-            {f({ label: 'URL REST Protheus', name: 'protheus_rest_url', placeholder: 'https://rodolltda...:10707/rest', mono: true, span: true })}
+            {f({ label: 'URL REST Protheus', name: 'base_rest_url', placeholder: 'https://rodolltda...:10707/rest', mono: true, span: true })}
             {f({ label: 'URL WebApp Protheus', name: 'protheus_webapp_url', placeholder: 'https://rodolltda...:10703/webapp/index.html', mono: true, span: true })}
-            {f({ label: 'Usuário REST (protheus_username)', name: 'protheus_user', placeholder: 'admin' })}
+            {f({ label: 'Usuário REST (protheus_username)', name: 'protheus_username', placeholder: 'USUARIO_TECNICO' })}
             
             {/* Campo Exclusivo de Senha REST (Isolado de credenciais do painel) */}
             <div>
@@ -256,9 +256,7 @@ function TenantModal({ tenant, onClose, onSaved }) {
               form={form}
               set={setForm}
               options={[
-                { value: 'oauth',  label: 'OAuth 2.0 (Recomendado)' },
-                { value: 'basic',  label: 'Basic Auth (usuário + senha)' },
-                { value: 'token',  label: 'Bearer Token' },
+                { value: 'oauth2_password', label: 'OAuth2 Password Grant' },
               ]}
             />
 
