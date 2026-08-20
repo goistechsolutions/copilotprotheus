@@ -89,11 +89,20 @@ async def queryrest_exec_tenant(
             method="POST"
         )
     except ProtheusQueryRestError as e:
-        logger.error(f"[QueryRest Tenant] Erro ao conectar ao portal REST /QueryRest (tenant={tenant_id}): status {e.status_code}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Não foi possível se conectar à API /QueryRest do Protheus (tenant: {tenant_id}). Serviço offline ou inacessível."
+        logger.error(
+            "[QueryRest Tenant] Falha tenant=%s ambiente=%s status=%s",
+            tenant_id,
+            environment_code,
+            e.status_code,
         )
+        status_code = e.status_code if e.status_code and e.status_code >= 400 else 502
+        detail = {
+            401: "Token OAuth2 do Protheus inválido ou expirado.",
+            403: "Usuário REST do Protheus sem autorização para QueryRest.",
+            404: "Endpoint QueryRest do Protheus não localizado.",
+            408: "Timeout na comunicação com o Protheus.",
+        }.get(status_code, "Falha na execução do QueryRest do Protheus.")
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception:
         logger.error("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s", tenant_id, environment_code)
         raise HTTPException(
