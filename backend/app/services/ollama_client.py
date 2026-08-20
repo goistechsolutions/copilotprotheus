@@ -345,7 +345,12 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
                 if name == "consultar_protheus":
                     endpoint = args.get("endpoint", "")
                     query_params = args.get("query_params", {})
-                    tool_result = await execute_protheus_tool(endpoint, query_params, tenant_id=tenant_id, context=context)
+                    tool_result = await execute_protheus_tool(
+                            endpoint,
+                            query_params,
+                            tenant_id=tenant_id,
+                            context=context,
+                        )
                     tool_results.append(tool_result)
                     messages.append({
                         "role": "tool",
@@ -480,7 +485,12 @@ async def stream_llm(
                         endpoint = args.get("endpoint", "")
                         query_params = args.get("query_params", {})
                         tenant_id = context.get("tenant_id", "default") if context else "default"
-                        tool_result = await execute_protheus_tool(endpoint, query_params, tenant_id=tenant_id, context=context)
+                        tool_result = await execute_protheus_tool(
+                            endpoint,
+                            query_params,
+                            tenant_id=tenant_id,
+                            context=context,
+                        )
                         tool_results.append(tool_result)
                         messages.append({
                             "role": "tool",
