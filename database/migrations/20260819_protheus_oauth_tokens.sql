@@ -3,7 +3,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.protheus_rest_connections (
     id BIGSERIAL PRIMARY KEY,
     tenant_code VARCHAR(100) NOT NULL,
-    environment_code VARCHAR(100) NOT NULL DEFAULT 'default',
+    environment_code VARCHAR(100) NOT NULL,
     base_rest_url VARCHAR(500) NOT NULL,
     auth_mode VARCHAR(30) NOT NULL DEFAULT 'oauth2_password',
     protheus_username VARCHAR(255) NOT NULL,
@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS public.protheus_rest_connections (
 
     CONSTRAINT ck_protheus_rest_connections_auth_mode
         CHECK (auth_mode IN ('oauth2_password')),
+    CONSTRAINT ck_protheus_rest_connections_environment
+        CHECK (LOWER(TRIM(environment_code)) NOT IN ('', 'default', 'none', 'null')),
 
     CONSTRAINT uq_protheus_rest_connections_tenant_environment UNIQUE (tenant_code, environment_code)
 );
