@@ -31,8 +31,15 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _require_real_environment(environment_code: str) -> str:
+    value = str(environment_code or "").strip()
+    if not value or value.lower() in {"default", "none", "null"}:
+        raise ValueError("environment_code Protheus é obrigatório e deve ser real.")
+    return value
+
+
 def _lock_key(tenant_code: str, environment_code: str) -> str:
-    return f"{tenant_code}:{environment_code}"
+    return f"{tenant_code}:{_require_real_environment(environment_code)}"
 
 
 def _get_lock(tenant_code: str, environment_code: str) -> asyncio.Lock:
@@ -86,8 +93,7 @@ def load_connection(
     tenant_code: str,
     environment_code: str,
 ) -> dict[str, Any]:
-    if not environment_code:
-        raise ValueError("Ambiente Protheus não informado.")
+    environment_code = _require_real_environment(environment_code)
     row = db.execute(
         text("""
             SELECT
@@ -197,9 +203,9 @@ async def _request_refresh_token(
             pass
 
     if response.status_code >= 400:
-        logger.error("Falha refresh OAuth2 Protheus status=%s body=%s", response.status_code, response.text[:500])
+        logger.error("Falha refresh OAuth2 Protheus status=%s", response.status_code)
         raise ProtheusAuthError(
-            message=f"refresh OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text[:300]}",
+            message=f"refresh OAuth2 Protheus falhou: HTTP {response.status_code}",
             status_code=response.status_code,
             response_body=response.text[:500],
         )
@@ -270,9 +276,9 @@ async def _request_password_token(
             pass
 
     if response.status_code >= 400:
-        logger.error("Falha OAuth2 Protheus status=%s body=%s", response.status_code, response.text[:500])
+        logger.error("Falha OAuth2 Protheus status=%s", response.status_code)
         raise ProtheusAuthError(
-            message=f"obtenção de token OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text[:300]}",
+            message=f"obtenção de token OAuth2 Protheus falhou: HTTP {response.status_code}",
             status_code=response.status_code,
             response_body=response.text[:500],
         )
@@ -375,8 +381,9 @@ async def get_valid_access_token(
 def invalidate_access_token(
     db: Any,
     tenant_code: str,
-    environment_code: str = "default",
+    environment_code: str,
 ) -> None:
+    environment_code = _require_real_environment(environment_code)
     db.execute(
         text("""
             UPDATE public.protheus_rest_connections
