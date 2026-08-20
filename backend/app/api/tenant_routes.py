@@ -54,17 +54,13 @@ def extract_connection_info(body: TenantCreate | TenantUpdate, db: Optional[Sess
 
     conn = body.connection
     if conn:
-        url = conn.base_rest_url or conn.protheus_rest_url or body.protheus_rest_url
-        env = conn.environment_code or conn.protheus_ambiente or conn.ambiente or body.environment_code or body.protheus_ambiente or body.ambiente
-        user = conn.protheus_username or conn.protheus_user or body.protheus_user
-        pw = conn.protheus_password or body.protheus_password
-        auth = conn.auth_mode or body.auth_mode or "oauth"
+        url = conn.base_rest_url
+        env = conn.environment_code
+        user = conn.protheus_username
+        pw = conn.protheus_password
+        auth = conn.auth_mode
     else:
-        url = body.protheus_rest_url
-        env = body.environment_code or body.protheus_ambiente or body.ambiente
-        user = body.protheus_user
-        pw = body.protheus_password
-        auth = body.auth_mode or "oauth"
+        return None
 
     if not url or not str(url).strip():
         return None
@@ -96,9 +92,9 @@ def extract_connection_info(body: TenantCreate | TenantUpdate, db: Optional[Sess
     return {
         "env_code": env_str,
         "rest_url": str(url).strip().rstrip("/"),
-        "username": str(user).strip() if user else "admin",
+        "username": str(user).strip(),
         "password": str(pw).strip() if pw else None,
-        "auth_mode": str(auth).strip() if auth else "oauth"
+        "auth_mode": str(auth).strip()
     }
 
 async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: dict):
@@ -204,11 +200,7 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
         "name": t.tenant_name,
         "tenant_code": t.tenant_code,
         "tenant_name": t.tenant_name,
-        "protheus_rest_url": rest_url,
         "protheus_webapp_url": t.webapp_url,
-        "protheus_user": user,
-        "auth_mode": auth_mode,
-        "environment_code": env_code,
         "connection": conn_obj,
         "system_prompt": t.system_prompt,
         "temperature": float(t.temperature) if t.temperature is not None else 0.2,
@@ -253,7 +245,7 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
     if not tenant:
         tenant = Tenant(
             tenant_code=clean_tenant,
-            tenant_name=body.tenant_name or body.name or clean_tenant,
+            tenant_name=body.name or clean_tenant,
             schema_name=clean_tenant,
             status=body.status or 'active',
             plan_code=body.plan_code,
@@ -267,7 +259,7 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
         db.commit()
         db.refresh(tenant)
     else:
-        tenant.tenant_name = body.tenant_name or body.name or tenant.tenant_name
+        tenant.tenant_name = body.name or tenant.tenant_name
         tenant.status = body.status or tenant.status
         tenant.plan_code = body.plan_code or tenant.plan_code
         tenant.cnpj = body.cnpj or tenant.cnpj
@@ -295,8 +287,8 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
-    if body.tenant_name or body.name:
-        tenant.tenant_name = body.tenant_name or body.name
+    if body.name:
+        tenant.tenant_name = body.name
     if body.status:
         tenant.status = body.status
     if body.plan_code:
