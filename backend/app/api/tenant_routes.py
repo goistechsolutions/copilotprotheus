@@ -234,7 +234,7 @@ def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(req
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     import uuid
-    raw_code = body.tenant_code or body.tenant_name or body.name or body.id or "tenant"
+    raw_code = body.tenant_code or body.name or body.id or "tenant"
     t_code = resolve_clean_tenant(str(raw_code).lower().strip())
     if not t_code:
         t_code = f"tenant_{uuid.uuid4().hex[:6]}"
