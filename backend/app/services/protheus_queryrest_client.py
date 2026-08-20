@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Mapping
 
@@ -14,6 +15,91 @@ from app.services.protheus_token_service import (
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 60
+
+
+def _sanitize_protheus_json(raw: str) -> str:
+    """Normaliza respostas históricas do Protheus sem expor o conteúdo em logs."""
+
+    if not raw:
+        return ""
+
+    valid_escapes = set('"\\/bfnrtu')
+    output: list[str] = []
+    index = 0
+    inside_string = False
+
+    while index < len(raw):
+        char = raw[index]
+        if inside_string:
+            if char == "\\":
+                if index + 1 >= len(raw):
+                    index += 1
+                    continue
+                next_char = raw[index + 1]
+                if next_char in valid_escapes:
+                    output.extend((char, next_char))
+                    if next_char == "u":
+                        hex_sequence = raw[index + 2:index + 6]
+                        if len(hex_sequence) == 4 and all(
+                            value in "0123456789abcdefABCDEF" for value in hex_sequence
+                        ):
+                            output.append(hex_sequence)
+                            index += 6
+                            continue
+                        output[-2:] = [" "]
+                    index += 2
+                    continue
+                output.append(next_char)
+                index += 2
+                continue
+            if char == '"':
+                inside_string = False
+                output.append(char)
+                index += 1
+                continue
+            if ord(char) < 0x20:
+                output.append({"\n": "\\n", "\r": "\\r", "\t": "\\t"}.get(char, f"\\u{ord(char):04x}"))
+                index += 1
+                continue
+            output.append(char)
+            index += 1
+            continue
+
+        if char == '"':
+            inside_string = True
+        output.append(char)
+        index += 1
+
+    return "".join(output).lstrip("\ufeff")
+
+
+def _parse_queryrest_json(response: httpx.Response) -> Any:
+    """Faz parse estrito e depois aplica apenas a normalização conhecida."""
+
+    try:
+        return response.json()
+    except ValueError:
+        pass
+
+    encoding = response.encoding or "utf-8-sig"
+    raw = response.content.decode(encoding, errors="replace").lstrip("\ufeff")
+    for candidate in (raw, _sanitize_protheus_json(raw)):
+        try:
+            return json.loads(candidate)
+        except ValueError:
+            continue
+
+    content_type = response.headers.get("content-type", "unknown").split(";", 1)[0].strip()
+    logger.error(
+        "QueryRest retornou resposta não JSON status=%s content_type=%s body_length=%s",
+        response.status_code,
+        content_type,
+        len(raw),
+    )
+    raise ProtheusQueryRestError(
+        f"QueryRest retornou conteúdo não JSON (content-type={content_type}, tamanho={len(raw)}).",
+        response.status_code,
+    )
 
 
 class ProtheusQueryRestError(RuntimeError):
@@ -135,24 +221,19 @@ class ProtheusQueryRestClient:
 
         if response.status_code >= 400:
             logger.error(
-                "QueryRest falhou tenant=%s ambiente=%s status=%s body=%s",
+                "QueryRest falhou tenant=%s ambiente=%s status=%s content_type=%s body_length=%s",
                 self.tenant_code,
                 self.environment_code,
                 response.status_code,
-                response.text[:200],
+                response.headers.get("content-type", "unknown").split(";", 1)[0].strip(),
+                len(response.content),
             )
             raise ProtheusQueryRestError(
                 f"Falha na execução do QueryRest Protheus (HTTP {response.status_code}).",
                 response.status_code,
             )
 
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise ProtheusQueryRestError(
-                "QueryRest retornou conteúdo que não é JSON.",
-                response.status_code,
-            ) from exc
+        return _parse_queryrest_json(response)
 
     async def _send(
         self,
