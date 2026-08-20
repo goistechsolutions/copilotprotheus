@@ -24,7 +24,9 @@ class FieldUsed(BaseModel):
 
 class ValidateQueryRequest(BaseModel):
     tenant_id: str
+    environment_code: str
     contract_id: Optional[str] = None
+
     company_id: Optional[str] = None
     env_id: Optional[str] = None
     user_id: Optional[str] = None
@@ -77,12 +79,16 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
     # (Here we could append limit dynamically based on validation["limit_apply"])
     
     # 3. Execute on Protheus
-    config = get_tenant_config(req.tenant_id)
+    config = get_tenant_config(req.tenant_id, req.environment_code)
     rest_url = config['rest_url'].strip()
     if rest_url.endswith('/'): rest_url = rest_url[:-1]
     url = f"{rest_url}/QueryRest"
     
-    headers = await build_protheus_headers(req.tenant_id, config)
+    headers = await build_protheus_headers(
+            req.tenant_id,
+            config,
+            environment_code=req.environment_code,
+        )
     
     start_time = time.time()
     try:
@@ -171,7 +177,9 @@ def get_usage(tenant_id: str, period_ref: str, db: Session = Depends(get_db)):
 
 class ValidateContextRequest(BaseModel):
     tenant_id: str
+    environment_code: str
     company: str
+
     branch: str
     user: str
     profile: Optional[str] = None
@@ -180,14 +188,18 @@ class ValidateContextRequest(BaseModel):
 @router.post("/validate-context")
 async def proxy_validate_context(req: ValidateContextRequest, db: Session = Depends(get_db)):
     try:
-        config = get_tenant_config(req.tenant_id)
+        config = get_tenant_config(req.tenant_id, req.environment_code)
         rest_url = config['rest_url'].strip()
         if rest_url.endswith('/'): rest_url = rest_url[:-1]
         
         # Endpoint AdvPL
         url = f"{rest_url}/copilot/validate-context"
         
-        headers = await build_protheus_headers(req.tenant_id, config)
+        headers = await build_protheus_headers(
+            req.tenant_id,
+            config,
+            environment_code=req.environment_code,
+        )
         
         res_text = await _execute_http_post_with_retry(url, req.dict(), headers)
         return json.loads(res_text)
@@ -196,7 +208,9 @@ async def proxy_validate_context(req: ValidateContextRequest, db: Session = Depe
 
 class AskAgentRequest(BaseModel):
     tenant_id: str
+    environment_code: str
     company: str
+
     branch: str
     user: str
     request_id: str
@@ -205,7 +219,7 @@ class AskAgentRequest(BaseModel):
 @router.post("/ask")
 async def proxy_ask_agent(req: AskAgentRequest, db: Session = Depends(get_db)):
     try:
-        config = get_tenant_config(req.tenant_id)
+        config = get_tenant_config(req.tenant_id, req.environment_code)
         rest_url = config['rest_url'].strip()
         if not rest_url.startswith("http://") and not rest_url.startswith("https://"):
             rest_url = "https://" + rest_url
@@ -214,7 +228,11 @@ async def proxy_ask_agent(req: AskAgentRequest, db: Session = Depends(get_db)):
         # Endpoint AdvPL
         url = f"{rest_url}/copilot/ask"
         
-        headers = await build_protheus_headers(req.tenant_id, config)
+        headers = await build_protheus_headers(
+            req.tenant_id,
+            config,
+            environment_code=req.environment_code,
+        )
         
         res_text = await _execute_http_post_with_retry(url, req.dict(), headers)
         return json.loads(res_text)
