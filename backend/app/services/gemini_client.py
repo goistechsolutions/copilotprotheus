@@ -196,7 +196,12 @@ async def ask_gemini(
                     endpoint = args.get("endpoint", "")
                     query_params = args.get("query_params", {})
                     tenant_id = context.get("tenant_id", "default") if context else "default"
-                    tool_result = await execute_protheus_tool(endpoint, query_params, tenant_id=tenant_id)
+                    tool_result = await execute_protheus_tool(
+                        endpoint,
+                        query_params,
+                        tenant_id=tenant_id,
+                        context=context,
+                    )
                 elif name == "descobrir_apis_protheus":
                     palavra_chave = args.get("palavra_chave", "")
                     tool_result = await descobrir_apis_protheus(palavra_chave)
@@ -321,7 +326,12 @@ async def stream_gemini(
                     endpoint = args.get("endpoint", "")
                     query_params = args.get("query_params", {})
                     tenant_id = context.get("tenant_id", "default") if context else "default"
-                    tool_result = await execute_protheus_tool(endpoint, query_params, tenant_id=tenant_id)
+                    tool_result = await execute_protheus_tool(
+                        endpoint,
+                        query_params,
+                        tenant_id=tenant_id,
+                        context=context,
+                    )
                 elif name == "descobrir_apis_protheus":
                     palavra_chave = args.get("palavra_chave", "")
                     tool_result = await descobrir_apis_protheus(palavra_chave)
