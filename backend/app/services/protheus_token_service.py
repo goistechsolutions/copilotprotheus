@@ -151,20 +151,39 @@ async def _request_refresh_token(
     refresh_token: str,
 ) -> ProtheusToken:
     token_url = _token_url(base_rest_url)
+
+    # 1. Envia grant_type=refresh_token com refresh_token no JSON body
     response = await client.post(
         token_url,
-        params={
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-        },
-        data={
+        params={"grant_type": "refresh_token"},
+        json={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
         },
         headers={
             "Accept": "application/json",
+            "Content-Type": "application/json",
         },
     )
+
+    # 2. Fallback para form-urlencoded se o AppServer rejeitar JSON
+    if response.status_code >= 400:
+        try:
+            response_form = await client.post(
+                token_url,
+                params={"grant_type": "refresh_token"},
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                },
+                headers={
+                    "Accept": "application/json",
+                },
+            )
+            if response_form.status_code < 400:
+                response = response_form
+        except Exception:
+            pass
 
     if response.status_code >= 400:
         raise RuntimeError(
@@ -182,41 +201,37 @@ async def _request_password_token(
 ) -> ProtheusToken:
     token_url = _token_url(base_rest_url)
 
-    # 1. Tenta envio com params e form-data (padrão Protheus REST Cloud)
+    # 1. Padrão canônico TOTVS: POST /api/oauth2/v1/token?grant_type=password com JSON body {"username": "...", "password": "..."}
     response = await client.post(
         token_url,
-        params={
-            "grant_type": "password",
-            "username": username,
-            "password": password,
-        },
-        data={
-            "grant_type": "password",
+        params={"grant_type": "password"},
+        json={
             "username": username,
             "password": password,
         },
         headers={
             "Accept": "application/json",
+            "Content-Type": "application/json",
         },
     )
 
-    # 2. Fallback para JSON body se retornar 400 (algumas versões do REST Protheus esperam JSON)
-    if response.status_code == 400 and ("username" in response.text.lower() or "invalid_grant" in response.text.lower()):
+    # 2. Fallback para form-data no body se o AppServer REST for versão legado
+    if response.status_code >= 400 and ("invalid_grant" in response.text.lower() or response.status_code == 500):
         try:
-            response_json = await client.post(
+            response_form = await client.post(
                 token_url,
                 params={"grant_type": "password"},
-                json={
+                data={
+                    "grant_type": "password",
                     "username": username,
                     "password": password,
                 },
                 headers={
                     "Accept": "application/json",
-                    "Content-Type": "application/json",
                 },
             )
-            if response_json.status_code < 400:
-                response = response_json
+            if response_form.status_code < 400:
+                response = response_form
         except Exception:
             pass
 

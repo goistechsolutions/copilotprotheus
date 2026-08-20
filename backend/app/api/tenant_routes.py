@@ -28,24 +28,7 @@ from app.services.tenant_resolver import resolve_clean_tenant
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
 
-# ── Criptografia da senha REST Protheus ──────────────────────
-
-def _get_fernet() -> Fernet:
-    key = os.getenv("FERNET_KEY", "").strip().encode()
-    if key:
-        try:
-            return Fernet(key)
-        except Exception:
-            pass
-    secret = os.getenv("JWT_SECRET") or os.getenv("ADMIN_JWT_SECRET") or "copilot-protheus-fernet-fallback-key"
-    key_32bytes = hashlib.sha256(secret.encode()).digest()
-    fallback_key = base64.urlsafe_b64encode(key_32bytes)
-    return Fernet(fallback_key)
-
-def encrypt_password(plaintext: str) -> str:
-    if not plaintext:
-        return ""
-    return _get_fernet().encrypt(plaintext.encode()).decode()
+from app.core.security import encrypt_password, decrypt_password
 
 
 # ── Helpers de Conexão e Validação ───────────────────────────
