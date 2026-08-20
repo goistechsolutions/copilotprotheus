@@ -22,7 +22,7 @@ from app.core.admin_security import require_admin, require_admin_flexible
 from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
-from app.services.protheus_token_service import invalidate_access_token, get_valid_access_token
+from app.services.protheus_token_service import invalidate_access_token, get_valid_access_token, ProtheusAuthError
 from app.services.tenant_resolver import resolve_clean_tenant
 
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
@@ -140,6 +140,11 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: di
     try:
         invalidate_access_token(db, tenant_code, env_code)
         await get_valid_access_token(db, tenant_code, env_code)
+    except ProtheusAuthError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Falha ao autenticar no REST Protheus (HTTP {exc.status_code}): {exc.response_body or str(exc)}"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=400,

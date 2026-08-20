@@ -145,6 +145,18 @@ def _parse_token_response(data: Mapping[str, Any]) -> ProtheusToken:
     )
 
 
+class ProtheusAuthError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        response_body: str | None = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_body = response_body
+
+
 async def _request_refresh_token(
     client: httpx.AsyncClient,
     base_rest_url: str,
@@ -152,42 +164,44 @@ async def _request_refresh_token(
 ) -> ProtheusToken:
     token_url = _token_url(base_rest_url)
 
-    # 1. Envia grant_type=refresh_token com refresh_token no JSON body
+    # 1. Modo form-urlencoded puro no body (Opção B)
     response = await client.post(
         token_url,
-        params={"grant_type": "refresh_token"},
-        json={
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
         },
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
     )
 
-    # 2. Fallback para form-urlencoded se o AppServer rejeitar JSON
+    # 2. Fallback com grant_type na query string
     if response.status_code >= 400:
         try:
-            response_form = await client.post(
+            response_alt = await client.post(
                 token_url,
                 params={"grant_type": "refresh_token"},
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": refresh_token,
-                },
                 headers={
                     "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "refresh_token": refresh_token,
                 },
             )
-            if response_form.status_code < 400:
-                response = response_form
+            if response_alt.status_code < 400:
+                response = response_alt
         except Exception:
             pass
 
     if response.status_code >= 400:
-        raise RuntimeError(
-            f"refresh OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text}"
+        logger.error("Falha refresh OAuth2 Protheus status=%s body=%s", response.status_code, response.text[:500])
+        raise ProtheusAuthError(
+            message=f"refresh OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text[:300]}",
+            status_code=response.status_code,
+            response_body=response.text[:500],
         )
 
     return _parse_token_response(response.json())
@@ -201,43 +215,66 @@ async def _request_password_token(
 ) -> ProtheusToken:
     token_url = _token_url(base_rest_url)
 
-    # 1. Padrão canônico TOTVS: POST /api/oauth2/v1/token?grant_type=password com JSON body {"username": "...", "password": "..."}
+    # 1. Opção B (Padrão TOTVS Form-Urlencoded no Body sem parâmetros na URL)
     response = await client.post(
         token_url,
-        params={"grant_type": "password"},
-        json={
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={
+            "grant_type": "password",
             "username": username,
             "password": password,
         },
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
     )
 
-    # 2. Fallback para form-data no body se o AppServer REST for versão legado
-    if response.status_code >= 400 and ("invalid_grant" in response.text.lower() or response.status_code == 500):
+    # 2. Opção A (Form-Urlencoded com grant_type na URL)
+    if response.status_code >= 400:
         try:
-            response_form = await client.post(
+            response_alt = await client.post(
                 token_url,
                 params={"grant_type": "password"},
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
                 data={
-                    "grant_type": "password",
                     "username": username,
                     "password": password,
                 },
+            )
+            if response_alt.status_code < 400:
+                response = response_alt
+        except Exception:
+            pass
+
+    # 3. Opção C (JSON body se o AppServer estiver configurado para JSON)
+    if response.status_code >= 400:
+        try:
+            response_json = await client.post(
+                token_url,
+                params={"grant_type": "password"},
                 headers={
                     "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "username": username,
+                    "password": password,
                 },
             )
-            if response_form.status_code < 400:
-                response = response_form
+            if response_json.status_code < 400:
+                response = response_json
         except Exception:
             pass
 
     if response.status_code >= 400:
-        raise RuntimeError(
-            f"obtenção de token OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text}"
+        logger.error("Falha OAuth2 Protheus status=%s body=%s", response.status_code, response.text[:500])
+        raise ProtheusAuthError(
+            message=f"obtenção de token OAuth2 Protheus falhou: HTTP {response.status_code} - {response.text[:300]}",
+            status_code=response.status_code,
+            response_body=response.text[:500],
         )
 
     return _parse_token_response(response.json())
