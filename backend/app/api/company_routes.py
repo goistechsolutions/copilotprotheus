@@ -398,8 +398,11 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
 
 @router.post("/companies", response_model=CompanyResponse)
 async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
-    raw_tenant = str(payload.tenant_id or payload.protheus_grupo or payload.cnpj or "default")
+    raw_tenant = str(payload.tenant_id or payload.protheus_grupo or "").strip()
+    if not raw_tenant:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório para criar uma empresa.")
     tenant_code = raw_tenant
+
     try:
         if raw_tenant.isdigit():
             reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant WHERE id = :id OR tenant_code = :tc"), {"id": int(raw_tenant), "tc": raw_tenant}).mappings().first()
@@ -481,64 +484,10 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 
     db.commit()
 
-    # Popula public.protheus_modules_master ao cadastrar empresa
-    if payload.protheus_rest_url and payload.protheus_usuario and payload.protheus_password:
-        try:
-            from app.services.protheus_queryrest_client import ProtheusQueryRestClient
-            
-            client = ProtheusQueryRestClient(
-                db=db,
-                tenant_code=clean_tenant,
-                environment_code="default"
-            )
-            
-            result_data = await client.execute(
-                """
-                SELECT DISTINCT
-                    TRIM(USR_CODMOD) AS mod_sigla,
-                    USR_MODULO AS mod_code,
-                    USR_NOME AS mod_name
-                FROM SYS_USR_MODULE
-                WHERE D_E_L_E_T_ <> '*'
-                ORDER BY USR_MODULO
-                """,
-                method="POST"
-            )
+    # A sincronização de módulos ocorre somente pela rota explícita de catálogo,
+    # com tenant_code + environment_code e conexão OAuth2 já persistida.
 
-            if isinstance(result_data, dict):
-                result_data = result_data.get("items") or result_data.get("data", [])
-            if isinstance(result_data, list):
-                for r in result_data:
-                    if not isinstance(r, dict): continue
-                    c_mod = str(r.get("mod_code") or "").strip()
-                    sigla = str(r.get("mod_sigla") or "").strip().upper()
-                    n_mod = str(r.get("mod_name") or "").strip()
-                    
-                    if not c_mod or not c_mod.isdigit():
-                        continue
-                        
-                    int_code = int(c_mod)
-                    
-                    existing = db.query(ProtheusModuleMaster).filter(
-                        (ProtheusModuleMaster.mod_code == int_code) | (ProtheusModuleMaster.mod_sigla == sigla)
-                    ).first()
-                    if existing:
-                        existing.mod_code = int_code
-                        existing.mod_sigla = sigla or existing.mod_sigla
-                        existing.mod_name = n_mod or existing.mod_name
-                        existing.description = n_mod or existing.description
-                        existing.active      = True
-                    else:
-                        db.add(ProtheusModuleMaster(
-                            mod_code=int_code,
-                            mod_sigla=sigla,
-                            mod_name=n_mod or sigla,
-                            description=n_mod,
-                            active=True
-                        ))
-                db.commit()
-        except Exception as e_mod:
-            logger.warning(f"Aviso ao sincronizar protheus_modules_master no cadastro da empresa: {e_mod}")
+
 
     cid = res[0] if res else 1
     now = datetime.now()
