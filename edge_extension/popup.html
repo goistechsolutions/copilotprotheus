@@ -17,20 +17,19 @@
 
     <hr>
 
-    <label for="tenantId">Grupo/Tenant ID (Obrigatório):</label>
-    <input type="text" id="tenantId" placeholder="rodol_prod">
+    <label for="tenantId">Tenant ID (obrigatório):</label>
+    <input type="text" id="tenantId" placeholder="rodol_prod" autocomplete="off">
 
-    <label for="username">Usuário Copilot:</label>
-    <input type="text" id="username" placeholder="admin">
+    <label for="environmentCode">Environment code (obrigatório):</label>
+    <input type="text" id="environmentCode" placeholder="c8te0u_prod" autocomplete="off">
 
-    <label for="password">Senha Copilot:</label>
-    <input type="password" id="password" placeholder="••••••••">
+    <label for="widgetUrl">URL do Widget:</label>
+    <input type="url" id="widgetUrl" placeholder="https://copilot.elitecorp.tec.br/" autocomplete="url">
 
-    <label for="widgetUrl">URL do Widget (Vite/Nuvem):</label>
-    <input type="url" id="widgetUrl" placeholder="https://copilot.elitecorp.tec.br/">
+    <label for="launchUrl">URL de Lançamento do Protheus:</label>
+    <input type="url" id="launchUrl" placeholder="https://host.protheus.cloudtotvs.com.br/webapp/index.html" autocomplete="url">
 
-    <label for="launchUrl">URL de Lançamento (FastAPI):</label>
-    <input type="url" id="launchUrl" placeholder="https://copilot.elitecorp.tec.br/api/launch">
+    <p class="hint">A extensão não armazena credenciais. O OAuth2 é executado no backend.</p>
 
     <button id="saveConfigBtn" class="btn btn-primary">Salvar Configurações</button>
 

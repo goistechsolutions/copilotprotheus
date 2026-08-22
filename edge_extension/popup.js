@@ -1,4 +1,4 @@
-const FIELDS = ["tenantId", "username", "password", "widgetUrl", "launchUrl"];
+const FIELDS = ["tenantId", "environmentCode", "widgetUrl", "launchUrl"];
 
 async function loadConfig() {
   const data = await chrome.storage.local.get(FIELDS);
@@ -30,22 +30,24 @@ document.getElementById("openOptionsLink").addEventListener("click", (e) => {
 
 document.getElementById("saveConfigBtn").addEventListener("click", async () => {
   const tenantId = document.getElementById("tenantId").value.trim();
+  const environmentCode = document.getElementById("environmentCode").value.trim();
   const widgetUrl = document.getElementById("widgetUrl").value.trim();
   const launchUrl = document.getElementById("launchUrl").value.trim();
 
-  if (!tenantId || !widgetUrl || !launchUrl) {
-    showStatus("Preencha Tenant ID, URL do Widget e URL de Lançamento.", true);
+  if (!tenantId || !environmentCode || !widgetUrl || !launchUrl) {
+    showStatus("Preencha Tenant ID, environment code, URL do Widget e URL de Lançamento.", true);
     return;
   }
 
-  const config = {
-    tenantId,
-    username: document.getElementById("username").value.trim(),
-    password: document.getElementById("password").value,
-    widgetUrl,
-    launchUrl,
-  };
+  let widgetOrigin;
+  try {
+    widgetOrigin = new URL(widgetUrl).origin;
+  } catch {
+    showStatus("URL do Widget inválida.", true);
+    return;
+  }
 
+  const config = { tenantId, environmentCode, widgetUrl, launchUrl, widgetOrigin };
   await chrome.storage.local.set(config);
   chrome.runtime.sendMessage({ type: "CONFIG_UPDATED", config });
   showStatus("Configurações salvas com sucesso.");
