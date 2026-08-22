@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db, SessionLocal
 from app.core.config import settings
+from app.core.logging_config import get_correlation_id
+
 from app.services.dictionary_context_service import (
     build_dictionary_context,
     render_context_for_prompt,
@@ -129,12 +131,19 @@ DIRETRIZES GERAIS E INNEGOCIÁVEIS:
 
 async def process_agent_task(task_id: str, payload: dict):
     started = time.time()
+    task_state = AGENT_TASKS.get(task_id) or {}
+    correlation_id = task_state.get("correlation_id") or get_correlation_id()
+    task_state["correlation_id"] = correlation_id
+    AGENT_TASKS[task_id] = task_state
+    logger.info("agent_task_started task_id=%s", task_id)
     try:
+
         execute = payload.get("execute", False)
         
         prompt = payload.get("prompt") or payload.get("query")
         if not prompt:
-            AGENT_TASKS[task_id] = {"status": "error", "error": "O campo prompt ou query é obrigatório na v2."}
+            AGENT_TASKS[task_id] = {"status": "error", "error": "O campo prompt ou query é obrigatório na v2.", "correlation_id": correlation_id}
+
             return
 
         environment_code = str(
@@ -146,6 +155,7 @@ async def process_agent_task(task_id: str, payload: dict):
             AGENT_TASKS[task_id] = {
                 "status": "error",
                 "error": "environment_code real é obrigatório para execução no Protheus.",
+                "correlation_id": correlation_id,
             }
             return
 
@@ -165,11 +175,21 @@ async def process_agent_task(task_id: str, payload: dict):
                 # 1. Resolve o contexto de forma segura (Tenant, Schema, Módulo, Branch)
                 ctx = resolve_context(db, payload)
             except ValueError as ve:
-                AGENT_TASKS[task_id] = {"status": "error", "error": str(ve)}
+                AGENT_TASKS[task_id] = {"status": "error", "error": str(ve), "correlation_id": correlation_id}
+
                 return
 
             clean_tenant = ctx.schema_name
+            logger.info(
+                "agent_context_resolved task_id=%s tenant=%s environment=%s company_id=%s module=%s",
+                task_id,
+                ctx.tenant_id,
+                environment_code,
+                ctx.company_id,
+                ctx.module_code,
+            )
             if clean_tenant and clean_tenant != "public":
+
                 ensure_tenant_tables(db, clean_tenant)
                 db.execute(text(f'SET search_path TO {clean_tenant}, public'))
                 db.commit()
@@ -217,7 +237,8 @@ async def process_agent_task(task_id: str, payload: dict):
                 })
 
             if not context:
-                AGENT_TASKS[task_id] = {"status": "error", "error": "Nenhuma tabela liberada ou encontrada no snapshot do dicionário para os filtros informados."}
+                AGENT_TASKS[task_id] = {"status": "error", "error": "Nenhuma tabela liberada ou encontrada no snapshot do dicionário para os filtros informados.", "correlation_id": correlation_id}
+
                 return
 
             context_text = render_context_for_prompt(context)
@@ -245,6 +266,8 @@ async def process_agent_task(task_id: str, payload: dict):
 
             response = {
                 "status": "success",
+                "correlation_id": correlation_id,
+
                 "tenant_id": str(ctx.tenant_id),
                 "company_id": ctx.company_id,
                 "context_operational": op_context,
@@ -255,8 +278,15 @@ async def process_agent_task(task_id: str, payload: dict):
 
             # 6. QueryRest
             if execute:
+                logger.info(
+                    "agent_queryrest_start task_id=%s tenant=%s environment=%s",
+                    task_id,
+                    ctx.tenant_id,
+                    environment_code,
+                )
                 try:
                     rows = await queryrest_exec_tenant(
+
                         db=db,
                         tenant_id=str(ctx.tenant_id),
                         company_id=ctx.company_id,
@@ -267,6 +297,8 @@ async def process_agent_task(task_id: str, payload: dict):
                     )
                     response["records"] = len(rows)
                     response["data"] = rows[:500]
+                    logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
+
                     if len(rows) == 0:
                         response["summary"] = "A consulta ao banco Oracle do Protheus foi executada com sucesso, porém retornou zero registros (tabela vazia ou sem correspondências no período)."
                     else:
@@ -282,14 +314,17 @@ async def process_agent_task(task_id: str, payload: dict):
                 except HTTPException as http_ex:
                     response["status"] = "execution_failed"
                     response["execution_error"] = http_ex.detail
+                    logger.warning("agent_queryrest_failed task_id=%s status=%s", task_id, http_ex.status_code)
 
             AGENT_TASKS[task_id] = response
+            logger.info("agent_task_completed task_id=%s status=%s elapsed_ms=%s", task_id, response.get("status"), response.get("response_time_ms"))
 
     except HTTPException as e:
-        AGENT_TASKS[task_id] = {"status": "error", "error": e.detail}
+        AGENT_TASKS[task_id] = {"status": "error", "error": e.detail, "correlation_id": correlation_id}
+        logger.warning("agent_task_failed task_id=%s status=%s", task_id, e.status_code)
     except Exception as e:
-        logger.error(f"Erro no processamento da task {task_id}: {e}")
-        AGENT_TASKS[task_id] = {"status": "error", "error": str(e)}
+        logger.error("agent_task_failed task_id=%s error_type=%s", task_id, type(e).__name__)
+        AGENT_TASKS[task_id] = {"status": "error", "error": "Falha interna ao processar a tarefa.", "correlation_id": correlation_id}
 
 @router.post("/ask/v2")
 async def ask_v2(payload: dict) -> Dict[str, Any]:
@@ -304,9 +339,11 @@ async def ask_v2(payload: dict) -> Dict[str, Any]:
         return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
 
     task_id = str(uuid.uuid4())
-    AGENT_TASKS[task_id] = {"status": "processing"}
+    correlation_id = get_correlation_id()
+    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id}
+    logger.info("agent_task_accepted task_id=%s", task_id)
     asyncio.create_task(process_agent_task(task_id, payload))
-    return {"status": "processing", "task_id": task_id}
+    return {"status": "processing", "task_id": task_id, "correlation_id": correlation_id}
 
 @router.post("/ask/v2/upload")
 async def ask_v2_upload(
@@ -360,9 +397,11 @@ async def ask_v2_upload(
     }
 
     task_id = str(uuid.uuid4())
-    AGENT_TASKS[task_id] = {"status": "processing"}
+    correlation_id = get_correlation_id()
+    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id}
+    logger.info("agent_task_accepted task_id=%s", task_id)
     asyncio.create_task(process_agent_task(task_id, payload))
-    return {"status": "processing", "task_id": task_id}
+    return {"status": "processing", "task_id": task_id, "correlation_id": correlation_id}
 
 
 @router.get("/ask/v2/status/{task_id}")
@@ -373,8 +412,12 @@ async def ask_v2_status(task_id: str):
     
     # Se erro for gerado, retornamos como JSON normal com 'summary' mapeado para o frontend renderizar
     if AGENT_TASKS[task_id].get("status") == "error":
-        return {"status": "error", "summary": AGENT_TASKS[task_id].get("error")}
-        
+        return {
+            "status": "error",
+            "summary": AGENT_TASKS[task_id].get("error"),
+            "correlation_id": AGENT_TASKS[task_id].get("correlation_id"),
+        }
+
     return AGENT_TASKS[task_id]
 
 
