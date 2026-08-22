@@ -184,7 +184,8 @@
 
   function buildIframeUrl(config, context) {
     const url = new URL(config.widgetUrl);
-    url.searchParams.set("tenant", config.tenantId || "");
+    url.searchParams.set("tenant_id", config.tenantId || "");
+    if (config.environmentCode) url.searchParams.set("environment_code", config.environmentCode);
     if (context.company) url.searchParams.set("company", context.company);
     if (context.branch) url.searchParams.set("branch", context.branch);
     if (context.user) url.searchParams.set("user", context.user);
@@ -196,12 +197,25 @@
 
   function sendContextToIframe(context) {
     const iframe = shadow.querySelector("#copilot-iframe");
-    if (!iframe?.contentWindow) return;
+    if (!iframe?.contentWindow || !currentConfig?.widgetUrl) return;
+
+    const payload = {
+      tenant_id: currentConfig.tenantId || "",
+      environment_code: currentConfig.environmentCode || "",
+      company_code: context.company || "",
+      company_id: context.company_id || "",
+      branch: context.branch || "",
+      user: context.user || "",
+      module: context.module || "",
+      profile: context.profile || "",
+      session_id: context.session_id || ""
+    };
 
     try {
+      const targetOrigin = new URL(currentConfig.widgetUrl).origin;
       iframe.contentWindow.postMessage(
-        { type: "PROTHEUS_CONTEXT", context, tenantId: currentConfig?.tenantId || "" },
-        "*"
+        { type: "cprot-context-update", payload },
+        targetOrigin
       );
     } catch (err) {
       console.warn("Copilot Protheus: falha ao enviar contexto via postMessage.", err);
