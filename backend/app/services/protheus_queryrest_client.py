@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 import httpx
 
+from app.core.logging_config import get_correlation_id
 from app.services.protheus_token_service import (
     get_valid_access_token,
     invalidate_access_token,
@@ -248,6 +249,9 @@ class ProtheusQueryRestClient:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {access_token}",
         })
+        correlation_id = get_correlation_id()
+        if correlation_id != "-":
+            headers["X-Correlation-ID"] = correlation_id
 
         safe_auth_debug = {
             "tenant_code": self.tenant_code,
@@ -260,6 +264,7 @@ class ProtheusQueryRestClient:
                 else None
             ),
             "token_length": len(access_token) if access_token else 0,
+            "correlation_id": correlation_id,
         }
         logger.info("queryrest_auth_context %s", safe_auth_debug)
 
