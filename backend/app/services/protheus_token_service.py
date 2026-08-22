@@ -295,8 +295,10 @@ async def get_valid_access_token(
     expires_at = connection.get("access_token_expires_at")
 
     if _is_token_valid(expires_at):
+        logger.info("oauth2_token_cache_hit tenant=%s ambiente=%s", tenant_code, environment_code)
         return _decrypt_secret(connection["encrypted_access_token"])
 
+    logger.info("oauth2_token_refresh_start tenant=%s ambiente=%s", tenant_code, environment_code)
     lock = _get_lock(tenant_code, environment_code)
 
     async with lock:
@@ -305,9 +307,11 @@ async def get_valid_access_token(
         expires_at = connection.get("access_token_expires_at")
 
         if _is_token_valid(expires_at):
+            logger.info("oauth2_token_refreshed_by_peer tenant=%s ambiente=%s", tenant_code, environment_code)
             return _decrypt_secret(connection["encrypted_access_token"])
 
         base_url = connection["base_rest_url"]
+
         new_token: ProtheusToken | None = None
 
         async with httpx.AsyncClient(
@@ -317,13 +321,16 @@ async def get_valid_access_token(
 
             if encrypted_refresh:
                 try:
+                    logger.info("oauth2_refresh_grant_start tenant=%s ambiente=%s", tenant_code, environment_code)
                     refresh_token = _decrypt_secret(encrypted_refresh)
+
                     new_token = await _request_refresh_token(
                         client, base_url, refresh_token,
                     )
                 except Exception:
                     logger.warning(
-                        "refresh OAuth2 falhou para tenant=%s ambiente=%s; tentando novo token",
+                        "oauth2_refresh_grant_failed tenant=%s ambiente=%s; tentando novo token",
+
                         tenant_code, environment_code,
                     )
 
@@ -337,9 +344,11 @@ async def get_valid_access_token(
                         f"para o tenant '{tenant_code}' (ambiente '{environment_code}')."
                     )
                     
+                logger.info("oauth2_password_grant_start tenant=%s ambiente=%s", tenant_code, environment_code)
                 password = _decrypt_secret(password_encrypted)
 
                 new_token = await _request_password_token(
+
                     client,
                     base_url,
                     username,
@@ -374,6 +383,7 @@ async def get_valid_access_token(
             },
         )
         db.commit()
+        logger.info("oauth2_token_persisted tenant=%s ambiente=%s", tenant_code, environment_code)
 
         return new_token.access_token
 
