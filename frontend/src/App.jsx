@@ -22,7 +22,8 @@ export default function App() {
         branch: params.get('branch') || null,
         user: params.get('user') || null,
         profile: params.get('profile') || null,
-        tenant_id: params.get('tenant') || null,
+        tenant_id: params.get('tenant_id') || params.get('tenant') || null,
+        environment_code: params.get('environment_code') || null,
         company_id: params.get('company_id') || params.get('company') || null
       };
   });
@@ -33,7 +34,9 @@ export default function App() {
   useEffect(() => {
     const handleMessage = (event) => {
       if (event.data?.type === 'cprot-context-update') {
+        if (event.source !== window.parent && event.source !== window) return;
         const incoming = event.data.payload || {};
+
         setContext(prev => ({
           ...prev,
           module: incoming.module || prev.module,
@@ -41,10 +44,11 @@ export default function App() {
           user: incoming.user || prev.user,
           profile: incoming.profile || prev.profile,
           tenant_id: incoming.tenant_id || prev.tenant_id,
+          environment_code: incoming.environment_code || prev.environment_code,
           company_id: incoming.company_id || prev.company_id
         }));
 
-        if (incoming.tenant_id && incoming.module && incoming.branch) {
+        if (incoming.tenant_id && incoming.environment_code && incoming.module && incoming.branch) {
           setConnectionStatus('connected');
         } else {
           setConnectionStatus('error');
@@ -64,7 +68,7 @@ export default function App() {
     const timer = setTimeout(() => {
       setConnectionStatus(prev => {
         const params = new URLSearchParams(window.location.search);
-        if (params.get('tenant')) return 'connected';
+        if (params.get('tenant') && params.get('environment_code')) return 'connected';
         return prev === 'connecting' ? 'error' : prev;
       });
     }, 4000);
@@ -91,7 +95,7 @@ export default function App() {
   };
 
   const validateContext = () => {
-    const required = ['tenant_id', 'module', 'branch'];
+    const required = ['tenant_id', 'environment_code', 'module', 'branch'];
     const missing = required.filter(field => !context[field]);
     if (missing.length > 0) {
       throw new Error(`Contexto Protheus incompleto. Campos não recebidos: ${missing.join(', ')}.`);
@@ -132,6 +136,7 @@ export default function App() {
           const formData = new FormData();
           formData.append('file', attachedFile);
           if (context.tenant_id) formData.append('tenant_id', context.tenant_id);
+          if (context.environment_code) formData.append('environment_code', context.environment_code);
           if (context.company_id) formData.append('company_id', context.company_id);
           formData.append('query', finalQuery);
           formData.append('context', JSON.stringify(context));
@@ -139,7 +144,8 @@ export default function App() {
         } else {
           const payload = { 
               query: finalQuery, 
-              tenant_id: context.tenant_id, 
+              tenant_id: context.tenant_id,
+              environment_code: context.environment_code,
               company_id: context.company_id,
               execute: true,
               context 
