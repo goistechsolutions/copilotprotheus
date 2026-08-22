@@ -19,7 +19,12 @@ from app.api.powerbi_routes import router as powerbi_router
 from app.api.leonardo_routes import router as leonardo_router
 from app.core.admin_security import require_admin
 from app.api.agent_sql_routes import router as agent_sql_router
-from app.core.logging_config import setup_logging
+from app.core.logging_config import (
+    setup_logging,
+    get_correlation_id,
+    set_correlation_id,
+    reset_correlation_id,
+)
 from app.db.database import get_db, engine, Base, ensure_public_tables, ensure_all_registered_tenant_schemas
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_user_flexible
@@ -104,6 +109,21 @@ async def enforce_https_scheme_middleware(request, call_next):
         request.scope["scheme"] = "https"
     response = await call_next(request)
     return response
+
+
+@app.middleware("http")
+async def correlation_id_middleware(request, call_next):
+    """Mantém um identificador seguro durante toda a requisição e seus tasks."""
+    correlation_id = request.headers.get("X-Correlation-ID")
+    context_token = set_correlation_id(correlation_id)
+    active_correlation_id = get_correlation_id()
+    request.state.correlation_id = active_correlation_id
+    try:
+        response = await call_next(request)
+        response.headers["X-Correlation-ID"] = active_correlation_id
+        return response
+    finally:
+        reset_correlation_id(context_token)
 
 # Configuração de CORS com suporte a domínios do Cloudflare e ambiente local
 cors_origins_env = os.getenv("CORS_ORIGIN", "*")
