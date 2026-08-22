@@ -8,29 +8,25 @@
 <body>
   <div class="container">
     <h1>✦ Copilot Protheus</h1>
-    <p class="subtitle">Configuração de conexão com o Protheus</p>
+    <p class="subtitle">Configuração do contexto de integração com o Protheus</p>
 
     <form id="config-form">
-      <label for="tenantId">Grupo/Tenant ID (obrigatório)</label>
-      <input type="text" id="tenantId" required placeholder="ex: rodol_prod">
+      <label for="tenantId">Tenant ID (obrigatório)</label>
+      <input type="text" id="tenantId" required placeholder="ex: rodol_prod" autocomplete="off">
 
-      <label for="username">Usuário Copilot</label>
-      <input type="text" id="username" placeholder="ex: admin">
+      <label for="environmentCode">Environment code (obrigatório)</label>
+      <input type="text" id="environmentCode" required placeholder="ex: c8te0u_prod" autocomplete="off">
 
-      <label for="password">Senha Copilot</label>
-      <div class="password-wrapper">
-        <input type="password" id="password" placeholder="••••••••">
-        <button type="button" id="togglePassword">👁</button>
-      </div>
+      <p class="hint">A extensão envia apenas o contexto operacional. A autenticação OAuth2 e as credenciais REST permanecem no backend.</p>
 
-      <label for="widgetUrl">URL do Widget (Vite/Nuvem)</label>
-      <input type="url" id="widgetUrl" required placeholder="https://copilot.elitecorp.tec.br/">
+      <label for="widgetUrl">URL do Widget</label>
+      <input type="url" id="widgetUrl" required placeholder="https://copilot.elitecorp.tec.br/" autocomplete="url">
 
-      <label for="launchUrl">URL de Lançamento (FastAPI)</label>
-      <input type="url" id="launchUrl" required placeholder="https://copilot.elitecorp.tec.br/api/launch">
+      <label for="launchUrl">URL de Lançamento do Protheus</label>
+      <input type="url" id="launchUrl" required placeholder="https://host.protheus.cloudtotvs.com.br/webapp/index.html" autocomplete="url">
 
       <div class="actions">
-        <button type="button" id="testConnection">Testar Conexão</button>
+        <button type="button" id="testConnection">Testar URL de Lançamento</button>
         <button type="submit" id="saveConfig">Salvar Configurações</button>
       </div>
 
