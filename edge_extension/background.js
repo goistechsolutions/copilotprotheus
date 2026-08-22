@@ -1,13 +1,13 @@
 const DEFAULT_CONFIG = {
   tenantId: "",
-  username: "",
-  password: "",
+  environmentCode: "",
   widgetUrl: "https://copilot.elitecorp.tec.br/",
   launchUrl: "https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html",
 };
 
 const CONTENT_SCRIPT_MATCH_PATTERNS = [
   "https://*.totvs.com.br/*",
+  "https://*.cloudtotvs.com.br/*",
   "https://copilot.elitecorp.tec.br/*",
   "https://rodolltda195384.protheus.cloudtotvs.com.br:10703/*",
 ];
@@ -109,10 +109,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "OPEN_PROTHEUS") {
-    chrome.storage.local.get(["launchUrl", "tenantId"], (config) => {
+    chrome.storage.local.get(["launchUrl", "tenantId", "environmentCode"], (config) => {
       if (config.launchUrl) {
-        const url = `${config.launchUrl}?tenant=${encodeURIComponent(config.tenantId || "")}`;
-        chrome.tabs.create({ url });
+        const url = new URL(config.launchUrl);
+        url.searchParams.set("tenant_id", config.tenantId || "");
+        url.searchParams.set("environment_code", config.environmentCode || "");
+        chrome.tabs.create({ url: url.toString() });
       }
     });
   }
