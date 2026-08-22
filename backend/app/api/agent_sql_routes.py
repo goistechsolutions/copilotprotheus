@@ -1,12 +1,15 @@
-import time
+import base64
+
+import json
 import re
 import logging
 from typing import Dict, Any, List
 from app.services.tenant_resolver import resolve_clean_tenant
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 import uuid
 import asyncio
 import time
+
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db, SessionLocal
@@ -305,8 +308,66 @@ async def ask_v2(payload: dict) -> Dict[str, Any]:
     asyncio.create_task(process_agent_task(task_id, payload))
     return {"status": "processing", "task_id": task_id}
 
+@router.post("/ask/v2/upload")
+async def ask_v2_upload(
+    tenant_id: str = Form(...),
+    environment_code: str = Form(...),
+    company_id: str | None = Form(None),
+    query: str = Form(...),
+    context: str = Form("{}"),
+    file: UploadFile = File(...),
+):
+    """Enfileira análise de arquivo usando o mesmo fluxo agent-sql OAuth2."""
+
+    clean_tenant = str(tenant_id or "").strip()
+    clean_environment = str(environment_code or "").strip()
+    if not clean_tenant or clean_tenant.lower() in {"default", "none", "null"}:
+        raise HTTPException(status_code=400, detail="tenant_id real é obrigatório.")
+    if not clean_environment or clean_environment.lower() in {"default", "none", "null"}:
+        raise HTTPException(status_code=400, detail="environment_code real é obrigatório.")
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="O campo query é obrigatório.")
+
+    try:
+        parsed_context = json.loads(context or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="context deve ser um objeto JSON válido.") from exc
+    if not isinstance(parsed_context, dict):
+        raise HTTPException(status_code=400, detail="context deve ser um objeto JSON.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Arquivo excede o limite permitido.")
+
+    payload = {
+        "query": query,
+        "tenant_id": clean_tenant,
+        "environment_code": clean_environment,
+        "company_id": company_id,
+        "execute": True,
+        "context": {
+            **parsed_context,
+            "tenant_id": clean_tenant,
+            "environment_code": clean_environment,
+        },
+        "file": {
+            "name": file.filename or "upload",
+            "content_type": file.content_type or "application/octet-stream",
+            "data": base64.b64encode(content).decode("ascii"),
+        },
+    }
+
+    task_id = str(uuid.uuid4())
+    AGENT_TASKS[task_id] = {"status": "processing"}
+    asyncio.create_task(process_agent_task(task_id, payload))
+    return {"status": "processing", "task_id": task_id}
+
+
 @router.get("/ask/v2/status/{task_id}")
 async def ask_v2_status(task_id: str):
+
     if task_id not in AGENT_TASKS:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
     
