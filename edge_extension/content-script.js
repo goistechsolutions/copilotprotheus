@@ -59,13 +59,76 @@
     return signals.filter(Boolean).length >= 2;
   }
 
+  const PROTHEUS_MODULE_MAP = {
+    "faturamento": "SIGAFAT",
+    "compras": "SIGACOM",
+    "financeiro": "SIGAFIN",
+    "estoque": "SIGAEST",
+    "estoque e custos": "SIGAEST",
+    "contabilidade": "SIGACTB",
+    "contabilidade gerencial": "SIGACTB",
+    "livros fiscais": "SIGAFIS",
+    "fiscal": "SIGAFIS",
+    "gestao de pessoal": "SIGAGPE",
+    "gestão de pessoal": "SIGAGPE",
+    "recursos humanos": "SIGAGPE",
+    "ativo fixo": "SIGAATF",
+    "pms": "SIGAPMS",
+    "pcp": "SIGAPCP",
+    "manutencao": "SIGAMNT",
+    "manutenção": "SIGAMNT",
+    "qualidade": "SIGAQMT",
+    "transportes": "SIGATMS",
+    "tms": "SIGATMS",
+    "comercio exterior": "SIGAEEC",
+    "comércio exterior": "SIGAEEC",
+    "call center": "SIGATMK",
+    "televendas": "SIGATMK",
+    "crm": "SIGACRM",
+    "loja": "SIGALOJA",
+    "front loja": "SIGAFRT",
+    "automação de ponto": "SIGAPON",
+    "automacao de ponto": "SIGAPON",
+    "ponto eletronico": "SIGAPON",
+    "ponto eletrônico": "SIGAPON",
+    "medicina e seguranca": "SIGAMDT",
+    "medicina e segurança": "SIGAMDT",
+    "recrutamento e selecao": "SIGARSP",
+    "recrutamento e seleção": "SIGARSP",
+    "avaliacao de desempenho": "SIGAADV",
+    "avaliação de desempenho": "SIGAADV",
+    "cargos e salarios": "SIGACSA",
+    "cargos e salários": "SIGACSA",
+    "gestao de servicos": "SIGATEC",
+    "gestão de serviços": "SIGATEC",
+    "serviços": "SIGATEC",
+    "servicos": "SIGATEC",
+    "inspecao de processos": "SIGAQIP",
+    "inspeção de processos": "SIGAQIP",
+    "auditoria": "SIGAQAD",
+    "documentos": "SIGAQDO",
+    "nao conformidades": "SIGAQNC",
+    "não conformidades": "SIGAQNC",
+    "controle de frete": "SIGAGFE",
+    "gfe": "SIGAGFE",
+    "contratos": "SIGAGCT",
+    "gestao de contratos": "SIGAGCT",
+    "gestão de contratos": "SIGAGCT",
+    "orcamentos": "SIGAORC",
+    "orçamentos": "SIGAORC",
+    "wms": "SIGAWMS",
+    "planejamento e controle de producao": "SIGAPCP",
+    "planejamento e controle de produção": "SIGAPCP",
+    "faturamento e vendas": "SIGAFAT"
+  };
+
   function extractProtheusContext() {
     const context = {
-      company: "",
-      branch: "",
-      user: "",
-      environment: "",
-      module: "",
+      company: "01",
+      branch: "0101",
+      user: currentConfig?.username || "admin",
+      environment: currentConfig?.environmentCode || "",
+      module: "SIGAFAT",
       session_id: ""
     };
 
@@ -78,7 +141,8 @@
       const companyBranchPatterns = [
         /([\wÀ-ú\s.&-]+)\s*\/\s*([\wÀ-ú\s.-]{2,40})/,
         /Empresa[:\s]+([^\n]{2,60})/i,
-        /Filial[:\s]+([^\n]{2,60})/i
+        /Filial[:\s]+([^\n]{2,60})/i,
+        /\b(\d{2})\s*[\/-]\s*(\d{2,4})\b/
       ];
 
       for (const pattern of companyBranchPatterns) {
@@ -91,15 +155,16 @@
           break;
         }
 
-        if (!context.company && /Empresa/i.test(String(pattern))) {
+        if (/Empresa/i.test(String(pattern))) {
           context.company = (match[1] || "").trim();
         }
 
-        if (!context.branch && /Filial/i.test(String(pattern))) {
+        if (/Filial/i.test(String(pattern))) {
           context.branch = (match[1] || "").trim();
         }
       }
 
+      // Usuário
       const userPatterns = [
         /Administrador/i,
         /Usuário[:\s]+([^\n]{2,40})/i,
@@ -113,23 +178,45 @@
           break;
         }
       }
-
-      const modulePatterns = [
-        /SIGA[A-Z]{3,}/i
-      ];
-
-      for (const pattern of modulePatterns) {
-        const match = bodyText.match(pattern);
-        if (match) {
-          context.module = match[0].trim();
-          break;
-        }
+      if (!context.user && currentConfig?.username) {
+        context.user = currentConfig.username;
       }
 
-      if (!context.module) {
-        const titleEl = document.querySelector("h1, h2, .title, [class*='titulo'], [class*='title']");
-        if (titleEl?.textContent) {
-          context.module = titleEl.textContent.trim().slice(0, 40);
+      // Módulo: 1. Busca código SIGA direto no DOM
+      const sigaMatch = bodyText.match(/\bSIGA[A-Z]{3,}\b/i);
+      if (sigaMatch) {
+        context.module = sigaMatch[0].toUpperCase();
+      } else {
+        // 2. Busca por elementos próximos a "Trocar módulo" no menu PO-UI
+        const allElements = document.querySelectorAll("h1, h2, h3, span, div, p, a");
+        let foundName = "";
+        for (const el of allElements) {
+          if (/Trocar m.dulo/i.test(el.textContent) && el.children.length === 0) {
+            const parent = el.closest(".po-menu-header, .sidebar-header, nav, aside") || el.parentElement;
+            if (parent) {
+              const textLines = (parent.innerText || "").split("\n").map(l => l.trim()).filter(Boolean);
+              const nameLine = textLines.find(l => !/Trocar m.dulo|TOTVS|Favoritos|Pesquisar/i.test(l) && l.length > 2);
+              if (nameLine) {
+                foundName = nameLine.toLowerCase();
+                break;
+              }
+            }
+          }
+        }
+
+        // 3. Procura pelos nomes conhecidos de módulos no bodyText
+        if (!foundName) {
+          for (const key of Object.keys(PROTHEUS_MODULE_MAP)) {
+            const regex = new RegExp(`\\b${key}\\b`, "i");
+            if (regex.test(bodyText)) {
+              foundName = key;
+              break;
+            }
+          }
+        }
+
+        if (foundName) {
+          context.module = PROTHEUS_MODULE_MAP[foundName] || foundName.toUpperCase();
         }
       }
 

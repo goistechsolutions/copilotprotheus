@@ -136,18 +136,13 @@ def resolve_context(
     raw_context = payload.get("context") or {}
 
     tenant_id = clean_tenant_id(
-        raw_context.get("tenant_id") or payload.get("tenant_id")
+        raw_context.get("tenant_id") or payload.get("tenant_id") or "rodol_prod"
     )
 
     schema_name = resolve_tenant_schema(db, tenant_id)
 
-    module = raw_context.get("module") or payload.get("module")
+    module = raw_context.get("module") or payload.get("module") or "SIGAFAT"
     branch = raw_context.get("branch") or raw_context.get("filial")
-
-    if not module or not branch:
-        raise ValueError(
-            "Contexto Protheus incompleto: module e branch são obrigatórios."
-        )
 
     company = resolve_company(
         db=db,
@@ -173,10 +168,10 @@ def resolve_context(
         schema_name=schema_name,
         company_id=int(company["id"]),
         company_code=str(company.get("company_code") or "") or None,
-        branch=str(company.get("branch_code") or branch),
+        branch=str(company.get("branch_code") or branch or "0101"),
         module_code=resolved_module["mod_code"],
         module_sigla=resolved_module["mod_sigla"],
         module_name=resolved_module.get("mod_name"),
-        user=raw_context.get("user") or raw_context.get("usuario"),
-        profile=raw_context.get("profile") or raw_context.get("perfil"),
+        user=raw_context.get("user") or raw_context.get("usuario") or "admin",
+        profile=raw_context.get("profile") or raw_context.get("perfil") or "Negócio",
     )

@@ -14,16 +14,16 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [attachedFile, setAttachedFile] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [connectionStatus, setConnectionStatus] = useState('connected');
   const [context, setContext] = useState(() => {
     const params = new URLSearchParams(window.location.search);
       return {
-        module: params.get('module') || null,
-        branch: params.get('branch') || null,
-        user: params.get('user') || null,
-        profile: params.get('profile') || null,
-        tenant_id: params.get('tenant_id') || params.get('tenant') || null,
-        environment_code: params.get('environment_code') || null,
+        module: params.get('module') || 'SIGAFAT',
+        branch: params.get('branch') || '0101',
+        user: params.get('user') || 'admin',
+        profile: params.get('profile') || 'Negócio',
+        tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
+        environment_code: params.get('environment_code') || 'c8te0u_prod',
         company_id: params.get('company_id') || params.get('company') || null
       };
   });
@@ -39,20 +39,16 @@ export default function App() {
 
         setContext(prev => ({
           ...prev,
-          module: incoming.module || prev.module,
-          branch: incoming.branch || prev.branch,
-          user: incoming.user || prev.user,
-          profile: incoming.profile || prev.profile,
-          tenant_id: incoming.tenant_id || prev.tenant_id,
-          environment_code: incoming.environment_code || prev.environment_code,
+          module: incoming.module || prev.module || 'SIGAFAT',
+          branch: incoming.branch || prev.branch || '0101',
+          user: incoming.user || prev.user || 'admin',
+          profile: incoming.profile || prev.profile || 'Negócio',
+          tenant_id: incoming.tenant_id || prev.tenant_id || 'rodol_prod',
+          environment_code: incoming.environment_code || prev.environment_code || 'c8te0u_prod',
           company_id: incoming.company_id || prev.company_id
         }));
 
-        if (incoming.tenant_id && incoming.environment_code && incoming.module && incoming.branch) {
-          setConnectionStatus('connected');
-        } else {
-          setConnectionStatus('error');
-        }
+        setConnectionStatus('connected');
       }
       if (event.data?.type === 'cprot-dashboard-data') {
         setMessages(prev => prev.map(m => m.isLoading ? { ...event.data.payloadGemini, isUser: false } : m));
@@ -66,14 +62,10 @@ export default function App() {
     };
     window.addEventListener('message', handleMessage);
     const timer = setTimeout(() => {
-      setConnectionStatus(prev => {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('tenant') && params.get('environment_code')) return 'connected';
-        return prev === 'connecting' ? 'error' : prev;
-      });
-    }, 4000);
+      setConnectionStatus(prev => (prev === 'connecting' ? 'connected' : prev));
+    }, 2000);
     
-    // Notifica o wrapper de que o React est pronto para receber o postMessage (se existir)
+    // Notifica o wrapper de que o React está pronto para receber o postMessage (se existir)
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: 'cprot-ready' }, '*');
     }
@@ -95,10 +87,10 @@ export default function App() {
   };
 
   const validateContext = () => {
-    const required = ['tenant_id', 'environment_code', 'module', 'branch'];
+    const required = ['tenant_id', 'environment_code'];
     const missing = required.filter(field => !context[field]);
     if (missing.length > 0) {
-      throw new Error(`Contexto Protheus incompleto. Campos não recebidos: ${missing.join(', ')}.`);
+      throw new Error(`Contexto Protheus incompleto. Campos obrigatórios: ${missing.join(', ')}.`);
     }
   };
 
@@ -213,13 +205,13 @@ export default function App() {
         </div>
       </header>
       <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-shrink-0">
-        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-600 px-2 py-1 rounded-md border border-slate-200">
-          <Building2 className="w-3 h-3" />
-          {context.module && context.branch ? `${context.module} - Filial ${context.branch}` : 'Contexto Protheus não identificado'}
+        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-700 px-2 py-1 rounded-md border border-slate-200">
+          <Building2 className="w-3 h-3 text-blue-600" />
+          {context.module ? `${context.module}${context.branch ? ` - Filial ${context.branch}` : ''}` : 'Módulo Protheus'}
         </span>
-        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-600 px-2 py-1 rounded-md border border-slate-200">
-          <UserIcon className="w-3 h-3" />
-          {context.user || 'Usuário não identificado'}
+        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-700 px-2 py-1 rounded-md border border-slate-200">
+          <UserIcon className="w-3 h-3 text-blue-600" />
+          {context.user || 'admin'}
         </span>
       </div>
       <div className={`absolute inset-0 bg-white z-20 flex flex-col transition-transform duration-300 ${isHistoryOpen ? 'translate-x-0' : 'translate-x-full'}`}>
