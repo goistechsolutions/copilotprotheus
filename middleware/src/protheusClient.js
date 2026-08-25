@@ -144,9 +144,41 @@ module.exports = {
   },
   
   // Executador de Query Genérico e Core
-  executeQuery: async (query, ctx) => {
-    const { cli, comp } = await getClientAndConfig(ctx)
-    return cli.post('/QueryRest', { query }, getHeaders(ctx, comp))
+  executeQuery: async (query, ctx = {}) => {
+    const tenantId = ctx.tenant_id || ctx.tenantId
+    const environmentCode = ctx.environment_code || ctx.environmentCode || ctx.environment
+    const companyId = ctx.company_id || ctx.companyId
+    const module = ctx.module || ctx.modulo || ctx.module_code || ctx.moduleCode
+    const branch = ctx.branch || ctx.filial
+    const company = ctx.company || ctx.company_code || ctx.companyCode
+
+    if (!tenantId || tenantId === 'default') {
+      throw new Error('tenant_id explícito é obrigatório para executar QueryRest.')
+    }
+    if (!environmentCode || ['default', 'none', 'null'].includes(String(environmentCode).toLowerCase())) {
+      throw new Error('environment_code explícito é obrigatório para executar QueryRest.')
+    }
+    if (!module || !branch || (!companyId && !company)) {
+      throw new Error('módulo, empresa e filial explícitos são obrigatórios para executar QueryRest.')
+    }
+
+    const response = await backendClient.queryRest({
+      tenant_id: tenantId,
+      environment_code: environmentCode,
+      company_id: companyId,
+      query,
+      context: {
+        tenant_id: tenantId,
+        environment_code: environmentCode,
+        module,
+        branch,
+        company,
+        company_id: companyId,
+        user: ctx.user || ctx.usuario,
+        profile: ctx.profile || ctx.perfil
+      }
+    }, ctx.token || null)
+    return response
   },
   getCompanies: async (ctx) => {
     const { cli, comp } = await getClientAndConfig(ctx)

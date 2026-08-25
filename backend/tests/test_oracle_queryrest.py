@@ -53,6 +53,10 @@ def test_resolve_clean_tenant_converts_numeric_ids():
 def test_rate_limiting_structure_and_enforcement():
     """Valida que o serviço de rate limit retorna o dicionário com a cota restante."""
     db_mock = MagicMock()
+    db_mock.execute.return_value.mappings.return_value.first.return_value = {
+        "tenant_code": "rodol",
+        "schema_name": "rodol",
+    }
     # Mock do plano (500 consultas/dia)
     db_mock.execute.return_value.fetchone.return_value = (500,)
     # Mock de 10 consultas realizadas hoje

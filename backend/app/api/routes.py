@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, Request
+from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
+
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.assistant import AskRequest, AskResponse
@@ -26,8 +28,10 @@ async def ask(
     if current_user and "tenant_id" in current_user:
         ctx["tenant_id"] = current_user["tenant_id"]
         
-    tenant_id = ctx.get("tenant_id", "default")
-    
+    tenant_id = ctx.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório no contexto do agente.")
+
     # Validar Usuário do Agente (Extensão)
     from fastapi import HTTPException
     from app.models.knowledge import User
@@ -45,7 +49,7 @@ async def ask(
     # Validar licença da empresa se cadastrada
     from app.models.knowledge import Company
     from app.services.license_service import verify_license
-    tenant_id = ctx.get("tenant_id", "default")
+    tenant_id = ctx.get("tenant_id")
     company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
     if company:
         try:
@@ -128,9 +132,12 @@ async def ask_stream(
     if current_user and "tenant_id" in current_user:
         ctx["tenant_id"] = current_user["tenant_id"]
         
-    tenant_id = ctx.get("tenant_id", "default")
+    tenant_id = ctx.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório no contexto do agente.")
         
     # Validar Usuário do Agente (Extensão)
+
     from fastapi import HTTPException
     from app.models.knowledge import User
     import hashlib
@@ -147,7 +154,7 @@ async def ask_stream(
     # Validar licença antes de iniciar o generator do stream
     from app.models.knowledge import Company
     from app.services.license_service import verify_license
-    tenant_id = ctx.get("tenant_id", "default")
+    tenant_id = ctx.get("tenant_id")
     company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
     
     blocked_message = None
@@ -190,41 +197,35 @@ async def ask_stream(
 @router.get("/launch")
 def launch(request: Request):
     params = dict(request.query_params)
-    tenant_id = params.get('tenant_id', 'default')
+    tenant_id = params.get('tenant_id')
+    from fastapi import HTTPException
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório para abrir o Protheus.")
     
     # Resolve a URL do WebClient/WebApp do Protheus dinamicamente do banco de dados (SaaS)
+
     from app.db.database import SessionLocal
-    from app.models.knowledge import Company
-    
+    from app.models.knowledge import Tenant
+
     launch_url = None
     db = SessionLocal()
     try:
-        company = db.query(Company).filter((Company.tenant_id == tenant_id) | (Company.protheus_grupo == tenant_id)).first()
-        if company and company.protheus_webapp_url:
-            launch_url = company.protheus_webapp_url
-            
-            # Use company data for defaults if not provided in params
-            if not params.get('environment') and company.protheus_ambientes:
-                params['environment'] = company.protheus_ambientes.split(',')[0].strip()
-            if not params.get('company') and company.protheus_empresa:
-                params['company'] = company.protheus_empresa
-            if not params.get('branch') and company.protheus_filial:
-                params['branch'] = company.protheus_filial
-            if not params.get('user'):
-                params['user'] = company.protheus_usuario.split(',')[0].strip() if company.protheus_usuario else 'admin'
-    except Exception as e:
-        pass
+        tenant = (
+            db.query(Tenant)
+            .filter(Tenant.tenant_code == tenant_id, Tenant.status == "active")
+            .first()
+        )
+        if tenant and tenant.webapp_url:
+            launch_url = str(tenant.webapp_url).strip()
     finally:
         db.close()
-        
+
     if not launch_url:
-        import os
-        launch_url = os.getenv("PROTHEUS_URL")
-        
-    if not launch_url:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail=f"URL do WebApp não configurada para o tenant {tenant_id}")
-        
+        raise HTTPException(
+            status_code=404,
+            detail=f"URL do WebApp não configurada para o tenant ativo {tenant_id}.",
+        )
+
     from fastapi.responses import RedirectResponse
     qs = urlencode(params)
     target_url = f"{launch_url}?{qs}"
@@ -232,7 +233,6 @@ def launch(request: Request):
 
 from app.schemas.company import SessionValidateRequest
 from app.services.license_service import verify_license
-from fastapi import HTTPException
 
 @router.post("/auth/validate-session")
 def validate_session(payload: SessionValidateRequest, db: Session = Depends(get_db)):

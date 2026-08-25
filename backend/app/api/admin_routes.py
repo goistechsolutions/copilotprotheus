@@ -318,7 +318,7 @@ def update_tables(
     """Atualiza tabelas permitidas no modelo V5 (tenant_allowed_tables)."""
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
+    clean_tenant = secure_clean_tenant(str(tenant_id))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -825,7 +825,7 @@ async def sync_schema(
             raise Exception("Nenhuma tabela retornada pelo Protheus.")
 
         # Persiste em "{clean_tenant}".tenant_schemas (cache legivel no schema do tenant)
-        clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
+        clean_tenant = secure_clean_tenant(str(tenant_id))
 
         ensure_tenant_tables(db, clean_tenant)
 
@@ -933,7 +933,7 @@ def get_schemas(
     admin: str    = Depends(verify_admin),
 ):
     import re
-    clean_tenant = secure_clean_tenant(str(tenant_id or 'default'))
+    clean_tenant = secure_clean_tenant(str(tenant_id))
 
     ensure_tenant_tables(db, clean_tenant)
 
@@ -972,24 +972,26 @@ def recreate_schema_tables(
     db: Session   = Depends(get_db),
     admin: str    = Depends(verify_admin),
 ):
-    """Recria as tabelas protheus_modules e tenant_schemas do tenant para resetar totalmente a estrutura de índices."""
+    """Mantém compatibilidade da rota, mas bloqueia recriação destrutiva por HTTP."""
     tenant_id = payload.get("tenant_id")
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
 
     from app.db.database import ensure_tenant_tables, resolve_clean_tenant
-    clean_tenant = resolve_clean_tenant(db, tenant_id)
-
     try:
-        db.execute(text(f'DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules CASCADE'))
-        db.execute(text(f'DROP TABLE IF EXISTS "{clean_tenant}".tenant_schemas CASCADE'))
-        db.commit()
-
+        clean_tenant = resolve_clean_tenant(db, tenant_id)
         ensure_tenant_tables(db, clean_tenant)
-        return {"success": True, "message": f"Tabelas do schema '{clean_tenant}' recriadas com sucesso!"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro ao recriar tabelas: {str(e)}")
+    except (ValueError, HTTPException) as exc:
+        detail = getattr(exc, "detail", None) or str(exc)
+        raise HTTPException(status_code=400, detail=detail) from exc
+
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            "Recriação destrutiva de tabelas tenant foi desativada. "
+            "Use uma migração versionada, com backup e aprovação operacional."
+        ),
+    )
 
 
 # ─────────────────────────────────────────────────────────────

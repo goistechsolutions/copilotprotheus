@@ -111,8 +111,27 @@ export default function AgentWorkspace() {
     if (!text?.trim()) return;
 
     if (text.trim() === '/log') {
-       setIsLogMode(true);
-       return;
+      setIsLogMode(true);
+      return;
+    }
+
+    const missingContext = [
+      ['tenant_id', context.tenant_id],
+      ['environment_code', context.environment],
+      ['company_code', context.company],
+      ['branch', context.branch],
+      ['module', context.module],
+    ].filter(([, value]) => !value?.trim()).map(([name]) => name);
+
+    if (missingContext.length > 0) {
+      setMessages((messages) => [
+        ...messages,
+        {
+          role: 'assistant',
+          text: `Consulta bloqueada: contexto do Protheus incompleto (${missingContext.join(', ')}). Abra o Copilot dentro do ERP com o ambiente, empresa, filial e módulo selecionados.`,
+        },
+      ]);
+      return;
     }
 
     setMessages((m) => [...m, { role: 'user', text }]);
@@ -121,7 +140,8 @@ export default function AgentWorkspace() {
     try {
       const payload = {
         ...context,
-        company_id: context.company,
+        environment_code: context.environment,
+        company_code: context.company,
         empresa: context.company,
         filial: context.branch,
         request_id: `REQ-${Date.now()}`,

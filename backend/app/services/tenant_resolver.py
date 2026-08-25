@@ -57,7 +57,10 @@ def resolve_clean_tenant(raw_tenant_id: str | None) -> str:
     Levanta HTTPException 400/403 em caso de valor inválido ou reservado.
     """
     if not raw_tenant_id or not str(raw_tenant_id).strip():
-        return "default"
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id é obrigatório e deve identificar um tenant real.",
+        )
 
     clean = str(raw_tenant_id).strip().lower()
 

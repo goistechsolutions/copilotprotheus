@@ -17,17 +17,20 @@ REMOVIDO (V4 obsoleto):
   - get_allowed_catalog / get_structured_catalog_by_role (substituídos por leitura direta)
 """
 
+import asyncio
 import json
 import logging
 from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db, resolve_clean_tenant
 from app.api.admin_routes import verify_admin
+from app.services.sync_dictionary_v52 import run_snapshot
 
 logger = logging.getLogger("app.api.catalog_v52")
 
@@ -37,10 +40,10 @@ router = APIRouter(tags=["catalog-v52-governance"])
 # ─── Request / Response Models ───────────────────────────────────────────────
 
 class SnapshotRequest(BaseModel):
-    tenant_id: str = Field(..., description="ID do tenant (padrão 'default')")
-    environment_id: str = Field("producao", description="ID do ambiente Protheus")
+    tenant_id: str = Field(..., min_length=1, max_length=100, description="ID real do tenant")
+    environment_id: str = Field(..., min_length=1, max_length=100, description="Código real do ambiente Protheus")
     company_id: Optional[str] = Field(None, description="ID opcional da empresa/filial")
-
+    modules: Optional[List[str]] = Field(None, description="Módulos Protheus a sincronizar")
     async_mode: bool = Field(False, description="Executar em segundo plano")
 
 class FieldPermissionItem(BaseModel):
@@ -51,8 +54,9 @@ class FieldPermissionItem(BaseModel):
 
 class SaveTablePermissionRequest(BaseModel):
     tenant_id: str
-    environment_id: str = "producao"
+    environment_id: str = Field(..., min_length=1, max_length=100)
     role_id: str
+
     table_name: str
     can_list: bool = True
     can_describe: bool = True
@@ -62,7 +66,7 @@ class SaveTablePermissionRequest(BaseModel):
 
 class AllowedCatalogRequest(BaseModel):
     tenant_id: str
-    environment_id: str = "producao"
+    environment_id: str = Field(..., min_length=1, max_length=100)
     role_ids: List[str]
 
 # --- Endpoints Admin (Governança e Dicionário) ---
@@ -118,33 +122,55 @@ def _parse_schema_json(raw) -> dict:
 @router.post("/api/admin/dictionary/snapshot", summary="Aciona sincronização do dicionário Protheus (V5)")
 async def trigger_dictionary_snapshot(
     req: SnapshotRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: str  = Depends(verify_admin),
 ):
-    """
-    Aciona a sincronização estrutural do dicionário Protheus via SX2/SX3.
-    Persiste em tenant_schemas com campos em schema_json.
-    Não armazena dados transacionais — apenas metadados de estrutura.
-    """
+    """Sincroniza o dicionário real do ambiente Protheus informado."""
+    environment_code = req.environment_id.strip()
+    if environment_code.lower() in {"default", "none", "null"}:
+        raise HTTPException(
+            status_code=400,
+            detail="environment_id deve identificar um ambiente Protheus real.",
+        )
+
+    module_filter = [module.strip() for module in (req.modules or []) if module and module.strip()]
+    snapshot_kwargs = {
+        "tenant_id": req.tenant_id.strip(),
+        "environment_code": environment_code,
+        "company_id": req.company_id,
+        "session": None,
+        "module_filter": module_filter or None,
+    }
+
     if req.async_mode:
-        pass
-        return {"status": "processing", "message": "Job de snapshot acionado em background para o ambiente real."}
-    else:
-        try:
-            result = {}
-            return result
-        except RuntimeError as rt_err:
-            logger.error(f"Erro na sincronização de dicionário: {rt_err}")
-            raise HTTPException(
-                status_code=502, 
-                detail=str(rt_err)
-            )
-        except Exception as e:
-            logger.error(f"Falha inesperada no snapshot: {e}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Erro interno ao sincronizar dicionário real: {str(e)}"
-            )
+        background_tasks.add_task(run_snapshot, **snapshot_kwargs)
+        return {
+            "status": "processing",
+            "message": "Sincronização do dicionário acionada para o ambiente informado.",
+            "tenant_id": req.tenant_id,
+            "environment_id": environment_code,
+        }
+
+    try:
+        result = await asyncio.to_thread(run_snapshot, **snapshot_kwargs)
+        return {
+            "status": result.get("status", "done") if isinstance(result, dict) else "done",
+            "tenant_id": req.tenant_id,
+            "environment_id": environment_code,
+            "result": result,
+        }
+    except RuntimeError as exc:
+        logger.error("Erro na sincronização do dicionário: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Falha inesperada no snapshot: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=500,
+            detail="Erro interno ao sincronizar o dicionário real.",
+        ) from exc
 
 
 

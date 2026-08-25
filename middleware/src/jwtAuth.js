@@ -53,6 +53,7 @@ function jwtAuth(req, res, next) {
     
     req.jwtPayload = decoded
     req.jwtPayload.tenantId = resolvedTenant || 'default'
+    req.authToken = token
     next()
   } catch (e) {
     return res.status(401).json({ error: 'Token de autenticação inválido ou expirado.' })

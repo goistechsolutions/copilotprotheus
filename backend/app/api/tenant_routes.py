@@ -65,16 +65,6 @@ def extract_connection_info(body: TenantCreate | TenantUpdate, db: Optional[Sess
     if not url or not str(url).strip():
         return None
 
-    if (not env or not str(env).strip()) and db and tenant_code:
-        # Busca o environment_code já cadastrado anteriormente se não veio no form
-        existing_conn = db.execute(text("""
-            SELECT environment_code FROM public.protheus_rest_connections
-            WHERE tenant_code = :tc AND active = TRUE
-            ORDER BY id DESC LIMIT 1
-        """), {"tc": tenant_code}).mappings().first()
-        if existing_conn and existing_conn.get("environment_code"):
-            env = existing_conn["environment_code"]
-
     if not env or not str(env).strip():
         raise HTTPException(
             status_code=400,
@@ -105,7 +95,27 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: di
     password = conn_info["password"]
     auth_mode = conn_info["auth_mode"]
 
-    enc_pw = encrypt_password(password) if password else None
+    existing_password = db.execute(
+        text("""
+            SELECT encrypted_protheus_password
+            FROM public.protheus_rest_connections
+            WHERE tenant_code = :tenant_code
+              AND environment_code = :environment_code
+            LIMIT 1
+        """),
+        {
+            "tenant_code": tenant_code,
+            "environment_code": env_code,
+        },
+    ).scalar()
+
+    if not password and not existing_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Senha REST Protheus é obrigatória para uma nova conexão.",
+        )
+
+    enc_pw = encrypt_password(password) if password else existing_password
 
     upsert_sql = text('''
         INSERT INTO public.protheus_rest_connections (

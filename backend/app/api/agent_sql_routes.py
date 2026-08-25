@@ -6,6 +6,7 @@ import logging
 from typing import Dict, Any, List
 from app.services.tenant_resolver import resolve_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
+from pydantic import BaseModel, Field
 import uuid
 import asyncio
 import time
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db, SessionLocal
 from app.core.config import settings
 from app.core.logging_config import get_correlation_id
+from app.core.auth import get_current_user
 
 from app.services.dictionary_context_service import (
     build_dictionary_context,
@@ -325,6 +327,118 @@ async def process_agent_task(task_id: str, payload: dict):
     except Exception as e:
         logger.error("agent_task_failed task_id=%s error_type=%s", task_id, type(e).__name__)
         AGENT_TASKS[task_id] = {"status": "error", "error": "Falha interna ao processar a tarefa.", "correlation_id": correlation_id}
+
+class QueryRestProxyRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1, max_length=100)
+    environment_code: str = Field(..., min_length=1, max_length=100)
+    query: str = Field(..., min_length=1, max_length=100000)
+    company_id: int | str | None = None
+    context: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/queryrest")
+async def queryrest_proxy(
+    payload: QueryRestProxyRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Executa uma consulta somente leitura recebida do gateway autenticado."""
+    token_tenant = str(
+        current_user.get("tenant_id")
+        or current_user.get("tenantId")
+        or ""
+    ).strip()
+    if not token_tenant:
+        raise HTTPException(
+            status_code=401,
+            detail="JWT sem tenant_id; consulta QueryRest bloqueada.",
+        )
+    if token_tenant != "public" and token_tenant.lower() != payload.tenant_id.strip().lower():
+        raise HTTPException(
+            status_code=403,
+            detail="O tenant do JWT não corresponde ao tenant da consulta.",
+        )
+
+    context_payload = {
+        **payload.context,
+        "tenant_id": payload.tenant_id,
+        "environment_code": payload.environment_code,
+    }
+    if payload.company_id is not None:
+        context_payload["company_id"] = payload.company_id
+
+    from sqlalchemy import text
+    from app.db.database import ensure_tenant_tables
+    from app.services.protheus_context_resolver import resolve_context
+    from app.services.protheus_module_catalog import filter_allowed_dictionary_tables
+
+    with SessionLocal() as db:
+        try:
+            ctx = resolve_context(
+                db,
+                {
+                    "tenant_id": payload.tenant_id,
+                    "environment_code": payload.environment_code,
+                    "company_id": payload.company_id,
+                    "context": context_payload,
+                },
+            )
+            ensure_tenant_tables(db, ctx.schema_name)
+            db.execute(text(f'SET search_path TO "{ctx.schema_name}", public'))
+            db.commit()
+
+            tables = filter_allowed_dictionary_tables(
+                db=db,
+                tenant_schema=ctx.schema_name,
+                module_codes=[ctx.module_code],
+                company_id=ctx.company_id,
+            )
+            allowed_table_names = {
+                name
+                for table in tables
+                for name in (table.get("table_name"), table.get("physical_name"))
+                if name
+            }
+            if not allowed_table_names:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Nenhuma tabela está autorizada para o contexto informado.",
+                )
+
+            validate_query_security(
+                sql=payload.query,
+                allowed_tables=allowed_table_names,
+                filial=ctx.branch,
+            )
+            rows = await queryrest_exec_tenant(
+                db=db,
+                tenant_id=ctx.tenant_id,
+                company_id=ctx.company_id,
+                query=payload.query,
+                environment_code=payload.environment_code,
+            )
+            return {
+                "status": "success",
+                "tenant_id": ctx.tenant_id,
+                "environment_code": payload.environment_code,
+                "records": len(rows),
+                "items": rows[:500],
+            }
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.error(
+                "queryrest_proxy_failed tenant=%s environment=%s error_type=%s",
+                payload.tenant_id,
+                payload.environment_code,
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Falha na execução do QueryRest do Protheus.",
+            ) from exc
+
 
 @router.post("/ask/v2")
 async def ask_v2(payload: dict) -> Dict[str, Any]:

@@ -244,16 +244,47 @@ router.get('/plano-contas', async (req, res) => {
 // --- EXECUÇÃO DE SQL GENÉRICO ---
 
 router.post('/query', async (req, res) => {
-  const { query } = req.body
+  const body = req.body || {}
+  const { query } = body
   if (!query) return res.status(400).json({ error: 'Parâmetro query é obrigatório no corpo.' })
-  const ctx = req.jwtPayload || {}
+
+  const jwtContext = req.jwtPayload || {}
+  const tenantId = jwtContext.tenant_id || jwtContext.tenantId
+  const environmentCode = body.environment_code || jwtContext.environment_code || jwtContext.environmentCode || jwtContext.environment
+  const companyId = body.company_id || jwtContext.company_id || jwtContext.companyId
+  const module = body.module || body.modulo || jwtContext.module || jwtContext.modulo || jwtContext.module_code || jwtContext.moduleCode
+  const branch = body.branch || body.filial || jwtContext.branch || jwtContext.filial
+  const company = body.company || body.company_code || jwtContext.company || jwtContext.company_code || jwtContext.companyCode
+
+  if (!tenantId || tenantId === 'default') {
+    return res.status(400).json({ error: 'tenant_id explícito é obrigatório no contexto autenticado.' })
+  }
+  if (!environmentCode || ['default', 'none', 'null'].includes(String(environmentCode).toLowerCase())) {
+    return res.status(400).json({ error: 'environment_code explícito é obrigatório.' })
+  }
+  if (!module || !branch || (!companyId && !company)) {
+    return res.status(400).json({ error: 'módulo, empresa e filial explícitos são obrigatórios.' })
+  }
+
+  const ctx = {
+    ...jwtContext,
+    tenant_id: tenantId,
+    environment_code: environmentCode,
+    company_id: companyId,
+    module,
+    branch,
+    company,
+    token: req.authToken || null
+  }
+
   // Queries dinâmicas não usam cache fixo pois o resultado pode mudar instantaneamente
   try {
     const { data } = await protheus.executeQuery(query, ctx)
     res.json(data)
   } catch (e) {
     logger.error(`POST /protheus/query err=${e.message}`)
-    res.status(502).json({ error: e.message })
+    const status = Number.isInteger(e.status) && e.status >= 400 ? e.status : 502
+    res.status(status).json({ error: e.detail || e.message })
   }
 })
 

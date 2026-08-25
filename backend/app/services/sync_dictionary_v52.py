@@ -203,22 +203,24 @@ def run_snapshot(
     """
     own_session = False
 
-    import re
-    from app.db.database import get_tenant_session, ensure_tenant_tables
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or ''))
+    from app.db.database import (
+        get_tenant_session,
+        ensure_tenant_tables,
+        resolve_clean_tenant,
+    )
+    raw_tenant = str(tenant_id or '').strip()
     environment_code = str(environment_code or '').strip()
-    if not clean_tenant or clean_tenant.lower() == "public":
+    if not raw_tenant or raw_tenant.lower() in {"public", "default", "none", "null"}:
         raise ValueError("tenant_code válido é obrigatório para sincronização do dicionário.")
     if not environment_code or environment_code.lower() in {"default", "none", "null"}:
         raise ValueError("environment_code real é obrigatório para sincronização do dicionário.")
 
     if session is None:
-        session      = get_tenant_session(clean_tenant)
-        own_session  = True
-    else:
-        if clean_tenant != "public":
-            ensure_tenant_tables(session, clean_tenant)
-            session.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        session = get_tenant_session(raw_tenant)
+        own_session = True
+    clean_tenant = resolve_clean_tenant(session, raw_tenant)
+    ensure_tenant_tables(session, clean_tenant)
+    session.execute(text(f'SET search_path TO "{clean_tenant}", public'))
 
     allowed_snapshot_tables = set()
     try:
@@ -408,15 +410,27 @@ def _mark_source(session, tenant_id, company_id, environment_id, source_type, st
         session.execute(text("""
             UPDATE tenant_dictionary_sources
             SET status='failed', finished_at=NOW(), error_message=:err
-            WHERE tenant_id=:tenant_id AND source_type=:source_type
-        """), {"tenant_id": str(tenant_id), 
-               "source_type": source_type, "err": str(error)})
+            WHERE tenant_id=:tenant_id
+              AND environment_id=:environment_id
+              AND source_type=:source_type
+        """), {
+            "tenant_id": str(tenant_id),
+            "environment_id": str(environment_id),
+            "source_type": source_type,
+            "err": str(error),
+        })
     else:
         session.execute(text("""
             UPDATE tenant_dictionary_sources
             SET status='done', finished_at=NOW()
-            WHERE tenant_id=:tenant_id AND source_type=:source_type
-        """), {"tenant_id": str(tenant_id),  "source_type": source_type})
+            WHERE tenant_id=:tenant_id
+              AND environment_id=:environment_id
+              AND source_type=:source_type
+        """), {
+            "tenant_id": str(tenant_id),
+            "environment_id": str(environment_id),
+            "source_type": source_type,
+        })
     session.commit()
 
 

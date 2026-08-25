@@ -10,10 +10,16 @@ def build_protheus_context(empresa: Optional[str], filial: Optional[str]) -> Dic
     Garante isolamento de escopo multiempresa no banco Oracle.
     """
     if not empresa or not str(empresa).strip():
-        empresa = "01"
+        raise HTTPException(
+            status_code=400,
+            detail="empresa/company_code é obrigatório no contexto operacional.",
+        )
 
     if not filial or not str(filial).strip():
-        filial = "01"
+        raise HTTPException(
+            status_code=400,
+            detail="filial/branch é obrigatório no contexto operacional.",
+        )
 
     emp_clean = str(empresa).strip()
     fil_clean = str(filial).strip()
@@ -37,6 +43,9 @@ def validate_query_security(sql: str, allowed_tables: Set[str], filial: str) -> 
     """
     if not sql or not sql.strip():
         raise HTTPException(status_code=400, detail="Nenhuma instrução SQL foi fornecida ou gerada para execução.")
+
+    if not filial or not str(filial).strip():
+        raise HTTPException(status_code=400, detail="filial/branch é obrigatória para validar a consulta.")
 
     upper_sql = sql.upper().strip()
 

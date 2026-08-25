@@ -22,10 +22,10 @@ logger = logging.getLogger("app.services.company_module_service")
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _clean(tenant_id: str | None) -> str:
-    """Normaliza tenant_id para nome seguro de schema."""
-    raw = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
-    if not raw or raw == 'public' or raw.isdigit():
-        return 'default'
+    """Normaliza tenant_id sem criar um schema substituto."""
+    raw = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or '')).lower()
+    if not raw or raw in {'public', 'default', 'none', 'null'} or raw.isdigit():
+        raise ValueError("tenant_id real é obrigatório para acessar o schema.")
     return raw
 
 
@@ -49,18 +49,19 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
             {"cid": cid_str}
         ).mappings().first()
 
-        if not reg and cid_str.isdigit():
-            reg = db.execute(
-                text("SELECT id, tenant_code, tenant_name, schema_name, status FROM public.tenant ORDER BY id ASC LIMIT 1")
-            ).mappings().first()
-
         if reg:
             clean_tenant = reg.get("schema_name") or reg.get("tenant_code") or ""
     except Exception as e:
         db.rollback()
         logger.warning(f"Aviso ao buscar tenant: {e}")
 
-    clean_tenant = _clean(clean_tenant)
+    if not reg or str(reg.get("status") or "").lower() != "active":
+        raise HTTPException(status_code=404, detail=f"Tenant ativo '{company_id}' não encontrado")
+
+    try:
+        clean_tenant = _clean(clean_tenant)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Tenant não possui schema válido") from exc
     ensure_tenant_tables(db, clean_tenant)
 
     try:
@@ -93,9 +94,7 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
                 FROM public.protheus_rest_connections
                 WHERE tenant_code = :tenant_code
                 AND active = TRUE
-                ORDER BY
-                    CASE WHEN environment_code = 'default' THEN 1 ELSE 0 END,
-                    environment_code
+                ORDER BY environment_code
                 LIMIT 1
             '''), {"tenant_code": clean_tenant}).mappings().first()
             
@@ -110,19 +109,6 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
     except Exception as e:
         db.rollback()
         logger.warning(f"Aviso ao buscar company_info em {clean_tenant}: {e}")
-
-    if reg:
-        return {
-            "id": reg["id"],
-            "tenant_id": reg["tenant_code"],
-            "code": reg["tenant_code"],
-            "name": reg["tenant_name"],
-            "status": reg["status"],
-            "protheus_rest_url": None,
-            "protheus_usuario": None,
-            "encrypted_protheus_password": None,
-            "protheus_ambientes": "producao",
-        }
 
     raise HTTPException(status_code=404, detail=f"Empresa '{company_id}' não encontrada")
 

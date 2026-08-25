@@ -36,54 +36,27 @@ setup_logging()
 logger = logging.getLogger("app.main")
 logger.info("Iniciando a aplicação FastAPI...")
 
-# Cria as tabelas se não existirem no startup
+# Inicialização do banco: um único bootstrap idempotente e não destrutivo.
+# O schema real é mantido em ``app.db.database``; este entrypoint não deve
+# executar DDL paralelo nem apagar tabelas legadas durante o startup.
 try:
     from sqlalchemy import text
+
     with engine.connect() as conn:
-        try:
-            conn.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
-            conn.execute(text("SET search_path TO public"))
-            conn.commit()
-            ensure_public_tables(conn)
-        except Exception as e_pub:
-            logger.warning(f"Aviso ao garantir tabelas no schema public: {e_pub}")
-        try:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-            conn.commit()
-        except Exception:
-            try: conn.rollback()
-            except: pass
-        
-        migrations = [
-            "CREATE TABLE IF NOT EXISTS public.agent_users (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, username VARCHAR(100) NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(50) DEFAULT 'user', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
-            "CREATE TABLE IF NOT EXISTS public.agent_roles (id SERIAL PRIMARY KEY, tenant_id VARCHAR(100) DEFAULT 'default' NOT NULL, name VARCHAR(50) NOT NULL, permissions JSON, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);",
-            "ALTER TABLE public.agent_users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
-            "ALTER TABLE public.agent_roles ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT 'default';",
-            
-            "CREATE TABLE IF NOT EXISTS public.protheus_modules_master (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), module_code VARCHAR(30) NOT NULL UNIQUE, module_name VARCHAR(120) NOT NULL, source_name VARCHAR(50) NOT NULL DEFAULT 'SYS_USR_MODULE', active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NULL);",
-            "CREATE TABLE IF NOT EXISTS public.tenant_module_contracts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id VARCHAR(100) NOT NULL, contract_id UUID NOT NULL, module_id UUID NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'allowed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());",
-            
-            # Limpeza de tabelas operacionais legadas criadas incorretamente no schema public
-            "DROP TABLE IF EXISTS public.tenants, public.companies, public.connectors, public.tenant_connectors, public.tenant_dictionary_sources, public.dictionary_tables, public.dictionary_fields, public.dictionary_indexes, public.dictionary_groups, public.tenant_table_permissions, public.tenant_field_permissions, public.tenant_allowed_tables, public.tenant_allowed_fields, public.tenant_dictionary_tables, public.tenant_dictionary_fields, public.tenant_dictionary_indexes, public.dictionary_snapshots CASCADE;"
-        ]
-        for query in migrations:
-            try:
-                conn.execute(text(query))
-                conn.commit()
-            except Exception:
-                try: conn.rollback()
-                except: pass
-                
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
         conn.execute(text("SET search_path TO public"))
-        ensure_public_tables(conn)
-        try:
-            ensure_all_registered_tenant_schemas(conn)
-        except Exception as e_tenants:
-            logger.warning(f"Aviso ao provisionar schemas de tenants cadastrados: {e_tenants}")
         conn.commit()
-    logger.info("Tabelas do banco de dados verificadas/criadas com sucesso com suporte a pgvector.")
-except Exception as e:
-    logger.error(f"Erro ao criar tabelas: {e}")
+
+        ensure_public_tables(conn)
+        ensure_all_registered_tenant_schemas(conn)
+        conn.execute(text("SET search_path TO public"))
+        conn.commit()
+
+    logger.info(
+        "Tabelas do banco verificadas/criadas com bootstrap idempotente e suporte a pgvector."
+    )
+except Exception as exc:
+    logger.error("Erro ao inicializar o banco de dados: %s", type(exc).__name__)
 
 
 # Inicializa Sentry se DSN fornecida

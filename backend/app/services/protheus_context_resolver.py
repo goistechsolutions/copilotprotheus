@@ -114,19 +114,9 @@ def resolve_company(
 
         return dict(row) if row else None
 
-    row = db.execute(
-        text(f"""
-            SELECT *
-            FROM {schema}.company_info
-            WHERE status = 'active'
-            ORDER BY
-                default_flag DESC NULLS LAST,
-                updated_at DESC NULLS LAST
-            LIMIT 1
-        """),
-    ).mappings().first()
-
-    return dict(row) if row else None
+    # Ausência de empresa/filial explícita não pode selecionar uma empresa
+    # arbitrariamente, pois isso quebra o isolamento operacional.
+    return None
 
 
 def resolve_context(
@@ -135,20 +125,29 @@ def resolve_context(
 ) -> ProtheusContext:
     raw_context = payload.get("context") or {}
 
-    tenant_id = clean_tenant_id(
-        raw_context.get("tenant_id") or payload.get("tenant_id") or "rodol_prod"
-    )
+    tenant_value = raw_context.get("tenant_id") or payload.get("tenant_id")
+    tenant_id = clean_tenant_id(tenant_value)
 
     schema_name = resolve_tenant_schema(db, tenant_id)
 
-    module = raw_context.get("module") or payload.get("module") or "SIGAFAT"
+    module = raw_context.get("module") or payload.get("module")
+    if not module or not str(module).strip():
+        raise ValueError("module é obrigatório para execução no Protheus.")
+
     branch = raw_context.get("branch") or raw_context.get("filial")
+    if not branch or not str(branch).strip():
+        raise ValueError("branch/filial é obrigatório para execução no Protheus.")
+
+    company_id = raw_context.get("company_id") or payload.get("company_id")
+    company_code = raw_context.get("company_code") or raw_context.get("company")
+    if company_id in (None, "") and not company_code:
+        raise ValueError("company_id ou company_code é obrigatório para execução no Protheus.")
 
     company = resolve_company(
         db=db,
         schema_name=schema_name,
-        company_id=raw_context.get("company_id") or payload.get("company_id"),
-        company_code=raw_context.get("company_code") or raw_context.get("company"),
+        company_id=company_id,
+        company_code=company_code,
         branch=branch,
     )
 
@@ -168,10 +167,10 @@ def resolve_context(
         schema_name=schema_name,
         company_id=int(company["id"]),
         company_code=str(company.get("company_code") or "") or None,
-        branch=str(company.get("branch_code") or branch or "0101"),
+        branch=str(company.get("branch_code") or branch).strip(),
         module_code=resolved_module["mod_code"],
         module_sigla=resolved_module["mod_sigla"],
         module_name=resolved_module.get("mod_name"),
-        user=raw_context.get("user") or raw_context.get("usuario") or "admin",
-        profile=raw_context.get("profile") or raw_context.get("perfil") or "Negócio",
+        user=raw_context.get("user") or raw_context.get("usuario"),
+        profile=raw_context.get("profile") or raw_context.get("perfil"),
     )

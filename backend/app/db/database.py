@@ -271,7 +271,7 @@ def ensure_public_tables(db, force: bool = False):
         CREATE TABLE IF NOT EXISTS public.protheus_rest_connections (
             id BIGSERIAL PRIMARY KEY,
             tenant_code VARCHAR(100) NOT NULL,
-            environment_code VARCHAR(100) NOT NULL DEFAULT 'default',
+            environment_code VARCHAR(100) NOT NULL,
             base_rest_url VARCHAR(500) NOT NULL,
             auth_mode VARCHAR(30) NOT NULL DEFAULT 'oauth2_password',
             protheus_username VARCHAR(255) NOT NULL,
@@ -291,6 +291,7 @@ def ensure_public_tables(db, force: bool = False):
         ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_auth_error TEXT;
         ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_auth_status INTEGER;
         ALTER TABLE public.protheus_rest_connections ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ;
+        ALTER TABLE public.protheus_rest_connections ALTER COLUMN environment_code DROP DEFAULT;
           """
           ,
           """
@@ -301,17 +302,9 @@ def ensure_public_tables(db, force: bool = False):
               LANGUAGE plpgsql
               AS $func$
               BEGIN
-                  IF NEW.environment_code = 'default'
-                  AND EXISTS (
-                      SELECT 1
-                      FROM public.protheus_rest_connections existing
-                      WHERE existing.tenant_code = NEW.tenant_code
-                        AND existing.environment_code <> 'default'
-                        AND existing.active = TRUE
-                        AND existing.id <> COALESCE(NEW.id, -1)
-                  )
+                  IF lower(btrim(COALESCE(NEW.environment_code, ''))) IN ('', 'default', 'none', 'null')
                   THEN
-                      RAISE EXCEPTION 'Não é permitido criar ambiente default para tenant que já possui ambiente explícito: %', NEW.tenant_code;
+                      RAISE EXCEPTION 'environment_code Protheus deve identificar um ambiente real para o tenant: %', NEW.tenant_code;
                   END IF;
                   RETURN NEW;
               END;
@@ -348,9 +341,14 @@ def ensure_public_tables(db, force: bool = False):
                 ALTER TABLE public.protheus_modules_master RENAME COLUMN module_name TO mod_name;
             END IF;
             IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'protheus_modules_master' AND column_name = 'module_code') THEN
-                -- Try to migrate string module_code to int mod_code if possible, else just drop/rename
-                -- Since mod_code is already added, let's just drop module_code to clean up
-                ALTER TABLE public.protheus_modules_master DROP COLUMN module_code;
+                -- Migra valores numéricos para a coluna canônica sem remover
+                -- a coluna legada; a limpeza deve ser uma migração explícita.
+                UPDATE public.protheus_modules_master
+                   SET mod_code = CASE
+                       WHEN module_code ~ '^[0-9]+$' THEN module_code::INTEGER
+                       ELSE mod_code
+                   END
+                 WHERE mod_code IS NULL;
             END IF;
         END $$;
         CREATE INDEX IF NOT EXISTS idx_pmm_code   ON public.protheus_modules_master(mod_code);
@@ -547,9 +545,6 @@ def ensure_public_tables(db, force: bool = False):
             created_at  TIMESTAMP DEFAULT NOW()
         );
         """,
-        """
-        DROP SCHEMA IF EXISTS "1" CASCADE;
-        """
     ]
 
     try:
@@ -601,42 +596,54 @@ def ensure_public_tables(db, force: bool = False):
 # ─────────────────────────────────────────────────────────────
 
 def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
-    """
-    Garante que o tenant_id seja convertido em um nome de schema válido.
-    Se for numérico (ex: '1' ou 1), busca no tenant ou assume o
-    primeiro tenant ou 'default'. NUNCA retorna um nome de schema puramente
-    numérico ou 'public'.
-    """
-    raw_str = str(tenant_id or '').strip()
-    if not raw_str or raw_str == "public":
-        return "default"
+    """Resolve um tenant ativo para um schema válido sem fallback silencioso."""
+    raw_str = str(tenant_id or "").strip()
+    if not raw_str or raw_str.lower() in {"public", "default", "none", "null"}:
+        raise ValueError("tenant_id é obrigatório e deve identificar um tenant real.")
 
-    clean = re.sub(r'[^a-zA-Z0-9_]', '', raw_str)
+    candidate = re.sub(r"[^a-zA-Z0-9_]", "", raw_str).lower()
+    if not candidate:
+        raise ValueError("tenant_id inválido.")
 
-    if clean.isdigit():
-        try:
-            reg = db.execute(
-                text("SELECT tenant_code, schema_name FROM public.tenant WHERE id = :id OR tenant_code = :tc LIMIT 1"),
-                {"id": int(clean), "tc": clean}
-            ).mappings().first()
+    try:
+        if candidate.isdigit():
+            query = text(
+                """
+                SELECT tenant_code, schema_name
+                FROM public.tenant
+                WHERE status = 'active'
+                  AND (id = :id OR tenant_code = :tenant_code)
+                LIMIT 1
+                """
+            )
+            params = {"id": int(candidate), "tenant_code": candidate}
+        else:
+            query = text(
+                """
+                SELECT tenant_code, schema_name
+                FROM public.tenant
+                WHERE status = 'active'
+                  AND (tenant_code = :tenant_code OR schema_name = :schema_name)
+                LIMIT 1
+                """
+            )
+            params = {"tenant_code": candidate, "schema_name": candidate}
+        row = db.execute(query, params).mappings().first()
+    except Exception as exc:
+        if hasattr(db, "rollback"):
+            db.rollback()
+        raise ValueError("não foi possível resolver o tenant informado.") from exc
 
-            if not reg:
-                reg = db.execute(
-                    text("SELECT tenant_code, schema_name FROM public.tenant ORDER BY id ASC LIMIT 1")
-                ).mappings().first()
+    if not row:
+        raise ValueError("tenant ativo não localizado.")
 
-            if reg and (reg.get("schema_name") or reg.get("tenant_code")):
-                clean = reg.get("schema_name") or reg.get("tenant_code")
-            else:
-                clean = "default"
-        except Exception:
-            if hasattr(db, "rollback"):
-                db.rollback()
-            clean = "default"
-
-    clean = re.sub(r'[^a-zA-Z0-9_]', '', str(clean))
-    if not clean or clean == "public" or clean.isdigit():
-        clean = "default"
+    clean = re.sub(
+        r"[^a-zA-Z0-9_]",
+        "",
+        str(row.get("schema_name") or row.get("tenant_code") or ""),
+    ).lower()
+    if not clean or clean in {"public", "default", "none", "null"} or clean.isdigit():
+        raise ValueError("tenant ativo não possui um schema válido.")
 
     return clean
 
@@ -646,15 +653,21 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
 # ─────────────────────────────────────────────────────────────
 
 TENANT_REQUIRED_TABLES = {
-    "company_info", "protheus_modules", "tenant_schemas",
+    "company_info", "tenant_schemas",
     "dictionary_tables", "dictionary_fields", "dictionary_indexes", "dictionary_groups",
     "tenant_dictionary_sources", "tenant_table_permissions", "tenant_field_permissions",
     "memories", "documents", "document_chunks", "agent_query_audit",
 }
 
+TENANT_REQUIRED_COLUMNS = {
+    "dictionary_tables": {"tenant_id", "environment_id", "table_name", "table_alias", "module_code"},
+    "dictionary_fields": {"tenant_id", "environment_id", "table_name", "field_name"},
+    "dictionary_indexes": {"tenant_id", "environment_id", "table_name", "index_order"},
+}
+
 
 def _tenant_schema_bootstrap_done(db, clean_tenant: str) -> bool:
-    """Verifica, de forma idempotente, se o schema do tenant já possui as tabelas essenciais."""
+    """Verifica tabelas e colunas essenciais antes de usar o cache de bootstrap."""
     try:
         rows = db.execute(text("""
             SELECT table_name
@@ -662,7 +675,19 @@ def _tenant_schema_bootstrap_done(db, clean_tenant: str) -> bool:
              WHERE table_schema = :schema_name
         """), {"schema_name": clean_tenant}).scalars().all()
         existing = set(rows)
-        return TENANT_REQUIRED_TABLES.issubset(existing)
+        if not TENANT_REQUIRED_TABLES.issubset(existing):
+            return False
+
+        for table_name, required_columns in TENANT_REQUIRED_COLUMNS.items():
+            columns = db.execute(text("""
+                SELECT column_name
+                  FROM information_schema.columns
+                 WHERE table_schema = :schema_name
+                   AND table_name = :table_name
+            """), {"schema_name": clean_tenant, "table_name": table_name}).scalars().all()
+            if not required_columns.issubset(set(columns)):
+                return False
+        return True
     except Exception:
         return False
 
@@ -743,16 +768,14 @@ def ensure_tenant_tables(db, clean_tenant: str):
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_rest_url       TEXT;
                     ALTER TABLE "{clean_tenant}".company_info ADD COLUMN IF NOT EXISTS protheus_usuario        VARCHAR(100);
 
-                    -- Migrate data if necessary
+                    -- Migra dados legados sem remover colunas. A limpeza deve ser
+                    -- feita somente por uma migração versionada e aprovada.
                     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '{clean_tenant}' AND table_name = 'company_info' AND column_name = 'protheus_user') THEN
                         UPDATE "{clean_tenant}".company_info SET protheus_usuario = protheus_user WHERE protheus_usuario IS NULL;
-                        ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_user;
                     END IF;
                     
                     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '{clean_tenant}' AND table_name = 'company_info' AND column_name = 'protheus_url') THEN
                         UPDATE "{clean_tenant}".company_info SET protheus_rest_url = protheus_url || ':' || CAST(protheus_rest_port AS TEXT) WHERE protheus_rest_url IS NULL AND protheus_rest_port IS NOT NULL;
-                        ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_url;
-                        ALTER TABLE "{clean_tenant}".company_info DROP COLUMN protheus_rest_port;
                     END IF;
                     
                     IF NOT EXISTS (
@@ -769,25 +792,9 @@ def ensure_tenant_tables(db, clean_tenant: str):
         """))
         db.commit()
 
-        # ── Patch 3: Drop legacy V4 tables to allow recreation with V5 schema ──
-        db.execute(text(f"""
-            DO $$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = '{clean_tenant}' AND table_name = 'protheus_modules' AND column_name = 'modulo'
-                ) THEN
-                    DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules CASCADE;
-                END IF;
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = '{clean_tenant}' AND table_name = 'tenant_schemas' AND column_name = 'modulo'
-                ) THEN
-                    DROP TABLE IF EXISTS "{clean_tenant}".tenant_schemas CASCADE;
-                END IF;
-            END $$;
-        """))
-        db.commit()
+        # ── Patch 3: tabelas legadas não são removidas no startup ──
+        # Se uma estrutura antiga precisar de conversão, ela deve ser tratada
+        # por migração versionada, com backup e janela operacional explícita.
 
         # ── Patch 4: Drop NOT NULL from company_id in dictionary_tables ──
         db.execute(text(f"""
@@ -887,26 +894,123 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """))
+
+        # Snapshot v5.3: amplia as tabelas V4 de forma aditiva. As colunas novas
+        # permanecem nullable para não invalidar registros históricos; os novos
+        # fluxos sempre enviam tenant_id e environment_id explicitamente.
+        db.execute(text(f"""
+            ALTER TABLE "{clean_tenant}".dictionary_tables
+                ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS environment_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS table_alias VARCHAR(80),
+                ADD COLUMN IF NOT EXISTS physical_name VARCHAR(80),
+                ADD COLUMN IF NOT EXISTS active_flag BOOLEAN DEFAULT TRUE,
+                ADD COLUMN IF NOT EXISTS raw_payload JSONB,
+                ADD COLUMN IF NOT EXISTS usa_empresa VARCHAR(1),
+                ADD COLUMN IF NOT EXISTS usa_unidade VARCHAR(1),
+                ADD COLUMN IF NOT EXISTS usa_filial VARCHAR(1),
+                ADD COLUMN IF NOT EXISTS x2_modo VARCHAR(10),
+                ADD COLUMN IF NOT EXISTS x2_tamfil INTEGER,
+                ADD COLUMN IF NOT EXISTS x2_modoun VARCHAR(10),
+                ADD COLUMN IF NOT EXISTS x2_tamun INTEGER,
+                ADD COLUMN IF NOT EXISTS x2_modoemp VARCHAR(10),
+                ADD COLUMN IF NOT EXISTS x2_tamemp INTEGER,
+                ADD COLUMN IF NOT EXISTS unique_index VARCHAR(20);
+            ALTER TABLE "{clean_tenant}".dictionary_tables ALTER COLUMN table_code DROP NOT NULL;
+
+            ALTER TABLE "{clean_tenant}".dictionary_fields
+                ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS environment_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS table_name VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS required_flag BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS browse_flag BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS virtual_flag BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS validation_rule TEXT,
+                ADD COLUMN IF NOT EXISTS relation_rule TEXT,
+                ADD COLUMN IF NOT EXISTS when_rule TEXT,
+                ADD COLUMN IF NOT EXISTS sxg_group VARCHAR(80),
+                ADD COLUMN IF NOT EXISTS sxg_size INTEGER,
+                ADD COLUMN IF NOT EXISTS raw_payload JSONB;
+            ALTER TABLE "{clean_tenant}".dictionary_fields ALTER COLUMN table_code DROP NOT NULL;
+
+            ALTER TABLE "{clean_tenant}".dictionary_indexes
+                ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS environment_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS table_name VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS raw_payload JSONB;
+            ALTER TABLE "{clean_tenant}".dictionary_indexes ALTER COLUMN table_code DROP NOT NULL;
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_groups (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100),
+                company_id VARCHAR(100),
+                environment_id VARCHAR(100),
+                snapshot_code VARCHAR(60),
+                group_name VARCHAR(80) NOT NULL,
+                description TEXT,
+                raw_payload JSONB,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                UNIQUE (tenant_id, environment_id, group_name)
+            );
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_dictionary_sources (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id VARCHAR(100),
+                environment_id VARCHAR(100) NOT NULL,
+                source_type VARCHAR(20) NOT NULL,
+                snapshot_code VARCHAR(60) NOT NULL DEFAULT 'runtime',
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                started_at TIMESTAMP WITH TIME ZONE,
+                finished_at TIMESTAMP WITH TIME ZONE,
+                error_message TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_table_permissions (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id VARCHAR(100),
+                environment_id VARCHAR(100) NOT NULL,
+                role_id VARCHAR(100) NOT NULL,
+                table_name VARCHAR(50) NOT NULL,
+                can_list BOOLEAN NOT NULL DEFAULT FALSE,
+                can_describe BOOLEAN NOT NULL DEFAULT FALSE,
+                can_query BOOLEAN NOT NULL DEFAULT FALSE,
+                approved_by VARCHAR(100),
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                UNIQUE (tenant_id, environment_id, role_id, table_name)
+            );
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_field_permissions (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id VARCHAR(100),
+                environment_id VARCHAR(100) NOT NULL,
+                role_id VARCHAR(100) NOT NULL,
+                table_name VARCHAR(50) NOT NULL,
+                field_name VARCHAR(50) NOT NULL,
+                can_select BOOLEAN NOT NULL DEFAULT FALSE,
+                can_filter BOOLEAN NOT NULL DEFAULT FALSE,
+                masked_flag BOOLEAN NOT NULL DEFAULT FALSE,
+                approved_by VARCHAR(100),
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                UNIQUE (tenant_id, environment_id, role_id, table_name, field_name)
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_tables_snapshot"
+                ON "{clean_tenant}".dictionary_tables (tenant_id, environment_id, table_name);
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_fields_snapshot"
+                ON "{clean_tenant}".dictionary_fields (tenant_id, environment_id, table_name, field_name);
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_indexes_snapshot"
+                ON "{clean_tenant}".dictionary_indexes (tenant_id, environment_id, table_name, index_order);
+        """))
         
-        # 5. Limpeza de tabelas operacionais legadas/duplicadas no schema do tenant
-        try:
-            db.execute(text(
-                f'DROP TABLE IF EXISTS "{clean_tenant}".protheus_modules, '
-                f'"{clean_tenant}".field_rules, '
-                f'"{clean_tenant}".users, '
-                f'"{clean_tenant}".tenant_allowed_tables, '
-                f'"{clean_tenant}".tenant_allowed_fields, '
-                f'"{clean_tenant}".tenant_dictionary_tables, '
-                f'"{clean_tenant}".tenant_dictionary_fields, '
-                f'"{clean_tenant}".tenant_dictionary_indexes, '
-                f'"{clean_tenant}".dictionary_groups, '
-                f'"{clean_tenant}".tenant_dictionary_sources, '
-                f'"{clean_tenant}".tenant_table_permissions, '
-                f'"{clean_tenant}".tenant_field_permissions CASCADE;'
-            ))
-            db.commit()
-        except Exception:
-            db.rollback()
+        # 5. Não remover tabelas legadas/duplicadas durante o bootstrap.
+        # Migrações destrutivas devem ser explícitas, versionadas e aprovadas;
+        # o startup somente cria ou ajusta objetos necessários.
 
         # 6. RAG, Memories and Audit
         db.execute(text(f"""
@@ -1034,42 +1138,32 @@ def ensure_all_registered_tenant_schemas(db):
 def get_tenant_session(tenant_id: str):
     db = SessionLocal()
     ensure_public_tables(db)
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id or 'default'))
-    if not clean_tenant:
-        clean_tenant = "default"
-    if clean_tenant != "public":
-        try:
-            db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-            if hasattr(db, "commit"): db.commit()
-        except Exception:
-            if hasattr(db, "rollback"): db.rollback()
-        ensure_tenant_tables(db, clean_tenant)
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
+    ensure_tenant_tables(db, clean_tenant)
     db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-    if hasattr(db, "commit"): db.commit()
+    if hasattr(db, "commit"):
+        db.commit()
     return db
 
 
 def get_db(x_tenant_id: str = Header(None), tenant_id: str = None):
     db = SessionLocal()
-    ensure_public_tables(db)
-
-    tid = x_tenant_id or tenant_id or "default"
-    clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tid))
-    if not clean_tenant:
-        clean_tenant = "default"
 
     try:
-        if clean_tenant != "public":
-            try:
-                db.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
-                if hasattr(db, "commit"): db.commit()
-            except Exception:
-                if hasattr(db, "rollback"): db.rollback()
+        ensure_public_tables(db)
 
+        # Rotas globais usam public; rotas tenant-scoped devem fornecer
+        # explicitamente X-Tenant-ID ou tenant_id.
+        tid = x_tenant_id or tenant_id
+        clean_tenant = resolve_clean_tenant(db, tid) if tid else None
+
+        if clean_tenant:
             ensure_tenant_tables(db, clean_tenant)
-
-        db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
-        if hasattr(db, "commit"): db.commit()
+            db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+        else:
+            db.execute(text('SET search_path TO public'))
+        if hasattr(db, "commit"):
+            db.commit()
 
         yield db
     finally:

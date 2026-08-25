@@ -42,6 +42,22 @@ module.exports = {
       throw error;
     }
   },
+  queryRest: async (payload, token = null) => {
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      return await client.post('/api/agent/queryrest', payload, { headers })
+    } catch (e) {
+      const status = e.response?.status || 502
+      const detail = e.response?.data?.detail || e.message
+      const error = new Error(`${status} ${detail}`)
+      error.status = status
+      error.detail = detail
+      throw error
+    }
+  },
   getCompanyByTenant: async (tenantId, token = null) => {
     try {
       const headers = {}
