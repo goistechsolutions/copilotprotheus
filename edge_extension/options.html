@@ -17,7 +17,13 @@
       <label for="environmentCode">Environment code (obrigatório)</label>
       <input type="text" id="environmentCode" required placeholder="ex: c8te0u_prod" autocomplete="off">
 
-      <p class="hint">A extensão envia apenas o contexto operacional. A autenticação OAuth2 e as credenciais REST permanecem no backend.</p>
+      <label for="username">Usuário Protheus</label>
+      <input type="text" id="username" placeholder="ex: admin" autocomplete="username">
+
+      <label for="password">Senha Protheus</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+
+      <p class="hint">Configurações de contexto e conexão integradas com o Copilot Protheus.</p>
 
       <label for="widgetUrl">URL do Widget</label>
       <input type="url" id="widgetUrl" required placeholder="https://copilot.elitecorp.tec.br/" autocomplete="url">

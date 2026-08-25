@@ -188,7 +188,8 @@
     if (config.environmentCode) url.searchParams.set("environment_code", config.environmentCode);
     if (context.company) url.searchParams.set("company", context.company);
     if (context.branch) url.searchParams.set("branch", context.branch);
-    if (context.user) url.searchParams.set("user", context.user);
+    const user = context.user || config.username || "";
+    if (user) url.searchParams.set("user", user);
     if (context.environment) url.searchParams.set("environment", context.environment);
     if (context.module) url.searchParams.set("module", context.module);
     if (context.session_id) url.searchParams.set("session_id", context.session_id);
@@ -205,7 +206,7 @@
       company_code: context.company || "",
       company_id: context.company_id || "",
       branch: context.branch || "",
-      user: context.user || "",
+      user: context.user || currentConfig.username || "",
       module: context.module || "",
       profile: context.profile || "",
       session_id: context.session_id || ""
