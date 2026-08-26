@@ -11,6 +11,76 @@ from app.api.admin_routes import verify_admin
 class ServerActionRequest(BaseModel):
     action: str  # ex: "reboot", "poweron", "poweroff", "reset"
 
+
+@router.get("/status", dependencies=[Depends(verify_admin)])
+def get_infra_status():
+    """Retorna somente a saúde dos serviços, sem ler dados corporativos."""
+    import os
+    from sqlalchemy import text
+    from app.db.database import SessionLocal
+
+    services = {
+        "FastAPI Backend": {"status": "online"},
+        "OpenAI API": {
+            "status": "configured" if os.getenv("OPENAI_API_KEY") else "unknown",
+        },
+    }
+
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        services["PostgreSQL"] = {"status": "healthy"}
+        try:
+            has_vector = db.execute(
+                text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+            ).scalar()
+            services["pgvector"] = {"status": "healthy" if has_vector else "degraded"}
+        except Exception:
+            services["pgvector"] = {"status": "unknown"}
+    except Exception:
+        services["PostgreSQL"] = {"status": "offline"}
+        services["pgvector"] = {"status": "unknown"}
+    finally:
+        db.close()
+
+    return {"services": services}
+
+
+@router.get("/env", dependencies=[Depends(verify_admin)])
+def get_sanitized_environment():
+    """Retorna flags de configuração sem valores de tokens, senhas ou chaves."""
+    import os
+
+    secret_names = {
+        "DATABASE_URL",
+        "POSTGRES_PASSWORD",
+        "JWT_SECRET",
+        "ADMIN_JWT_SECRET",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "FERNET_KEY",
+        "HETZNER_API_TOKEN",
+        "CLOUDFLARE_API_TOKEN",
+        "R2_SECRET_ACCESS_KEY",
+    }
+    known_names = {
+        "NODE_ENV",
+        "LLM_BACKEND",
+        "BACKEND_URL",
+        "TENANT_HEADER_REQUIRED",
+        "PROTHEUS_ENVIRONMENT",
+    }
+    env = [
+        {"key": name, "value": "configured" if os.getenv(name) else "not_configured"}
+        for name in sorted(secret_names)
+    ]
+    env.extend(
+        {"key": name, "value": os.getenv(name, "not_configured")}
+        for name in sorted(known_names)
+    )
+    return {"env": env}
+
+
 # ----------------- HETZNER CLOUD -----------------
 
 @router.get("/hetzner/servers", dependencies=[Depends(verify_admin)])
