@@ -85,8 +85,8 @@ def _extract_table_refs(sql: str) -> list[tuple[str, str]]:
     refs: list[tuple[str, str]] = []
     keyword_aliases = _SQL_WORDS | {"USING", "SET", "VALUES"}
     pattern = re.compile(
-        r"\b(?:FROM|JOIN)\s+([A-Z][A-Z0-9_$#]{1,40})"
-        r"(?:\s+(?:AS\s+)?([A-Z][A-Z0-9_$#]{1,40}))?",
+        r"\b(?:FROM|JOIN)\s+([A-Z][A-Z0-9_$#]{0,40})"
+        r"(?:\s+(?:AS\s+)?([A-Z][A-Z0-9_$#]{0,40}))?",
         re.IGNORECASE,
     )
     for match in pattern.finditer(sql):
