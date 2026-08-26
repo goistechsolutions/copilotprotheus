@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { exportStructuredReport } from '../services/api';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   BarElement,
@@ -227,6 +228,7 @@ export default function StructuredResultPanel({ result, onClose }) {
   const [filterColumn, setFilterColumn] = useState('all');
   const [filterValue, setFilterValue] = useState('');
   const [sort, setSort] = useState({ column: '', direction: 'asc' });
+  const [exportState, setExportState] = useState('');
 
   const rows = useMemo(() => getSafeRows(result), [result]);
   const summaryText = useMemo(() => resultSummaryText(result?.summary), [result?.summary]);
@@ -286,6 +288,42 @@ export default function StructuredResultPanel({ result, onClose }) {
     exportFile(JSON.stringify(visibleRows, null, 2), 'copilot-protheus-resultado.json', 'application/json;charset=utf-8');
   };
 
+  const downloadServerReport = async format => {
+    const tenantCode = result?.tenant_code || result?.tenant_id;
+    const environmentCode = result?.environment_code;
+    if (!tenantCode || !environmentCode || !visibleRows.length || !columns.length) return;
+
+    setExportState(format);
+    try {
+      const exported = await exportStructuredReport({
+        tenant_code: tenantCode,
+        environment_code: environmentCode,
+        company_id: result?.company_id != null ? String(result.company_id) : undefined,
+        title: result?.title || 'Relatório Copilot',
+        format,
+        columns,
+        rows: visibleRows,
+      });
+      if (exported?.download_url) {
+        const anchor = document.createElement('a');
+        anchor.href = exported.download_url;
+        anchor.target = '_blank';
+        anchor.rel = 'noreferrer';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+    } catch (error) {
+      setExportState('error');
+    } finally {
+      window.setTimeout(() => setExportState(''), 1200);
+    }
+  };
+
+  const canExportServer = Boolean(
+    !isError && result?.environment_code && (result?.tenant_code || result?.tenant_id) && visibleRows.length && columns.length,
+  );
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-5 lg:p-8">
       <button type="button" aria-label="Fechar tela auxiliar" onClick={onClose} className="absolute inset-0 cursor-default bg-[#152b45]/50 backdrop-blur-sm" />
@@ -313,6 +351,12 @@ export default function StructuredResultPanel({ result, onClose }) {
                 </button>
                 <button type="button" onClick={downloadJson} disabled={!visibleRows.length} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] font-semibold text-[#53708c] transition-colors hover:border-[#b8d5ec] hover:bg-[#f6fbff] disabled:cursor-not-allowed disabled:opacity-45">
                   <FileJson size={14} /> JSON
+                </button>
+                <button type="button" onClick={() => downloadServerReport('xlsx')} disabled={!canExportServer || Boolean(exportState)} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] font-semibold text-[#53708c] transition-colors hover:border-[#b8d5ec] hover:bg-[#f6fbff] disabled:cursor-not-allowed disabled:opacity-45">
+                  <FileSpreadsheet size={14} /> {exportState === 'xlsx' ? 'Gerando...' : 'XLSX'}
+                </button>
+                <button type="button" onClick={() => downloadServerReport('pdf')} disabled={!canExportServer || Boolean(exportState)} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] font-semibold text-[#53708c] transition-colors hover:border-[#b8d5ec] hover:bg-[#f6fbff] disabled:cursor-not-allowed disabled:opacity-45">
+                  <Download size={14} /> {exportState === 'pdf' ? 'Gerando...' : 'PDF'}
                 </button>
               </>
             )}
