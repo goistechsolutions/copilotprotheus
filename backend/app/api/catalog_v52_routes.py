@@ -305,9 +305,12 @@ def _permission_scope_where(columns: set[str], role_id: str | None, environment_
     if role_id and "role_id" in columns:
         conditions.append("(btrim(role_id) = :role_id OR lower(btrim(role_id)) = lower(btrim((SELECT role_code FROM public.roles WHERE id::text = :role_id LIMIT 1))))")
         params["role_id"] = role_id.strip()
-    if company_id and "company_id" in columns:
-        conditions.append("company_id::text = :company_id")
-        params["company_id"] = company_id.strip()
+    if "company_id" in columns:
+        if company_id:
+            conditions.append("company_id::text = :company_id")
+            params["company_id"] = company_id.strip()
+        else:
+            conditions.append("company_id IS NULL")
     return conditions, params
 
 
