@@ -217,14 +217,13 @@ async def process_agent_task(task_id: str, payload: dict):
             role_id = payload.get("role_id") or context_payload.get("role_id") or context_payload.get("profile") or context_payload.get("perfil")
             session_key = payload.get("session_key") or context_payload.get("session_key") or correlation_id
             try:
-                entitlement = entitlement_guard.check_and_reserve(
+                entitlement = entitlement_guard.authorize(
                     db,
                     tenant_code=ctx.tenant_id,
                     environment_code=environment_code,
                     module_code=ctx.module_code,
                     user_identity=str(user_identity) if user_identity else None,
                     role_id=str(role_id) if role_id else None,
-                    session_key=str(session_key),
                     correlation_id=correlation_id,
                 )
             except EntitlementDenied as exc:
@@ -440,6 +439,22 @@ async def process_agent_task(task_id: str, payload: dict):
 
             # 6. QueryRest
             if execute:
+                try:
+                    entitlement_guard.reserve(
+                        db,
+                        entitlement,
+                        session_key=str(session_key),
+                        correlation_id=correlation_id,
+                    )
+                except EntitlementDenied as exc:
+                    AGENT_TASKS[task_id] = {
+                        "status": "error",
+                        "error": exc.message,
+                        "error_code": exc.code,
+                        "correlation_id": correlation_id,
+                    }
+                    return
+
                 logger.info(
                     "agent_queryrest_start task_id=%s tenant=%s environment=%s",
                     task_id,
@@ -484,6 +499,9 @@ async def process_agent_task(task_id: str, payload: dict):
                     response["status"] = "execution_failed"
                     response["execution_error"] = http_ex.detail
                     logger.warning("agent_queryrest_failed task_id=%s status=%s", task_id, http_ex.status_code)
+                finally:
+                    if entitlement.lease_key:
+                        entitlement_guard.release_session(db, ctx.tenant_id, entitlement.lease_key)
 
             AGENT_TASKS[task_id] = response
             logger.info("agent_task_completed task_id=%s status=%s elapsed_ms=%s", task_id, response.get("status"), response.get("response_time_ms"))
