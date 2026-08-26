@@ -146,6 +146,7 @@ def filter_allowed_dictionary_tables(
     tenant_schema: str,
     module_codes: Sequence[str],
     company_id: int | None = None,
+    environment_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if not module_codes:
         return []
@@ -157,6 +158,7 @@ def filter_allowed_dictionary_tables(
     }
 
     company_filter = ""
+    environment_filter = ""
 
     if company_id is not None:
         company_filter = """
@@ -167,13 +169,34 @@ def filter_allowed_dictionary_tables(
         """
         params["company_id"] = int(company_id)
 
+    if environment_id is not None:
+        environment_filter = """
+            AND (
+                dt.environment_id = :environment_id
+                OR dt.environment_id IS NULL
+            )
+        """
+        params["environment_id"] = str(environment_id)
+
     rows = db.execute(
         text(f"""
             SELECT DISTINCT
                 dt.table_code,
                 dt.table_name,
                 dt.module_code,
-                COALESCE(dt.description, dt.table_name) AS description
+                COALESCE(dt.description, dt.table_name) AS description,
+                dt.table_alias,
+                dt.physical_name,
+                dt.unique_index,
+                dt.usa_empresa,
+                dt.usa_unidade,
+                dt.usa_filial,
+                dt.x2_modo,
+                dt.x2_tamfil,
+                dt.x2_modoun,
+                dt.x2_tamun,
+                dt.x2_modoemp,
+                dt.x2_tamemp
             FROM {schema}.dictionary_tables dt
             JOIN {schema}.tenant_schemas ts
               ON ts.chave = dt.table_code
@@ -181,6 +204,7 @@ def filter_allowed_dictionary_tables(
              AND ts.mod_code::text = dt.module_code
             WHERE dt.module_code = ANY(:module_codes)
               {company_filter}
+              {environment_filter}
             ORDER BY dt.table_code
         """),
         params,
