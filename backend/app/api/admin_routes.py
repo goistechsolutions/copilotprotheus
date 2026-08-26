@@ -47,6 +47,31 @@ security = HTTPBasic(auto_error=False)
 
 ENV_PATH = Path(".env")
 
+_SENSITIVE_CONFIG_KEYS = {
+    "DATABASE_URL", "POSTGRES_PASSWORD", "JWT_SECRET", "ADMIN_JWT_SECRET",
+    "FERNET_KEY", "ADMIN_PASSWORD", "PROTHEUS_PASSWORD", "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+    "HETZNER_API_TOKEN", "CLOUDFLARE_API_TOKEN",
+}
+_SENSITIVE_CONFIG_MARKERS = ("PASSWORD", "SECRET", "TOKEN", "API_KEY", "ACCESS_KEY")
+_MANAGED_CONFIG_KEYS = {
+    "R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME",
+    "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_API_TOKEN", "HETZNER_API_TOKEN",
+    "LLM_BACKEND", "GEMINI_MODEL", "GEMINI_API_KEY", "OLLAMA_MODEL", "OLLAMA_BASE_URL",
+}
+_CONFIG_SENTINELS = {"configured", "not_configured"}
+
+
+def _is_sensitive_config_key(key: str) -> bool:
+    normalized = str(key or "").strip().upper()
+    return normalized in _SENSITIVE_CONFIG_KEYS or any(marker in normalized for marker in _SENSITIVE_CONFIG_MARKERS)
+
+
+def _safe_config_value(key: str, value: object) -> str:
+    if _is_sensitive_config_key(key):
+        return "configured" if value not in (None, "") else "not_configured"
+    return "" if value is None else str(value)
+
 # ─────────────────────────────────────────────────────────────
 # Autenticacao administrativa (Cookie JWT ou HTTP Basic)
 # ─────────────────────────────────────────────────────────────
