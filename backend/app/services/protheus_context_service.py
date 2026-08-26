@@ -1,14 +1,20 @@
 import re
-from typing import Dict, Set, Optional
+from typing import Dict, Iterable, Optional, Set
+
 from fastapi import HTTPException
 
 
+_SQL_WORDS = {
+    "AS", "FROM", "JOIN", "WHERE", "ON", "AND", "OR", "NOT", "NULL", "IS",
+    "IN", "LIKE", "BETWEEN", "GROUP", "BY", "ORDER", "HAVING", "FETCH", "FIRST",
+    "NEXT", "ROWS", "ONLY", "OFFSET", "ROWNUM", "DISTINCT", "CASE", "WHEN", "THEN",
+    "ELSE", "END", "ASC", "DESC", "INNER", "LEFT", "RIGHT", "FULL", "OUTER",
+    "CROSS", "UNION", "ALL", "WITH", "SELECT", "FROM", "TRUE", "FALSE",
+}
+
+
 def build_protheus_context(empresa: Optional[str], filial: Optional[str]) -> Dict[str, str]:
-    """
-    Padroniza e valida a montagem do contexto operacional de empresa e filial (XFILIAL)
-    antes de gerar ou executar consultas SQL no ERP TOTVS Protheus.
-    Garante isolamento de escopo multiempresa no banco Oracle.
-    """
+    """Padroniza e valida o contexto operacional de empresa e filial."""
     if not empresa or not str(empresa).strip():
         raise HTTPException(
             status_code=400,
@@ -24,13 +30,10 @@ def build_protheus_context(empresa: Optional[str], filial: Optional[str]) -> Dic
     emp_clean = str(empresa).strip()
     fil_clean = str(filial).strip()
 
-    # No TOTVS Protheus, a variável de ambiente/sistema XFILIAL reflete a filial ativa da tabela
-    xfilial = fil_clean
-
     return {
         "empresa": emp_clean,
         "filial": fil_clean,
-        "xfilial": xfilial
+        "xfilial": fil_clean,
     }
 
 
@@ -55,8 +58,7 @@ def mask_sensitive_rows(rows, masked_fields=None):
             continue
         safe_row = {}
         for key, value in row.items():
-            key_text = str(key)
-            normalized_key = key_text.strip().upper()
+            normalized_key = str(key).strip().upper()
             if normalized_key in configured or _SENSITIVE_FIELD_PATTERN.search(normalized_key):
                 safe_row[key] = _MASKED_VALUE
             else:
@@ -65,13 +67,67 @@ def mask_sensitive_rows(rows, masked_fields=None):
     return masked_rows
 
 
-def validate_query_security(sql: str, allowed_tables: Set[str], filial: str) -> bool:
-    """
-    Garante o bloqueio imediato de execução caso a consulta SQL gerada:
-    1. Tente realizar operações de mutação ou DDL proibidas.
-    2. Tente acessar tabelas que não estejam dentro do contexto/snapshot autorizado (RBAC/Escopo do tenant).
-    3. Transgrida as Diretrizes Globais do Agente (ex: uso proibido de SELECT TOP em Oracle ou ausência do filtro D_E_L_E_T_).
-    """
+def _normalize_allowed_tables(allowed_tables: Iterable[str]) -> Set[str]:
+    normalized: Set[str] = set()
+    for table in allowed_tables or []:
+        value = str(table or "").strip().upper()
+        if not value:
+            continue
+        normalized.add(value)
+        if len(value) == 3:
+            normalized.add(f"{value}010")
+        elif value.endswith("010") and len(value) > 3:
+            normalized.add(value[:-3])
+    return normalized
+
+
+def _extract_table_refs(sql: str) -> list[tuple[str, str]]:
+    refs: list[tuple[str, str]] = []
+    keyword_aliases = _SQL_WORDS | {"USING", "SET", "VALUES"}
+    pattern = re.compile(
+        r"\b(?:FROM|JOIN)\s+([A-Z][A-Z0-9_$#]{1,40})"
+        r"(?:\s+(?:AS\s+)?([A-Z][A-Z0-9_$#]{1,40}))?",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(sql):
+        table_name = match.group(1).upper()
+        alias = (match.group(2) or "").upper()
+        if alias in keyword_aliases:
+            alias = ""
+        refs.append((table_name, alias))
+    return refs
+
+
+def _extract_selected_fields(sql: str) -> set[str]:
+    match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return set()
+    body = match.group("body")
+    fields = set()
+    for qualified in re.findall(r"\b[A-Z][A-Z0-9_$#]*\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
+        fields.add(qualified.upper())
+    for unqualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b", body, re.IGNORECASE):
+        token = unqualified.upper()
+        if token not in _SQL_WORDS:
+            fields.add(token)
+    return fields
+
+
+def _has_oracle_limit(sql: str) -> bool:
+    return bool(
+        re.search(r"\bROWNUM\s*(?:<=|<)\s*\d+", sql, re.IGNORECASE)
+        or re.search(r"\bFETCH\s+FIRST\s+\d+\s+ROWS?\s+ONLY\b", sql, re.IGNORECASE)
+        or re.search(r"\bOFFSET\s+\d+\s+ROWS?\s+FETCH\s+NEXT\s+\d+\s+ROWS?\s+ONLY\b", sql, re.IGNORECASE)
+    )
+
+
+def validate_query_security(
+    sql: str,
+    allowed_tables: Set[str],
+    filial: str,
+    allowed_fields: Optional[Set[str]] = None,
+) -> bool:
+    """Valida SQL Oracle contra o contexto autorizado e as regras Protheus."""
     if not sql or not sql.strip():
         raise HTTPException(status_code=400, detail="Nenhuma instrução SQL foi fornecida ou gerada para execução.")
 
@@ -79,58 +135,70 @@ def validate_query_security(sql: str, allowed_tables: Set[str], filial: str) -> 
         raise HTTPException(status_code=400, detail="filial/branch é obrigatória para validar a consulta.")
 
     upper_sql = sql.upper().strip()
+    if not re.match(r"^(?:WITH\b[\s\S]*\bSELECT\b|SELECT\b)", upper_sql):
+        raise HTTPException(status_code=400, detail="A consulta deve começar por SELECT ou WITH e ser somente leitura.")
 
-    # 1. Bloquear estritamente qualquer comando não-consulta (DDL/DML de alteração)
     forbidden_keywords = [
-        "INSERT ", "UPDATE ", "DELETE ", "DROP ", "ALTER ", "TRUNCATE ", 
-        "EXEC ", "CREATE ", "GRANT ", "REVOKE ", "MERGE ", "CALL "
+        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "EXEC",
+        "CREATE", "GRANT", "REVOKE", "MERGE", "CALL", "BEGIN", "COMMIT", "ROLLBACK",
     ]
-    for kw in forbidden_keywords:
-        if re.search(f"\\b{kw.strip()}\\b", upper_sql):
-            raise HTTPException(
-                status_code=403, 
-                detail=f"Bloqueio de Segurança: Operação de mutação ou DDL ('{kw.strip()}') é proibida via endpoint de consulta SQL."
-            )
-
-    # 2. Conformidade com Diretriz Global #3: NUNCA usar SELECT TOP N no ambiente Oracle
-    if re.search(r'\bSELECT\s+TOP\s+\d+', upper_sql):
-        raise HTTPException(
-            status_code=400,
-            detail="Violação da Diretriz Global #3: A sintaxe 'SELECT TOP N' é proibida no banco Oracle do Protheus na TOTVS Cloud. Deve utilizar WHERE ROWNUM <= N ou OFFSET ... FETCH NEXT."
-        )
-
-    # 3. Validar se todas as tabelas referenciadas no FROM/JOIN estão no escopo permitido do tenant
-    found_tables = set(re.findall(r'\b(?:FROM|JOIN)\s+([A-Z0-9_]{2,30})', sql, re.IGNORECASE))
-    
-    # Normalizamos as tabelas autorizadas para conter variações (ex: SA1 e SA1010, SF2 e SF2010)
-    normalized_allowed = set()
-    for tbl in allowed_tables:
-        t_up = tbl.upper().strip()
-        normalized_allowed.add(t_up)
-        if len(t_up) == 3:  # Código lógico no dicionário (ex: SA1)
-            normalized_allowed.add(f"{t_up}010")
-        elif t_up.endswith("010") and len(t_up) > 3:  # Nome físico da tabela no ERP (ex: SA1010)
-            normalized_allowed.add(t_up[:-3])
-
-    # Ignorar palavras-chave SQL que possam ser erroneamente apanhadas por sintaxes aninhadas
-    sql_keywords = {"DUAL", "SELECT", "WHERE", "ORDER", "BY", "GROUP", "HAVING", "FETCH", "FIRST", "ROWS", "ONLY", "INNER", "LEFT", "RIGHT", "OUTER", "ON"}
-
-    for tbl in found_tables:
-        t_up = tbl.upper()
-        if t_up in sql_keywords:
-            continue
-        # Se a tabela não casa com nenhuma tabela autorizada
-        if t_up not in normalized_allowed and not any(t_up.startswith(a) for a in normalized_allowed):
+    for keyword in forbidden_keywords:
+        if re.search(rf"\b{keyword}\b", upper_sql):
             raise HTTPException(
                 status_code=403,
-                detail=f"Bloqueio de Segurança RBAC: A consulta SQL tenta acessar a tabela '{tbl}', que não está autorizada no escopo de módulos/dicionário permitido da empresa."
+                detail=f"Bloqueio de Segurança: operação '{keyword}' é proibida via consulta analítica.",
             )
 
-    # 4. Verificar filtro obrigatório do Protheus para exclusões lógicas (D_E_L_E_T_ <> '*')
-    if "D_E_L_E_T_" not in upper_sql:
+    if re.search(r"\bSELECT\s+(?:DISTINCT\s+)?\*", upper_sql) or re.search(r"\b[A-Z][A-Z0-9_$#]*\.\*", upper_sql):
+        raise HTTPException(status_code=400, detail="SELECT * não é permitido; selecione somente os campos necessários.")
+
+    if re.search(r"\bSELECT\s+TOP\s+\d+", upper_sql) or re.search(r"\bLIMIT\s+\d+", upper_sql):
+        raise HTTPException(status_code=400, detail="TOP/LIMIT não são permitidos no Oracle; use ROWNUM ou FETCH FIRST.")
+
+    if not _has_oracle_limit(upper_sql) and not re.search(r"\b(?:SUM|COUNT|MAX|MIN|AVG)\s*\(", upper_sql):
         raise HTTPException(
             status_code=400,
-            detail="Violação da Diretriz de Consulta Protheus: Toda consulta nativa deve filtrar registros excluídos no ERP, contendo explicitamente a cláusula (D_E_L_E_T_ <> '*')."
+            detail="A consulta não agregada precisa possuir limite Oracle com ROWNUM ou FETCH FIRST.",
         )
+
+    normalized_allowed = _normalize_allowed_tables(allowed_tables)
+    table_refs = _extract_table_refs(upper_sql)
+    if not table_refs:
+        raise HTTPException(status_code=400, detail="A consulta não possui uma tabela autorizável no FROM/JOIN.")
+
+    for table_name, _alias in table_refs:
+        if table_name not in normalized_allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Bloqueio de Segurança RBAC: a tabela '{table_name}' não está autorizada no snapshot.",
+            )
+
+    if len(table_refs) == 1:
+        if "D_E_L_E_T_" not in upper_sql:
+            raise HTTPException(status_code=400, detail="Toda tabela Protheus deve filtrar D_E_L_E_T_ <> '*'.")
+    else:
+        for table_name, alias in table_refs:
+            qualified_filters = [
+                f"{alias}.D_E_L_E_T_" if alias else "",
+                f"{table_name}.D_E_L_E_T_",
+            ]
+            if not any(filter_name and filter_name in upper_sql for filter_name in qualified_filters):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A tabela '{table_name}' não possui filtro lógico D_E_L_E_T_ próprio.",
+                )
+
+    if allowed_fields:
+        normalized_fields = {str(field).strip().upper() for field in allowed_fields if str(field).strip()}
+        selected_fields = _extract_selected_fields(upper_sql)
+        unauthorized = sorted(field for field in selected_fields if field not in normalized_fields and field != "D_E_L_E_T_")
+        if unauthorized:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Bloqueio de Segurança RBAC: campo(s) não autorizado(s) no SELECT: {', '.join(unauthorized[:5])}.",
+            )
+
+    if "D_E_L_E_T_" not in upper_sql:
+        raise HTTPException(status_code=400, detail="Toda consulta nativa deve filtrar registros excluídos com D_E_L_E_T_ <> '*'.")
 
     return True
