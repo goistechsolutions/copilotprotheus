@@ -83,6 +83,14 @@ class EntitlementDecision:
         }
 
 
+@dataclass
+class DictionaryAuthorization:
+    allowed_tables: set[str] = field(default_factory=set)
+    allowed_fields_by_table: dict[str, set[str]] = field(default_factory=dict)
+    filter_fields_by_table: dict[str, set[str]] = field(default_factory=dict)
+    masked_fields_by_table: dict[str, set[str]] = field(default_factory=dict)
+
+
 class EntitlementGuard:
     """Valida os direitos contratados antes da geração/execução de uma consulta."""
 
@@ -628,6 +636,97 @@ class EntitlementGuard:
             )
         return decision
 
+    def authorize_dictionary_details(
+        self,
+        db: Any,
+        *,
+        tenant_schema: str,
+        tenant_code: str,
+        environment_code: str,
+        company_id: int | str | None,
+        role_id: str | None,
+        table_names: Iterable[str],
+    ) -> DictionaryAuthorization:
+        """Retorna autorização de tabela, seleção, filtro e mascaramento.
+
+        A consulta é feita dentro do schema já resolvido do tenant. Nenhuma
+        permissão ausente é convertida em permissão positiva.
+        """
+        names: set[str] = set()
+        for value in table_names:
+            names.update(self._table_tokens(value))
+        if not names or not role_id:
+            return DictionaryAuthorization()
+        schema_name = self._clean(tenant_schema).lower()
+        schema = quote_tenant_schema(schema_name)
+        if not self._schema_table_exists(db, schema_name, "tenant_table_permissions"):
+            return DictionaryAuthorization()
+
+        params = {
+            "tenant_code": self._lower(tenant_code),
+            "environment_code": self._clean(environment_code),
+            "role_id": self._clean(role_id),
+            "company_id": self._clean(company_id),
+        }
+        role_match = """
+                  AND (
+                        btrim(role_id) = :role_id
+                     OR lower(btrim(role_id)) = lower(btrim((
+                            SELECT role_code
+                            FROM public.roles
+                            WHERE id::text = :role_id
+                            LIMIT 1
+                        )))
+                  )
+        """
+        table_rows = db.execute(
+            text(f"""
+                SELECT table_name
+                FROM {schema}.tenant_table_permissions
+                WHERE lower(btrim(tenant_id)) = :tenant_code
+                  AND environment_id = :environment_code
+                  {role_match}
+                  AND can_query = TRUE
+                  AND (company_id IS NULL OR company_id::text = :company_id)
+            """),
+            params,
+        ).mappings().all()
+        allowed_tables: set[str] = set()
+        for row in table_rows:
+            allowed_tables.update(self._table_tokens(row.get("table_name")))
+        allowed_tables &= names
+        authorization = DictionaryAuthorization(allowed_tables=allowed_tables)
+        if not allowed_tables:
+            return authorization
+
+        if not self._schema_table_exists(db, schema_name, "tenant_field_permissions"):
+            return authorization
+        field_rows = db.execute(
+            text(f"""
+                SELECT table_name, field_name, can_select, can_filter, masked_flag
+                FROM {schema}.tenant_field_permissions
+                WHERE lower(btrim(tenant_id)) = :tenant_code
+                  AND environment_id = :environment_code
+                  {role_match}
+                  AND (company_id IS NULL OR company_id::text = :company_id)
+            """),
+            params,
+        ).mappings().all()
+        for row in field_rows:
+            table_name = self._clean(row.get("table_name")).upper()
+            field_name = self._clean(row.get("field_name")).upper()
+            normalized_tables = self._table_tokens(table_name) & allowed_tables
+            if not normalized_tables or not field_name:
+                continue
+            for normalized_table in normalized_tables:
+                if bool(row.get("can_select")):
+                    authorization.allowed_fields_by_table.setdefault(normalized_table, set()).add(field_name)
+                if bool(row.get("can_filter")):
+                    authorization.filter_fields_by_table.setdefault(normalized_table, set()).add(field_name)
+                if bool(row.get("can_select")) and bool(row.get("masked_flag")):
+                    authorization.masked_fields_by_table.setdefault(normalized_table, set()).add(field_name)
+        return authorization
+
     def authorize_dictionary(
         self,
         db: Any,
@@ -639,81 +738,14 @@ class EntitlementGuard:
         role_id: str | None,
         table_names: Iterable[str],
     ) -> tuple[set[str], dict[str, set[str]]]:
-        """Retorna tabelas consultáveis e campos selecionáveis por tabela.
-
-        A consulta é feita dentro do schema já resolvido do tenant. Nenhuma
-        permissão ausente é convertida em permissão positiva.
-        """
-        names: set[str] = set()
-        for value in table_names:
-            names.update(self._table_tokens(value))
-        if not names or not role_id:
-            return set(), {}
-        schema_name = self._clean(tenant_schema).lower()
-        schema = quote_tenant_schema(schema_name)
-        if not self._schema_table_exists(db, schema_name, "tenant_table_permissions"):
-            return set(), {}
-
-        params = {
-            "tenant_code": self._lower(tenant_code),
-            "environment_code": self._clean(environment_code),
-            "role_id": self._clean(role_id),
-            "company_id": self._clean(company_id),
-        }
-        table_rows = db.execute(
-            text(f"""
-                SELECT table_name
-                FROM {schema}.tenant_table_permissions
-                WHERE lower(btrim(tenant_id)) = :tenant_code
-                  AND environment_id = :environment_code
-                  AND (
-                        btrim(role_id) = :role_id
-                     OR lower(btrim(role_id)) = lower(btrim((
-                            SELECT role_code
-                            FROM public.roles
-                            WHERE id::text = :role_id
-                            LIMIT 1
-                        )))
-                  )
-                  AND can_query = TRUE
-                  AND (company_id IS NULL OR company_id::text = :company_id)
-            """),
-            params,
-        ).mappings().all()
-        allowed_tables: set[str] = set()
-        for row in table_rows:
-            allowed_tables.update(self._table_tokens(row.get("table_name")))
-        allowed_tables &= names
-        if not allowed_tables:
-            return set(), {}
-
-        if not self._schema_table_exists(db, schema_name, "tenant_field_permissions"):
-            return allowed_tables, {}
-        field_rows = db.execute(
-            text(f"""
-                SELECT table_name, field_name
-                FROM {schema}.tenant_field_permissions
-                WHERE lower(btrim(tenant_id)) = :tenant_code
-                  AND environment_id = :environment_code
-                  AND (
-                        btrim(role_id) = :role_id
-                     OR lower(btrim(role_id)) = lower(btrim((
-                            SELECT role_code
-                            FROM public.roles
-                            WHERE id::text = :role_id
-                            LIMIT 1
-                        )))
-                  )
-                  AND can_select = TRUE
-                  AND (company_id IS NULL OR company_id::text = :company_id)
-            """),
-            params,
-        ).mappings().all()
-        allowed_fields_by_table: dict[str, set[str]] = {}
-        for row in field_rows:
-            table_name = self._clean(row.get("table_name")).upper()
-            field_name = self._clean(row.get("field_name")).upper()
-            if self._table_tokens(table_name) & allowed_tables and field_name:
-                for normalized_table in self._table_tokens(table_name) & allowed_tables:
-                    allowed_fields_by_table.setdefault(normalized_table, set()).add(field_name)
-        return allowed_tables, allowed_fields_by_table
+        """Compatibilidade: retorna apenas tabelas e campos selecionáveis."""
+        authorization = self.authorize_dictionary_details(
+            db,
+            tenant_schema=tenant_schema,
+            tenant_code=tenant_code,
+            environment_code=environment_code,
+            company_id=company_id,
+            role_id=role_id,
+            table_names=table_names,
+        )
+        return authorization.allowed_tables, authorization.allowed_fields_by_table
