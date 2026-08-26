@@ -288,21 +288,6 @@ async def process_agent_task(task_id: str, payload: dict):
 
                 return
 
-            context_text = render_context_for_prompt(context)
-            allowed_table_names = {item["table"]["table_name"] for item in context}
-            allowed_field_names = {
-                str(field.get("field_name")).upper()
-                for item in context
-                for field in item.get("fields", [])
-                if field.get("field_name")
-            }
-            for item in context:
-                table = item["table"]
-                if table.get("physical_name"):
-                    allowed_table_names.add(table["physical_name"])
-                if table.get("table_alias"):
-                    allowed_table_names.add(table["table_alias"])
-
             permission_table_names = {
                 str(name).strip()
                 for item in context
@@ -339,11 +324,63 @@ async def process_agent_task(task_id: str, payload: dict):
                         "correlation_id": correlation_id,
                     }
                     return
-                allowed_field_names = {
-                    field_name
-                    for field_names in allowed_fields_by_table.values()
-                    for field_name in field_names
-                }
+
+                permission_tokens = {str(value).strip().upper() for value in allowed_permission_tables}
+                filtered_context = []
+                for item in context:
+                    table = item["table"]
+                    table_tokens = {
+                        str(name).strip().upper()
+                        for name in (
+                            table.get("table_name"),
+                            table.get("physical_name"),
+                            table.get("table_alias"),
+                        )
+                        if name
+                    }
+                    matched_tokens = table_tokens & permission_tokens
+                    if not matched_tokens:
+                        continue
+                    permitted_fields = {
+                        str(field_name).strip().upper()
+                        for token in matched_tokens
+                        for field_name in allowed_fields_by_table.get(token, set())
+                    }
+                    visible_fields = [
+                        field for field in item.get("fields", [])
+                        if str(field.get("field_name") or "").strip().upper() in permitted_fields
+                    ]
+                    if not visible_fields:
+                        continue
+                    filtered_context.append({**item, "fields": visible_fields})
+
+                context = filtered_context
+                if not context:
+                    AGENT_TASKS[task_id] = {
+                        "status": "error",
+                        "error": "As permissões do perfil não autorizam campos selecionáveis nas tabelas do snapshot.",
+                        "error_code": "FIELD_PERMISSION_DENIED",
+                        "correlation_id": correlation_id,
+                    }
+                    return
+
+            context_text = render_context_for_prompt(context)
+            allowed_table_names = {
+                str(name).strip()
+                for item in context
+                for name in (
+                    item["table"].get("table_name"),
+                    item["table"].get("physical_name"),
+                    item["table"].get("table_alias"),
+                )
+                if name
+            }
+            allowed_field_names = {
+                str(field.get("field_name")).upper()
+                for item in context
+                for field in item.get("fields", [])
+                if field.get("field_name")
+            }
 
             # 4. LLM
             sql = await real_llm_sql_generator(
