@@ -508,6 +508,8 @@ class EntitlementGuard:
             user_id=self._clean(user_identity) or None,
             role_id=self._clean(role_id) or None,
         )
+        if self.mode == "off":
+            return decision
         if tenant in _INVALID_CONTEXT:
             self._issue(decision, "TENANT_REQUIRED", "Tenant real é obrigatório.")
             return decision
@@ -576,6 +578,82 @@ class EntitlementGuard:
 
         return decision
 
+    def _handle_denial(
+        self,
+        db: Any,
+        decision: EntitlementDecision,
+        correlation_id: str,
+    ) -> EntitlementDecision:
+        if decision.allowed:
+            return decision
+        logger.warning(
+            "entitlement_denied mode=%s tenant=%s environment=%s module=%s codes=%s correlation_id=%s",
+            self.mode,
+            decision.tenant_code,
+            decision.environment_code,
+            decision.module_code,
+            ",".join(issue["code"] for issue in decision.issues),
+            correlation_id,
+        )
+        if self.mode == "enforce":
+            self._audit(db, decision, correlation_id, "entitlement_denied")
+            issue = decision.issues[0]
+            status_code = 429 if issue["code"] in {"QUERY_LIMIT_EXCEEDED", "CONCURRENT_SESSION_LIMIT_EXCEEDED"} else 403
+            raise EntitlementDenied(issue["code"], issue["message"], status_code=status_code)
+        return decision
+
+    def authorize(
+        self,
+        db: Any,
+        *,
+        tenant_code: str,
+        environment_code: str,
+        module_code: str,
+        user_identity: str | None = None,
+        role_id: str | None = None,
+        correlation_id: str = "",
+    ) -> EntitlementDecision:
+        """Avalia direitos sem consumir franquia nem abrir lease de sessão."""
+        if self.mode == "off":
+            return EntitlementDecision(
+                allowed=True,
+                mode="off",
+                tenant_code=self._lower(tenant_code),
+                environment_code=self._clean(environment_code),
+                module_code=self._clean(module_code),
+            )
+        decision = self.evaluate(
+            db,
+            tenant_code=tenant_code,
+            environment_code=environment_code,
+            module_code=module_code,
+            user_identity=user_identity,
+            role_id=role_id,
+        )
+        return self._handle_denial(db, decision, correlation_id)
+
+    def reserve(
+        self,
+        db: Any,
+        decision: EntitlementDecision,
+        *,
+        session_key: str | None = None,
+        correlation_id: str = "",
+    ) -> EntitlementDecision:
+        """Reserva consulta e conexão imediatamente antes da execução no Protheus.
+
+        A reserva de consulta representa uma tentativa autorizada. Se o QueryRest
+        falhar depois dessa etapa, o uso permanece contabilizado para auditoria;
+        não há reembolso implícito de franquia.
+        """
+        if self.mode != "enforce":
+            return decision
+        self._handle_denial(db, decision, correlation_id)
+        self._reserve_query(db, decision, correlation_id)
+        self._acquire_session(db, decision, session_key or correlation_id, decision.user_id)
+        self._audit(db, decision, correlation_id, "entitlement_reserved")
+        return decision
+
     def check_and_reserve(
         self,
         db: Any,
@@ -588,53 +666,22 @@ class EntitlementGuard:
         session_key: str | None = None,
         correlation_id: str = "",
     ) -> EntitlementDecision:
-        if self.mode == "off":
-            return EntitlementDecision(
-                allowed=True,
-                mode="off",
-                tenant_code=self._lower(tenant_code),
-                environment_code=self._clean(environment_code),
-                module_code=self._clean(module_code),
-            )
-
-        decision = self.evaluate(
+        """Compatibilidade para chamadores legados que ainda precisam dos dois passos."""
+        decision = self.authorize(
             db,
             tenant_code=tenant_code,
             environment_code=environment_code,
             module_code=module_code,
             user_identity=user_identity,
             role_id=role_id,
+            correlation_id=correlation_id,
         )
-        if not decision.allowed:
-            logger.warning(
-                "entitlement_denied mode=%s tenant=%s environment=%s module=%s codes=%s correlation_id=%s",
-                self.mode,
-                decision.tenant_code,
-                decision.environment_code,
-                decision.module_code,
-                ",".join(issue["code"] for issue in decision.issues),
-                correlation_id,
-            )
-            if self.mode == "enforce":
-                self._audit(db, decision, correlation_id, "entitlement_denied")
-                issue = decision.issues[0]
-                status_code = 429 if issue["code"] in {"QUERY_LIMIT_EXCEEDED", "CONCURRENT_SESSION_LIMIT_EXCEEDED"} else 403
-                raise EntitlementDenied(issue["code"], issue["message"], status_code=status_code)
-            return decision
-
-        if self.mode == "enforce":
-            self._reserve_query(db, decision, correlation_id)
-            self._acquire_session(db, decision, session_key or correlation_id, decision.user_id)
-            self._audit(db, decision, correlation_id, "entitlement_reserved")
-        else:
-            logger.info(
-                "entitlement_shadow_allowed tenant=%s environment=%s module=%s contract=%s",
-                decision.tenant_code,
-                decision.environment_code,
-                decision.module_code,
-                decision.contract_code,
-            )
-        return decision
+        return self.reserve(
+            db,
+            decision,
+            session_key=session_key,
+            correlation_id=correlation_id,
+        )
 
     def authorize_dictionary_details(
         self,
