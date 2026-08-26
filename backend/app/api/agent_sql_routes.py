@@ -303,6 +303,47 @@ async def process_agent_task(task_id: str, payload: dict):
                 if table.get("table_alias"):
                     allowed_table_names.add(table["table_alias"])
 
+            permission_table_names = {
+                str(name).strip()
+                for item in context
+                for name in (
+                    item["table"].get("table_name"),
+                    item["table"].get("physical_name"),
+                    item["table"].get("table_alias"),
+                )
+                if name
+            }
+            allowed_permission_tables, allowed_fields_by_table = entitlement_guard.authorize_dictionary(
+                db=db,
+                tenant_schema=ctx.schema_name,
+                tenant_code=ctx.tenant_id,
+                environment_code=environment_code,
+                company_id=ctx.company_id,
+                role_id=entitlement.role_id,
+                table_names=permission_table_names,
+            )
+            if entitlement_guard.mode == "enforce":
+                if not allowed_permission_tables:
+                    AGENT_TASKS[task_id] = {
+                        "status": "error",
+                        "error": "Nenhuma permissão de tabela autoriza consultas para o perfil informado.",
+                        "error_code": "TABLE_PERMISSION_DENIED",
+                        "correlation_id": correlation_id,
+                    }
+                    return
+                if not allowed_fields_by_table:
+                    AGENT_TASKS[task_id] = {
+                        "status": "error",
+                        "error": "Nenhuma permissão de campo autoriza retorno para o perfil informado.",
+                        "error_code": "FIELD_PERMISSION_DENIED",
+                        "correlation_id": correlation_id,
+                    }
+                    return
+                allowed_field_names = {
+                    field_name
+                    for field_names in allowed_fields_by_table.values()
+                    for field_name in field_names
+                }
 
             # 4. LLM
             sql = await real_llm_sql_generator(
@@ -323,6 +364,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 sql=sql,
                 allowed_tables=allowed_table_names,
                 allowed_fields=allowed_field_names,
+                allowed_fields_by_table=allowed_fields_by_table if entitlement_guard.mode == "enforce" else None,
                 filial=op_context["xfilial"],
             )
 
