@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, TrendingUp, AlertCircle, Hash, Info } from 'lucide-react';
+import { AlertCircle, Info } from 'lucide-react';
 
 export default function ResultCards({ result }) {
   if (!result) return null;
@@ -58,3 +58,4 @@ export default function ResultCards({ result }) {
     </div>
   );
 }
+
