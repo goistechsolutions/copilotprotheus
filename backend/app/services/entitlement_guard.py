@@ -110,6 +110,18 @@ class EntitlementGuard:
             return None
 
     @staticmethod
+    def _table_tokens(value: Any) -> set[str]:
+        token = str(value or "").strip().upper()
+        if not token:
+            return set()
+        tokens = {token}
+        if len(token) == 3:
+            tokens.add(f"{token}010")
+        elif token.endswith("010") and len(token) > 3:
+            tokens.add(token[:-3])
+        return tokens
+
+    @staticmethod
     def _schema_table_exists(db: Any, schema_name: str, table_name: str) -> bool:
         row = db.execute(
             text("""
@@ -629,7 +641,9 @@ class EntitlementGuard:
         A consulta é feita dentro do schema já resolvido do tenant. Nenhuma
         permissão ausente é convertida em permissão positiva.
         """
-        names = {self._clean(value).upper() for value in table_names if self._clean(value)}
+        names: set[str] = set()
+        for value in table_names:
+            names.update(self._table_tokens(value))
         if not names or not role_id:
             return set(), {}
         schema_name = self._clean(tenant_schema).lower()
@@ -655,7 +669,9 @@ class EntitlementGuard:
             """),
             params,
         ).mappings().all()
-        allowed_tables = {self._clean(row.get("table_name")).upper() for row in table_rows}
+        allowed_tables: set[str] = set()
+        for row in table_rows:
+            allowed_tables.update(self._table_tokens(row.get("table_name")))
         allowed_tables &= names
         if not allowed_tables:
             return set(), {}
@@ -678,6 +694,7 @@ class EntitlementGuard:
         for row in field_rows:
             table_name = self._clean(row.get("table_name")).upper()
             field_name = self._clean(row.get("field_name")).upper()
-            if table_name in allowed_tables and field_name:
-                allowed_fields_by_table.setdefault(table_name, set()).add(field_name)
+            if self._table_tokens(table_name) & allowed_tables and field_name:
+                for normalized_table in self._table_tokens(table_name) & allowed_tables:
+                    allowed_fields_by_table.setdefault(normalized_table, set()).add(field_name)
         return allowed_tables, allowed_fields_by_table
