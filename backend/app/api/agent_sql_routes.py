@@ -29,6 +29,7 @@ from app.services.protheus_context_service import (
 )
 from app.services.protheus_service import get_tenant_config
 from app.services.queryrest_service import queryrest_exec_tenant
+from app.services.entitlement_guard import EntitlementDenied, EntitlementGuard
 
 logger = logging.getLogger("app.api.agent_sql")
 router = APIRouter(prefix="/agent", tags=["agent-sql"])
@@ -204,9 +205,43 @@ async def process_agent_task(task_id: str, payload: dict):
                 db.execute(text(f'SET search_path TO {clean_tenant}, public'))
                 db.commit()
 
-            # 2. Valida cota e limite diário
-            from app.core.rate_limit import check_tenant_rate_limit
-            rate_info = check_tenant_rate_limit(db, clean_tenant)
+            # 2. Entitlements: licença, usuário, módulo, consumo e conexões.
+            context_payload = payload.get("context") or {}
+            entitlement_guard = EntitlementGuard()
+            user_identity = (
+                payload.get("user_id")
+                or context_payload.get("user_id")
+                or context_payload.get("user")
+                or context_payload.get("usuario")
+            )
+            role_id = payload.get("role_id") or context_payload.get("role_id") or context_payload.get("profile") or context_payload.get("perfil")
+            session_key = payload.get("session_key") or context_payload.get("session_key") or correlation_id
+            try:
+                entitlement = entitlement_guard.check_and_reserve(
+                    db,
+                    tenant_code=ctx.tenant_id,
+                    environment_code=environment_code,
+                    module_code=ctx.module_code,
+                    user_identity=str(user_identity) if user_identity else None,
+                    role_id=str(role_id) if role_id else None,
+                    session_key=str(session_key),
+                    correlation_id=correlation_id,
+                )
+            except EntitlementDenied as exc:
+                AGENT_TASKS[task_id] = {
+                    "status": "error",
+                    "error": exc.message,
+                    "error_code": exc.code,
+                    "correlation_id": correlation_id,
+                }
+                return
+
+            if not entitlement.allowed:
+                logger.warning(
+                    "entitlement_shadow_issues task_id=%s codes=%s",
+                    task_id,
+                    ",".join(issue["code"] for issue in entitlement.issues),
+                )
 
             # 3. Montar contexto XFILIAL
             # O build_protheus_context legada continua operando para gerar a string xfilial
@@ -311,6 +346,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 "tables_in_context": len(context),
                 "tables_used": context_tables,
                 "sql": sql,
+                "entitlement": entitlement.as_dict(),
                 "response_time_ms": int((time.time() - started) * 1000),
             }
 
