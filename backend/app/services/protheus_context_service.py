@@ -115,7 +115,7 @@ def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
 
 def _extract_filter_field_refs(sql: str) -> set[tuple[str | None, str]]:
     match = re.search(
-        r"\\bWHERE\\b(?P<body>.*?)(?:\\bGROUP\\s+BY\\b|\\bORDER\\s+BY\\b|\\bHAVING\\b|\\bFETCH\\b|\\bOFFSET\\b|$)",
+        r"\bWHERE\b(?P<body>.*?)(?:\bGROUP\s+BY\b|\bORDER\s+BY\b|\bHAVING\b|\bFETCH\b|\bOFFSET\b|$)",
         sql,
         re.IGNORECASE | re.DOTALL,
     )
@@ -124,13 +124,13 @@ def _extract_filter_field_refs(sql: str) -> set[tuple[str | None, str]]:
     body = match.group("body")
     fields: set[tuple[str | None, str]] = set()
     qualified_pattern = re.compile(
-        r"\\b([A-Z][A-Z0-9_$#]*)\\.([A-Z][A-Z0-9_$#]*)\\s*"
-        r"(?:(?:NOT\\s+)?(?:LIKE|IN|BETWEEN|IS)|<>|!=|<=|>=|=|<|>)",
+        r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\s*"
+        r"(?:(?:NOT\s+)?(?:LIKE|IN|BETWEEN|IS)|<>|!=|<=|>=|=|<|>)",
         re.IGNORECASE,
     )
     unqualified_pattern = re.compile(
-        r"\\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\\s*"
-        r"(?:(?:NOT\\s+)?(?:LIKE|IN|BETWEEN|IS)|<>|!=|<=|>=|=|<|>)",
+        r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\s*"
+        r"(?:(?:NOT\s+)?(?:LIKE|IN|BETWEEN|IS)|<>|!=|<=|>=|=|<|>)",
         re.IGNORECASE,
     )
     for qualifier, field_name in qualified_pattern.findall(body):
