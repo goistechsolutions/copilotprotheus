@@ -17,6 +17,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
 from reportlab.lib.pagesizes import letter
 
 from app.services.protheus_service import execute_protheus_tool
+from app.services.protheus_context_service import mask_sensitive_rows
 from app.services import report_templates as tpl
 
 # Diretório para armazenamento temporário dos relatórios gerados na nuvem
@@ -104,7 +105,13 @@ REPORT_CONFIGS = {
 
 class ReportService:
     @staticmethod
-    async def generate_report(report_type: str, filters: Dict[str, Any], file_format: str, tenant_id: str = "default") -> str:
+    async def generate_report(
+        report_type: str,
+        filters: Dict[str, Any],
+        file_format: str,
+        tenant_id: str,
+        environment_code: str,
+    ) -> str:
         """
         Gera relatório com base no tipo, parâmetros e formato (xlsx ou pdf).
         Retorna o caminho físico do arquivo gerado.
@@ -115,14 +122,22 @@ class ReportService:
         config = REPORT_CONFIGS[report_type]
         endpoint = config["endpoint"]
 
-        # Normaliza cFilial para cFil para compatibilidade com as APIs ADVPL
+        filters = dict(filters or {})
+        environment = str(environment_code or "").strip()
+        if not environment or environment.lower() in {"default", "none", "null"}:
+            raise ValueError("environment_code Protheus é obrigatório e deve ser real.")
+
+        # Normaliza cFilial para cFil para compatibilidade com as APIs ADVPL.
         if "cFilial" in filters:
             filters["cFil"] = filters["cFilial"]
-            # Mantém cFilial também para compatibilidade se necessário
-            # filters.pop("cFilial")
 
-        # Busca dados reais do Protheus
-        res_raw = await execute_protheus_tool(endpoint, filters, tenant_id=tenant_id)
+        # Busca dados reais do Protheus no tenant e ambiente explícitos.
+        res_raw = await execute_protheus_tool(
+            endpoint,
+            filters,
+            tenant_id=tenant_id,
+            environment_code=environment,
+        )
         res_json = json.loads(res_raw)
 
         if "error" in res_json:
@@ -144,6 +159,66 @@ class ReportService:
         else:
             ReportService._build_pdf(file_path, config, items)
 
+        return str(file_path)
+
+    @staticmethod
+    def _structured_items(rows: List[Dict[str, Any]], columns: List[str] | None = None):
+        """Normaliza linhas reais para exportação sem alterar seu conteúdo semântico."""
+        safe_rows = mask_sensitive_rows(rows or [])
+        valid_rows = [row for row in safe_rows if isinstance(row, dict)]
+        if columns:
+            normalized_columns = [str(column).strip() for column in columns if str(column).strip()]
+        else:
+            normalized_columns = []
+            for row in valid_rows:
+                for key in row:
+                    key_text = str(key)
+                    if key_text not in normalized_columns:
+                        normalized_columns.append(key_text)
+        items = [
+            {column: row.get(column, "") for column in normalized_columns}
+            for row in valid_rows
+        ]
+        return normalized_columns, items
+
+    @staticmethod
+    def _infer_formats(items: List[Dict[str, Any]], columns: List[str]) -> Dict[str, str]:
+        formats: Dict[str, str] = {}
+        for column in columns:
+            values = [str(item.get(column, "")).strip() for item in items if item.get(column) not in (None, "")]
+            if not values:
+                continue
+            if all(re.fullmatch(r"\d{8}|\d{2}/\d{2}/\d{4}", value) for value in values):
+                formats[column] = "date"
+            elif all(re.fullmatch(r"(?:R\$\s*)?-?\d+[\d.,]*", value) for value in values):
+                formats[column] = "currency" if any("R$" in value for value in values) else "number"
+        return formats
+
+    @staticmethod
+    async def generate_from_result(
+        rows: List[Dict[str, Any]],
+        file_format: str,
+        title: str = "Relatório Copilot",
+        columns: List[str] | None = None,
+    ) -> str:
+        """Gera XLSX/PDF diretamente do resultado estruturado do QueryRest."""
+        normalized_columns, items = ReportService._structured_items(rows, columns)
+        if not normalized_columns:
+            raise ValueError("O resultado estruturado não possui colunas exportáveis.")
+
+        config = {
+            "title": str(title or "Relatório Copilot").strip()[:160],
+            "headers": normalized_columns,
+            "fields": normalized_columns,
+            "formats": ReportService._infer_formats(items, normalized_columns),
+        }
+        file_id = str(uuid.uuid4())
+        ext = "xlsx" if file_format.lower() == "xlsx" else "pdf"
+        file_path = REPORTS_TMP_DIR / f"structured_{file_id}.{ext}"
+        if ext == "xlsx":
+            ReportService._build_xlsx(file_path, config, items)
+        else:
+            ReportService._build_pdf(file_path, config, items)
         return str(file_path)
 
     @staticmethod
@@ -253,7 +328,7 @@ class ReportService:
 
         # Título do Relatório
         ws.merge_cells(start_row=1, start_column=1, end_row=2, end_column=len(headers))
-        title_cell = ws.cell(row=1, column=1, value=f"RODOL Ltda • {title}")
+        title_cell = ws.cell(row=1, column=1, value=title)
         title_cell.font = tpl.font_title
         title_cell.fill = tpl.fill_title
         title_cell.alignment = tpl.align_center
@@ -357,7 +432,7 @@ class ReportService:
         elements = []
 
         # Título do Relatório
-        elements.append(Paragraph(f"RODOL Ltda • {config['title']}", styles['DocTitle']))
+        elements.append(Paragraph(str(config['title']), styles['DocTitle']))
         
         # Subtítulo com metadados
         gen_time = datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
