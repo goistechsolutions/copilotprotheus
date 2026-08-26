@@ -32,7 +32,7 @@ export default function Conversation({ messages }) {
                   isUser
                     ? 'prose-p:text-[#245c8e] prose-strong:text-[#1f4f7c] prose-code:text-[#245c8e]'
                     : 'prose-slate prose-p:text-[#3f5872] prose-headings:text-[#203c60] prose-strong:text-[#203c60] prose-code:text-[#285f8e]'
-                } prose-p:my-0 prose-headings:mb-2 prose-headings:mt-0 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-pre:rounded-xl prose-pre:bg-[#f3f7fb] prose-pre:text-[#28445f] prose-code:before:content-none prose-code:after:content-none`
+                } prose-p:my-0 prose-headings:mb-2 prose-headings:mt-0 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-pre:rounded-xl prose-pre:bg-[#f3f7fb] prose-pre:text-[#28445f] prose-code:before:content-none prose-code:after:content-none`}
               >
                 <ReactMarkdown>{message.text}</ReactMarkdown>
               </div>
