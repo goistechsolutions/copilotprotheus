@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, User } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 export default function MessageBubble({ role, text }) {
