@@ -17,6 +17,9 @@ class FakeMappings:
     def all(self):
         return self.rows
 
+    def first(self):
+        return self.rows[0] if self.rows else None
+
 
 class FakeDB:
     def __enter__(self):
