@@ -9,7 +9,6 @@ import {
   Plus,
   Send,
   Sparkles,
-  User as UserIcon,
   X,
 } from 'lucide-react';
 import ChatHistory from './components/ChatHistory';
