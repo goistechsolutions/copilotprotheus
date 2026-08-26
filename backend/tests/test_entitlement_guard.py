@@ -23,32 +23,6 @@ class FakeResult:
         return list(self.rows)
 
 
-class UsageDB(FakeDB):
-    def __init__(self, usage_row=None):
-        super().__init__()
-        self.usage_row = usage_row
-
-    def execute(self, query, params=None):
-        sql = str(query).lower()
-        if "to_char(current_date" in sql:
-            return FakeResult(value="2026-08")
-        if "from public.query_usage_counters" in sql:
-            return FakeResult(rows=[self.usage_row] if self.usage_row else [])
-        return super().execute(query, params)
-
-
-class SessionLimitDB(FakeDB):
-    def execute(self, query, params=None):
-        sql = str(query).lower()
-        if "update public.concurrent_sessions" in sql:
-            return FakeResult()
-        if "select id" in sql and "public.concurrent_sessions" in sql:
-            return FakeResult(value=None)
-        if "select count(*)" in sql and "public.concurrent_sessions" in sql:
-            return FakeResult(value=2)
-        return super().execute(query, params)
-
-
 class FakeDB:
     def __init__(self, tenant=True, contract=None, user=None, module=None, table_permissions=None, field_permissions=None):
         self.tenant = tenant
@@ -84,6 +58,32 @@ class FakeDB:
 
     def rollback(self):
         self.rollbacks += 1
+
+
+class UsageDB(FakeDB):
+    def __init__(self, usage_row=None):
+        super().__init__()
+        self.usage_row = usage_row
+
+    def execute(self, query, params=None):
+        sql = str(query).lower()
+        if "to_char(current_date" in sql:
+            return FakeResult(value="2026-08")
+        if "from public.query_usage_counters" in sql:
+            return FakeResult(rows=[self.usage_row] if self.usage_row else [])
+        return super().execute(query, params)
+
+
+class SessionLimitDB(FakeDB):
+    def execute(self, query, params=None):
+        sql = str(query).lower()
+        if "update public.concurrent_sessions" in sql:
+            return FakeResult()
+        if "select id" in sql and "public.concurrent_sessions" in sql:
+            return FakeResult(value=None)
+        if "select count(*)" in sql and "public.concurrent_sessions" in sql:
+            return FakeResult(value=2)
+        return super().execute(query, params)
 
 
 def entitlement_decision(**overrides):
