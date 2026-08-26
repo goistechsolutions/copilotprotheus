@@ -220,43 +220,46 @@ class ConfigUpdate(BaseModel):
 
 @router.get("/config")
 def get_config(admin: str = Depends(verify_admin)):
-    """Retorna chaves do .env — oculta segredos de tenant e senhas."""
+    """Retorna somente configurações seguras ou o estado configurado de segredos."""
     config_dict = dotenv.dotenv_values(ENV_PATH)
-    keys_to_hide = [
-        "PROTHEUS_REST_URL", "PROTHEUS_USER", "PROTHEUS_PASSWORD",
-        "PROTHEUS_URL", "PROTHEUS_ENVIRONMENT", "WEBAPP_URL",
-        "FERNET_KEY", "JWT_SECRET", "ADMIN_PASSWORD",
-    ]
-    for k in keys_to_hide:
-        config_dict.pop(k, None)
-    default_keys = [
-        "R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME",
-        "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_API_TOKEN", "HETZNER_API_TOKEN",
-        "LLM_BACKEND", "GEMINI_MODEL", "GEMINI_API_KEY",
-        "OLLAMA_MODEL", "OLLAMA_BASE_URL",
-    ]
-    for key in default_keys:
-        if key not in config_dict:
-            config_dict[key] = ""
-    return {"configs": config_dict}
+    for key in _MANAGED_CONFIG_KEYS:
+        config_dict.setdefault(key, "")
+    safe_configs = {
+        str(key).upper(): _safe_config_value(str(key), value)
+        for key, value in config_dict.items()
+        if key
+    }
+    return {"configs": safe_configs}
 
 
 @router.post("/config")
 def update_config(update: ConfigUpdate, admin: str = Depends(verify_admin)):
-    """Atualiza uma chave no .env e em os.environ."""
+    """Atualiza uma chave permitida no .env sem revelar o valor anterior."""
+    key = str(update.key or "").strip().upper()
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]{1,99}", key):
+        raise HTTPException(status_code=400, detail="Nome de configuração inválido.")
+
     config_dict = dotenv.dotenv_values(ENV_PATH)
-    config_dict[update.key] = update.value
+    if key not in config_dict and key not in _MANAGED_CONFIG_KEYS:
+        raise HTTPException(status_code=400, detail="Configuração não permitida pelo painel.")
+
+    value = str(update.value or "")
+    if _is_sensitive_config_key(key) and value.strip().lower() in _CONFIG_SENTINELS:
+        raise HTTPException(status_code=400, detail="Informe um novo valor somente para substituir o segredo.")
+
+    config_dict[key] = value
     with open(ENV_PATH, "w", encoding="utf-8") as f:
-        for k, v in config_dict.items():
-            if v is not None:
-                f.write(f"{k}='{str(v).replace(chr(10), chr(92)+'n')}'\n")
+        for config_key, config_value in config_dict.items():
+            if config_value is not None:
+                escaped = str(config_value).replace(chr(10), chr(92) + "n").replace("'", "'\\''")
+                f.write(f"{config_key}='{escaped}'\n")
             else:
-                f.write(f"{k}=\n")
-    os.environ[update.key] = update.value
-    key_lower = update.key.lower()
+                f.write(f"{config_key}=\n")
+    os.environ[key] = value
+    key_lower = key.lower()
     if hasattr(settings, key_lower):
-        setattr(settings, key_lower, update.value)
-    return {"success": True, "message": f"Chave {update.key} atualizada."}
+        setattr(settings, key_lower, value)
+    return {"success": True, "message": f"Chave {key} atualizada."}
 
 
 # ─────────────────────────────────────────────────────────────
