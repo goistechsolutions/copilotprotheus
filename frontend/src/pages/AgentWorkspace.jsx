@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { api } from '../services/api';
+import { askAgent, getAgentTaskStatus } from '../services/api';
 import ContextBanner from '../components/ContextBanner';
 import Composer from '../components/Composer';
 import HistoryRail from '../components/HistoryRail';
@@ -14,6 +14,18 @@ const suggestions = [
   { title: 'Top 5 produtos', subtitle: 'mais vendidos' },
   { title: 'Clientes com risco', subtitle: 'inadimplência' },
 ];
+
+async function waitForAgentTask(taskId, timeoutMs = 120000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const task = await getAgentTaskStatus(taskId);
+    if (['success', 'execution_failed', 'error', 'completed'].includes(task.status)) {
+      return task;
+    }
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }
+  throw new Error('Tempo limite excedido aguardando o processamento do agente.');
+}
 
 function readContextFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -149,12 +161,19 @@ export default function AgentWorkspace() {
         execute: true,
       };
 
-      const res = await api.askAgent(payload);
+      const accepted = await askAgent(payload);
+      const res = accepted.task_id
+        ? await waitForAgentTask(accepted.task_id)
+        : accepted;
 
       setResult(res);
       
       let replyMessage = 'Consulta concluída.';
-      if (res.summary) replyMessage = res.summary;
+      if (res.status === 'execution_failed') {
+        replyMessage = `Consulta não executada no Protheus: ${res.execution_error || 'o ERP retornou uma falha.'}`;
+      } else if (res.status === 'error') {
+        replyMessage = `Consulta bloqueada: ${res.error || 'o contexto não foi validado.'}`;
+      } else if (res.summary) replyMessage = res.summary;
       else if (res.message) replyMessage = res.message;
       else if (res.answer) replyMessage = res.answer;
       
