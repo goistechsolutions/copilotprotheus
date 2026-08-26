@@ -139,7 +139,7 @@ export default function PermissionEditorPage() {
     const fields = Array.isArray(table.campos) ? table.campos.map(field => {
       const current = fieldPermissions[fieldKey(table, field)] || {};
       return { field_name: String(field.campo || field.field_name || '').toUpperCase(), can_select: current.can_select === true, can_filter: current.can_filter === true, masked_flag: current.masked_flag === true };
-    }).filter(field => field.field_name);
+    }).filter(field => field.field_name) : [];
     try {
       await api.post('/api/admin/permissions', { tenant_id: selectedTenant, environment_id: environmentId.trim(), role_id: selectedRole, table_name: name, can_list: tablePermission.can_list === true, can_describe: tablePermission.can_describe === true, can_query: tablePermission.can_query === true, field_permissions: fields });
       setNotice(`Permissões da tabela ${name} salvas para o perfil selecionado.`);
