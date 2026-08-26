@@ -117,6 +117,30 @@ def _parse_schema_json(raw) -> dict:
     return raw or {}
 
 
+def _existing_columns(db: Session, schema_name: str, table_name: str) -> set[str]:
+    rows = db.execute(
+        text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = :schema_name
+              AND table_name = :table_name
+        """),
+        {"schema_name": schema_name, "table_name": table_name},
+    ).scalars().all()
+    return {str(column) for column in rows}
+
+
+def _role_storage_id(db: Session, role_id: str) -> str:
+    clean_role = str(role_id or "").strip()
+    if not clean_role:
+        raise HTTPException(status_code=400, detail="role_id é obrigatório para editar permissões.")
+    role_code = db.execute(
+        text("SELECT role_code FROM public.roles WHERE id::text = :role_id LIMIT 1"),
+        {"role_id": clean_role},
+    ).scalar()
+    return str(role_code).strip() if role_code else clean_role
+
+
 # ─── Admin: Snapshot / Sincronização ─────────────────────────────────────────
 
 @router.post("/api/admin/dictionary/snapshot", summary="Aciona sincronização do dicionário Protheus (V5)")
