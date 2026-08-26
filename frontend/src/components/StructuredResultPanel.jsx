@@ -89,11 +89,13 @@ function buildCsv(rows, columns) {
 }
 
 function getSafeRows(result) {
-  const candidateRows = Array.isArray(result?.data)
-    ? result.data
-    : Array.isArray(result?.items)
-      ? result.items
-      : [];
+  const candidateRows = Array.isArray(result?.structured?.rows)
+    ? result.structured.rows
+    : Array.isArray(result?.data)
+      ? result.data
+      : Array.isArray(result?.items)
+        ? result.items
+        : [];
   return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
 }
 
@@ -228,7 +230,12 @@ export default function StructuredResultPanel({ result, onClose }) {
 
   const rows = useMemo(() => getSafeRows(result), [result]);
   const summaryText = useMemo(() => resultSummaryText(result?.summary), [result?.summary]);
-  const columns = useMemo(() => Object.keys(rows[0] || {}), [rows]);
+  const columns = useMemo(() => {
+    const structuredColumns = result?.structured?.columns;
+    return Array.isArray(structuredColumns) && structuredColumns.length
+      ? structuredColumns
+      : Object.keys(rows[0] || {});
+  }, [result?.structured?.columns, rows]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -253,7 +260,7 @@ export default function StructuredResultPanel({ result, onClose }) {
   }, [columns, filterColumn, filterValue, rows, search, sort]);
 
   const visibleRows = filteredRows.slice(0, MAX_ROWS);
-  const records = result?.records ?? rows.length;
+  const records = result?.structured?.total_records ?? result?.records ?? rows.length;
   const isError = result?.status === 'execution_failed' || result?.status === 'error' || result?.error;
 
   const toggleSort = column => {
