@@ -25,16 +25,34 @@ class FakeDB:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def execute(self, *_args, **_kwargs):
-        return FakeMappings([
-            {
-                "field_name": "A1_COD",
-                "field_label": "Código",
-                "field_type": "C",
-                "field_length": 6,
-                "field_decimal": 0,
+    def execute(self, statement, params=None):
+        sql = str(statement).lower()
+        params = params or {}
+        if "information_schema.columns" in sql:
+            table_name = params.get("table_name")
+            columns_by_table = {
+                "dictionary_fields": {
+                    "field_name", "title", "field_type", "length_num", "decimal_num",
+                    "validation_rule", "relation_rule", "when_rule", "sxg_group", "sxg_size",
+                    "table_name", "table_code", "environment_id", "id",
+                },
+                "dictionary_indexes": {"table_name", "index_order", "nickname", "expression"},
             }
-        ])
+            columns = columns_by_table.get(table_name, set())
+            return FakeMappings([{"column_name": column} for column in columns])
+        if "dictionary_fields" in sql:
+            return FakeMappings([
+                {
+                    "field_name": "A1_COD",
+                    "field_label": "Código",
+                    "field_type": "C",
+                    "field_length": 6,
+                    "field_decimal": 0,
+                }
+            ])
+        if "dictionary_indexes" in sql:
+            return FakeMappings([])
+        return FakeMappings([])
 
     def commit(self):
         pass
