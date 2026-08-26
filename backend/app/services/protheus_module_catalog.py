@@ -227,3 +227,98 @@ def filter_allowed_dictionary_tables(
     ).mappings().all()
 
     return [dict(row) for row in rows]
+
+
+def load_dictionary_fields(
+    db: Any,
+    tenant_schema: str,
+    table_code: str | None,
+    table_name: str | None,
+    environment_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Lê campos do snapshot sem assumir colunas opcionais de versões antigas."""
+    schema_name = str(tenant_schema or "").strip()
+    schema = quote_tenant_schema(schema_name)
+    columns = _available_columns(db, schema_name, "dictionary_fields")
+    if "field_name" not in columns:
+        return []
+
+    select_parts = ["df.field_name"]
+    select_parts.append("COALESCE(df.title, df.field_name) AS field_label" if "title" in columns else "df.field_name AS field_label")
+    optional_selects = {
+        "field_type": "df.field_type",
+        "length_num": "df.length_num AS field_length",
+        "decimal_num": "df.decimal_num AS field_decimal",
+        "validation_rule": "df.validation_rule",
+        "relation_rule": "df.relation_rule",
+        "when_rule": "df.when_rule",
+        "sxg_group": "df.sxg_group",
+        "sxg_size": "df.sxg_size",
+    }
+    for column, expression in optional_selects.items():
+        if column in columns:
+            select_parts.append(expression)
+
+    scope_parts = []
+    params: dict[str, Any] = {
+        "table_code": str(table_code or ""),
+        "table_name": str(table_name or ""),
+    }
+    if "table_name" in columns:
+        scope_parts.append("df.table_name = :table_name")
+    if "table_code" in columns:
+        scope_parts.append("df.table_code = :table_code")
+    if not scope_parts:
+        return []
+
+    environment_filter = ""
+    if environment_id is not None and "environment_id" in columns:
+        environment_filter = " AND (df.environment_id = :environment_id OR df.environment_id IS NULL)"
+        params["environment_id"] = str(environment_id)
+    order_by = "df.id" if "id" in columns else "df.field_name"
+    rows = db.execute(
+        text(f"""
+            SELECT {', '.join(select_parts)}
+            FROM {schema}.dictionary_fields df
+            WHERE ({' OR '.join(scope_parts)}){environment_filter}
+            ORDER BY {order_by}
+        """),
+        params,
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def load_dictionary_indexes(
+    db: Any,
+    tenant_schema: str,
+    table_code: str | None,
+    table_name: str | None,
+) -> list[dict[str, Any]]:
+    """Lê índices SIX persistidos, tolerando snapshots sem atributos opcionais."""
+    schema_name = str(tenant_schema or "").strip()
+    schema = quote_tenant_schema(schema_name)
+    columns = _available_columns(db, schema_name, "dictionary_indexes")
+    if "table_name" not in columns:
+        return []
+
+    select_parts = []
+    for column, expression in (
+        ("index_order", "di.index_order"),
+        ("nickname", "di.nickname"),
+        ("expression", "di.expression"),
+    ):
+        if column in columns:
+            select_parts.append(expression)
+    if not select_parts:
+        return []
+
+    rows = db.execute(
+        text(f"""
+            SELECT {', '.join(select_parts)}
+            FROM {schema}.dictionary_indexes di
+            WHERE di.table_name IN (:table_name, :table_code)
+            ORDER BY {"di.index_order" if "index_order" in columns else "di.table_name"}
+        """),
+        {"table_name": str(table_name or ""), "table_code": str(table_code or "")},
+    ).mappings().all()
+    return [dict(row) for row in rows]
