@@ -174,7 +174,11 @@ async def process_agent_task(task_id: str, payload: dict):
         from app.db.database import ensure_tenant_tables
         from app.db.database import resolve_clean_tenant
         from app.services.protheus_context_resolver import resolve_context
-        from app.services.protheus_module_catalog import filter_allowed_dictionary_tables
+        from app.services.protheus_module_catalog import (
+            filter_allowed_dictionary_tables,
+            load_dictionary_fields,
+            load_dictionary_indexes,
+        )
         
         with SessionLocal() as db:
             try:
@@ -220,51 +224,28 @@ async def process_agent_task(task_id: str, payload: dict):
                 environment_id=environment_code,
             )
 
-            # O LLM precisa dos campos também. Precisamos enriquecer as tabelas com seus fields
+            # O LLM recebe campos e índices por leitores compatíveis com snapshots legados.
             context = []
             for t in tables:
                 table_data = dict(t)
-                fields = db.execute(
-                    text("""
-                        SELECT
-                            field_name,
-                            COALESCE(title, field_name) AS field_label,
-                            field_type,
-                            length_num AS field_length,
-                            decimal_num AS field_decimal,
-                            validation_rule,
-                            relation_rule,
-                            when_rule,
-                            sxg_group,
-                            sxg_size
-                        FROM dictionary_fields
-                        WHERE (table_name = :table_name OR table_code = :table_code)
-                          AND (environment_id = :environment_id OR environment_id IS NULL)
-                        ORDER BY id
-                    """),
-                    {
-                        "table_name": table_data.get("table_name"),
-                        "table_code": table_data.get("table_code"),
-                        "environment_id": environment_code,
-                    },
-                ).mappings().all()
-                indexes = db.execute(
-                    text("""
-                        SELECT index_order, nickname, expression
-                        FROM dictionary_indexes
-                        WHERE table_name IN (:table_name, :table_code)
-                        ORDER BY index_order
-                    """),
-                    {
-                        "table_name": table_data.get("table_name"),
-                        "table_code": table_data.get("table_code"),
-                    },
-                ).mappings().all()
+                fields = load_dictionary_fields(
+                    db=db,
+                    tenant_schema=ctx.schema_name,
+                    table_code=table_data.get("table_code"),
+                    table_name=table_data.get("table_name"),
+                    environment_id=environment_code,
+                )
+                indexes = load_dictionary_indexes(
+                    db=db,
+                    tenant_schema=ctx.schema_name,
+                    table_code=table_data.get("table_code"),
+                    table_name=table_data.get("table_name"),
+                )
 
                 context.append({
                     "table": table_data,
-                    "fields": [dict(f) for f in fields],
-                    "indexes": [dict(index) for index in indexes],
+                    "fields": fields,
+                    "indexes": indexes,
                 })
 
             if not context:
