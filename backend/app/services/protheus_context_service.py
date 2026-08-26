@@ -98,6 +98,21 @@ def _extract_table_refs(sql: str) -> list[tuple[str, str]]:
     return refs
 
 
+def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
+    match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return set()
+    body = match.group("body")
+    fields: set[tuple[str | None, str]] = set()
+    for qualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
+        fields.add((qualified[0].upper(), qualified[1].upper()))
+    for unqualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b", body, re.IGNORECASE):
+        token = unqualified.upper()
+        if token not in _SQL_WORDS:
+            fields.add((None, token))
+    return fields
+
+
 def _extract_selected_fields(sql: str) -> set[str]:
     match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
     if not match:
@@ -126,6 +141,7 @@ def validate_query_security(
     allowed_tables: Set[str],
     filial: str,
     allowed_fields: Optional[Set[str]] = None,
+    allowed_fields_by_table: Optional[Dict[str, Set[str]]] = None,
 ) -> bool:
     """Valida SQL Oracle contra o contexto autorizado e as regras Protheus."""
     if not sql or not sql.strip():
@@ -199,6 +215,43 @@ def validate_query_security(
             raise HTTPException(
                 status_code=403,
                 detail=f"Bloqueio de Segurança RBAC: campo(s) não autorizado(s) no SELECT: {', '.join(unauthorized[:5])}.",
+            )
+
+    if allowed_fields_by_table:
+        normalized_by_table: dict[str, set[str]] = {}
+        for table_name, fields in allowed_fields_by_table.items():
+            normalized_fields = {str(field).strip().upper() for field in fields if str(field).strip()}
+            for normalized_table in _normalize_allowed_tables([table_name]):
+                normalized_by_table[normalized_table] = normalized_fields
+
+        alias_to_table: dict[str, str] = {}
+        for table_name, alias in table_refs:
+            if alias:
+                alias_to_table[alias] = table_name
+            alias_to_table[table_name] = table_name
+
+        selected_refs = _extract_selected_field_refs(upper_sql)
+        unauthorized_refs: list[str] = []
+        for qualifier, field_name in selected_refs:
+            if field_name == "D_E_L_E_T_":
+                continue
+            if qualifier:
+                resolved_table = alias_to_table.get(qualifier, qualifier)
+                allowed_for_table = normalized_by_table.get(resolved_table, set())
+                if field_name not in allowed_for_table:
+                    unauthorized_refs.append(f"{qualifier}.{field_name}")
+                continue
+            tables_with_field = [
+                table_name for table_name, fields in normalized_by_table.items()
+                if field_name in fields
+            ]
+            if not tables_with_field:
+                unauthorized_refs.append(field_name)
+
+        if unauthorized_refs:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Bloqueio de Segurança RBAC: campo(s) não autorizado(s) no SELECT: {', '.join(sorted(set(unauthorized_refs))[:5])}.",
             )
 
     return True
