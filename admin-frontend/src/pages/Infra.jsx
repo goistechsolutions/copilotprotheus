@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { RefreshCw, Server, Database, Cpu, HardDrive, Cloud, Activity, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import PageHeader from '../components/ui/PageHeader';
@@ -14,7 +13,6 @@ const STATUS_CFG = {
 
 function ServiceCard({ name, status, details, icon: Icon }) {
   const cfg = STATUS_CFG[status?.toLowerCase()] || STATUS_CFG.unknown;
-  const StatusIcon = cfg.icon;
   return (
     <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-5 hover:border-[#2196F3]/30 transition-all">
       <div className="flex items-start justify-between mb-3">
@@ -75,7 +73,7 @@ const SERVICE_ICONS = {
 };
 
 export default function Infra() {
-  const { data, loading, refetch } = useApi('/api/infra/status');
+  const { data, loading, error, refetch } = useApi('/api/infra/status');
   const { data: envData } = useApi('/api/infra/env');
 
   // Normaliza resposta do backend
@@ -129,14 +127,12 @@ export default function Infra() {
           ))}
         </div>
       ) : (
-        // Fallback estático se o endpoint não retornar dados
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {[
-            { name: 'FastAPI Backend', status: 'online', icon: Server },
-            { name: 'PostgreSQL', status: 'online', icon: Database },
-            { name: 'pgvector RAG', status: 'online', icon: Database },
-            { name: 'OpenAI API', status: 'unknown', icon: Cloud },
-          ].map(svc => <ServiceCard key={svc.name} {...svc} />)}
+        <div className="mb-6 flex min-h-36 items-center gap-3 rounded-xl border border-dashed border-amber-400/20 bg-amber-400/5 px-5 py-4 text-sm text-amber-200">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-medium">Saúde dos serviços não verificada</p>
+            <p className="mt-1 text-xs leading-5 text-amber-200/70">{error || 'A API não retornou uma matriz de serviços nesta consulta. Nenhum estado foi presumido como online.'}</p>
+          </div>
         </div>
       )}
 
