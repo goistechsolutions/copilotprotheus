@@ -12,7 +12,7 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [_error, setError] = useState(null);
   const [attachedFile, setAttachedFile] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [context, setContext] = useState(() => {
@@ -27,8 +27,8 @@ export default function App() {
         company_id: params.get('company_id') || params.get('company') || null
       };
   });
-  const [historyItems, setHistoryItems] = useState([]);
-  const messagesEndRef = useRef(null);
+  const [historyItems, _setHistoryItems] = useState([]);
+  const _messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -277,3 +277,4 @@ export default function App() {
     </div>
   );
 }
+
