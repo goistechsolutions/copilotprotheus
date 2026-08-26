@@ -49,3 +49,10 @@ export async function getAgentTaskStatus(taskId) {
     method: 'GET',
   });
 }
+
+export async function exportStructuredReport(payload) {
+  return fetchWithRetry(`${API_BASE}/report/export-structured`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
