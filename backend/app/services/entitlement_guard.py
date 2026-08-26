@@ -123,7 +123,7 @@ class EntitlementGuard:
 
     @staticmethod
     def _schema_table_exists(db: Any, schema_name: str, table_name: str) -> bool:
-        row = db.execute(
+        result = db.execute(
             text("""
                 SELECT EXISTS (
                     SELECT 1
@@ -133,8 +133,11 @@ class EntitlementGuard:
                 ) AS exists_flag
             """),
             {"schema_name": schema_name, "table_name": table_name},
-        ).scalar()
-        return bool(row)
+        )
+        scalar = getattr(result, "scalar", None)
+        if not callable(scalar):
+            return False
+        return bool(scalar())
 
     def _issue(self, decision: EntitlementDecision, code: str, message: str) -> None:
         decision.issues.append({"code": code, "message": message})
