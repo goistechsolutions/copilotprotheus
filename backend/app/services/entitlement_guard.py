@@ -666,7 +666,15 @@ class EntitlementGuard:
                 FROM {schema}.tenant_table_permissions
                 WHERE lower(btrim(tenant_id)) = :tenant_code
                   AND environment_id = :environment_code
-                  AND btrim(role_id) = :role_id
+                  AND (
+                        btrim(role_id) = :role_id
+                     OR lower(btrim(role_id)) = lower(btrim((
+                            SELECT role_code
+                            FROM public.roles
+                            WHERE id::text = :role_id
+                            LIMIT 1
+                        )))
+                  )
                   AND can_query = TRUE
                   AND (company_id IS NULL OR company_id::text = :company_id)
             """),
@@ -687,7 +695,15 @@ class EntitlementGuard:
                 FROM {schema}.tenant_field_permissions
                 WHERE lower(btrim(tenant_id)) = :tenant_code
                   AND environment_id = :environment_code
-                  AND btrim(role_id) = :role_id
+                  AND (
+                        btrim(role_id) = :role_id
+                     OR lower(btrim(role_id)) = lower(btrim((
+                            SELECT role_code
+                            FROM public.roles
+                            WHERE id::text = :role_id
+                            LIMIT 1
+                        )))
+                  )
                   AND can_select = TRUE
                   AND (company_id IS NULL OR company_id::text = :company_id)
             """),
