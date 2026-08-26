@@ -174,9 +174,8 @@ export default function Dashboard() {
   const activityModules = Array.isArray(stats?.activity_by_module) ? stats.activity_by_module : [];
   const maxActivity = Math.max(...activityModules.map(module => Number(module.value) || 0), 1);
   const recentActions = Array.isArray(stats?.recent_actions) ? stats.recent_actions : [];
-  const infraServices = infra?.services && typeof infra.services === 'object' ? infra.services : {};
-
   const services = useMemo(() => {
+    const infraServices = infra?.services && typeof infra.services === 'object' ? infra.services : {};
     const getStatus = (key, fallback = 'unknown') => {
       const value = infraServices[key];
       const raw = typeof value === 'string' ? value : value?.status;
@@ -188,7 +187,7 @@ export default function Dashboard() {
       { name: SERVICE_LABELS.pgvector, status: getStatus('pgvector') },
       { name: SERVICE_LABELS['OpenAI API'], status: getStatus('OpenAI API') },
     ];
-  }, [health, infraServices, stats]);
+  }, [health, infra, stats]);
 
   const verifiedCount = services.filter(service => ['online', 'healthy', 'configured'].includes(service.status)).length;
 
