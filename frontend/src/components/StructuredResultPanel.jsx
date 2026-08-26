@@ -89,8 +89,26 @@ function buildCsv(rows, columns) {
 }
 
 function getSafeRows(result) {
-  if (!Array.isArray(result?.data)) return [];
-  return result.data.filter(row => row && typeof row === 'object' && !Array.isArray(row));
+  const candidateRows = Array.isArray(result?.data)
+    ? result.data
+    : Array.isArray(result?.items)
+      ? result.items
+      : [];
+  return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
+}
+
+function isPipeTableSummary(value) {
+  if (typeof value !== 'string') return false;
+  const lines = value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (lines.length < 2) return false;
+  const firstLine = lines[0];
+  const secondLine = lines[1];
+  return firstLine.includes('|') && /^\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)+\|?$/.test(secondLine);
+}
+
+function resultSummaryText(value) {
+  if (!value || isPipeTableSummary(value)) return '';
+  return String(value).trim();
 }
 
 function StatCard({ icon: Icon, label, value, tone = 'blue' }) {
@@ -209,6 +227,7 @@ export default function StructuredResultPanel({ result, onClose }) {
   const [sort, setSort] = useState({ column: '', direction: 'asc' });
 
   const rows = useMemo(() => getSafeRows(result), [result]);
+  const summaryText = useMemo(() => resultSummaryText(result?.summary), [result?.summary]);
   const columns = useMemo(() => Object.keys(rows[0] || {}), [rows]);
 
   const filteredRows = useMemo(() => {
@@ -305,11 +324,11 @@ export default function StructuredResultPanel({ result, onClose }) {
               <StatCard icon={CheckCircle2} label="Fonte" value="QueryRest" tone="slate" />
             </div>
 
-            {result?.summary && (
+            {summaryText && (
               <div className="rounded-2xl border border-[#e1eaf2] bg-white px-4 py-4 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-5">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#8397aa]">Resumo retornado</p>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#8397aa]">Resumo da consulta</p>
                 <div className="prose prose-sm prose-slate max-w-none text-[12px] leading-relaxed prose-p:my-1 prose-table:text-[11px]">
-                  <ReactMarkdown>{String(result.summary)}</ReactMarkdown>
+                  <ReactMarkdown>{summaryText}</ReactMarkdown>
                 </div>
               </div>
             )}
@@ -322,6 +341,18 @@ export default function StructuredResultPanel({ result, onClose }) {
               </div>
             ) : (
               <>
+                {rows.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e1eaf2] bg-white px-4 py-3 shadow-[0_4px_16px_rgba(43,78,112,0.04)]">
+                    <div>
+                      <p className="text-[13px] font-bold text-[#203c60]">Dados retornados</p>
+                      <p className="mt-1 text-[11px] text-[#8496a9]">Os registros do QueryRest estão organizados na tabela abaixo.</p>
+                    </div>
+                    <span className="rounded-full bg-[#f1f6fa] px-3 py-1.5 text-[10px] font-semibold text-[#657f98]">
+                      {records > rows.length ? `Exibindo ${rows.length} de ${records} registros` : `${rows.length} registros disponíveis`}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e1eaf2] bg-white px-3 py-2.5 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-4">
                   <div className="flex items-center gap-1 rounded-xl bg-[#f1f6fa] p-1">
                     <button type="button" onClick={() => setView('table')} className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors ${view === 'table' ? 'bg-white text-[#2677bb] shadow-sm' : 'text-[#7890a6] hover:text-[#496a87]'}`}>
