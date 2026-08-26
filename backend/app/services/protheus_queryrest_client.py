@@ -268,9 +268,12 @@ class ProtheusQueryRestClient:
         }
         logger.info("queryrest_auth_context %s", safe_auth_debug)
 
+        # O contrato REST Protheus documentado usa exclusivamente cQuery.
+        # Não enviar o alias query evita que o AppServer interprete o body como
+        # um payload diferente do contrato do endpoint QueryRest.
         request_payload: dict[str, Any] = dict(payload or {})
-        request_payload.setdefault("query", query)
-        request_payload.setdefault("cQuery", query)
+        request_payload.pop("query", None)
+        request_payload["cQuery"] = query
 
         async with httpx.AsyncClient(
             timeout=REQUEST_TIMEOUT_SECONDS,
