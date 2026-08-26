@@ -217,7 +217,7 @@ class EntitlementGuard:
 
     def _lock_usage(self, db: Any, lock_key: str) -> None:
         dialect = getattr(getattr(db, "bind", None), "dialect", None)
-        if getattr(dialect, "name", "postgresql") == "postgresql":
+        if getattr(dialect, "name", None) == "postgresql":
             db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"), {"lock_key": lock_key})
 
     def _reserve_query(
@@ -539,6 +539,8 @@ class EntitlementGuard:
             decision.user_id = self._clean(user.get("user_id")) or decision.user_id
             if not decision.role_id:
                 decision.role_id = self._clean(user.get("role_id")) or None
+        if self.mode == "enforce" and not decision.role_id:
+            self._issue(decision, "ROLE_REQUIRED", "Perfil de acesso não informado para o usuário.")
 
         try:
             module = self._load_module_contract(db, tenant, decision.contract_id or "", module)
