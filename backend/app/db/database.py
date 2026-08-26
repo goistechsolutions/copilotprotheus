@@ -22,7 +22,7 @@ Correções aplicadas nesta versão:
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
-from fastapi import Header, Request
+from fastapi import Header, HTTPException, Request
 import os
 import re
 
@@ -1155,7 +1155,12 @@ def get_db(x_tenant_id: str = Header(None), tenant_id: str = None):
         # Rotas globais usam public; rotas tenant-scoped devem fornecer
         # explicitamente X-Tenant-ID ou tenant_id.
         tid = x_tenant_id or tenant_id
-        clean_tenant = resolve_clean_tenant(db, tid) if tid else None
+        try:
+            clean_tenant = resolve_clean_tenant(db, tid) if tid else None
+        except ValueError as exc:
+            if hasattr(db, "rollback"):
+                db.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         if clean_tenant:
             ensure_tenant_tables(db, clean_tenant)
