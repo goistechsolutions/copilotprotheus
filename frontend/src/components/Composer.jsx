@@ -1,47 +1,72 @@
-import React, { useState } from 'react';
-import { SendHorizontal, Mic, Paperclip } from 'lucide-react';
+import { useState } from 'react';
+import { Mic, Paperclip, SendHorizontal } from 'lucide-react';
 
 export default function Composer({ disabled, onSend, placeholder }) {
   const [value, setValue] = useState('');
 
   const submit = () => {
     if (!value.trim() || disabled) return;
-    onSend(value);
+    onSend(value.trim());
     setValue('');
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       submit();
     }
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto relative group">
-      <textarea
-        id="composer-input"
-        name="composer-input"
-        rows={2}
-        disabled={disabled}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        className="w-full bg-white border border-slate-200 rounded-[24px] py-4 pl-4 pr-14 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 resize-none transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-      />
-      <div className="absolute left-4 bottom-3 flex gap-2">
-         <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 hover:bg-slate-100 rounded-full"><Mic size={18} /></button>
-         <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 hover:bg-slate-100 rounded-full"><Paperclip size={18} /></button>
+    <div className="w-full">
+      <div className="relative rounded-[22px] border border-[#dce7f1] bg-white p-2 shadow-[0_8px_24px_rgba(47,83,119,0.08)] transition-shadow focus-within:border-[#a9ccec] focus-within:shadow-[0_10px_28px_rgba(45,119,188,0.13)]">
+        <textarea
+          id="composer-input"
+          name="composer-input"
+          rows={2}
+          disabled={disabled}
+          value={value}
+          onChange={event => setValue(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          aria-label="Pergunta para o Copilot Protheus"
+          className="min-h-[74px] w-full resize-none bg-transparent px-3 pb-10 pt-2 text-[13px] leading-relaxed text-[#203c60] outline-none placeholder:text-[#94a3b6] disabled:cursor-not-allowed disabled:opacity-50"
+        />
+
+        <div className="absolute bottom-2.5 left-3 flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Usar entrada de voz"
+            title="Entrada de voz"
+            disabled
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#8295aa] transition-colors hover:bg-[#f1f6fb] hover:text-[#356f9f] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Mic size={17} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="Anexar arquivo"
+            title="Anexar arquivo"
+            disabled
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#8295aa] transition-colors hover:bg-[#f1f6fb] hover:text-[#356f9f] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Paperclip size={17} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          aria-label="Enviar pergunta"
+          disabled={disabled || !value.trim()}
+          onClick={submit}
+          className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-[#2379c9] text-white shadow-[0_4px_10px_rgba(35,121,201,0.25)] transition-all hover:bg-[#176bb8] focus:outline-none focus:ring-2 focus:ring-[#2379c9]/30 active:scale-95 disabled:cursor-not-allowed disabled:bg-[#dfe8f1] disabled:text-[#9aabba] disabled:shadow-none"
+        >
+          <SendHorizontal size={17} strokeWidth={2} aria-hidden="true" />
+        </button>
       </div>
-      <button
-        type="button"
-        disabled={disabled || !value.trim()}
-        onClick={submit}
-        className="absolute right-3 bottom-3 p-2.5 bg-blue-600 text-white rounded-full hover:bg-blue-500 disabled:opacity-50 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-sm"
-      >
-        <SendHorizontal size={18} />
-      </button>
+      <p className="mt-2 text-center text-[10px] text-[#9aaabd]">
+        A IA pode cometer erros. Verifique as informações antes de tomar decisões.
+      </p>
     </div>
   );
 }
