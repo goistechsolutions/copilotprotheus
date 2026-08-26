@@ -324,6 +324,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 "status": "success",
                 "correlation_id": correlation_id,
                 "tenant_id": str(ctx.tenant_id),
+                "environment_code": environment_code,
                 "company_id": ctx.company_id,
                 "context_operational": op_context,
                 "tables_in_context": len(context),
