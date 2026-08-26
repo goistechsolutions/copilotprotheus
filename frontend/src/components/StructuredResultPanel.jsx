@@ -48,10 +48,12 @@ function parseNumeric(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'string' || !value.trim()) return null;
 
-  const normalized = value
-    .trim()
+  const candidate = value.trim();
+  if (!/^[+-]?\s*(?:R\$\s*)?\d[\d\s.,]*(?:%|\s*)$/.test(candidate)) return null;
+
+  const normalized = candidate
     .replace(/\s/g, '')
-    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+    .replace(/\.(?=\d{3}(?:,|$))/g, '')
     .replace(',', '.')
     .replace(/[^\d.-]/g, '');
   const parsed = Number(normalized);
