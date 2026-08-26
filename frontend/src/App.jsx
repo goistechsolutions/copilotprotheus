@@ -28,7 +28,7 @@ export default function App() {
       };
   });
   const [historyItems, _setHistoryItems] = useState([]);
-  const _messagesEndRef = useRef(null);
+  const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -277,4 +277,5 @@ export default function App() {
     </div>
   );
 }
+
 
