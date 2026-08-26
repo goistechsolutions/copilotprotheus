@@ -78,7 +78,7 @@ export default function AgentWorkspace() {
     },
   ]);
 
-  const [history, setHistory] = useState([
+  const [history] = useState([
     { title: 'Faturamento do mês', date: 'Hoje' },
     { title: 'Títulos vencendo', date: 'Ontem' },
   ]);
@@ -316,3 +316,4 @@ export default function AgentWorkspace() {
     </div>
   );
 }
+
