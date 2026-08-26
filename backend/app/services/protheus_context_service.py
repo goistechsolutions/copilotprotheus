@@ -34,6 +34,37 @@ def build_protheus_context(empresa: Optional[str], filial: Optional[str]) -> Dic
     }
 
 
+_SENSITIVE_FIELD_PATTERN = re.compile(
+    r"(?:PASSWORD|PASSWD|TOKEN|SECRET|JWT|CERT|PRIVATE|ACCESS[_-]?KEY|API[_-]?KEY)",
+    re.IGNORECASE,
+)
+_MASKED_VALUE = "********************"
+
+
+def mask_sensitive_rows(rows, masked_fields=None):
+    """Mascara campos proibidos antes de uma resposta sair do backend."""
+    configured = {
+        str(field).strip().upper()
+        for field in (masked_fields or [])
+        if str(field).strip()
+    }
+    masked_rows = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            masked_rows.append(row)
+            continue
+        safe_row = {}
+        for key, value in row.items():
+            key_text = str(key)
+            normalized_key = key_text.strip().upper()
+            if normalized_key in configured or _SENSITIVE_FIELD_PATTERN.search(normalized_key):
+                safe_row[key] = _MASKED_VALUE
+            else:
+                safe_row[key] = value
+        masked_rows.append(safe_row)
+    return masked_rows
+
+
 def validate_query_security(sql: str, allowed_tables: Set[str], filial: str) -> bool:
     """
     Garante o bloqueio imediato de execução caso a consulta SQL gerada:
