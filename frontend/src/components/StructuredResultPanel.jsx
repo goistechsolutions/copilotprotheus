@@ -66,6 +66,12 @@ function displayValue(value) {
   return String(value);
 }
 
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function exportFile(content, filename, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -131,6 +137,34 @@ function StatCard({ icon: Icon, label, value, tone = 'blue' }) {
         <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8b9caf]">{label}</span>
         <span className="mt-0.5 block truncate text-[14px] font-bold text-[#203c60]">{value}</span>
       </span>
+    </div>
+  );
+}
+
+function EntitlementStatus({ entitlement }) {
+  if (!entitlement || typeof entitlement !== 'object') return null;
+
+  const remaining = numberOrNull(entitlement.remaining_queries);
+  const queryLimit = numberOrNull(entitlement.query_limit);
+  const used = numberOrNull(entitlement.queries_used);
+  const activeSessions = numberOrNull(entitlement.active_sessions);
+  const sessionLimit = numberOrNull(entitlement.concurrent_sessions_limit);
+  const planLabel = entitlement.plan_code || entitlement.contract_code || 'Licença contratada';
+  const remainingLabel = remaining !== null
+    ? `${remaining} consultas restantes${queryLimit !== null ? ` de ${queryLimit}` : ''}`
+    : used !== null
+      ? `${used} consultas utilizadas`
+      : null;
+  const sessionLabel = activeSessions !== null && sessionLimit !== null
+    ? `${activeSessions}/${sessionLimit} conexões em uso`
+    : null;
+  const tone = remaining === 0 ? 'border-[#f1dfbb] bg-[#fffaf0] text-[#976b25]' : 'border-[#d9ebdf] bg-[#f4fbf6] text-[#2f7e59]';
+
+  return (
+    <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-4 py-3 text-[11px] shadow-[0_4px_16px_rgba(43,78,112,0.04)] ${tone}`}>
+      <span className="font-bold">{planLabel}</span>
+      {remainingLabel && <span>{remainingLabel}</span>}
+      {sessionLabel && <span>{sessionLabel}</span>}
     </div>
   );
 }
@@ -229,6 +263,7 @@ export default function StructuredResultPanel({ result, onClose }) {
   const [filterValue, setFilterValue] = useState('');
   const [sort, setSort] = useState({ column: '', direction: 'asc' });
   const [exportState, setExportState] = useState('');
+  const [exportError, setExportError] = useState('');
 
   const rows = useMemo(() => getSafeRows(result), [result]);
   const summaryText = useMemo(() => resultSummaryText(result?.summary), [result?.summary]);
@@ -293,6 +328,7 @@ export default function StructuredResultPanel({ result, onClose }) {
     const environmentCode = result?.environment_code;
     if (!tenantCode || !environmentCode || !visibleRows.length || !columns.length) return;
 
+    setExportError('');
     setExportState(format);
     try {
       const exported = await exportStructuredReport({
@@ -313,7 +349,9 @@ export default function StructuredResultPanel({ result, onClose }) {
         anchor.click();
         anchor.remove();
       }
-    } catch {
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'o serviço de exportação não retornou um arquivo.';
+      setExportError(`Não foi possível gerar ${format.toUpperCase()}: ${detail}`);
       setExportState('error');
     } finally {
       window.setTimeout(() => setExportState(''), 1200);
@@ -374,6 +412,15 @@ export default function StructuredResultPanel({ result, onClose }) {
               <StatCard icon={Clock3} label="Tempo de resposta" value={result?.response_time_ms != null ? `${result.response_time_ms} ms` : '—'} tone="amber" />
               <StatCard icon={CheckCircle2} label="Fonte" value="QueryRest" tone="slate" />
             </div>
+
+            <EntitlementStatus entitlement={result?.entitlement} />
+
+            {exportError && (
+              <div role="alert" className="flex items-start justify-between gap-3 rounded-2xl border border-[#f0d4d4] bg-[#fff7f7] px-4 py-3 text-[11px] leading-relaxed text-[#8d4b4b]">
+                <span>{exportError}</span>
+                <button type="button" onClick={() => setExportError('')} className="shrink-0 rounded-lg p-1 text-[#a87373] hover:bg-[#fbeaea]" aria-label="Fechar mensagem de exportação"><X size={14} /></button>
+              </div>
+            )}
 
             {summaryText && (
               <div className="rounded-2xl border border-[#e1eaf2] bg-white px-4 py-4 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-5">
@@ -487,7 +534,7 @@ export default function StructuredResultPanel({ result, onClose }) {
         </div>
 
         <footer className="flex shrink-0 items-center justify-between border-t border-[#e1eaf2] bg-white px-4 py-3 text-[10px] text-[#8a9bad] sm:px-7">
-          <span className="flex items-center gap-1.5"><Download size={13} /> Exportações respeitam os filtros ativos</span>
+          <span className="flex items-center gap-1.5"><Download size={13} /> Exportações usam somente os dados filtrados disponíveis</span>
           <span className="flex items-center gap-1.5"><X size={13} /> Feche para voltar ao contexto do chat</span>
         </footer>
       </section>
