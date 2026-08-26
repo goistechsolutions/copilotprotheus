@@ -264,6 +264,15 @@
   `;
   shadow.appendChild(panel);
 
+  window.addEventListener("message", (event) => {
+    const iframe = shadow.querySelector("#copilot-iframe");
+    if (!iframe || event.source !== iframe.contentWindow) return;
+
+    if (event.data?.type === "cprot-result-state") {
+      panel.classList.toggle("results-open", Boolean(event.data.open));
+    }
+  });
+
   function updateWaitingMessage(message) {
     const waiting = shadow.querySelector("#copilot-waiting");
     if (waiting) waiting.textContent = message;
