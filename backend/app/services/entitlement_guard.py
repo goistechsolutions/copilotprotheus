@@ -621,19 +621,19 @@ class EntitlementGuard:
         company_id: int | str | None,
         role_id: str | None,
         table_names: Iterable[str],
-    ) -> tuple[set[str], set[str]]:
-        """Retorna tabelas consultáveis e campos selecionáveis pelo role.
+    ) -> tuple[set[str], dict[str, set[str]]]:
+        """Retorna tabelas consultáveis e campos selecionáveis por tabela.
 
         A consulta é feita dentro do schema já resolvido do tenant. Nenhuma
         permissão ausente é convertida em permissão positiva.
         """
         names = {self._clean(value).upper() for value in table_names if self._clean(value)}
         if not names or not role_id:
-            return set(), set()
+            return set(), {}
         schema_name = self._clean(tenant_schema).lower()
         schema = quote_tenant_schema(schema_name)
         if not self._schema_table_exists(db, schema_name, "tenant_table_permissions"):
-            return set(), set()
+            return set(), {}
 
         params = {
             "tenant_code": self._lower(tenant_code),
@@ -656,10 +656,10 @@ class EntitlementGuard:
         allowed_tables = {self._clean(row.get("table_name")).upper() for row in table_rows}
         allowed_tables &= names
         if not allowed_tables:
-            return set(), set()
+            return set(), {}
 
         if not self._schema_table_exists(db, schema_name, "tenant_field_permissions"):
-            return allowed_tables, set()
+            return allowed_tables, {}
         field_rows = db.execute(
             text(f"""
                 SELECT table_name, field_name
@@ -672,9 +672,10 @@ class EntitlementGuard:
             """),
             params,
         ).mappings().all()
-        allowed_fields = {
-            self._clean(row.get("field_name")).upper()
-            for row in field_rows
-            if self._clean(row.get("table_name")).upper() in allowed_tables
-        }
-        return allowed_tables, allowed_fields
+        allowed_fields_by_table: dict[str, set[str]] = {}
+        for row in field_rows:
+            table_name = self._clean(row.get("table_name")).upper()
+            field_name = self._clean(row.get("field_name")).upper()
+            if table_name in allowed_tables and field_name:
+                allowed_fields_by_table.setdefault(table_name, set()).add(field_name)
+        return allowed_tables, allowed_fields_by_table
