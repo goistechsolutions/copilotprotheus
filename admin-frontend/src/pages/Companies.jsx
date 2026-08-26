@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
 import {
   Building, Plus, Edit2, Trash2, Save, X,
-  Search, ChevronRight, Globe, Lock, Loader2, Key
+  Search, ChevronRight, Globe, Loader2
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 
@@ -151,8 +151,6 @@ export default function Companies() {
   const [search, setSearch]       = useState('');
   const [modal, setModal]         = useState(null); // null | 'new' | company
 
-  useEffect(() => { fetchData(); }, []);
-
   const fetchData = async () => {
     try {
       const cRes = await axios.get('/api/companies').catch(() => null);
@@ -165,6 +163,8 @@ export default function Companies() {
       setLoading(false);
     }
   };
+
+  useEffect(() => { fetchData(); }, []);
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
