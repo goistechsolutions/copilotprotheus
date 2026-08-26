@@ -20,7 +20,23 @@ router.post('/generate', async (req, res) => {
   }
 })
 
-// Proxy para exportar markdown
+// Proxy para exportar resultado estruturado
+router.post('/export-structured', async (req, res) => {
+  const token = req.headers.authorization
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) {
+      headers['Authorization'] = token
+    }
+    const response = await axios.post(`${BACKEND_URL}/api/report/export-structured`, req.body, { headers })
+    res.json(response.data)
+  } catch (e) {
+    logger.error(`POST /report/export-structured status=${e.response?.status || 'network_error'}`)
+    res.status(e.response?.status || 502).json({ error: e.response?.data?.detail || 'Falha ao exportar resultado estruturado.' })
+  }
+})
+
+// Proxy legado para exportar markdown
 router.post('/export-markdown', async (req, res) => {
   const token = req.headers.authorization
   try {
