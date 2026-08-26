@@ -313,7 +313,7 @@ export default function StructuredResultPanel({ result, onClose }) {
         anchor.click();
         anchor.remove();
       }
-    } catch (error) {
+    } catch {
       setExportState('error');
     } finally {
       window.setTimeout(() => setExportState(''), 1200);
