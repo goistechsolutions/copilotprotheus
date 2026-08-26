@@ -225,7 +225,7 @@ export default function App() {
   }
 
   return (
-    <div className="fixed bottom-0 right-0 z-50 flex h-full w-full flex-col overflow-hidden border border-slate-200 bg-white font-sans shadow-2xl md:bottom-6 md:right-6 md:h-[640px] md:w-[420px] md:rounded-2xl">
+    <div className="fixed bottom-0 right-0 z-50 flex h-full w-full flex-col overflow-hidden border border-slate-200 bg-white font-sans shadow-2xl md:bottom-6 md:right-6 md:h-[680px] md:w-[470px] md:rounded-[28px]">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600"><Sparkles className="h-4 w-4 text-white" /></div>
@@ -242,14 +242,12 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
-        <span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700">
-          <Building2 className="h-3 w-3 text-blue-600" />
-          {context.module ? `${context.module}${context.branch ? ` - Filial ${context.branch}` : ''}` : 'Módulo Protheus'}
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 pb-3 pt-0">
+        <span className="text-[10px] font-medium text-slate-400">
+          {context.module || 'Módulo Protheus'}{context.branch ? ` · Filial ${context.branch}` : ''}
         </span>
-        <span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700">
-          <UserIcon className="h-3 w-3 text-blue-600" />
-          {context.user || 'admin'}
+        <span className="flex items-center gap-1 text-[10px] text-slate-400">
+          <Building2 className="h-3 w-3 text-blue-500" /> {context.user || 'admin'}
         </span>
       </div>
 
@@ -289,19 +287,19 @@ export default function App() {
         )}
       </div>
 
-      <div className="shrink-0 border-t border-slate-100 bg-white p-3">
+      <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
         {attachedFile && (
           <div className="mb-2 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs text-blue-700">
             <span className="flex min-w-0 items-center gap-1.5 truncate"><Paperclip className="h-3.5 w-3.5 shrink-0" />{attachedFile.name}</span>
             <button onClick={() => setAttachedFile(null)} className="text-blue-400 hover:text-blue-700"><X className="h-3.5 w-3.5" /></button>
           </div>
         )}
-        <form onSubmit={(event) => { event.preventDefault(); handleAsk(); }} className="flex items-end gap-2">
+        <form onSubmit={(event) => { event.preventDefault(); handleAsk(); }} className="flex items-end gap-2 rounded-[22px] border border-slate-200 bg-white p-2 shadow-[0_4px_16px_rgba(32,69,103,0.08)]">
           <FileUploadButton inputRef={fileInputRef} onFileSelect={handleFileSelect} />
           <div className="relative flex-1">
             <textarea
-              className="min-h-[44px] max-h-28 w-full resize-none rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 pr-2 text-sm text-slate-700 transition-colors focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Pergunte algo sobre o Protheus..."
+              className="min-h-[42px] max-h-28 w-full resize-none border-0 bg-transparent px-1 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+              placeholder="Faça sua pergunta sobre o Protheus..."
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleAsk(); } }}
@@ -309,11 +307,11 @@ export default function App() {
               rows={1}
             />
           </div>
-          <button type="submit" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-50" disabled={isLoading || (!query.trim() && !attachedFile)} aria-label="Enviar pergunta">
+          <button type="submit" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-50" disabled={isLoading || (!query.trim() && !attachedFile)} aria-label="Enviar pergunta">
             <Send className="h-4 w-4" />
           </button>
         </form>
-        <p className="mt-1.5 text-center text-[10px] text-slate-400">A IA pode cometer erros, verifique as informações.</p>
+        <p className="mt-2 text-center text-[10px] text-slate-400">A IA pode cometer erros, verifique as informações.</p>
       </div>
 
       {isResultOpen && result && <StructuredResultPanel result={result} onClose={() => setIsResultOpen(false)} />}
