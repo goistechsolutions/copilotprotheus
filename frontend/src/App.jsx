@@ -12,11 +12,11 @@ import {
   User as UserIcon,
   X,
 } from 'lucide-react';
-import ChatHistory from './ChatHistory';
-import QuickPrompts from './QuickPrompts';
-import ChatMessage from './ChatMessage';
-import FileUploadButton from './FileUploadButton';
-import StructuredResultPanel from './StructuredResultPanel';
+import ChatHistory from './components/ChatHistory';
+import QuickPrompts from './components/QuickPrompts';
+import ChatMessage from './components/ChatMessage';
+import FileUploadButton from './components/FileUploadButton';
+import StructuredResultPanel from './components/StructuredResultPanel';
 import { askAgent, getAgentTaskStatus, uploadAgentFile } from './services/api';
 
 export default function App() {
@@ -320,3 +320,4 @@ export default function App() {
     </div>
   );
 }
+
