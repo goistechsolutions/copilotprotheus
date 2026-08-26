@@ -293,6 +293,147 @@ def list_snapshots(
         return {"status": "success", "tenant_id": tenant_id, "snapshots": []}
 
 
+# ─── Admin: Permissões relacionais de tabela/campo ─────────────────────────────
+
+
+def _permission_scope_where(columns: set[str], role_id: str | None, environment_id: str | None, company_id: str | None) -> tuple[list[str], dict[str, Any]]:
+    conditions = ["btrim(tenant_id) = :tenant_id"]
+    params: dict[str, Any] = {}
+    if environment_id and "environment_id" in columns:
+        conditions.append("environment_id = :environment_id")
+        params["environment_id"] = environment_id.strip()
+    if role_id and "role_id" in columns:
+        conditions.append("(btrim(role_id) = :role_id OR lower(btrim(role_id)) = lower(btrim((SELECT role_code FROM public.roles WHERE id::text = :role_id LIMIT 1))))")
+        params["role_id"] = role_id.strip()
+    if company_id and "company_id" in columns:
+        conditions.append("company_id::text = :company_id")
+        params["company_id"] = company_id.strip()
+    return conditions, params
+
+
+def _permission_select(columns: set[str], names: list[str]) -> str:
+    return ", ".join(name if name in columns else f"NULL AS {name}" for name in names)
+
+
+@router.get("/api/admin/permissions", summary="Lista permissões relacionais do tenant")
+def get_table_permissions(
+    tenant_id: str = Query(..., min_length=1),
+    environment_id: Optional[str] = Query(None),
+    role_id: Optional[str] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    admin: str = Depends(verify_admin),
+):
+    clean_tenant = resolve_clean_tenant(db, tenant_id)
+    table_columns = _existing_columns(db, clean_tenant, "tenant_table_permissions")
+    field_columns = _existing_columns(db, clean_tenant, "tenant_field_permissions")
+    if "table_name" not in table_columns:
+        return {"status": "unavailable", "tenant_id": tenant_id, "tables": [], "fields": [], "message": "A matriz de permissões ainda não foi criada para este tenant."}
+
+    table_where, params = _permission_scope_where(table_columns, role_id, environment_id, company_id)
+    params["tenant_id"] = tenant_id.strip()
+    table_rows = db.execute(
+        text(f"""
+            SELECT {_permission_select(table_columns, ['table_name', 'environment_id', 'role_id', 'company_id', 'can_list', 'can_describe', 'can_query'])}
+            FROM \"{clean_tenant}\".tenant_table_permissions
+            WHERE {' AND '.join(table_where)}
+            ORDER BY table_name
+        """),
+        params,
+    ).mappings().all()
+    tables = [dict(row) for row in table_rows]
+
+    fields = []
+    if "table_name" in field_columns and "field_name" in field_columns:
+        field_where, field_params = _permission_scope_where(field_columns, role_id, environment_id, company_id)
+        field_params["tenant_id"] = tenant_id.strip()
+        field_rows = db.execute(
+            text(f"""
+                SELECT {_permission_select(field_columns, ['table_name', 'field_name', 'environment_id', 'role_id', 'company_id', 'can_select', 'can_filter', 'masked_flag'])}
+                FROM \"{clean_tenant}\".tenant_field_permissions
+                WHERE {' AND '.join(field_where)}
+                ORDER BY table_name, field_name
+            """),
+            field_params,
+        ).mappings().all()
+        fields = [dict(row) for row in field_rows]
+
+    return {"status": "success", "tenant_id": tenant_id, "tables": tables, "fields": fields}
+
+
+@router.post("/api/admin/permissions", summary="Substitui permissões relacionais de uma tabela")
+def save_table_permissions(
+    req: SaveTablePermissionRequest,
+    db: Session = Depends(get_db),
+    admin: str = Depends(verify_admin),
+):
+    clean_tenant = resolve_clean_tenant(db, req.tenant_id)
+    table_columns = _existing_columns(db, clean_tenant, "tenant_table_permissions")
+    field_columns = _existing_columns(db, clean_tenant, "tenant_field_permissions")
+    required_table = {"tenant_id", "environment_id", "role_id", "table_name", "can_list", "can_describe", "can_query"}
+    if not required_table.issubset(table_columns):
+        raise HTTPException(status_code=409, detail="A matriz de permissões de tabelas não está disponível para este tenant.")
+    if req.field_permissions and not {"tenant_id", "environment_id", "role_id", "table_name", "field_name", "can_select", "can_filter", "masked_flag"}.issubset(field_columns):
+        raise HTTPException(status_code=409, detail="A matriz de permissões de campos não está disponível para este tenant.")
+
+    storage_role_id = _role_storage_id(db, req.role_id)
+    scope = {
+        "tenant_id": req.tenant_id.strip(),
+        "environment_id": req.environment_id.strip(),
+        "role_id": storage_role_id,
+        "table_name": req.table_name.strip().upper(),
+        "company_id": req.company_id,
+    }
+    if not scope["tenant_id"] or not scope["environment_id"] or not scope["table_name"]:
+        raise HTTPException(status_code=400, detail="tenant_id, environment_id e table_name são obrigatórios.")
+
+    table_columns_to_write = ["tenant_id", "environment_id", "role_id", "table_name", "can_list", "can_describe", "can_query"]
+    table_values = {**scope, "can_list": req.can_list, "can_describe": req.can_describe, "can_query": req.can_query}
+    if "company_id" in table_columns:
+        table_columns_to_write.append("company_id")
+    else:
+        table_columns_to_write.remove("company_id") if "company_id" in table_columns_to_write else None
+        table_values.pop("company_id", None)
+    if "approved_by" in table_columns:
+        table_columns_to_write.append("approved_by")
+        table_values["approved_by"] = req.approved_by
+
+    try:
+        table_scope = "tenant_id = :tenant_id AND environment_id = :environment_id AND role_id = :role_id AND table_name = :table_name"
+        if "company_id" in table_columns:
+            table_scope += " AND company_id IS NOT DISTINCT FROM :company_id"
+        db.execute(text(f'DELETE FROM "{clean_tenant}".tenant_table_permissions WHERE {table_scope}'), scope)
+        columns_sql = ", ".join(table_columns_to_write)
+        values_sql = ", ".join(f":{column}" for column in table_columns_to_write)
+        db.execute(text(f'INSERT INTO "{clean_tenant}".tenant_table_permissions ({columns_sql}) VALUES ({values_sql})'), table_values)
+
+        if "field_name" in field_columns:
+            db.execute(text(f'DELETE FROM "{clean_tenant}".tenant_field_permissions WHERE {table_scope}'), scope)
+            field_columns_to_write = ["tenant_id", "environment_id", "role_id", "table_name", "field_name", "can_select", "can_filter", "masked_flag"]
+            if "company_id" in field_columns:
+                field_columns_to_write.append("company_id")
+            for field in req.field_permissions:
+                field_values = {
+                    **scope,
+                    "field_name": field.field_name.strip().upper(),
+                    "can_select": field.can_select,
+                    "can_filter": field.can_filter,
+                    "masked_flag": field.masked_flag,
+                }
+                if "company_id" not in field_columns:
+                    field_values.pop("company_id", None)
+                field_columns_sql = ", ".join(field_columns_to_write)
+                field_values_sql = ", ".join(f":{column}" for column in field_columns_to_write)
+                db.execute(text(f'INSERT INTO "{clean_tenant}".tenant_field_permissions ({field_columns_sql}) VALUES ({field_values_sql})'), field_values)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("Falha ao salvar permissões relacionais: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Não foi possível salvar as permissões relacionais.") from exc
+
+    return {"status": "success", "tenant_id": req.tenant_id, "environment_id": req.environment_id, "role_id": storage_role_id, "table_name": scope["table_name"]}
+
+
 # ─── Agente: Catálogo Completo (V5) ──────────────────────────────────────────
 
 def _build_agent_catalog(db: Session, tenant_id: str, mod_sigla: Optional[str], table_filter: Optional[str]) -> Dict[str, Any]:
