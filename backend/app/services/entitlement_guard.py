@@ -230,7 +230,7 @@ class EntitlementGuard:
             return
         self._lock_usage(
             db,
-            f"copilot:usage:{decision.tenant_code}:{decision.contract_id}:{correlation_id[:80]}",
+            f"copilot:usage:{decision.tenant_code}:{decision.contract_id}",
         )
         period_ref = db.execute(text("SELECT to_char(CURRENT_DATE, 'YYYY-MM')")).scalar() or "current"
         row = db.execute(
