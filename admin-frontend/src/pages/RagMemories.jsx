@@ -1,178 +1,103 @@
-import { useState } from 'react';
-import { RefreshCw, Upload, Trash2, FileText, BookOpen, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertCircle, BookOpen, CheckCircle2, FileText, Loader2, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import api from '../api/axios';
 import { useApi, apiCall } from '../hooks/useApi';
 import PageHeader from '../components/ui/PageHeader';
 import Badge from '../components/ui/Badge';
 import DataTable from '../components/ui/DataTable';
 
-function UploadModal({ onClose, onSaved }) {
-  const [file, setFile] = useState(null);
-  const [tenantId, setTenantId] = useState('default');
-  const [uploading, setUploading] = useState(false);
-  const [err, setErr] = useState('');
-  const [ok, setOk] = useState(false);
+function listFrom(payload, keys = []) {
+  if (Array.isArray(payload)) return payload;
+  for (const key of keys) if (Array.isArray(payload?.[key])) return payload[key];
+  return [];
+}
 
-  const upload = async (e) => {
-    e.preventDefault();
-    if (!file) return;
-    setUploading(true); setErr(''); setOk(false);
+function UploadModal({ tenants, onClose, onSaved }) {
+  const [file, setFile] = useState(null);
+  const [tenantId, setTenantId] = useState(tenants.length === 1 ? String(tenants[0].tenant_code || tenants[0].id || '') : '');
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const upload = async event => {
+    event.preventDefault();
+    if (!file || !tenantId) {
+      setError('Selecione um tenant e um arquivo antes de continuar.');
+      return;
+    }
+    setUploading(true);
+    setError('');
+    setSuccess(false);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('tenant_id', tenantId);
-      const res = await fetch('/api/knowledge/upload', {
-        method: 'POST',
-        credentials: 'include',
-        body: fd,
-      });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.detail || 'Erro no upload'); }
-      setOk(true);
-      setTimeout(() => { onSaved(); }, 1200);
-    } catch (e) { setErr(e.message); }
-    finally { setUploading(false); }
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('tenant_id', tenantId);
+      const response = await fetch('/api/knowledge/upload', { method: 'POST', credentials: 'include', body: formData });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível indexar o documento.');
+      setSuccess(true);
+      window.setTimeout(onSaved, 900);
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível indexar o documento.');
+    } finally {
+      setUploading(false);
+    }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-[#161B27] border border-[#1E2535] rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2535]">
-          <h2 className="text-white font-semibold">Upload de Documento</h2>
-          <button onClick={onClose} className="text-[#8892A4] hover:text-white">
-            <span className="text-lg leading-none">×</span>
-          </button>
-        </div>
-        <form onSubmit={upload} className="p-6 space-y-4">
-          <div>
-            <label className="block text-[#8892A4] text-xs font-medium mb-1.5 uppercase tracking-wider">Tenant ID</label>
-            <input value={tenantId} onChange={e => setTenantId(e.target.value)}
-              className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#2196F3] transition-all"
-              placeholder="default" />
-          </div>
-          <div>
-            <label className="block text-[#8892A4] text-xs font-medium mb-1.5 uppercase tracking-wider">Arquivo</label>
-            <div
-              className="border-2 border-dashed border-[#1E2535] rounded-xl p-6 text-center cursor-pointer hover:border-[#2196F3]/50 transition-all"
-              onClick={() => document.getElementById('rag-file').click()}
-            >
-              {file ? (
-                <div className="flex items-center justify-center gap-2 text-[#2196F3]">
-                  <FileText className="w-5 h-5" />
-                  <span className="text-sm font-medium">{file.name}</span>
-                </div>
-              ) : (
-                <div className="text-[#8892A4]">
-                  <Upload className="w-6 h-6 mx-auto mb-2" />
-                  <p className="text-sm">Clique para selecionar</p>
-                  <p className="text-xs mt-1">.pdf, .txt, .docx, .md</p>
-                </div>
-              )}
-              <input id="rag-file" type="file" className="hidden" accept=".pdf,.txt,.docx,.md"
-                onChange={e => setFile(e.target.files[0])} />
-            </div>
-          </div>
-          {err && <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />{err}
-          </div>}
-          {ok && <div className="flex items-center gap-2 text-emerald-400 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />Documento indexado com sucesso!
-          </div>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#8892A4] hover:text-white border border-[#1E2535] rounded-lg transition-all">Cancelar</button>
-            <button type="submit" disabled={uploading || !file} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#1565C0] hover:bg-[#1976D2] text-white rounded-lg font-medium transition-all disabled:opacity-60">
-              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              {uploading ? 'Enviando...' : 'Fazer Upload'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-2xl border border-[#2B3850] bg-[#161B27] shadow-2xl"><div className="flex items-center justify-between border-b border-[#1E2A3D] px-6 py-4"><div><h2 className="text-base font-semibold text-white">Adicionar documento ao RAG</h2><p className="mt-1 text-xs text-[#94A3B8]">O documento será indexado somente no tenant selecionado.</p></div><button type="button" onClick={onClose} className="rounded-lg p-1.5 text-[#94A3B8] transition hover:bg-[#1E2535] hover:text-white"><X className="h-5 w-5" /></button></div><form onSubmit={upload} className="space-y-4 p-6">
+    <label className="block"><span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#CBD5E1]">Tenant *</span><select value={tenantId} onChange={event => setTenantId(event.target.value)} disabled={uploading} className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2.5 text-sm text-white outline-none focus:border-[#60A5FA] disabled:opacity-60"><option value="">Selecione um tenant</option>{tenants.map(tenant => { const value = String(tenant.tenant_code || tenant.id || ''); return <option key={value} value={value}>{tenant.tenant_name || tenant.name || value}</option>; })}</select></label>
+    <div><span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#CBD5E1]">Arquivo *</span><label htmlFor="rag-file" className="block cursor-pointer rounded-xl border-2 border-dashed border-[#2B3850] p-7 text-center transition hover:border-[#60A5FA]/60 hover:bg-[#0F172A]"><input id="rag-file" type="file" className="sr-only" accept=".pdf,.txt,.docx,.md" onChange={event => setFile(event.target.files?.[0] || null)} />{file ? <div className="flex items-center justify-center gap-2 text-[#60A5FA]"><FileText className="h-5 w-5" /><span className="text-sm font-medium">{file.name}</span></div> : <div className="text-[#94A3B8]"><Upload className="mx-auto mb-2 h-6 w-6" /><p className="text-sm">Selecione um PDF, TXT, DOCX ou Markdown</p><p className="mt-1 text-xs text-[#64748B]">Use somente documentos autorizados para este tenant.</p></div>}</label></div>
+    {error && <div className="flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2.5 text-sm text-red-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
+    {success && <div className="flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-sm text-emerald-200"><CheckCircle2 className="h-4 w-4" />Documento aceito para indexação.</div>}
+    <div className="flex justify-end gap-2 border-t border-[#1E2A3D] pt-4"><button type="button" onClick={onClose} className="rounded-lg border border-[#2B3850] px-4 py-2 text-sm text-[#CBD5E1] transition hover:bg-[#1E2535] hover:text-white">Cancelar</button><button type="submit" disabled={uploading || !file || !tenantId} className="inline-flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50">{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{uploading ? 'Indexando…' : 'Indexar documento'}</button></div>
+  </form></div></div>;
 }
 
 export default function RagMemories() {
-  const { data, loading, refetch } = useApi('/api/knowledge/documents');
+  const { data, loading, error: loadError, refetch } = useApi('/api/knowledge/documents');
+  const [tenants, setTenants] = useState([]);
+  const [tenantError, setTenantError] = useState('');
   const [modal, setModal] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const docs = Array.isArray(data) ? data : (data?.documents ?? data?.items ?? []);
+  const docs = listFrom(data, ['documents', 'items']);
 
-  const deleteDoc = async (id) => {
-    if (!confirm('Remover este documento da base RAG?')) return;
+  useEffect(() => {
+    api.get('/api/tenants').then(response => setTenants(listFrom(response.data, ['tenants', 'items']))).catch(requestError => setTenantError(requestError.response?.data?.detail || 'Não foi possível carregar os tenants para upload.'));
+  }, []);
+
+  const deleteDoc = async id => {
+    if (!window.confirm('Remover este documento da base RAG?')) return;
     setDeleting(id);
-    try { await apiCall(`/api/knowledge/documents/${id}`, 'DELETE'); refetch(); }
-    catch (e) { alert(e.message); }
-    finally { setDeleting(null); }
+    setActionError('');
+    setNotice('');
+    try {
+      await apiCall(`/api/knowledge/documents/${id}`, 'DELETE');
+      setNotice('Documento removido da base RAG.');
+      await refetch();
+    } catch (requestError) {
+      setActionError(requestError.message || 'Não foi possível remover o documento.');
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const columns = [
-    {
-      key: 'filename', label: 'Arquivo',
-      render: (v, row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#1565C0]/10 rounded-lg flex items-center justify-center">
-            <FileText className="w-3.5 h-3.5 text-[#2196F3]" />
-          </div>
-          <span className="text-white text-sm font-medium">{v || row.title || row.name || '—'}</span>
-        </div>
-      )
-    },
-    { key: 'tenant_id', label: 'Tenant', render: v => <Badge variant="default">{v || 'default'}</Badge> },
-    { key: 'visibility', label: 'Visibilidade', render: v => <Badge variant={v === 'global' ? 'green' : 'blue'}>{v || 'tenant'}</Badge> },
-    {
-      key: 'chunk_count', label: 'Chunks',
-      render: v => <span className="text-[#8892A4] text-sm">{v ?? '—'}</span>
-    },
-    {
-      key: 'created_at', label: 'Indexado em',
-      render: v => v ? <span className="text-[#8892A4] text-xs">{new Date(v).toLocaleDateString('pt-BR')}</span> : '—'
-    },
-    {
-      key: 'id', label: 'Ações',
-      render: (id) => (
-        <button
-          onClick={() => deleteDoc(id)}
-          disabled={deleting === id}
-          className="p-1.5 text-[#8892A4] hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all disabled:opacity-40"
-        >
-          {deleting === id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-        </button>
-      )
-    },
+    { key: 'filename', label: 'Arquivo', render: (value, row) => <div className="flex items-center gap-2.5"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1565C0]/15 text-[#60A5FA]"><FileText className="h-4 w-4" /></div><span className="text-sm font-medium text-white">{value || row.title || row.name || 'Arquivo sem nome'}</span></div> },
+    { key: 'tenant_id', label: 'Tenant', render: value => <Badge variant="default">{value || 'Não informado'}</Badge> },
+    { key: 'visibility', label: 'Visibilidade', render: value => <Badge variant={value === 'global' ? 'green' : 'blue'}>{value || 'Não informada'}</Badge> },
+    { key: 'chunk_count', label: 'Chunks', render: value => <span className="text-sm text-[#CBD5E1]">{value ?? '—'}</span> },
+    { key: 'created_at', label: 'Indexado em', render: value => <span className="text-xs text-[#94A3B8]">{value ? new Date(value).toLocaleDateString('pt-BR') : '—'}</span> },
+    { key: 'id', label: 'Ações', render: (id) => <button type="button" onClick={() => deleteDoc(id)} disabled={deleting === id} title="Remover documento" className="rounded-md p-1.5 text-[#94A3B8] transition hover:bg-red-400/10 hover:text-red-300 disabled:opacity-40">{deleting === id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button> },
   ];
 
-  return (
-    <div>
-      <PageHeader
-        title="Base de Conhecimento"
-        description="Documentos indexados no RAG vector store"
-        actions={
-          <>
-            <button onClick={refetch} className="p-2 text-[#8892A4] hover:text-white hover:bg-[#1E2535] rounded-lg transition-all">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button onClick={() => setModal(true)} className="flex items-center gap-2 px-3 py-2 bg-[#1565C0] hover:bg-[#1976D2] text-white text-sm font-medium rounded-lg transition-all">
-              <Upload className="w-4 h-4" /> Upload Doc
-            </button>
-          </>
-        }
-      />
-
-      {docs.length > 0 && (
-        <div className="mb-4 flex items-center gap-2">
-          <BookOpen className="w-4 h-4 text-[#2196F3]" />
-          <span className="text-[#8892A4] text-sm">{docs.length} documento{docs.length !== 1 ? 's' : ''} na base</span>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-12 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : (
-        <DataTable columns={columns} data={docs} />
-      )}
-
-      {modal && <UploadModal onClose={() => setModal(false)} onSaved={() => { setModal(false); refetch(); }} />}
-    </div>
-  );
+  return <div className="space-y-6"><PageHeader title="Base de conhecimento" description="Documentos indexados no RAG vector store, separados por tenant." actions={<><button type="button" onClick={refetch} className="rounded-lg border border-[#2B3850] p-2 text-[#94A3B8] transition hover:bg-[#1E2535] hover:text-white" title="Atualizar"><RefreshCw className="h-4 w-4" /></button><button type="button" onClick={() => setModal(true)} disabled={!tenants.length} className="inline-flex items-center gap-2 rounded-lg bg-[#2563EB] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"><Upload className="h-4 w-4" />Adicionar documento</button></>} />
+    {(loadError || tenantError || actionError) && <div className="flex items-start gap-2.5 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>{loadError || tenantError || actionError}</span></div>}
+    {notice && <div className="flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"><CheckCircle2 className="h-4 w-4" />{notice}</div>}
+    {docs.length > 0 && <div className="flex items-center gap-2 text-sm text-[#94A3B8]"><BookOpen className="h-4 w-4 text-[#60A5FA]" />{docs.length} documento{docs.length === 1 ? '' : 's'} retornado{docs.length === 1 ? '' : 's'}</div>}
+    {loading ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-[#1E2A3D] bg-[#161B27]"><RefreshCw className="h-6 w-6 animate-spin text-[#60A5FA]" /></div> : <DataTable columns={columns} data={docs} emptyMessage="Nenhum documento foi retornado para o escopo administrativo atual." />}
+    {modal && <UploadModal tenants={tenants} onClose={() => setModal(false)} onSaved={() => { setModal(false); setNotice('Documento enviado para indexação.'); refetch(); }} />}
+  </div>;
 }
