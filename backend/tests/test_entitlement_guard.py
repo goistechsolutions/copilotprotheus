@@ -71,6 +71,8 @@ class UsageDB(FakeDB):
             return FakeResult(value="2026-08")
         if "from public.query_usage_counters" in sql:
             return FakeResult(rows=[self.usage_row] if self.usage_row else [])
+        if "query_usage_counters" in sql:
+            return FakeResult()
         return super().execute(query, params)
 
 
