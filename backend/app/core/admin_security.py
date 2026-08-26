@@ -10,11 +10,9 @@ security = HTTPBasic(auto_error=False)
 JWT_ALGORITHM = "HS256"
 
 
-def _get_jwt_secret() -> str:
+def _get_jwt_secret() -> Optional[str]:
     secret = os.environ.get("ADMIN_JWT_SECRET", "").strip()
-    if not secret:
-        secret = "elitecorp-admin-secret-change-in-prod"
-    return secret
+    return secret if len(secret) >= 32 else None
 
 
 async def require_admin(
@@ -23,18 +21,19 @@ async def require_admin(
 ):
     """Dependency FastAPI — valida JWT cookie ou HTTP Basic Auth do admin"""
     # 1. Valida Cookie JWT se presente
-    if admin_token:
+    jwt_secret = _get_jwt_secret()
+    if admin_token and jwt_secret:
         try:
-            payload = jwt.decode(admin_token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+            payload = jwt.decode(admin_token, jwt_secret, algorithms=[JWT_ALGORITHM])
             if payload.get("sub") == "admin":
                 return payload
         except Exception:
             pass
 
     # 2. Valida HTTP Basic Auth se presente nos cabeçalhos
-    if credentials:
-        admin_user = os.environ.get("ADMIN_USER", "admin").strip()
-        admin_pass = os.environ.get("ADMIN_PASSWORD", "admin123").strip()
+    admin_user = os.environ.get("ADMIN_USER", "").strip()
+    admin_pass = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if credentials and admin_user and admin_pass:
         user_ok = hmac.compare_digest(credentials.username.strip().lower(), admin_user.lower())
         pass_ok = hmac.compare_digest(credentials.password.strip(), admin_pass)
         if user_ok and pass_ok:
