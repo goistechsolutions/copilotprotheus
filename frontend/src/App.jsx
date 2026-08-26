@@ -103,6 +103,12 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'cprot-result-state', open: isResultOpen }, '*');
+    }
+  }, [isResultOpen]);
+
   const handleFileSelect = (event) => {
     const file = event.target.files?.[0];
     if (file) setAttachedFile(file);
