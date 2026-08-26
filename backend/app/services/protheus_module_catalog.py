@@ -141,6 +141,19 @@ def require_tenant_module(
     }
 
 
+def _available_columns(db: Any, schema_name: str, table_name: str) -> set[str]:
+    rows = db.execute(
+        text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = :schema_name
+              AND table_name = :table_name
+        """),
+        {"schema_name": schema_name, "table_name": table_name},
+    ).mappings().all()
+    return {str(row["column_name"]).lower() for row in rows}
+
+
 def filter_allowed_dictionary_tables(
     db: Any,
     tenant_schema: str,
@@ -151,30 +164,45 @@ def filter_allowed_dictionary_tables(
     if not module_codes:
         return []
 
-    schema = quote_tenant_schema(tenant_schema)
+    schema_name = str(tenant_schema or "").strip()
+    schema = quote_tenant_schema(schema_name)
+    columns = _available_columns(db, schema_name, "dictionary_tables")
+    if not {"table_code", "table_name", "module_code"}.issubset(columns):
+        raise RuntimeError("Snapshot dictionary_tables não possui as colunas mínimas esperadas.")
 
-    params: dict[str, Any] = {
-        "module_codes": list(module_codes),
+    params: dict[str, Any] = {"module_codes": [str(code) for code in module_codes]}
+    optional_columns = {
+        "table_alias": "dt.table_alias",
+        "physical_name": "dt.physical_name",
+        "unique_index": "dt.unique_index",
+        "usa_empresa": "dt.usa_empresa",
+        "usa_unidade": "dt.usa_unidade",
+        "usa_filial": "dt.usa_filial",
+        "x2_modo": "dt.x2_modo",
+        "x2_tamfil": "dt.x2_tamfil",
+        "x2_modoun": "dt.x2_modoun",
+        "x2_tamun": "dt.x2_tamun",
+        "x2_modoemp": "dt.x2_modoemp",
+        "x2_tamemp": "dt.x2_tamemp",
     }
+    selected_optional = [
+        expression
+        for column, expression in optional_columns.items()
+        if column in columns
+    ]
+    select_optional = (",\n                " + ",\n                ".join(selected_optional)) if selected_optional else ""
 
     company_filter = ""
-    environment_filter = ""
-
-    if company_id is not None:
+    if company_id is not None and "company_id" in columns:
         company_filter = """
-            AND (
-                dt.company_id = :company_id
-                OR dt.company_id IS NULL
-            )
+            AND (dt.company_id = :company_id OR dt.company_id IS NULL)
         """
         params["company_id"] = int(company_id)
 
-    if environment_id is not None:
+    environment_filter = ""
+    if environment_id is not None and "environment_id" in columns:
         environment_filter = """
-            AND (
-                dt.environment_id = :environment_id
-                OR dt.environment_id IS NULL
-            )
+            AND (dt.environment_id = :environment_id OR dt.environment_id IS NULL)
         """
         params["environment_id"] = str(environment_id)
 
@@ -184,25 +212,13 @@ def filter_allowed_dictionary_tables(
                 dt.table_code,
                 dt.table_name,
                 dt.module_code,
-                COALESCE(dt.description, dt.table_name) AS description,
-                dt.table_alias,
-                dt.physical_name,
-                dt.unique_index,
-                dt.usa_empresa,
-                dt.usa_unidade,
-                dt.usa_filial,
-                dt.x2_modo,
-                dt.x2_tamfil,
-                dt.x2_modoun,
-                dt.x2_tamun,
-                dt.x2_modoemp,
-                dt.x2_tamemp
+                COALESCE(dt.description, dt.table_name) AS description{select_optional}
             FROM {schema}.dictionary_tables dt
             JOIN {schema}.tenant_schemas ts
               ON ts.chave = dt.table_code
              AND ts.tabela = dt.table_name
-             AND ts.mod_code::text = dt.module_code
-            WHERE dt.module_code = ANY(:module_codes)
+             AND ts.mod_code::text = dt.module_code::text
+            WHERE dt.module_code::text = ANY(:module_codes)
               {company_filter}
               {environment_filter}
             ORDER BY dt.table_code
