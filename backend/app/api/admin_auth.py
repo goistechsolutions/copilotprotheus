@@ -34,15 +34,11 @@ def _clean_env(val: str, default: str = "") -> str:
 
 
 def get_admin_credentials():
-    user = _clean_env(os.environ.get("ADMIN_USER"), "admin")
+    user = _clean_env(os.environ.get("ADMIN_USER"))
     pwd = _clean_env(os.environ.get("ADMIN_PASSWORD"))
     secret = _clean_env(os.environ.get("ADMIN_JWT_SECRET"))
-    
-    if not pwd:
-        pwd = _clean_env(os.environ.get("PROTHEUS_PASSWORD"), "admin123")
-    if not secret:
-        secret = "elitecorp-admin-secret-change-in-prod"
-        
+    if not user or not pwd or len(secret) < 32:
+        raise RuntimeError("Credenciais administrativas não configuradas com segurança.")
     return user, pwd, secret
 
 
@@ -108,8 +104,8 @@ def _delete_auth_cookie(response: Response, *, is_https: bool):
 async def login(request: LoginRequest, raw_request: Request, response: Response):
     try:
         admin_user, admin_pass, _ = get_admin_credentials()
-    except KeyError as e:
-        raise HTTPException(status_code=500, detail=f"Variável de ambiente não configurada: {e}")
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Autenticação administrativa indisponível: credenciais não configuradas.")
 
     req_user = (request.username or "").strip()
     req_pass = (request.password or "").strip()
@@ -118,10 +114,7 @@ async def login(request: LoginRequest, raw_request: Request, response: Response)
     user_ok = hmac.compare_digest(req_user.lower(), admin_user.lower())
     pass_ok = hmac.compare_digest(req_pass, admin_pass)
 
-    # Fallback flexível se a senha do ambiente for a padrão do .env.example ou admin123/admin
-    if not pass_ok and admin_pass in ("change-this-super-strong-password", "admin123", "admin", ""):
-        if req_pass in ("admin123", "admin", "change-this-super-strong-password"):
-            pass_ok = True
+    
 
     if not user_ok or not pass_ok:
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
