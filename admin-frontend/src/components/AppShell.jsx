@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Building2, Users, BookOpen, ScrollText,
   Server, Plug, Key, Database, ShieldCheck,
   Activity, Settings, ChevronLeft, ChevronRight,
-  LogOut, Bell, Menu, Table2, Lock, FileSearch, RefreshCw
+  LogOut, Bell, Menu, Lock, FileSearch
 } from 'lucide-react';
 
 const nav = [
