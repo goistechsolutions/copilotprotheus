@@ -153,7 +153,7 @@ def validate_query_security(
         raise HTTPException(status_code=400, detail="SELECT * não é permitido; selecione somente os campos necessários.")
 
     if re.search(r"\bSELECT\s+TOP\s+\d+", upper_sql) or re.search(r"\bLIMIT\s+\d+", upper_sql):
-        raise HTTPException(status_code=400, detail="TOP/LIMIT não são permitidos no Oracle; use ROWNUM ou FETCH FIRST.")
+        raise HTTPException(status_code=400, detail="SELECT TOP/LIMIT não são permitidos no Oracle; use ROWNUM ou FETCH FIRST.")
 
     if "D_E_L_E_T_" not in upper_sql:
         raise HTTPException(status_code=400, detail="Toda consulta nativa deve filtrar registros excluídos com D_E_L_E_T_ <> '*'.")
