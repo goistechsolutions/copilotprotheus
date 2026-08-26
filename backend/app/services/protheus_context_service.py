@@ -155,6 +155,9 @@ def validate_query_security(
     if re.search(r"\bSELECT\s+TOP\s+\d+", upper_sql) or re.search(r"\bLIMIT\s+\d+", upper_sql):
         raise HTTPException(status_code=400, detail="TOP/LIMIT não são permitidos no Oracle; use ROWNUM ou FETCH FIRST.")
 
+    if "D_E_L_E_T_" not in upper_sql:
+        raise HTTPException(status_code=400, detail="Toda consulta nativa deve filtrar registros excluídos com D_E_L_E_T_ <> '*'.")
+
     if not _has_oracle_limit(upper_sql) and not re.search(r"\b(?:SUM|COUNT|MAX|MIN|AVG)\s*\(", upper_sql):
         raise HTTPException(
             status_code=400,
@@ -197,8 +200,5 @@ def validate_query_security(
                 status_code=403,
                 detail=f"Bloqueio de Segurança RBAC: campo(s) não autorizado(s) no SELECT: {', '.join(unauthorized[:5])}.",
             )
-
-    if "D_E_L_E_T_" not in upper_sql:
-        raise HTTPException(status_code=400, detail="Toda consulta nativa deve filtrar registros excluídos com D_E_L_E_T_ <> '*'.")
 
     return True
