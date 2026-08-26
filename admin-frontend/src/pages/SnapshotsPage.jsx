@@ -48,7 +48,7 @@ export default function SnapshotsPage() {
     }
   };
 
-  const loadSnapshots = async tenant = selectedTenant => {
+  const loadSnapshots = async (tenant = selectedTenant) => {
     if (!tenant) {
       setSnapshots([]);
       return;
