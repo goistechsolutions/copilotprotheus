@@ -7,6 +7,7 @@ import SuggestionCards from '../components/SuggestionCards';
 import Conversation from '../components/Conversation';
 import ResultPane from '../components/ResultPane';
 import LogViewer from '../components/LogViewer';
+import { Bot, ChevronDown, Plus, Sparkles } from 'lucide-react';
 
 const suggestions = [
   { title: 'Faturamento do mês', subtitle: 'por filial' },
@@ -62,7 +63,7 @@ export default function AgentWorkspace() {
   const hasContext = !!(context.tenant_id || context.company || context.branch || context.user || context.module);
 
   const [state, setState] = useState({
-    ready: true,
+    ready: hasContext,
     message: hasContext
       ? 'Contexto do Protheus identificado.'
       : 'Copilot disponível sem contexto validado do Protheus.',
@@ -114,7 +115,7 @@ export default function AgentWorkspace() {
       : 'Copilot disponível sem contexto validado do Protheus.';
 
     setState({
-      ready: true,
+      ready: hasContext,
       message: readyMessage,
     });
   }, [hasContext]);
@@ -167,7 +168,7 @@ export default function AgentWorkspace() {
         : accepted;
 
       setResult(res);
-      
+
       let replyMessage = 'Consulta concluída.';
       if (res.status === 'execution_failed') {
         replyMessage = `Consulta não executada no Protheus: ${res.execution_error || 'o ERP retornou uma falha.'}`;
@@ -176,7 +177,7 @@ export default function AgentWorkspace() {
       } else if (res.summary) replyMessage = res.summary;
       else if (res.message) replyMessage = res.message;
       else if (res.answer) replyMessage = res.answer;
-      
+
       setMessages((m) => [
         ...m,
         { role: 'assistant', text: replyMessage },
@@ -191,66 +192,125 @@ export default function AgentWorkspace() {
     setLoading(false);
   };
 
+  const startNewConversation = () => {
+    setMessages([{ role: 'assistant', text: 'Nova conversa iniciada.' }]);
+    setResult(null);
+    setSelected(null);
+  };
+
   return (
-    <div className="flex flex-col xl:flex-row h-screen w-full bg-slate-50 text-slate-800 overflow-hidden font-sans">
+    <div className="flex h-screen w-full overflow-hidden bg-[#f4f8fc] font-sans text-[#203c60]">
       <div className="hidden md:flex">
         <HistoryRail
           items={history}
           onSelect={setSelected}
-          onNew={() => {
-            setMessages([{ role: 'assistant', text: 'Nova conversa iniciada.' }]);
-            setResult(null);
-            setSelected(null);
-          }}
+          onNew={startNewConversation}
         />
       </div>
 
-      <main className="flex-1 min-w-0 flex flex-col bg-white shadow-xl z-10 overflow-hidden relative border-r border-slate-100">
-        
-        <header className="px-6 pt-6 pb-2 bg-white flex flex-col items-center xl:items-start z-10">
-          <div className="flex items-center gap-2 mb-2">
-             <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-bot"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
-             </div>
-             <h1 className="text-xl font-bold text-slate-800">Protheus Copiloto</h1>
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f8fbfe]">
+        <header className="z-10 border-b border-[#e3ecf4] bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
+          <div className="mx-auto flex w-full max-w-[1180px] items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2476bd]">
+                <Bot size={21} strokeWidth={1.8} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="truncate text-[15px] font-bold tracking-[-0.01em] text-[#1e3b5e]">
+                    Protheus Copiloto
+                  </h1>
+                  <span className="hidden rounded-full bg-[#f0f6fb] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7790a9] sm:inline-flex">
+                    Assistente IA
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-[11px] text-[#8495a8]">
+                  Consultas seguras sobre o seu ERP
+                </p>
+              </div>
+            </div>
+
+            <div className="flex min-w-0 items-center gap-2">
+              <ContextBanner state={state} />
+              <button
+                type="button"
+                onClick={startNewConversation}
+                className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#dfe9f2] bg-white px-3 text-[11px] font-semibold text-[#5f7893] transition-colors hover:border-[#bdd7ed] hover:bg-[#f6fbff] hover:text-[#2377bd] sm:flex"
+              >
+                <Plus size={14} strokeWidth={2} aria-hidden="true" />
+                Nova conversa
+              </button>
+            </div>
           </div>
-          <ContextBanner state={state} />
-          
-          <h2 className="text-2xl mt-4 text-slate-700">
-            Olá, como posso ajudar você hoje?
-          </h2>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 flex flex-col gap-8 scroll-smooth">
-          <SuggestionCards
-            items={suggestions}
-            disabled={loading}
-            onPick={(it) => send(it.title)}
-          />
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth">
+          <div className="mx-auto flex w-full max-w-[980px] flex-col px-4 pb-6 pt-8 sm:px-8 sm:pt-11">
+            <section className="mb-8 flex items-start gap-3 sm:mb-10 sm:gap-4">
+              <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2879bf] shadow-[0_4px_12px_rgba(42,119,184,0.08)] sm:h-11 sm:w-11">
+                <Sparkles size={20} strokeWidth={1.7} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7190ad]">
+                  Seu assistente de dados
+                </p>
+                <h2 className="text-[25px] font-semibold leading-tight tracking-[-0.03em] text-[#1c3a5e] sm:text-[31px]">
+                  Olá, como posso ajudar você hoje?
+                </h2>
+                <p className="mt-2 max-w-[620px] text-[13px] leading-relaxed text-[#7b8fa6]">
+                  Faça uma pergunta sobre o Protheus e receba uma resposta contextualizada para a empresa, filial e módulo ativos.
+                </p>
+              </div>
+            </section>
 
-          <Conversation messages={messages} />
+            {messages.length <= 1 && !selected && (
+              <div className="mb-8">
+                <SuggestionCards
+                  items={suggestions}
+                  disabled={loading}
+                  onPick={(item) => send(item.title)}
+                />
+              </div>
+            )}
 
-          {selected && (
-            <div className="p-4 mx-auto w-full max-w-3xl bg-blue-50 text-blue-700 rounded-lg text-sm border border-blue-100">
-              Histórico selecionado: {selected.title}
-            </div>
-          )}
+            <Conversation messages={messages} />
+
+            {loading && (
+              <div className="mt-2 flex items-center gap-2.5 text-[12px] text-[#7790a9]" aria-live="polite">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]">
+                  <Bot size={16} className="animate-pulse" strokeWidth={1.8} aria-hidden="true" />
+                </span>
+                <span className="rounded-2xl rounded-bl-md border border-[#e1eaf2] bg-white px-4 py-2.5 shadow-[0_3px_12px_rgba(49,84,117,0.05)]">
+                  Consultando o Protheus…
+                </span>
+              </div>
+            )}
+
+            {selected && (
+              <div className="mt-5 flex items-center gap-2 rounded-2xl border border-[#cfe3f4] bg-[#f0f7fd] px-4 py-3 text-[12px] text-[#3d6f98]">
+                <ChevronDown size={15} className="rotate-[-90deg]" aria-hidden="true" />
+                Histórico selecionado: <strong>{selected.title}</strong>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="p-4 bg-white shrink-0">
-          <Composer
-            disabled={loading}
-            onSend={send}
-            placeholder="Faça sua pergunta sobre o Protheus... (ou digite /log)"
-          />
+        <div className="border-t border-[#e6eef5] bg-white/90 px-4 pb-3 pt-3 backdrop-blur sm:px-8 sm:pb-4">
+          <div className="mx-auto w-full max-w-[980px]">
+            <Composer
+              disabled={loading}
+              onSend={send}
+              placeholder="Pergunte qualquer coisa sobre o Protheus... (ou digite /log)"
+            />
+          </div>
         </div>
       </main>
 
-      <aside className={`w-full xl:w-[420px] shrink-0 bg-white border-t xl:border-t-0 xl:border-l border-slate-200 overflow-y-auto flex-col h-1/2 xl:h-auto ${result || isLogMode ? 'flex' : 'hidden xl:flex'}`}>
+      <aside className={`w-full shrink-0 flex-col overflow-y-auto border-t border-[#e1eaf2] bg-white xl:w-[420px] xl:border-l xl:border-t-0 ${result || isLogMode ? 'flex' : 'hidden'}`}>
         {isLogMode ? (
-           <LogViewer onClose={() => setIsLogMode(false)} />
+          <LogViewer onClose={() => setIsLogMode(false)} />
         ) : (
-           <ResultPane result={result} />
+          <ResultPane result={result} />
         )}
       </aside>
     </div>
