@@ -75,8 +75,8 @@ const SERVICE_ICONS = {
 };
 
 export default function Infra() {
-  const { data, loading, refetch } = useApi('/api/admin/infra/status');
-  const { data: envData } = useApi('/api/admin/infra/env');
+  const { data, loading, refetch } = useApi('/api/infra/status');
+  const { data: envData } = useApi('/api/infra/env');
 
   // Normaliza resposta do backend
   const services = data?.services
