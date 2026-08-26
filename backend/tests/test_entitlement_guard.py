@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.services.entitlement_guard import EntitlementGuard
+from app.services.entitlement_guard import EntitlementDecision, EntitlementDenied, EntitlementGuard
 from app.services.protheus_context_service import mask_sensitive_rows, validate_query_security
 
 
@@ -21,6 +21,32 @@ class FakeResult:
 
     def all(self):
         return list(self.rows)
+
+
+class UsageDB(FakeDB):
+    def __init__(self, usage_row=None):
+        super().__init__()
+        self.usage_row = usage_row
+
+    def execute(self, query, params=None):
+        sql = str(query).lower()
+        if "to_char(current_date" in sql:
+            return FakeResult(value="2026-08")
+        if "from public.query_usage_counters" in sql:
+            return FakeResult(rows=[self.usage_row] if self.usage_row else [])
+        return super().execute(query, params)
+
+
+class SessionLimitDB(FakeDB):
+    def execute(self, query, params=None):
+        sql = str(query).lower()
+        if "update public.concurrent_sessions" in sql:
+            return FakeResult()
+        if "select id" in sql and "public.concurrent_sessions" in sql:
+            return FakeResult(value=None)
+        if "select count(*)" in sql and "public.concurrent_sessions" in sql:
+            return FakeResult(value=2)
+        return super().execute(query, params)
 
 
 class FakeDB:
@@ -58,6 +84,23 @@ class FakeDB:
 
     def rollback(self):
         self.rollbacks += 1
+
+
+def entitlement_decision(**overrides):
+    values = {
+        "allowed": True,
+        "mode": "enforce",
+        "tenant_code": "rodol_prod",
+        "environment_code": "c8te0u_prod",
+        "module_code": "FAT",
+        "contract_id": "contract-1",
+        "query_limit": 3,
+        "overage_mode": "block",
+        "concurrent_sessions_limit": 2,
+        "user_id": "user-1",
+    }
+    values.update(overrides)
+    return EntitlementDecision(**values)
 
 
 def active_contract():
@@ -195,6 +238,61 @@ def test_masked_dictionary_field_is_masked_before_response():
     safe_rows = mask_sensitive_rows(rows, masked_fields={"A1_EMAIL"})
 
     assert safe_rows == [{"A1_EMAIL": "********************", "A1_COD": "000001"}]
+
+
+def test_query_limit_blocks_when_counter_reaches_limit():
+    guard = EntitlementGuard(mode="enforce")
+    db = UsageDB({"total_queries": 3, "blocked_queries": 0, "overage_queries": 0})
+
+    with pytest.raises(EntitlementDenied, match="Limite de consultas") as error:
+        guard._reserve_query(db, entitlement_decision(), "corr-limit")
+
+    assert error.value.code == "QUERY_LIMIT_EXCEEDED"
+    assert db.commits == 1
+
+
+def test_query_limit_allows_overage_when_contract_allows_it():
+    guard = EntitlementGuard(mode="enforce")
+    db = UsageDB({"total_queries": 3, "blocked_queries": 0, "overage_queries": 0})
+    decision = entitlement_decision(overage_mode="allow")
+
+    guard._reserve_query(db, decision, "corr-overage")
+
+    assert decision.queries_used == 4
+    assert decision.remaining_queries == 0
+    assert db.commits == 1
+
+
+def test_concurrent_session_limit_blocks_new_session():
+    guard = EntitlementGuard(mode="enforce")
+    db = SessionLimitDB()
+
+    with pytest.raises(EntitlementDenied, match="conexões simultâneas") as error:
+        guard._acquire_session(db, entitlement_decision(), "session-new", "user-1")
+
+    assert error.value.code == "CONCURRENT_SESSION_LIMIT_EXCEEDED"
+
+
+def test_authorize_does_not_reserve_until_explicit_reserve_call(monkeypatch):
+    guard = EntitlementGuard(mode="enforce")
+    db = FakeDB(contract=active_contract(), user=active_user(), module=active_module())
+    calls = []
+    monkeypatch.setattr(guard, "_reserve_query", lambda *_args: calls.append("query"))
+    monkeypatch.setattr(guard, "_acquire_session", lambda *_args: calls.append("session"))
+    monkeypatch.setattr(guard, "_audit", lambda *_args: calls.append("audit"))
+
+    decision = guard.authorize(
+        db,
+        tenant_code="rodol_prod",
+        environment_code="c8te0u_prod",
+        module_code="FAT",
+        user_identity="user-1",
+    )
+
+    assert decision.allowed is True
+    assert calls == []
+    guard.reserve(db, decision, session_key="session-1", correlation_id="corr-1")
+    assert calls == ["query", "session", "audit"]
 
 
 def test_missing_role_does_not_grant_dictionary_access():
