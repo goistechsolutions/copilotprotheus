@@ -121,16 +121,14 @@ def _extract_filter_field_refs(sql: str) -> set[tuple[str | None, str]]:
     )
     if not match:
         return set()
-    body = match.group("body")
+    body = re.sub(r"'(?:''|[^'])*'", " ", match.group("body"))
     fields: set[tuple[str | None, str]] = set()
     qualified_pattern = re.compile(
-        r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\s*"
-        r"(?:(?:NOT\s+)?(?:LIKE|IN|BETWEEN|IS)|<>|!=|<=|>=|=|<|>)",
+        r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\b",
         re.IGNORECASE,
     )
     unqualified_pattern = re.compile(
-        r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\s*"
-        r"(?:(?:NOT\s+)?(?:LIKE|IN|BETWEEN|IS)|<>|!=|<=|>=|=|<|>)",
+        r"(?<!\.)\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b(?!\s*\()",
         re.IGNORECASE,
     )
     for qualifier, field_name in qualified_pattern.findall(body):
