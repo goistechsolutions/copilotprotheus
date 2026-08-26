@@ -303,18 +303,33 @@ async def process_agent_task(task_id: str, payload: dict):
             )
 
             # 5. Segurança
-            validate_query_security(sql=sql, allowed_tables=allowed_table_names, filial=op_context["xfilial"])
+            validate_query_security(
+                sql=sql,
+                allowed_tables=allowed_table_names,
+                allowed_fields=allowed_field_names,
+                filial=op_context["xfilial"],
+            )
 
+            context_tables = [
+                {
+                    "table_code": item["table"].get("table_code"),
+                    "table_name": item["table"].get("table_name"),
+                    "physical_name": item["table"].get("physical_name") or item["table"].get("table_alias"),
+                    "description": item["table"].get("description"),
+                    "module_code": item["table"].get("module_code"),
+                }
+                for item in context
+            ]
             response = {
                 "status": "success",
                 "correlation_id": correlation_id,
-
                 "tenant_id": str(ctx.tenant_id),
                 "company_id": ctx.company_id,
                 "context_operational": op_context,
                 "tables_in_context": len(context),
+                "tables_used": context_tables,
                 "sql": sql,
-                "response_time_ms": int((time.time() - started) * 1000)
+                "response_time_ms": int((time.time() - started) * 1000),
             }
 
             # 6. QueryRest
@@ -336,22 +351,26 @@ async def process_agent_task(task_id: str, payload: dict):
 
 
                     )
+                    safe_rows = mask_sensitive_rows(rows)
                     response["records"] = len(rows)
-                    response["data"] = rows[:500]
+                    response["data"] = safe_rows[:500]
+                    response["structured"] = {
+                        "columns": list(safe_rows[0].keys()) if safe_rows and isinstance(safe_rows[0], dict) else [],
+                        "rows": safe_rows[:500],
+                        "total_records": len(rows),
+                        "display_limit": 500,
+                    }
                     logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
 
                     if len(rows) == 0:
                         response["summary"] = "A consulta ao banco Oracle do Protheus foi executada com sucesso, porém retornou zero registros (tabela vazia ou sem correspondências no período)."
+                    elif safe_rows and isinstance(safe_rows[0], dict):
+                        response["summary"] = (
+                            f"A consulta ao Protheus retornou {len(rows)} registros. "
+                            "Os dados estruturados estão disponíveis na tabela e nas visualizações do relatório."
+                        )
                     else:
-                        if isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict):
-                            headers = list(rows[0].keys())
-                            md_table = "| " + " | ".join(headers) + " |\n"
-                            md_table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
-                            for row in rows[:500]:
-                                md_table += "| " + " | ".join([str(row.get(h, "")).replace("\n", " ") for h in headers]) + " |\n"
-                            response["summary"] = md_table
-                        else:
-                            response["summary"] = f"A consulta retornou {len(rows)} registros, mas o formato é inesperado."
+                        response["summary"] = f"A consulta retornou {len(rows)} registros, mas o formato recebido não é tabular."
                 except HTTPException as http_ex:
                     response["status"] = "execution_failed"
                     response["execution_error"] = http_ex.detail
