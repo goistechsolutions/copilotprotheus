@@ -298,7 +298,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 )
                 if name
             }
-            allowed_permission_tables, allowed_fields_by_table = entitlement_guard.authorize_dictionary(
+            dictionary_authorization = entitlement_guard.authorize_dictionary_details(
                 db=db,
                 tenant_schema=ctx.schema_name,
                 tenant_code=ctx.tenant_id,
@@ -307,6 +307,14 @@ async def process_agent_task(task_id: str, payload: dict):
                 role_id=entitlement.role_id,
                 table_names=permission_table_names,
             )
+            allowed_permission_tables = dictionary_authorization.allowed_tables
+            allowed_fields_by_table = dictionary_authorization.allowed_fields_by_table
+            allowed_filter_fields_by_table = dictionary_authorization.filter_fields_by_table
+            masked_fields = {
+                field_name
+                for field_names in dictionary_authorization.masked_fields_by_table.values()
+                for field_name in field_names
+            }
             if entitlement_guard.mode == "enforce":
                 if not allowed_permission_tables:
                     AGENT_TASKS[task_id] = {
@@ -402,6 +410,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 allowed_tables=allowed_table_names,
                 allowed_fields=allowed_field_names,
                 allowed_fields_by_table=allowed_fields_by_table if entitlement_guard.mode == "enforce" else None,
+                filter_fields_by_table=allowed_filter_fields_by_table if entitlement_guard.mode == "enforce" else None,
                 filial=op_context["xfilial"],
             )
 
@@ -448,7 +457,10 @@ async def process_agent_task(task_id: str, payload: dict):
 
 
                     )
-                    safe_rows = mask_sensitive_rows(rows)
+                    safe_rows = mask_sensitive_rows(
+                        rows,
+                        masked_fields=masked_fields if entitlement_guard.mode == "enforce" else None,
+                    )
                     response["records"] = len(rows)
                     response["data"] = safe_rows[:500]
                     response["structured"] = {
