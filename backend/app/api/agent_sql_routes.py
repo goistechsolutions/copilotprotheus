@@ -22,7 +22,11 @@ from app.services.dictionary_context_service import (
     build_dictionary_context,
     render_context_for_prompt,
 )
-from app.services.protheus_context_service import build_protheus_context, validate_query_security
+from app.services.protheus_context_service import (
+    build_protheus_context,
+    mask_sensitive_rows,
+    validate_query_security,
+)
 from app.services.protheus_service import get_tenant_config
 from app.services.queryrest_service import queryrest_exec_tenant
 
@@ -56,19 +60,19 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 {context_text}
 =============================================================================
 
-DIRETRIZES GERAIS E INNEGOCIÁVEIS:
-1. Retorne EXCLUSIVAMENTE o código SQL da consulta (começando obrigatoriamente por SELECT). NÃO envolva a resposta em blocos de markdown (```sql ou ```) nem acrescente qualquer comentário ou texto introdutório.
-2. Banco de Dados ORACLE: NUNCA utilize a sintaxe `SELECT TOP N`. Em consultas paginadas ou limitadas, você é obrigado a usar a sintaxe Oracle:
-   - Para limite de linhas simples: `WHERE ROWNUM <= N` (inserido apropriadamente) ou no formato subquery.
-   - Para paginação/limitação padrão ANSI/Oracle: `OFFSET 0 ROWS FETCH NEXT N ROWS ONLY`.
-3. Filtro Obrigatório de Exclusão Lógica: Toda e qualquer tabela do Protheus referenciada no FROM ou JOINs precisa estar filtrada pela cláusula de exclusão lógica: `D_E_L_E_T_ <> '*'`.
-4. Injeção de Empresa e Filial (XFILIAL): A empresa operacional atual é '{empresa}' e a filial (XFILIAL) ativa é '{xfilial}'. É OBRIGATÓrio incluir a restrição pela filial aplicável para as tabelas (ex: `A1_FILIAL = '{xfilial}'`, `F2_FILIAL = '{xfilial}'`, `E1_FILIAL = '{xfilial}'`).
-5. Cruzamentos e JOINs no Protheus:
-   - Faturamento (Notas de Saída): cruzamento entre SF2 (cabeçalho) e SD2 (itens) via `F2_FILIAL = D2_FILIAL AND F2_DOC = D2_DOC AND F2_SERIE = D2_SERIE`.
-   - Saídas Financeiras (TES): JOIN com SF4 via `D2_TES = F4_CODIGO`.
-   - Notas Normais: `F2_TIPO = 'N'` (desconsidera devoluções e complementos).
-   - Notas de Entrada: cruzamento entre SF1 e SD1 via `F1_FILIAL = D1_FILIAL AND F1_DOC = D1_DOC AND F1_SERIE = D1_SERIE AND F1_FORNECE = D1_FORNECE AND F1_LOJA = D1_LOJA`.
-6. Fidelidade aos Dados: NUNCA invente nomes de tabelas ou colunas que não existam na árvore autorizada acima."""
+    DIRETRIZES GERAIS E INNEGOCIÁVEIS:
+1. Retorne EXCLUSIVAMENTE uma única instrução SELECT ou WITH Oracle. Não envolva a resposta em markdown, comentários ou texto introdutório.
+2. Use somente tabelas, nomes físicos e campos presentes no snapshot autorizado. Nunca derive nome físico com sufixo, nunca invente tabela/campo e nunca use `X3_RELACAO` para criar JOIN.
+3. Banco ORACLE: nunca use `SELECT TOP` ou `LIMIT`. Toda consulta não agregada deve ter limite Oracle (`ROWNUM <= 500` ou `FETCH FIRST 500 ROWS ONLY`); consultas agregadas devem usar SUM, COUNT, MAX, MIN ou AVG quando o pedido permitir.
+4. Use aliases claros e selecione somente os campos necessários. Nunca use `SELECT *`.
+5. Toda tabela Protheus do FROM/JOIN deve possuir seu próprio filtro `alias.D_E_L_E_T_ <> '*'`.
+6. Respeite as flags SHARING/SX2 de cada tabela. Inclua empresa, unidade e/ou filial somente quando o snapshot indicar que o nível é usado; a filial operacional autorizada é '{xfilial}'. Nunca deduza XFILIAL.
+7. Priorize os índices SIX e o `UNIQUE_INDEX` informados para montar JOINs e filtros. Se o relacionamento não estiver sustentado por SIX, X2_UNICO ou convenção Protheus documentada, não invente o JOIN.
+8. Padrões documentados: SF2/SD2 usam F2_FILIAL=D2_FILIAL, F2_DOC=D2_DOC e F2_SERIE=D2_SERIE; SF1/SD1 usam filial, documento, série, fornecedor e loja; TES usa D2_TES/F4_CODIGO ou D1_TES/F4_CODIGO quando essas tabelas estiverem autorizadas.
+9. Filtros de negócio usuais, como F2_TIPO='N' ou F4_DUPLIC='S', só podem ser usados quando o campo estiver no snapshot e forem pertinentes ao pedido.
+10. Nunca acessar campos marcados como sigilosos/mascarados e nunca retornar senha, token, JWT, secret, certificado ou chave.
+11. Contexto operacional: empresa='{empresa}', filial='{filial}', XFILIAL='{xfilial}'. Se o snapshot não sustentar a regra necessária, informe a impossibilidade em vez de fabricar SQL.
+12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant/ambiente."""
 
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}"
 
@@ -212,12 +216,14 @@ async def process_agent_task(task_id: str, payload: dict):
                 db=db,
                 tenant_schema=ctx.schema_name,
                 module_codes=[ctx.module_code],
-                company_id=ctx.company_id
+                company_id=ctx.company_id,
+                environment_id=environment_code,
             )
 
             # O LLM precisa dos campos também. Precisamos enriquecer as tabelas com seus fields
             context = []
             for t in tables:
+                table_data = dict(t)
                 fields = db.execute(
                     text("""
                         SELECT
@@ -225,17 +231,40 @@ async def process_agent_task(task_id: str, payload: dict):
                             COALESCE(title, field_name) AS field_label,
                             field_type,
                             length_num AS field_length,
-                            decimal_num AS field_decimal
+                            decimal_num AS field_decimal,
+                            validation_rule,
+                            relation_rule,
+                            when_rule,
+                            sxg_group,
+                            sxg_size
                         FROM dictionary_fields
-                        WHERE table_code = :table_code
+                        WHERE (table_name = :table_name OR table_code = :table_code)
+                          AND (environment_id = :environment_id OR environment_id IS NULL)
                         ORDER BY id
                     """),
-                    {"table_code": t["table_code"]}
+                    {
+                        "table_name": table_data.get("table_name"),
+                        "table_code": table_data.get("table_code"),
+                        "environment_id": environment_code,
+                    },
                 ).mappings().all()
-                
+                indexes = db.execute(
+                    text("""
+                        SELECT index_order, nickname, expression
+                        FROM dictionary_indexes
+                        WHERE table_name IN (:table_name, :table_code)
+                        ORDER BY index_order
+                    """),
+                    {
+                        "table_name": table_data.get("table_name"),
+                        "table_code": table_data.get("table_code"),
+                    },
+                ).mappings().all()
+
                 context.append({
-                    "table": dict(t),
-                    "fields": [dict(f) for f in fields]
+                    "table": table_data,
+                    "fields": [dict(f) for f in fields],
+                    "indexes": [dict(index) for index in indexes],
                 })
 
             if not context:
@@ -245,9 +274,19 @@ async def process_agent_task(task_id: str, payload: dict):
 
             context_text = render_context_for_prompt(context)
             allowed_table_names = {item["table"]["table_name"] for item in context}
+            allowed_field_names = {
+                str(field.get("field_name")).upper()
+                for item in context
+                for field in item.get("fields", [])
+                if field.get("field_name")
+            }
             for item in context:
-                if item["table"].get("physical_name"):
-                    allowed_table_names.add(item["table"]["physical_name"])
+                table = item["table"]
+                if table.get("physical_name"):
+                    allowed_table_names.add(table["physical_name"])
+                if table.get("table_alias"):
+                    allowed_table_names.add(table["table_alias"])
+
 
             # 4. LLM
             sql = await real_llm_sql_generator(
