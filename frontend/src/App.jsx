@@ -1,33 +1,48 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, X, Send, History, Plus, Building2, User as UserIcon, CircleCheck, CircleAlert, Paperclip } from 'lucide-react';
-import ChatHistory from './components/ChatHistory';
-import QuickPrompts from './components/QuickPrompts';
-import ChatMessage from './components/ChatMessage';
-import FileUploadButton from './components/FileUploadButton';
-import { askAgent, uploadAgentFile, getAgentTaskStatus } from './services/api';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  BarChart3,
+  Building2,
+  CircleAlert,
+  CircleCheck,
+  History,
+  Paperclip,
+  Plus,
+  Send,
+  Sparkles,
+  User as UserIcon,
+  X,
+} from 'lucide-react';
+import ChatHistory from './ChatHistory';
+import QuickPrompts from './QuickPrompts';
+import ChatMessage from './ChatMessage';
+import FileUploadButton from './FileUploadButton';
+import StructuredResultPanel from './StructuredResultPanel';
+import { askAgent, getAgentTaskStatus, uploadAgentFile } from './services/api';
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isResultOpen, setIsResultOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [_error, setError] = useState(null);
+  const [, setError] = useState(null);
   const [attachedFile, setAttachedFile] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [context, setContext] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-      return {
-        module: params.get('module') || 'SIGAFAT',
-        branch: params.get('branch') || '0101',
-        user: params.get('user') || 'admin',
-        profile: params.get('profile') || 'Negócio',
-        tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
-        environment_code: params.get('environment_code') || 'c8te0u_prod',
-        company_id: params.get('company_id') || params.get('company') || null
-      };
+    return {
+      module: params.get('module') || 'SIGAFAT',
+      branch: params.get('branch') || '0101',
+      user: params.get('user') || 'admin',
+      profile: params.get('profile') || 'Negócio',
+      tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
+      environment_code: params.get('environment_code') || 'c8te0u_prod',
+      company_id: params.get('company_id') || params.get('company') || null,
+    };
   });
-  const [historyItems, _setHistoryItems] = useState([]);
+  const [historyItems] = useState([]);
+  const [result, setResult] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -45,31 +60,40 @@ export default function App() {
           profile: incoming.profile || prev.profile || 'Negócio',
           tenant_id: incoming.tenant_id || prev.tenant_id || 'rodol_prod',
           environment_code: incoming.environment_code || prev.environment_code || 'c8te0u_prod',
-          company_id: incoming.company_id || prev.company_id
+          company_id: incoming.company_id || prev.company_id,
         }));
 
         setConnectionStatus('connected');
       }
+
       if (event.data?.type === 'cprot-dashboard-data') {
-        setMessages(prev => prev.map(m => m.isLoading ? { ...event.data.payloadGemini, isUser: false } : m));
+        const payload = event.data.payloadGemini || {};
+        setMessages(prev => prev.map(message => message.isLoading ? { ...payload, isUser: false } : message));
+        setResult({ ...payload, status: payload.status || 'success' });
+        setIsResultOpen(true);
         setIsLoading(false);
       }
+
       if (event.data?.type === 'cprot-dashboard-error') {
-        setError(event.data.error);
+        const errorMessage = String(event.data.error || 'Falha no processamento do dashboard.');
+        setError(errorMessage);
         setIsLoading(false);
-        setMessages(prev => [...prev.filter(m => !m.isLoading), { executive_summary: `**Erro:** ${event.data.error}`, isUser: false }]);
+        const errorResult = { status: 'error', error: errorMessage, summary: errorMessage };
+        setResult(errorResult);
+        setIsResultOpen(true);
+        setMessages(prev => [...prev.filter(message => !message.isLoading), { executive_summary: `**Erro:** ${errorMessage}`, isUser: false }]);
       }
     };
+
     window.addEventListener('message', handleMessage);
     const timer = setTimeout(() => {
       setConnectionStatus(prev => (prev === 'connecting' ? 'connected' : prev));
     }, 2000);
-    
-    // Notifica o wrapper de que o React está pronto para receber o postMessage (se existir)
+
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: 'cprot-ready' }, '*');
     }
-    
+
     return () => {
       window.removeEventListener('message', handleMessage);
       clearTimeout(timer);
@@ -80,10 +104,10 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
+  const handleFileSelect = (event) => {
+    const file = event.target.files?.[0];
     if (file) setAttachedFile(file);
-    e.target.value = '';
+    event.target.value = '';
   };
 
   const validateContext = () => {
@@ -100,15 +124,15 @@ export default function App() {
 
     try {
       validateContext();
-    } catch (e) {
-      setError(e.message);
+    } catch (error) {
+      setError(error.message);
       setIsLoading(false);
+      const errorResult = { status: 'error', error: error.message, summary: error.message };
+      setResult(errorResult);
+      setIsResultOpen(true);
       setMessages(prev => [
-        ...prev.filter(m => !m.isLoading),
-        {
-          executive_summary: `**Contexto não disponível:** ${e.message}`,
-          isUser: false
-        }
+        ...prev.filter(message => !message.isLoading),
+        { executive_summary: `**Contexto não disponível:** ${error.message}`, isUser: false },
       ]);
       return;
     }
@@ -119,163 +143,180 @@ export default function App() {
     setMessages(prev => [
       ...prev,
       { text: finalQuery, isUser: true, file: attachedFile ? attachedFile.name : null },
-      { isLoading: true, isUser: false }
+      { isLoading: true, isUser: false },
     ]);
 
     try {
       let response;
-        if (attachedFile) {
-          const formData = new FormData();
-          formData.append('file', attachedFile);
-          if (context.tenant_id) formData.append('tenant_id', context.tenant_id);
-          if (context.environment_code) formData.append('environment_code', context.environment_code);
-          if (context.company_id) formData.append('company_id', context.company_id);
-          formData.append('query', finalQuery);
-          formData.append('context', JSON.stringify(context));
-          response = await uploadAgentFile(formData);
-        } else {
-          const payload = { 
-              query: finalQuery, 
-              tenant_id: context.tenant_id,
-              environment_code: context.environment_code,
-              company_id: context.company_id,
-              execute: true,
-              context 
-            };
-          response = await askAgent(payload);
-        }
-      
-      // Polling logic
+      if (attachedFile) {
+        const formData = new FormData();
+        formData.append('file', attachedFile);
+        if (context.tenant_id) formData.append('tenant_id', context.tenant_id);
+        if (context.environment_code) formData.append('environment_code', context.environment_code);
+        if (context.company_id) formData.append('company_id', context.company_id);
+        formData.append('query', finalQuery);
+        formData.append('context', JSON.stringify(context));
+        response = await uploadAgentFile(formData);
+      } else {
+        const payload = {
+          query: finalQuery,
+          tenant_id: context.tenant_id,
+          environment_code: context.environment_code,
+          company_id: context.company_id,
+          execute: true,
+          context,
+        };
+        response = await askAgent(payload);
+      }
+
       if (response.status === 'processing' && response.task_id) {
         let isComplete = false;
         while (!isComplete) {
-          await new Promise(r => setTimeout(r, 5000)); // 5 segundos para evitar Rate Limit (429) do Cloudflare
+          await new Promise(resolve => setTimeout(resolve, 5000));
           try {
-            const statusRes = await getAgentTaskStatus(response.task_id);
-            if (statusRes.status === 'success' || statusRes.status === 'execution_failed' || statusRes.status === 'error') {
-              response = statusRes;
+            const statusResponse = await getAgentTaskStatus(response.task_id);
+            if (['success', 'execution_failed', 'error', 'completed'].includes(statusResponse.status)) {
+              response = statusResponse;
               isComplete = true;
             }
-          } catch (err) {
-            console.warn("Polling falhou ou sofreu interrupção de rede/CORS:", err);
-            // Em caso de WAF/Rate Limit, aguardamos mais tempo no próximo loop
-            await new Promise(r => setTimeout(r, 5000));
+          } catch (pollingError) {
+            console.warn('Polling falhou ou sofreu interrupção de rede/CORS:', pollingError);
+            await new Promise(resolve => setTimeout(resolve, 5000));
           }
         }
       }
 
-      setMessages(prev => prev.map(m => m.isLoading ? { executive_summary: response.message || response.answer || response.summary, ...response, isUser: false } : m));
+      const structuredResult = {
+        ...response,
+        summary: response.summary || response.message || response.answer || '',
+        data: Array.isArray(response.data) ? response.data : [],
+      };
+      setResult(structuredResult);
+      setIsResultOpen(true);
+      setMessages(prev => prev.map(message => message.isLoading ? {
+        executive_summary: response.message || response.answer || response.summary || response.execution_error,
+        ...response,
+        isUser: false,
+      } : message));
       if (attachedFile) setAttachedFile(null);
       setIsLoading(false);
-    } catch (e) {
-      setError(e.message);
+    } catch (error) {
+      setError(error.message);
       setIsLoading(false);
-      setMessages(prev => [...prev.filter(m => !m.isLoading), { executive_summary: `**Erro:** ${e.message}`, isUser: false }]);
+      const errorResult = { status: 'error', error: error.message, summary: error.message };
+      setResult(errorResult);
+      setIsResultOpen(true);
+      setMessages(prev => [...prev.filter(message => !message.isLoading), { executive_summary: `**Erro:** ${error.message}`, isUser: false }]);
     }
   };
 
   const statusConfig = {
-    connecting: { label: 'Conectando ao Protheus...', color: 'text-slate-400', icon: <CircleAlert className="w-3.5 h-3.5" /> },
-    connected: { label: 'Conectado ao Protheus', color: 'text-green-600', icon: <CircleCheck className="w-3.5 h-3.5" /> },
-    error: { label: 'Contexto não detectado', color: 'text-amber-600', icon: <CircleAlert className="w-3.5 h-3.5" /> },
+    connecting: { label: 'Conectando ao Protheus...', color: 'text-slate-400', icon: <CircleAlert className="h-3.5 w-3.5" /> },
+    connected: { label: 'Conectado ao Protheus', color: 'text-green-600', icon: <CircleCheck className="h-3.5 w-3.5" /> },
+    error: { label: 'Contexto não detectado', color: 'text-amber-600', icon: <CircleAlert className="h-3.5 w-3.5" /> },
   }[connectionStatus];
 
   if (!isOpen) {
     return (
-      <button onClick={() => setIsOpen(true)} className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white transition-all hover:scale-105 z-50" title="Abrir Protheus Copiloto">
-        <Sparkles className="w-6 h-6" />
+      <button onClick={() => setIsOpen(true)} className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all hover:scale-105 hover:bg-blue-700" title="Abrir Protheus Copiloto">
+        <Sparkles className="h-6 w-6" />
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-0 right-0 md:bottom-6 md:right-6 w-full md:w-[420px] h-full md:h-[640px] bg-white md:rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden z-50 font-sans">
-      <header className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between flex-shrink-0">
+    <div className="fixed bottom-0 right-0 z-50 flex h-full w-full flex-col overflow-hidden border border-slate-200 bg-white font-sans shadow-2xl md:bottom-6 md:right-6 md:h-[640px] md:w-[420px] md:rounded-2xl">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center"><Sparkles className="w-4 h-4 text-white" /></div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600"><Sparkles className="h-4 w-4 text-white" /></div>
           <div>
-            <h1 className="text-sm font-bold text-slate-800 leading-tight">Protheus Copiloto</h1>
+            <h1 className="text-sm font-bold leading-tight text-slate-800">Protheus Copiloto</h1>
             <span className={`flex items-center gap-1 text-[11px] font-medium ${statusConfig.color}`}>{statusConfig.icon}{statusConfig.label}</span>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setIsHistoryOpen(true)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors" title="Histórico"><History className="w-4 h-4" /></button>
-          <button onClick={() => setMessages([])} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors" title="Novo chat"><Plus className="w-4 h-4" /></button>
-          <button onClick={() => setIsOpen(false)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors" title="Fechar"><X className="w-4 h-4" /></button>
+          {result && <button onClick={() => setIsResultOpen(true)} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600" title="Abrir resultados"><BarChart3 className="h-4 w-4" /></button>}
+          <button onClick={() => setIsHistoryOpen(true)} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100" title="Histórico"><History className="h-4 w-4" /></button>
+          <button onClick={() => { setMessages([]); setResult(null); setIsResultOpen(false); }} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100" title="Novo chat"><Plus className="h-4 w-4" /></button>
+          <button onClick={() => setIsOpen(false)} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100" title="Fechar"><X className="h-4 w-4" /></button>
         </div>
       </header>
-      <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-shrink-0">
-        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-700 px-2 py-1 rounded-md border border-slate-200">
-          <Building2 className="w-3 h-3 text-blue-600" />
+
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
+        <span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700">
+          <Building2 className="h-3 w-3 text-blue-600" />
           {context.module ? `${context.module}${context.branch ? ` - Filial ${context.branch}` : ''}` : 'Módulo Protheus'}
         </span>
-        <span className="flex items-center gap-1 text-[11px] font-medium bg-white text-slate-700 px-2 py-1 rounded-md border border-slate-200">
-          <UserIcon className="w-3 h-3 text-blue-600" />
+        <span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700">
+          <UserIcon className="h-3 w-3 text-blue-600" />
           {context.user || 'admin'}
         </span>
       </div>
-      <div className={`absolute inset-0 bg-white z-20 flex flex-col transition-transform duration-300 ${isHistoryOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
-          <h2 className="font-bold text-slate-800 flex items-center gap-2 text-sm"><History className="w-4 h-4 text-blue-600" />Histórico</h2>
-          <button onClick={() => setIsHistoryOpen(false)} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"><X className="w-4 h-4" /></button>
+
+      <div className={`absolute inset-0 z-20 flex flex-col bg-white transition-transform duration-300 ${isHistoryOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 p-4">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800"><History className="h-4 w-4 text-blue-600" />Histórico</h2>
+          <button onClick={() => setIsHistoryOpen(false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           <ChatHistory history={historyItems} onSelect={() => setIsHistoryOpen(false)} />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+
+      <div className="flex flex-1 flex-col overflow-y-auto p-4">
         {messages.length === 0 ? (
-          <div className="flex-1 flex flex-col justify-center">
-            <h2 className="text-lg font-bold text-slate-800 mb-1">Olá, como posso ajudar você hoje?</h2>
-            <p className="text-sm text-slate-500 mb-5">Estou conectado ao seu ERP e adapto as sugestões ao módulo ativo.</p>
-            <QuickPrompts module={context.module} onSelect={(p) => handleAsk(p)} />
+          <div className="flex flex-1 flex-col justify-center">
+            <h2 className="mb-1 text-lg font-bold text-slate-800">Olá, como posso ajudar você hoje?</h2>
+            <p className="mb-5 text-sm text-slate-500">Estou conectado ao seu ERP e adapto as sugestões ao módulo ativo.</p>
+            <QuickPrompts module={context.module} onSelect={handleAsk} />
           </div>
         ) : (
           <div className="w-full">
-            {messages.map((msg, idx) => (
-              msg.isLoading ? (
-                <div key={idx} className="flex justify-start mb-6">
-                  <div className="bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-blue-600"></div>
+            {messages.map((message, index) => (
+              message.isLoading ? (
+                <div key={index} className="mb-6 flex justify-start">
+                  <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-b-2 border-blue-600" />
                     <span className="text-xs text-slate-500">Analisando dados do ERP...</span>
                   </div>
                 </div>
               ) : (
-                <ChatMessage key={idx} message={msg} isUser={msg.isUser} profile={context.profile} />
+                <ChatMessage key={index} message={message} isUser={message.isUser} profile={context.profile} />
               )
             ))}
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
-      <div className="p-3 bg-white border-t border-slate-100 flex-shrink-0">
+
+      <div className="shrink-0 border-t border-slate-100 bg-white p-3">
         {attachedFile && (
-          <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 mb-2 text-xs text-blue-700">
-            <span className="truncate flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" />{attachedFile.name}</span>
-            <button onClick={() => setAttachedFile(null)} className="text-blue-400 hover:text-blue-700"><X className="w-3.5 h-3.5" /></button>
+          <div className="mb-2 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs text-blue-700">
+            <span className="flex min-w-0 items-center gap-1.5 truncate"><Paperclip className="h-3.5 w-3.5 shrink-0" />{attachedFile.name}</span>
+            <button onClick={() => setAttachedFile(null)} className="text-blue-400 hover:text-blue-700"><X className="h-3.5 w-3.5" /></button>
           </div>
         )}
-        <form onSubmit={(e) => { e.preventDefault(); handleAsk(); }} className="flex items-end gap-2">
+        <form onSubmit={(event) => { event.preventDefault(); handleAsk(); }} className="flex items-end gap-2">
           <FileUploadButton inputRef={fileInputRef} onFileSelect={handleFileSelect} />
-          <div className="flex-1 relative">
+          <div className="relative flex-1">
             <textarea
-              className="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[44px] max-h-28 text-sm text-slate-700 bg-slate-50 focus:bg-white transition-colors"
+              className="min-h-[44px] max-h-28 w-full resize-none rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 pr-2 text-sm text-slate-700 transition-colors focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Pergunte algo sobre o Protheus..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk(); } }}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleAsk(); } }}
               disabled={isLoading}
               rows={1}
             />
           </div>
-          <button type="submit" className="w-9 h-9 flex-shrink-0 flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50" disabled={isLoading || (!query.trim() && !attachedFile)}>
-            <Send className="w-4 h-4" />
+          <button type="submit" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-50" disabled={isLoading || (!query.trim() && !attachedFile)} aria-label="Enviar pergunta">
+            <Send className="h-4 w-4" />
           </button>
         </form>
-        <p className="text-center text-[10px] text-slate-400 mt-1.5">A IA pode cometer erros, verifique as informações.</p>
+        <p className="mt-1.5 text-center text-[10px] text-slate-400">A IA pode cometer erros, verifique as informações.</p>
       </div>
+
+      {isResultOpen && result && <StructuredResultPanel result={result} onClose={() => setIsResultOpen(false)} />}
     </div>
   );
 }
-
-
