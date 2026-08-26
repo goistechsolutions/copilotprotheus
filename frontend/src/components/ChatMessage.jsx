@@ -1,7 +1,7 @@
 import React from 'react';
 import { User, Sparkles } from 'lucide-react';
 
-export default function ChatMessage({ message, isUser, profile }) {
+export default function ChatMessage({ message, isUser, profile: _profile }) {
   return (
     <div className={`flex flex-col mb-4 ${isUser ? 'items-end' : 'items-start'}`}>
       <div className={`flex items-start gap-2 max-w-[85%] ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
