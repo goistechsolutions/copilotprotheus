@@ -167,7 +167,10 @@ def render_context_for_prompt(context: List[Dict[str, Any]]) -> str:
                 f"len={field.get('field_length') if field.get('field_length') is not None else 'não informado'} "
                 f"dec={field.get('field_decimal') if field.get('field_decimal') is not None else 'não informado'} "
                 f"validation={field.get('validation_rule') or 'não informado'} "
-                f"relation={field.get('relation_rule') or 'não informado'}"
+                f"relation={field.get('relation_rule') or 'não informado'} "
+                f"can_select={field.get('can_select') if field.get('can_select') is not None else 'não informado'} "
+                f"can_filter={field.get('can_filter') if field.get('can_filter') is not None else 'não informado'} "
+                f"masked={field.get('masked_flag') if field.get('masked_flag') is not None else field.get('masked') if field.get('masked') is not None else 'não informado'}"
             )
 
     return "\n".join(parts)
