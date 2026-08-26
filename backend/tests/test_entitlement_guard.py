@@ -1,4 +1,8 @@
+import pytest
+from fastapi import HTTPException
+
 from app.services.entitlement_guard import EntitlementGuard
+from app.services.protheus_context_service import mask_sensitive_rows, validate_query_security
 
 
 class FakeResult:
@@ -125,8 +129,8 @@ def test_table_and_field_permissions_keep_table_scope():
     db = FakeDB(
         table_permissions=[{"table_name": "SF2"}],
         field_permissions=[
-            {"table_name": "SF2", "field_name": "F2_DOC"},
-            {"table_name": "SD2", "field_name": "D2_DOC"},
+            {"table_name": "SF2", "field_name": "F2_DOC", "can_select": True, "can_filter": True, "masked_flag": False},
+            {"table_name": "SD2", "field_name": "D2_DOC", "can_select": True, "can_filter": True, "masked_flag": False},
         ],
     )
 
@@ -144,6 +148,53 @@ def test_table_and_field_permissions_keep_table_scope():
     assert fields_by_table["SF2"] == {"F2_DOC"}
     assert fields_by_table["SF2010"] == {"F2_DOC"}
     assert "D2_DOC" not in fields_by_table
+
+
+def test_dictionary_authorization_returns_filter_and_masked_fields():
+    guard = EntitlementGuard(mode="enforce")
+    db = FakeDB(
+        table_permissions=[{"table_name": "SA1"}],
+        field_permissions=[
+            {"table_name": "SA1", "field_name": "A1_COD", "can_select": True, "can_filter": True, "masked_flag": False},
+            {"table_name": "SA1", "field_name": "A1_EMAIL", "can_select": True, "can_filter": False, "masked_flag": True},
+            {"table_name": "SA1", "field_name": "A1_INTERNAL", "can_select": False, "can_filter": True, "masked_flag": True},
+        ],
+    )
+
+    authorization = guard.authorize_dictionary_details(
+        db,
+        tenant_schema="rodol_prod",
+        tenant_code="rodol_prod",
+        environment_code="c8te0u_prod",
+        company_id=1,
+        role_id="role-1",
+        table_names={"SA1010"},
+    )
+
+    assert authorization.allowed_tables == {"SA1", "SA1010"}
+    assert authorization.allowed_fields_by_table["SA1010"] == {"A1_COD", "A1_EMAIL"}
+    assert authorization.filter_fields_by_table["SA1010"] == {"A1_COD", "A1_INTERNAL"}
+    assert authorization.masked_fields_by_table["SA1010"] == {"A1_EMAIL"}
+
+
+def test_query_guard_rejects_filter_field_without_can_filter():
+    with pytest.raises(HTTPException, match="não autorizados no WHERE"):
+        validate_query_security(
+            sql="SELECT A1_COD FROM SA1010 A1 WHERE A1.A1_NOME = 'fixture' AND A1.D_E_L_E_T_ <> '*' FETCH FIRST 10 ROWS ONLY",
+            allowed_tables={"SA1"},
+            filial="0101",
+            allowed_fields={"A1_COD", "A1_NOME"},
+            allowed_fields_by_table={"SA1": {"A1_COD", "A1_NOME"}},
+            filter_fields_by_table={"SA1": {"A1_COD"}},
+        )
+
+
+def test_masked_dictionary_field_is_masked_before_response():
+    rows = [{"A1_EMAIL": "fixture@example.invalid", "A1_COD": "000001"}]
+
+    safe_rows = mask_sensitive_rows(rows, masked_fields={"A1_EMAIL"})
+
+    assert safe_rows == [{"A1_EMAIL": "********************", "A1_COD": "000001"}]
 
 
 def test_missing_role_does_not_grant_dictionary_access():
