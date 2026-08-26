@@ -9,8 +9,11 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.db.database import get_db
 from app.services.report_service import REPORTS_TMP_DIR, ReportService
 
 router = APIRouter(prefix="/report", tags=["report"])
@@ -44,10 +47,11 @@ class ExportMarkdownRequest(BaseModel):
     title: Optional[str] = Field("Exportação Copilot", max_length=160)
 
 
-def _require_tenant_match(payload_tenant: str, current_user: dict) -> str:
+def _require_tenant_match(payload_tenant: str, current_user: dict, db: Session) -> str:
     tenant_code = str(payload_tenant or "").strip().lower()
     token_tenant = str(
-        current_user.get("tenant_id")
+        current_user.get("tenant_code")
+        or current_user.get("tenant_id")
         or current_user.get("tenantId")
         or ""
     ).strip().lower()
@@ -55,7 +59,20 @@ def _require_tenant_match(payload_tenant: str, current_user: dict) -> str:
         raise HTTPException(status_code=400, detail="tenant_code real é obrigatório.")
     if not token_tenant:
         raise HTTPException(status_code=401, detail="JWT sem tenant_id; relatório bloqueado.")
-    if token_tenant != "public" and token_tenant != tenant_code:
+    if token_tenant == tenant_code or token_tenant == "public":
+        return tenant_code
+
+    # O login atual grava o UUID do tenant no JWT; convertemos apenas para
+    # comparação, sem aceitar qualquer UUID informado pelo cliente.
+    try:
+        row = db.execute(
+            text("SELECT tenant_code FROM public.tenant WHERE id::text = :tenant_id LIMIT 1"),
+            {"tenant_id": token_tenant},
+        ).mappings().first()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Não foi possível validar o tenant do JWT.") from exc
+    resolved_code = str((row or {}).get("tenant_code") or "").strip().lower()
+    if resolved_code != tenant_code:
         raise HTTPException(status_code=403, detail="O tenant do JWT não corresponde ao relatório.")
     return tenant_code
 
@@ -71,8 +88,9 @@ def _require_environment(value: str) -> str:
 async def generate_report(
     payload: GenerateReportRequest,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    tenant_code = _require_tenant_match(payload.tenant_code, current_user)
+    tenant_code = _require_tenant_match(payload.tenant_code, current_user, db)
     environment_code = _require_environment(payload.environment_code)
     try:
         filters = dict(payload.filters or {})
@@ -108,8 +126,9 @@ async def generate_report(
 async def export_structured_report(
     payload: ExportStructuredReportRequest,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    tenant_code = _require_tenant_match(payload.tenant_code, current_user)
+    tenant_code = _require_tenant_match(payload.tenant_code, current_user, db)
     environment_code = _require_environment(payload.environment_code)
     try:
         file_path_str = await ReportService.generate_from_result(
