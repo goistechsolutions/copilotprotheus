@@ -123,6 +123,9 @@ jobs:
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+            ADMIN_USER=${{ secrets.ADMIN_USER }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            ADMIN_JWT_SECRET=${{ secrets.ADMIN_JWT_SECRET }}
             CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
             ENVIRONMENT=production
             LOG_LEVEL=INFO
