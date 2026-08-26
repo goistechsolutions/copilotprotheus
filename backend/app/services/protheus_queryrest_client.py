@@ -74,6 +74,23 @@ def _sanitize_protheus_json(raw: str) -> str:
     return "".join(output).lstrip("\ufeff")
 
 
+def _extract_remote_error(response: httpx.Response) -> str:
+    """Extrai apenas a mensagem diagnóstica do AppServer, sem devolver o body bruto."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return ""
+
+    if not isinstance(payload, dict):
+        return ""
+
+    for key in ("errorMessage", "message", "detail", "error", "errorCode"):
+        value = payload.get(key)
+        if value:
+            return " ".join(str(value).split())[:500]
+    return ""
+
+
 def _parse_queryrest_json(response: httpx.Response) -> Any:
     """Faz parse estrito e depois aplica apenas a normalização conhecida."""
 
@@ -229,10 +246,11 @@ class ProtheusQueryRestClient:
                 response.headers.get("content-type", "unknown").split(";", 1)[0].strip(),
                 len(response.content),
             )
-            raise ProtheusQueryRestError(
-                f"Falha na execução do QueryRest Protheus (HTTP {response.status_code}).",
-                response.status_code,
-            )
+            remote_error = _extract_remote_error(response)
+            detail = f"Falha na execução do QueryRest Protheus (HTTP {response.status_code})."
+            if remote_error:
+                detail = f"{detail} Mensagem do AppServer: {remote_error}"
+            raise ProtheusQueryRestError(detail, response.status_code)
 
         return _parse_queryrest_json(response)
 
