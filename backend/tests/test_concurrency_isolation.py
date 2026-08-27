@@ -166,9 +166,10 @@ def decision(**overrides):
     return EntitlementDecision(**values)
 
 
-def run_concurrently(function, count):
-    with ThreadPoolExecutor(max_workers=count) as executor:
-        return list(executor.map(function, range(count)))
+def run_concurrently(function, values_or_count):
+    values = list(range(values_or_count)) if isinstance(values_or_count, int) else list(values_or_count)
+    with ThreadPoolExecutor(max_workers=len(values)) as executor:
+        return list(executor.map(function, values))
 
 
 def test_query_reservation_is_atomic_under_concurrency():
@@ -230,7 +231,10 @@ def test_query_counters_are_isolated_by_tenant():
         )
         return tenant
 
-    assert set(run_concurrently(attempt, 2)) == {'tenant_alpha', 'tenant_beta'}
+    assert set(run_concurrently(attempt, ['tenant_alpha', 'tenant_beta'])) == {
+        'tenant_alpha',
+        'tenant_beta',
+    }
 
     with pytest.raises(EntitlementDenied) as alpha_error:
         guard._reserve_query(
