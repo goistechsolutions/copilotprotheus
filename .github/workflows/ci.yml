@@ -39,8 +39,10 @@ jobs:
 
       - name: Preparar segredos efêmeros de validação
         run: |
-          echo "JWT_SECRET=$(python -c \"import secrets; print(secrets.token_urlsafe(48))\")" >> "$GITHUB_ENV"
-          echo "ADMIN_JWT_SECRET=$(python -c \"import secrets; print(secrets.token_urlsafe(48))\")" >> "$GITHUB_ENV"
+          jwt_secret=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')
+          admin_jwt_secret=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')
+          echo "JWT_SECRET=$jwt_secret" >> "$GITHUB_ENV"
+          echo "ADMIN_JWT_SECRET=$admin_jwt_secret" >> "$GITHUB_ENV"
 
       - name: Verificar se pasta tests/ existe
         id: check_tests
