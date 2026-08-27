@@ -37,6 +37,11 @@ jobs:
       - name: Instalar dependências de teste
         run: pip install pytest pytest-asyncio httpx
 
+      - name: Preparar segredos efêmeros de validação
+        run: |
+          echo "JWT_SECRET=$(python -c \"import secrets; print(secrets.token_urlsafe(48))\")" >> "$GITHUB_ENV"
+          echo "ADMIN_JWT_SECRET=$(python -c \"import secrets; print(secrets.token_urlsafe(48))\")" >> "$GITHUB_ENV"
+
       - name: Verificar se pasta tests/ existe
         id: check_tests
         run: |
