@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.admin_security import require_admin
-from app.crud.knowledge_crud import KnowledgeCRUD
+from app.crud.knowledge_crud import KnowledgeCRUD, KnowledgeStoreUnavailable
 from app.db.database import get_db
 from app.services.ingestion_service import IngestionService
 from app.services.r2_client import R2Client
@@ -72,8 +72,11 @@ def documents(
     x_tenant_id: str = Depends(_tenant_header),
     admin: dict = Depends(require_admin),
 ):
-    crud = KnowledgeCRUD(db)
-    return {'items': crud.list_documents(tenant_id=x_tenant_id.strip())}
+    try:
+        items = KnowledgeCRUD(db).list_documents(tenant_id=x_tenant_id)
+    except KnowledgeStoreUnavailable:
+        raise HTTPException(status_code=503, detail='A base RAG não está disponível para o tenant informado.') from None
+    return {'items': items}
 
 
 @router.get('/documents/shared')
