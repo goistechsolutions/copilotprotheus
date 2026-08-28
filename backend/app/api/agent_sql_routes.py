@@ -90,7 +90,8 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                     "environment_code": environment_code,
                 },
                 history=[],
-                image=image
+                image=image,
+                allow_tools=False,
             )
         else:
             from app.services.ollama_client import ask_llm
