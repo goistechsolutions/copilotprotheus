@@ -178,7 +178,9 @@ _DOMAIN_TABLE_FAMILIES = {
 
 
 def _infer_query_domain(prompt: str) -> str | None:
-    normalized = re.sub(r"[^a-z0-9 ]", " ", str(prompt or "").lower())
+    normalized = unicodedata.normalize("NFKD", str(prompt or "").lower())
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = re.sub(r"[^a-z0-9 ]", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     sales_terms = (
         "venda", "vendas", "vendido", "faturamento", "faturada", "faturadas",
@@ -357,7 +359,7 @@ def _normalize_conversation_history(value: Any, limit: int = 12) -> list[dict[st
             continue
         content = content.strip()
         if content:
-            normalized.append({"role": role, "content": content[:4000]})
+            normalized.append({"role": role, "text": content[:4000]})
     return normalized
 
 
