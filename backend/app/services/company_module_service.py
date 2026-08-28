@@ -168,28 +168,11 @@ def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
                 cd.setdefault("protheus_filial", "0101")
                 result.append(cd)
 
+            # Tenant sem company_info não é uma empresa. Não fabricar uma linha
+            # com o ID de public.tenant: as rotas de edição/exclusão esperam o
+            # ID real de uma linha em "<tenant>".company_info.
             if not c_rows:
-                result.append({
-                    "id": r["id"],
-                    "tenant_id": t_code,
-                    "cnpj": "",
-                    "ie": None,
-                    "razao_social": r["tenant_name"],
-                    "email": None,
-                    "telefone": None,
-                    "endereco": None,
-                    "protheus_grupo": t_code,
-                    "protheus_empresa": "01",
-                    "protheus_unidade": "01",
-                    "protheus_filial": "0101",
-                    "protheus_ambientes": "producao",
-                    "protheus_usuario": None,
-                    "protheus_rest_url": None,
-                    "webapp_url": None,
-                    "status": r["status"] or "ativa",
-                    "created_at": r["created_at"],
-                    "updated_at": r["updated_at"],
-                })
+                continue
         except Exception as e:
             logger.warning(f"Erro ao listar company_info em {clean}: {e}")
 
