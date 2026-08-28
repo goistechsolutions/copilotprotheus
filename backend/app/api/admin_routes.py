@@ -589,7 +589,7 @@ async def import_protheus_modules(
     O arquivo contém somente código, sigla e descrição de módulo. Nenhum dado
     empresarial, conexão, tenant ou registro operacional é aceito ou persistido.
     A importação é completa: módulos ausentes no arquivo ficam inativos, sem
-                    serem apagados.
+    serem apagados.
 
     """
     filename = str(file.filename or "").strip().lower()
