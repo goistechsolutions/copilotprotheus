@@ -178,7 +178,7 @@ def _build_messages(question, protheus_data, intent, context, history, image=Non
         msgs.append({"role":"system","content":f"Dados Protheus (intencao: {intent}):\n{json.dumps(protheus_data,ensure_ascii=False,indent=2)}"})
     if history:
         for m in history[-6:]:
-            msgs.append({"role":m.get("role","user"),"content":m.get("text","")})
+            msgs.append({"role":m.get("role","user"),"content":m.get("text", m.get("content", ""))})
             
     if image:
         import re
