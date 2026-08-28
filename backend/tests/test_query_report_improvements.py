@@ -74,3 +74,52 @@ def test_structured_report_normalization_preserves_columns_and_rows():
         {"DOC": "TEST-001", "VALOR": 10},
         {"DOC": "TEST-002", "VALOR": 20},
     ]
+
+
+def test_query_guard_allows_presentation_aliases_for_authorized_physical_fields():
+    # Fixture sintética: aliases não representam nomes físicos do ERP.
+    sql = (
+        "SELECT T.SRC_COD AS CODIGO_FORNECEDOR, "
+        "T.SRC_EMISSAO AS DATA_EMISSAO_NF, "
+        "T.SRC_RECEBIMENTO AS DATA_RECEBIMENTO_NF, "
+        "T.SRC_LOJA AS LOJA_FORNECEDOR, "
+        "T.SRC_NOME AS NOME_FORNECEDOR "
+        "FROM FIXTURE_TABLE T "
+        "WHERE T.D_E_L_E_T_ <> '*' AND ROWNUM <= 10"
+    )
+    physical_fields = {
+        "SRC_COD",
+        "SRC_EMISSAO",
+        "SRC_RECEBIMENTO",
+        "SRC_LOJA",
+        "SRC_NOME",
+    }
+
+    validate_query_security(
+        sql,
+        {"FIXTURE_TABLE"},
+        filial="0101",
+        allowed_fields=physical_fields,
+        allowed_fields_by_table={"FIXTURE_TABLE": physical_fields},
+    )
+
+
+def test_query_guard_still_rejects_unauthorized_physical_field_with_alias():
+    sql = (
+        "SELECT T.SRC_COD AS CODIGO_FORNECEDOR, "
+        "T.SRC_PRIVADO AS NOME_FORNECEDOR "
+        "FROM FIXTURE_TABLE T "
+        "WHERE T.D_E_L_E_T_ <> '*' AND ROWNUM <= 10"
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        validate_query_security(
+            sql,
+            {"FIXTURE_TABLE"},
+            filial="0101",
+            allowed_fields={"SRC_COD"},
+            allowed_fields_by_table={"FIXTURE_TABLE": {"SRC_COD"}},
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "SRC_PRIVADO" in str(exc_info.value.detail)
