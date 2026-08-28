@@ -895,14 +895,13 @@ async def sync_schema(
         if not schema_dict:
             raise Exception("Nenhuma tabela retornada pelo Protheus.")
 
-        # Atualiza o catálogo global com metadados SX2/SX3 בלבד. A chave é o
+        # Atualiza o catálogo global somente com metadados SX2/SX3. A chave é o
         # módulo; nenhum dado operacional, credencial ou identificador de tenant
         # é gravado nesta tabela global.
         global_catalog = _build_global_catalog_metadata(schema_dict)
         for module_code, catalog_metadata in global_catalog.items():
             if not str(module_code).isdigit():
                 continue
-            first_table = (catalog_metadata.get("tables") or [{}])[0]
             module_sigla = sigla_map.get(str(module_code)) or ""
             module_name = code_to_name.get(str(module_code)) or module_sigla or str(module_code)
             db.execute(
