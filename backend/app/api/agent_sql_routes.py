@@ -12,6 +12,7 @@ import asyncio
 import time
 
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.db.database import get_db, SessionLocal
 from app.core.config import settings
