@@ -259,16 +259,26 @@ def load_dictionary_fields(
         if column in columns:
             select_parts.append(expression)
 
-    scope_parts = []
     params: dict[str, Any] = {
-        "table_code": str(table_code or ""),
-        "table_name": str(table_name or ""),
+        "table_code": str(table_code or "").strip(),
+        "table_name": str(table_name or "").strip(),
     }
-    if "table_name" in columns:
-        scope_parts.append("df.table_name = :table_name")
-    if "table_code" in columns:
-        scope_parts.append("df.table_code = :table_code")
-    if not scope_parts:
+    if "table_code" in columns and "table_name" in columns:
+        # SX3.X3_ARQUIVO referencia a chave lógica SX2.X2_CHAVE. Portanto,
+        # table_code é a chave primária do vínculo; table_name só atende
+        # snapshots legados nos quais table_code ainda não foi preenchido.
+        field_scope = """
+            NULLIF(BTRIM(COALESCE(df.table_code, '')), '') = :table_code
+            OR (
+                NULLIF(BTRIM(COALESCE(df.table_code, '')), '') IS NULL
+                AND df.table_name IN (:table_code, :table_name)
+            )
+        """
+    elif "table_code" in columns:
+        field_scope = "df.table_code = :table_code"
+    elif "table_name" in columns:
+        field_scope = "df.table_name IN (:table_code, :table_name)"
+    else:
         return []
 
     environment_filter = ""
@@ -280,7 +290,7 @@ def load_dictionary_fields(
         text(f"""
             SELECT {', '.join(select_parts)}
             FROM {schema}.dictionary_fields df
-            WHERE ({' OR '.join(scope_parts)}){environment_filter}
+            WHERE ({field_scope}){environment_filter}
             ORDER BY {order_by}
         """),
         params,
