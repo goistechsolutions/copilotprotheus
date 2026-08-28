@@ -208,14 +208,6 @@ export default function AgentWorkspace() {
       return;
     }
 
-    const currentHistory = [
-      ...messages,
-      { role: 'user', text },
-    ]
-      .filter(item => ['user', 'assistant'].includes(item.role) && item.text?.trim())
-      .slice(-12)
-      .map(item => ({ role: item.role, content: item.text.trim().slice(0, 4000) }));
-
     setMessages((m) => [...m, { role: 'user', text }]);
     setHistory((items) => {
       const next = [
@@ -237,7 +229,6 @@ export default function AgentWorkspace() {
         request_id: `REQ-${Date.now()}`,
         conversation_id: conversationId,
         session_id: conversationId,
-        history: currentHistory,
         prompt: text,
         execute: true,
       };
