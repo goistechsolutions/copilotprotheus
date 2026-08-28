@@ -138,7 +138,7 @@ function TenantModal({ tenant, onClose, onSaved }) {
     setErr('');
 
     const payload = {
-      id: form.id,
+      ...(isEdit ? {} : { id: form.id }),
       name: form.name || form.tenant_name || form.id,
       tenant_code: form.tenant_code || form.id,
       cnpj: form.cnpj || null,
