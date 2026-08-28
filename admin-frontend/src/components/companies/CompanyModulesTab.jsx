@@ -111,7 +111,10 @@ export default function CompanyModulesTab({ company }) {
     setMessage(null);
 
     try {
-      const res = await syncCompanyModules(companyId, false);
+      const environmentCode = String(
+        company?.environment || company?.protheus_ambientes || ''
+      ).split(',')[0].trim();
+      const res = await syncCompanyModules(companyId, environmentCode, false);
       const syncedModules = res?.module_filter?.join(', ') || '-';
       setMessage(`Sincronização concluída com sucesso! Módulos sincronizados: ${syncedModules}`);
     } catch (err) {
