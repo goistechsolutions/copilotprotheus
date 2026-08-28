@@ -254,15 +254,15 @@ def _validate_query_domain(prompt: str, sql: str) -> None:
         return
     families = _table_families_from_sql(sql)
     if domain == "sales":
-        if not families.intersection(_DOMAIN_TABLE_FAMILIES["sales"]):
-            raise HTTPException(
-                status_code=422,
-                detail="A consulta de vendas não referencia SF2, SD2 ou SA1 no SQL gerado.",
-            )
         if families.intersection({"SF1", "SD1", "SA2"}):
             raise HTTPException(
                 status_code=422,
                 detail="Consulta de vendas gerou tabela de entrada/fornecedor (SF1, SD1 ou SA2); SQL bloqueado.",
+            )
+        if not families.intersection(_DOMAIN_TABLE_FAMILIES["sales"]):
+            raise HTTPException(
+                status_code=422,
+                detail="A consulta de vendas não referencia SF2, SD2 ou SA1 no SQL gerado.",
             )
     elif families.intersection({"SF2", "SD2", "SA1"}):
         raise HTTPException(
