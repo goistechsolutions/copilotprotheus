@@ -1,52 +1,42 @@
-from app.api.admin_routes import _build_global_catalog_metadata
+import pytest
+
+from app.api.admin_routes import ModuleCatalogImportError, _parse_module_catalog_csv
 
 
-def test_global_catalog_metadata_contains_structure_only():
-    catalog = _build_global_catalog_metadata({
-        "SF1": {
-            "x2_modulo": "2",
-            "tabela": "SF1010",
-            "nome": "Notas de entrada",
-            "compartilhamento": {
-                "empresa": "E",
-                "unidade": "N",
-                "filial": "E",
-            },
-            "indice_principal": "F1_FILIAL+F1_DOC",
-            "campos": [{
-                "campo": "F1_DOC",
-                "descricao": "Documento",
-                "tipo": "C",
-                "tamanho": 9,
-            }],
-            "tenant_id": "must-not-be-copied",
-            "records": [{"F1_DOC": "must-not-be-copied"}],
-        }
-    })
+def test_module_catalog_csv_normalizes_codes_and_descriptions():
+    records = _parse_module_catalog_csv(
+        "codigo,sigla,descricao\n01,SIGAATF,Ativo Fixo\n02,SIGACOM,Compras\n".encode()
+    )
 
-    assert catalog == {
-        "2": {
-            "schema_version": "sx2-sx3-v1",
-            "source": "SX2/SX3",
-            "tables": [{
-                "table_code": "SF1",
-                "physical_name": "SF1010",
-                "description": "Notas de entrada",
-                "sharing": {
-                    "empresa": "E",
-                    "unidade": "N",
-                    "filial": "E",
-                },
-                "unique_index": "F1_FILIAL+F1_DOC",
-                "fields": [{
-                    "field_name": "F1_DOC",
-                    "title": "Documento",
-                    "field_type": "C",
-                    "length_num": 9,
-                }],
-            }],
-        }
-    }
+    assert records == [
+        (1, "SIGAATF", "Ativo Fixo"),
+        (2, "SIGACOM", "Compras"),
+    ]
 
-    rendered = str(catalog)
-    assert "must-not-be-copied" not in rendered
+
+def test_module_catalog_csv_accepts_utf8_bom_and_skips_blank_lines():
+    records = _parse_module_catalog_csv(
+        b"\xef\xbb\xbfcodigo,sigla,descricao\n05,SIGAFAT,Faturamento\n,,\n"
+    )
+
+    assert records == [(5, "SIGAFAT", "Faturamento")]
+
+
+def test_module_catalog_csv_rejects_extra_columns_and_does_not_accept_data_payload():
+    with pytest.raises(ModuleCatalogImportError) as exc_info:
+        _parse_module_catalog_csv(
+            "codigo,sigla,descricao,registros\n05,SIGAFAT,Faturamento,nao-permitido\n".encode()
+        )
+
+    assert exc_info.value.detail.startswith("Cabeçalho inválido")
+
+
+def test_module_catalog_csv_rejects_duplicate_code_and_sigla():
+    with pytest.raises(ModuleCatalogImportError) as exc_info:
+        _parse_module_catalog_csv(
+            "codigo,sigla,descricao\n05,SIGAFAT,Faturamento\n05,SIGAFAT,Outro\n".encode()
+        )
+
+    assert exc_info.value.detail["message"].startswith("CSV rejeitado")
+    assert any("codigo duplicado" in error for error in exc_info.value.detail["errors"])
+    assert any("sigla duplicada" in error for error in exc_info.value.detail["errors"])
