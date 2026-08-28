@@ -113,15 +113,36 @@ export default function AgentWorkspace() {
 
   useEffect(() => {
     const storedHistory = safeStorageRead(historyStorageKey, []);
-    setHistory(Array.isArray(storedHistory) ? storedHistory : []);
+    const conversations = Array.isArray(storedHistory) ? storedHistory : [];
+    setHistory(conversations);
     try {
       const active = window.localStorage.getItem(`${historyStorageKey}:active`);
-      if (active) setConversationId(active);
-      else window.localStorage.setItem(`${historyStorageKey}:active`, conversationId);
+      const activeId = active || conversationId;
+      if (activeId) setConversationId(activeId);
+      if (!active) window.localStorage.setItem(`${historyStorageKey}:active`, activeId);
+      const activeConversation = conversations.find(item => item.id === activeId);
+      if (activeConversation?.messages?.length) setMessages(activeConversation.messages);
     } catch {
       // O backend continuará usando o conversation_id da sessão atual.
     }
   }, [historyStorageKey]);
+
+  useEffect(() => {
+    const textMessages = messages
+      .filter(item => ['user', 'assistant'].includes(item.role) && item.text?.trim())
+      .map(item => ({ role: item.role, text: item.text.trim().slice(0, 4000) }));
+    if (!textMessages.some(item => item.role === 'user')) return;
+
+    setHistory((items) => {
+      const title = textMessages.find(item => item.role === 'user')?.text.slice(0, 52) || 'Nova conversa';
+      const next = [
+        { id: conversationId, title, date: 'Agora', messages: textMessages },
+        ...items.filter(item => item.id !== conversationId),
+      ].slice(0, 20);
+      safeStorageWrite(historyStorageKey, next);
+      return next;
+    });
+  }, [messages, conversationId, historyStorageKey]);
 
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -251,6 +272,23 @@ export default function AgentWorkspace() {
     setLoading(false);
   };
 
+  const selectConversation = (item) => {
+    if (!item?.id) return;
+    setConversationId(item.id);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, item.id);
+    } catch {
+      // O histórico do backend segue disponível mesmo sem localStorage.
+    }
+    if (Array.isArray(item.messages) && item.messages.length) {
+      setMessages(item.messages);
+    } else {
+      setMessages([{ role: 'assistant', text: 'Conversa selecionada. Envie uma nova pergunta para continuar.' }]);
+    }
+    setResult(null);
+    setSelected(item);
+  };
+
   const startNewConversation = () => {
     const nextConversationId = makeConversationId();
     setConversationId(nextConversationId);
@@ -269,7 +307,7 @@ export default function AgentWorkspace() {
       <div className="hidden md:flex">
         <HistoryRail
           items={history}
-          onSelect={setSelected}
+          onSelect={selectConversation}
           onNew={startNewConversation}
         />
       </div>
