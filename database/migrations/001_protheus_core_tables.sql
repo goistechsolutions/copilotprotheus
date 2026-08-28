@@ -19,12 +19,15 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- busca textual eficiente
 -- ---------------------------------------------------------------------------
 -- SCHEMA
 -- ---------------------------------------------------------------------------
-CREATE SCHEMA IF NOT EXISTS protheus;
+-- O schema protheus e as tabelas operacionais replicadas foram descontinuados.
+-- O ERP permanece a fonte dos dados empresariais; esta migration não os copia.
 CREATE SCHEMA IF NOT EXISTS copilot;
+COMMENT ON SCHEMA copilot IS 'Dados próprios do CopilotProtheus (escrita permitida)';
 
-COMMENT ON SCHEMA protheus IS 'Dados replicados do ERP TOTVS Protheus (somente leitura)';
-COMMENT ON SCHEMA copilot  IS 'Dados próprios do CopilotProtheus (escrita permitida)';
-
+\if false
+-- ---------------------------------------------------------------------------
+-- BLOCO LEGADO DESATIVADO: não criar schema/tabelas/views com dados do ERP.
+-- O catálogo permitido é mantido em public.protheus_modules_master como metadado.
 -- ---------------------------------------------------------------------------
 -- TIPO ENUM DE COMPARTILHAMENTO (SX2 X2_MODO)
 -- ---------------------------------------------------------------------------
@@ -403,6 +406,8 @@ CREATE INDEX IF NOT EXISTS idx_ct2_delete   ON protheus.ct2 (d_e_l_e_t_);
 COMMENT ON TABLE protheus.ct2 IS 'Lançamentos Contábeis';
 
 -- =============================================================================
+\endif
+
 -- TABELAS DO COPILOT (schema próprio — escrita permitida)
 -- =============================================================================
 
@@ -454,7 +459,8 @@ CREATE TABLE IF NOT EXISTS copilot.mensagens (
 CREATE INDEX IF NOT EXISTS idx_mensagens_conversa ON copilot.mensagens (conversa_id);
 
 -- =============================================================================
--- VIEWS UTILITÁRIAS (filtros obrigatórios já embutidos)
+\if false
+-- VIEWS LEGADAS DO SCHEMA PROTHEUS — DESATIVADAS; nenhum dado do ERP é replicado.
 -- =============================================================================
 
 -- View: clientes ativos
@@ -519,6 +525,8 @@ WHERE sc5.d_e_l_e_t_ = ' '
 COMMENT ON VIEW protheus.v_pedidos_venda IS 'Pedidos de venda com itens e saldo a entregar';
 
 -- =============================================================================
+\endif
+
 -- FUNÇÃO: atualiza coluna updated_at automaticamente
 -- =============================================================================
 CREATE OR REPLACE FUNCTION copilot.fn_atualiza_timestamp()
