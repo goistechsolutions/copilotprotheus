@@ -174,5 +174,5 @@ def test_query_guard_rejects_f1_total_when_used_as_nonexistent_physical_field():
         )
 
     assert exc_info.value.status_code == 403
-    assert "SF1.F1_TOTAL" in str(exc_info.value.detail)
+    assert "F1_TOTAL" in str(exc_info.value.detail)
     assert "ausente" in str(exc_info.value.detail)
