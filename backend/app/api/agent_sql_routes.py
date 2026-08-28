@@ -184,8 +184,8 @@ def _infer_query_domain(prompt: str) -> str | None:
     normalized = re.sub(r"[^a-z0-9 ]", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     sales_terms = (
-        "venda", "vendas", "vendido", "faturamento", "faturada", "faturadas",
-        "pedido de venda", "nota de saida", "notas de saida", "cliente",
+        "venda", "vendas", "vendido", "faturamento", "faturado", "faturada", "faturadas",
+        "pedido de venda", "notas fiscais de saida", "nota de saida", "notas de saida",
     )
     purchase_terms = (
         "compra", "compras", "comprado", "entrada", "entradas", "fornecedor",
