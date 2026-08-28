@@ -98,11 +98,21 @@ def _extract_table_refs(sql: str) -> list[tuple[str, str]]:
     return refs
 
 
+def _remove_select_aliases(body: str) -> str:
+    """Remove aliases de apresentação antes de extrair campos físicos."""
+    return re.sub(
+        r"\bAS\s+[A-Z][A-Z0-9_$#]*\b",
+        " ",
+        body,
+        flags=re.IGNORECASE,
+    )
+
+
 def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
     match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
     if not match:
         return set()
-    body = match.group("body")
+    body = _remove_select_aliases(match.group("body"))
     fields: set[tuple[str | None, str]] = set()
     for qualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
         fields.add((qualified[0].upper(), qualified[1].upper()))
@@ -144,7 +154,7 @@ def _extract_selected_fields(sql: str) -> set[str]:
     match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
     if not match:
         return set()
-    body = match.group("body")
+    body = _remove_select_aliases(match.group("body"))
     fields = set()
     for qualified in re.findall(r"\b[A-Z][A-Z0-9_$#]*\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
         fields.add(qualified.upper())
