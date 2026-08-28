@@ -40,8 +40,8 @@ def test_conversation_history_accepts_only_bounded_user_and_assistant_text():
         {"role": "user", "content": 123},
     ])
     assert history == [
-        {"role": "user", "content": "vendas de hoje"},
-        {"role": "assistant", "content": "Consulta concluída."},
+        {"role": "user", "text": "vendas de hoje"},
+        {"role": "assistant", "text": "Consulta concluída."},
     ]
 
 
