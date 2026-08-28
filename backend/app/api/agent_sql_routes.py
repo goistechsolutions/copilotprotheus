@@ -2,6 +2,7 @@ import base64
 
 import json
 import re
+import unicodedata
 import logging
 from typing import Dict, Any, List
 from app.services.tenant_resolver import resolve_clean_tenant
