@@ -38,6 +38,20 @@ function toSlug(v) {
     .replace(/^-|-$/g, '');
 }
 
+function apiErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map(item => {
+      if (typeof item === 'string') return item;
+      return item?.msg || item?.message || JSON.stringify(item);
+    }).join('; ');
+  }
+  if (detail && typeof detail === 'object') {
+    return detail.msg || detail.message || 'Falha de validação da API.';
+  }
+  return String(detail || error?.message || 'Falha ao salvar o tenant.');
+}
+
 // ─── Field helpers ────────────────────────────────────────────────────────────
 function F({ label, name, form, set, type = 'text', placeholder = '', mono = false, span = false, readOnly = false, autoComplete = 'off' }) {
   return (
@@ -127,7 +141,6 @@ function TenantModal({ tenant, onClose, onSaved }) {
       id: form.id,
       name: form.name || form.tenant_name || form.id,
       tenant_code: form.tenant_code || form.id,
-      tenant_name: form.tenant_name || form.name || form.id,
       cnpj: form.cnpj || null,
       status: form.status || 'active',
       plan_code: form.plan_code || null,
@@ -153,7 +166,7 @@ function TenantModal({ tenant, onClose, onSaved }) {
       else        await apiCall('/api/tenants/', 'POST', payload);
       onSaved();
     } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
+      setErr(apiErrorMessage(e));
     } finally {
       setSaving(false);
     }
