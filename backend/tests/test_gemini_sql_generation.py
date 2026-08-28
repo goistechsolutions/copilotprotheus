@@ -1,10 +1,14 @@
 import asyncio
 import os
 
+import pytest
+from fastapi import HTTPException
+
 os.environ.setdefault("JWT_SECRET", "x" * 32)
 
 from app.api import agent_sql_routes
 from app.services import gemini_client
+from app.services.protheus_service import ProtheusServiceError
 
 
 class FakeResponse:
@@ -84,3 +88,29 @@ def test_agent_sql_generator_disables_tools_only_for_gemini(monkeypatch):
     assert captured["allow_tools"] is False
     assert captured["context"]["tenant_id"] == "tenant_alpha"
     assert captured["context"]["environment_code"] == "env_homolog"
+
+
+def test_agent_sql_generator_preserves_protheus_connection_error(monkeypatch):
+    async def fake_ask_gemini(**_kwargs):
+        raise ProtheusServiceError(
+            "conexão REST Protheus ativa não localizada para tenant_alpha/env_homolog",
+            status_code=404,
+        )
+
+    monkeypatch.setattr(agent_sql_routes.settings, "llm_backend", "gemini")
+    monkeypatch.setattr(gemini_client, "ask_gemini", fake_ask_gemini)
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(agent_sql_routes.real_llm_sql_generator(
+            prompt="Liste clientes",
+            context_text="SA1010: A1_COD",
+            empresa="01",
+            filial="0101",
+            xfilial="0101",
+            tenant_id="tenant_alpha",
+            environment_code="env_homolog",
+        ))
+
+    assert error.value.status_code == 404
+    assert "conexão REST Protheus ativa não localizada" in str(error.value.detail)
+    assert "provedor de IA" not in str(error.value.detail)
