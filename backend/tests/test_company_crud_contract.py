@@ -1,5 +1,6 @@
 import pytest
 
+from app.schemas.company_modules import CompanyModulesSaveRequest
 from app.services import company_module_service
 
 
@@ -91,3 +92,49 @@ def test_list_companies_keeps_real_company_info_id(monkeypatch):
     assert len(result) == 1
     assert result[0]["id"] == 42
     assert result[0]["tenant_id"] == "tenant_fixture"
+
+
+class _ModuleWriteDB:
+    def __init__(self):
+        self.calls = []
+        self.commits = 0
+        self.rollbacks = 0
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        self.calls.append((sql, params or {}))
+        if "FROM public.protheus_modules_master WHERE active = TRUE" in sql:
+            return _FakeResult([
+                {"mod_code": 2, "mod_sigla": "SIGACOM", "mod_name": "Compras"},
+            ])
+        return _FakeResult([])
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+def test_replace_company_modules_refreshes_active_contract_scope(monkeypatch):
+    db = _ModuleWriteDB()
+    monkeypatch.setattr(company_module_service, "ensure_tenant_tables", lambda *_args: None)
+    payload = CompanyModulesSaveRequest(
+        modules=[{"module_code": "SIGACOM", "enabled": True}],
+    )
+
+    saved = company_module_service.replace_company_modules(
+        db,
+        company_id=1,
+        tenant_id="tenant_fixture",
+        payload=payload,
+    )
+
+    sql = "\n".join(statement for statement, _ in db.calls)
+    assert saved == 1
+    assert 'INSERT INTO "tenant_fixture".protheus_modules' in sql
+    assert "DELETE FROM public.tenant_module_contracts" in sql
+    assert "INSERT INTO public.tenant_module_contracts" in sql
+    assert 'JOIN "tenant_fixture".protheus_modules tm ON TRUE' in sql
+    assert db.commits == 1
+    assert db.rollbacks == 0
