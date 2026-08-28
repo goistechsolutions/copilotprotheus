@@ -24,6 +24,7 @@ from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
 from app.services.protheus_token_service import invalidate_access_token, get_valid_access_token, ProtheusAuthError
 from app.services.tenant_resolver import resolve_clean_tenant
+from app.services.license_service import sync_license_entitlement
 
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
@@ -86,6 +87,24 @@ def extract_connection_info(body: TenantCreate | TenantUpdate, db: Optional[Sess
         "password": str(pw).strip() if pw else None,
         "auth_mode": str(auth).strip()
     }
+
+def _sync_tenant_license_contract(db: Session, tenant: Tenant, tenant_schema: str) -> None:
+    """Sincroniza somente a licença JWT explicitamente salva no cadastro."""
+    if not tenant.licenca_uso:
+        return
+    try:
+        sync_license_entitlement(
+            db,
+            tenant_code=tenant.tenant_code,
+            tenant_schema=tenant_schema,
+            plan_code=tenant.plan_code,
+            license_token=tenant.licenca_uso,
+            cnpj=tenant.cnpj,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Licença não ativada: {exc}") from exc
+
 
 async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: dict):
     """Grava na tabela public.protheus_rest_connections e valida a autenticação."""
@@ -283,6 +302,10 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
     # Garante o schema isolado
     ensure_tenant_tables(db, clean_tenant)
 
+    # Materializa a licença assinada no contrato exigido pelo EntitlementGuard.
+    if body.licenca_uso is not None:
+        _sync_tenant_license_contract(db, tenant, clean_tenant)
+
     # Processa e valida conexão REST Protheus
     conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
     if conn_info:
@@ -320,6 +343,10 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
     clean_tenant = resolve_clean_tenant(tenant.tenant_code)
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
+
+    # Materializa a licença assinada no contrato exigido pelo EntitlementGuard.
+    if body.licenca_uso is not None:
+        _sync_tenant_license_contract(db, tenant, clean_tenant)
 
     # Processa e valida conexão REST Protheus
     conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
