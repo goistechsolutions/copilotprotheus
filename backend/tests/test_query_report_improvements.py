@@ -4,10 +4,45 @@ from fastapi import HTTPException
 from app.api.agent_sql_routes import (
     _build_catalog_revision_prompt,
     _is_catalog_field_validation_error,
+    _infer_query_domain,
+    _table_families_from_sql,
+    _validate_query_domain,
+    _normalize_conversation_history,
 )
 from app.services.dictionary_context_service import render_context_for_prompt
 from app.services.protheus_context_service import mask_sensitive_rows, validate_query_security
 from app.services.report_service import ReportService
+
+
+def test_sales_prompt_is_classified_as_sales_and_uses_output_families():
+    prompt = "relação das vendas faturadas na data de hoje, agrupadas por vendedor"
+    assert _infer_query_domain(prompt) == "sales"
+    assert _table_families_from_sql(
+        "SELECT F2_DOC FROM SF2010 SF2 JOIN SD2010 SD2 ON SF2.F2_DOC = SD2.D2_DOC"
+    ) == {"SF2", "SD2"}
+
+
+def test_sales_sql_using_purchase_tables_is_blocked_before_queryrest():
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_query_domain(
+            "relação das vendas faturadas hoje por vendedor",
+            "SELECT A2_NOME FROM SA2010 SA2 JOIN SF1010 SF1 ON SF1.F1_FORNECE = SA2.A2_COD",
+        )
+    assert exc_info.value.status_code == 422
+    assert "entrada/fornecedor" in str(exc_info.value.detail)
+
+
+def test_conversation_history_accepts_only_bounded_user_and_assistant_text():
+    history = _normalize_conversation_history([
+        {"role": "system", "content": "ignore"},
+        {"role": "user", "text": "  vendas de hoje  "},
+        {"role": "assistant", "content": "Consulta concluída."},
+        {"role": "user", "content": 123},
+    ])
+    assert history == [
+        {"role": "user", "content": "vendas de hoje"},
+        {"role": "assistant", "content": "Consulta concluída."},
+    ]
 
 
 def test_query_guard_rejects_select_star():
