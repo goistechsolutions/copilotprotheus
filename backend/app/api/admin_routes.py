@@ -474,6 +474,49 @@ def require_environment_code(payload: dict) -> str:
         
     return environment_code
 
+
+def _build_global_catalog_metadata(schema_dict: dict) -> dict[str, dict]:
+    """Agrupa apenas metadados SX2/SX3 para o catálogo global.
+
+    O retorno deliberadamente não contém tenant, empresa, ambiente, URL,
+    credenciais, tokens nem linhas operacionais do ERP.
+    """
+    grouped: dict[str, dict] = {}
+    for table_code, meta in schema_dict.items():
+        module_code = str(meta.get("x2_modulo") or "").strip()
+        if not module_code:
+            continue
+        module = grouped.setdefault(module_code, {
+            "schema_version": "sx2-sx3-v1",
+            "source": "SX2/SX3",
+            "tables": [],
+        })
+        fields = []
+        for field in meta.get("campos") or []:
+            field_name = str(field.get("campo") or "").strip().upper()
+            if not field_name:
+                continue
+            fields.append({
+                "field_name": field_name,
+                "title": str(field.get("descricao") or "").strip(),
+                "field_type": str(field.get("tipo") or "").strip(),
+                "length_num": int(field.get("tamanho") or 0) or None,
+            })
+        module["tables"].append({
+            "table_code": str(table_code or "").strip().upper(),
+            "physical_name": str(meta.get("tabela") or "").strip().upper(),
+            "description": str(meta.get("nome") or "").strip(),
+            "sharing": {
+                "empresa": str((meta.get("compartilhamento") or {}).get("empresa") or "N").strip(),
+                "unidade": str((meta.get("compartilhamento") or {}).get("unidade") or "N").strip(),
+                "filial": str((meta.get("compartilhamento") or {}).get("filial") or "N").strip(),
+            },
+            "unique_index": str(meta.get("indice_principal") or "").strip(),
+            "fields": fields,
+        })
+    return grouped
+
+
 @router.post("/sync-modules")
 async def sync_modules(
     payload: dict     = Body(...),
@@ -851,6 +894,36 @@ async def sync_schema(
 
         if not schema_dict:
             raise Exception("Nenhuma tabela retornada pelo Protheus.")
+
+        # Atualiza o catálogo global com metadados SX2/SX3 בלבד. A chave é o
+        # módulo; nenhum dado operacional, credencial ou identificador de tenant
+        # é gravado nesta tabela global.
+        global_catalog = _build_global_catalog_metadata(schema_dict)
+        for module_code, catalog_metadata in global_catalog.items():
+            if not str(module_code).isdigit():
+                continue
+            first_table = (catalog_metadata.get("tables") or [{}])[0]
+            module_sigla = sigla_map.get(str(module_code)) or ""
+            module_name = code_to_name.get(str(module_code)) or module_sigla or str(module_code)
+            db.execute(
+                text("""
+                    INSERT INTO public.protheus_modules_master
+                        (mod_code, mod_sigla, mod_name, catalog_metadata, active, updated_at)
+                    VALUES (:mod_code, :mod_sigla, :mod_name, CAST(:catalog_metadata AS JSONB), TRUE, NOW())
+                    ON CONFLICT (mod_code) DO UPDATE SET
+                        mod_sigla = COALESCE(NULLIF(EXCLUDED.mod_sigla, ''), public.protheus_modules_master.mod_sigla),
+                        mod_name = COALESCE(NULLIF(EXCLUDED.mod_name, ''), public.protheus_modules_master.mod_name),
+                        catalog_metadata = EXCLUDED.catalog_metadata,
+                        active = TRUE,
+                        updated_at = NOW()
+                """),
+                {
+                    "mod_code": int(module_code),
+                    "mod_sigla": module_sigla,
+                    "mod_name": module_name,
+                    "catalog_metadata": json.dumps(catalog_metadata, ensure_ascii=False),
+                },
+            )
 
         # Persiste em "{clean_tenant}".tenant_schemas (cache legivel no schema do tenant)
         clean_tenant = secure_clean_tenant(str(tenant_id))
