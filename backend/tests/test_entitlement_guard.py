@@ -297,7 +297,7 @@ def test_authorize_does_not_reserve_until_explicit_reserve_call(monkeypatch):
     assert calls == ["query", "session", "audit"]
 
 
-def test_missing_role_does_not_grant_dictionary_access():
+def test_catalog_dictionary_access_does_not_require_role_when_catalog_is_present():
     guard = EntitlementGuard(mode="enforce")
     allowed_tables, fields_by_table = guard.authorize_dictionary(
         FakeDB(),
@@ -309,5 +309,5 @@ def test_missing_role_does_not_grant_dictionary_access():
         table_names={"SF2"},
     )
 
-    assert allowed_tables == set()
+    assert allowed_tables == {"SF2", "SF2010"}
     assert fields_by_table == {}
