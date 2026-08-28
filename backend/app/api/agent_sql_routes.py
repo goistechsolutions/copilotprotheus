@@ -73,7 +73,8 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 9. Filtros de negócio usuais, como F2_TIPO='N' ou F4_DUPLIC='S', só podem ser usados quando o campo estiver no snapshot e forem pertinentes ao pedido.
 10. Nunca acessar campos marcados como sigilosos/mascarados e nunca retornar senha, token, JWT, secret, certificado ou chave.
 11. Contexto operacional: empresa='{empresa}', filial='{filial}', XFILIAL='{xfilial}'. Se o snapshot não sustentar a regra necessária, informe a impossibilidade em vez de fabricar SQL.
-12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant/ambiente."""
+12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant/ambiente.
+13. O snapshot SX3 é a única fonte de campos físicos. Um identificador com aparência Protheus, como F1_TOTAL, não é campo válido se não estiver listado em FIELD para a tabela. Para totais calculados, use SUM/COUNT/AVG somente sobre um campo físico listado e atribua um alias de apresentação explícito com AS; o alias não pode ser usado como campo físico, filtro ou chave de JOIN."""
 
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}"
 
@@ -143,6 +144,29 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 
     return clean_sql
 
+
+def _is_catalog_field_validation_error(exc: HTTPException) -> bool:
+    """Identifica somente falhas de campo físico; demais bloqueios não têm retry."""
+    return (
+        exc.status_code == 403
+        and "campo(s) físico(s)" in str(exc.detail)
+        and ("ausente(s)" in str(exc.detail) or "não autorizado(s)" in str(exc.detail))
+    )
+
+
+def _build_catalog_revision_prompt(prompt: str, rejected_sql: str, reason: str) -> str:
+    """Instrui uma única revisão baseada no snapshot, sem sugerir campo substituto."""
+    return (
+        f"{prompt}\n\n"
+        "REVISÃO OBRIGATÓRIA: a primeira consulta foi rejeitada porque contém "
+        "identificador físico ausente ou não autorizado no catálogo SX3 do tenant. "
+        "Gere novamente a consulta do zero usando exclusivamente os FIELD listados "
+        "no snapshot. Não invente um campo substituto. Se precisar de total, aplique "
+        "SUM/COUNT/AVG sobre um campo físico listado e use alias explícito com AS. "
+        "Não reutilize aliases em WHERE ou JOIN.\n"
+        f"Motivo da rejeição: {reason}\n"
+        f"SQL rejeitado: {rejected_sql}"
+    )
 
 
 async def process_agent_task(task_id: str, payload: dict):
@@ -429,15 +453,36 @@ async def process_agent_task(task_id: str, payload: dict):
 
             )
 
-            # 5. Segurança
-            validate_query_security(
-                sql=sql,
-                allowed_tables=allowed_table_names,
-                allowed_fields=allowed_field_names,
-                allowed_fields_by_table=allowed_fields_by_table if entitlement_guard.mode == "enforce" else None,
-                filter_fields_by_table=allowed_filter_fields_by_table if entitlement_guard.mode == "enforce" else None,
-                filial=op_context["xfilial"],
-            )
+            # 5. Segurança. Um campo ausente do SX3 nunca é liberado. Quando a
+            # primeira geração inventar um identificador, o LLM recebe uma única
+            # oportunidade de reconstruir o SQL usando o mesmo snapshot autorizado.
+            validation_args = {
+                "allowed_tables": allowed_table_names,
+                "allowed_fields": allowed_field_names,
+                "allowed_fields_by_table": allowed_fields_by_table if entitlement_guard.mode == "enforce" else None,
+                "filter_fields_by_table": allowed_filter_fields_by_table if entitlement_guard.mode == "enforce" else None,
+                "filial": op_context["xfilial"],
+            }
+            try:
+                validate_query_security(sql=sql, **validation_args)
+            except HTTPException as exc:
+                if not _is_catalog_field_validation_error(exc):
+                    raise
+                logger.warning(
+                    "agent_sql_catalog_retry task_id=%s reason=physical_field_not_in_catalog",
+                    task_id,
+                )
+                sql = await real_llm_sql_generator(
+                    prompt=_build_catalog_revision_prompt(str(prompt), sql, str(exc.detail)),
+                    context_text=context_text,
+                    empresa=op_context["empresa"],
+                    filial=op_context["filial"],
+                    xfilial=op_context["xfilial"],
+                    tenant_id=str(ctx.tenant_id),
+                    environment_code=environment_code,
+                    image=image_b64,
+                )
+                validate_query_security(sql=sql, **validation_args)
 
             context_tables = [
                 {
