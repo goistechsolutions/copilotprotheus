@@ -151,6 +151,10 @@ def render_context_for_prompt(context: List[Dict[str, Any]]) -> str:
             f"X2_TAMEMP={table.get('x2_tamemp') if table.get('x2_tamemp') is not None else 'não informado'}"
         )
         parts.append(f"  UNIQUE_INDEX: {table.get('unique_index') or 'não informado no snapshot'}")
+        parts.append(
+            "  SX3_PHYSICAL_FIELDS: a lista FIELD abaixo é exaustiva para esta tabela; "
+            "qualquer identificador ausente não existe no snapshot autorizado."
+        )
 
         for index in item.get("indexes", []):
             parts.append(
@@ -161,13 +165,12 @@ def render_context_for_prompt(context: List[Dict[str, Any]]) -> str:
 
         for field in item.get("fields", []):
             parts.append(
-                f"  FIELD: {field.get('field_name') or 'não informado'} - "
+                f"  FIELD_PHYSICAL: {field.get('field_name') or 'não informado'} - "
                 f"{field.get('field_label') or 'não informado'} "
                 f"| type={field.get('field_type') or 'não informado'} "
                 f"len={field.get('field_length') if field.get('field_length') is not None else 'não informado'} "
                 f"dec={field.get('field_decimal') if field.get('field_decimal') is not None else 'não informado'} "
                 f"validation={field.get('validation_rule') or 'não informado'} "
-                f"relation={field.get('relation_rule') or 'não informado'} "
                 f"can_select={field.get('can_select') if field.get('can_select') is not None else 'não informado'} "
                 f"can_filter={field.get('can_filter') if field.get('can_filter') is not None else 'não informado'} "
                 f"masked={field.get('masked_flag') if field.get('masked_flag') is not None else field.get('masked') if field.get('masked') is not None else 'não informado'}"
