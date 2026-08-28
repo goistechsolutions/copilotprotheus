@@ -169,7 +169,7 @@ def test_missing_contract_denies_entitlement():
     assert decision.issues[0]["code"] == "LICENSE_NOT_ACTIVE"
 
 
-def test_table_and_field_permissions_keep_table_scope():
+def test_catalog_scope_and_field_permissions_keep_field_scope():
     guard = EntitlementGuard(mode="enforce")
     db = FakeDB(
         table_permissions=[{"table_name": "SF2"}],
@@ -189,10 +189,11 @@ def test_table_and_field_permissions_keep_table_scope():
         table_names={"SF2010", "SD2010"},
     )
 
-    assert allowed_tables == {"SF2", "SF2010"}
+    assert allowed_tables == {"SF2", "SF2010", "SD2", "SD2010"}
     assert fields_by_table["SF2"] == {"F2_DOC"}
     assert fields_by_table["SF2010"] == {"F2_DOC"}
-    assert "D2_DOC" not in fields_by_table
+    assert fields_by_table["SD2"] == {"D2_DOC"}
+    assert fields_by_table["SD2010"] == {"D2_DOC"}
 
 
 def test_dictionary_authorization_returns_filter_and_masked_fields():
