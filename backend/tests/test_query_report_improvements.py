@@ -8,6 +8,7 @@ from app.api.agent_sql_routes import (
     _table_families_from_sql,
     _validate_query_domain,
     _normalize_conversation_history,
+    _domain_context_block,
 )
 from app.services.dictionary_context_service import render_context_for_prompt
 from app.services.protheus_context_service import mask_sensitive_rows, validate_query_security
@@ -30,6 +31,24 @@ def test_sales_sql_using_purchase_tables_is_blocked_before_queryrest():
         )
     assert exc_info.value.status_code == 422
     assert "entrada/fornecedor" in str(exc_info.value.detail)
+
+
+def test_sales_domain_is_blocked_when_active_snapshot_is_purchases_only():
+    context = [{
+        "table": {"table_code": "SF1", "table_name": "SF1010", "module_code": "2"},
+        "fields": [{"field_name": "F1_DOC"}],
+    }]
+    message = _domain_context_block("vendas faturadas hoje", context)
+    assert message is not None
+    assert "não contêm SF2/SD2/SA1" in message
+
+
+def test_sales_domain_is_accepted_when_output_snapshot_is_present():
+    context = [{
+        "table": {"table_code": "SF2", "table_name": "SF2010", "module_code": "5"},
+        "fields": [{"field_name": "F2_DOC"}],
+    }]
+    assert _domain_context_block("vendas faturadas hoje", context) is None
 
 
 def test_conversation_history_accepts_only_bounded_user_and_assistant_text():
