@@ -20,6 +20,8 @@ class _CatalogDB:
     def execute(self, query, params=None):
         sql = str(query)
         self.queries.append(sql)
+        if "information_schema.tables" in sql:
+            return _Result([{"exists_flag": bool(self.field_rows)}])
         if "tenant_field_permissions" in sql:
             return _Result(self.field_rows)
         raise AssertionError(f"consulta inesperada no fake: {sql}")
