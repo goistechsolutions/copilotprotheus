@@ -187,6 +187,7 @@ def test_catalog_scope_and_field_permissions_keep_field_scope():
         company_id=1,
         role_id="role-1",
         table_names={"SF2010", "SD2010"},
+        catalog_fields_by_table={"SF2": ["F2_DOC"], "SD2": ["D2_DOC"]},
     )
 
     assert allowed_tables == {"SF2", "SF2010", "SD2", "SD2010"}
@@ -215,11 +216,12 @@ def test_dictionary_authorization_returns_filter_and_masked_fields():
         company_id=1,
         role_id="role-1",
         table_names={"SA1010"},
+        catalog_fields_by_table={"SA1": ["A1_COD", "A1_EMAIL"]},
     )
 
     assert authorization.allowed_tables == {"SA1", "SA1010"}
     assert authorization.allowed_fields_by_table["SA1010"] == {"A1_COD", "A1_EMAIL"}
-    assert authorization.filter_fields_by_table["SA1010"] == {"A1_COD", "A1_INTERNAL"}
+    assert authorization.filter_fields_by_table["SA1010"] == {"A1_COD"}
     assert authorization.masked_fields_by_table["SA1010"] == {"A1_EMAIL"}
 
 
