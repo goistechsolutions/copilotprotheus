@@ -421,7 +421,7 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     except Exception:
         pass
 
-    clean_tenant = resolve_clean_tenant(tenant_code)
+    clean_tenant = resolve_clean_tenant(db, tenant_code)
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
@@ -527,7 +527,7 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
     tenant_code = str(payload.tenant_id or comp_info.get("tenant_id"))
-    clean_tenant = resolve_clean_tenant(tenant_code)
+    clean_tenant = resolve_clean_tenant(db, tenant_code)
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
