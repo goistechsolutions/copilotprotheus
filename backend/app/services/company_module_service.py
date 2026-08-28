@@ -290,6 +290,44 @@ def replace_company_modules(
             )
             saved += 1
 
+        # Mantém o escopo contratual consistente quando os módulos são alterados
+        # depois da criação/ativação da licença. Somente módulos existentes no
+        # catálogo global e contratos vigentes do mesmo tenant são afetados.
+        db.execute(
+            text("""
+                DELETE FROM public.tenant_module_contracts tmc
+                USING public.tenant_contracts tc
+                WHERE tmc.contract_id = tc.id
+                  AND lower(btrim(tmc.tenant_id)) = :tenant_id
+                  AND lower(btrim(tc.tenant_id)) = :tenant_id
+                  AND lower(btrim(tc.contract_status)) IN ('active', 'enabled', 'allowed')
+                  AND tc.starts_at <= CURRENT_DATE
+                  AND (tc.ends_at IS NULL OR tc.ends_at >= CURRENT_DATE)
+            """),
+            {"tenant_id": clean_tenant},
+        )
+        db.execute(
+            text(f"""
+                INSERT INTO public.tenant_module_contracts
+                    (tenant_id, contract_id, module_id, status)
+                SELECT DISTINCT
+                    :tenant_id,
+                    tc.id,
+                    pm.id,
+                    'allowed'
+                FROM public.tenant_contracts tc
+                JOIN {chr(34)}{clean_tenant}{chr(34)}.protheus_modules tm ON TRUE
+                JOIN public.protheus_modules_master pm
+                  ON pm.mod_code = tm.mod_code
+                WHERE lower(btrim(tc.tenant_id)) = :tenant_id
+                  AND lower(btrim(tc.contract_status)) IN ('active', 'enabled', 'allowed')
+                  AND tc.starts_at <= CURRENT_DATE
+                  AND (tc.ends_at IS NULL OR tc.ends_at >= CURRENT_DATE)
+                  AND pm.active = TRUE
+            """),
+            {"tenant_id": clean_tenant},
+        )
+
         db.commit()
         return saved
 
