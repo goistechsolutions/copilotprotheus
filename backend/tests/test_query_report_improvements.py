@@ -1,6 +1,11 @@
 import pytest
 from fastapi import HTTPException
 
+from app.api.agent_sql_routes import (
+    _build_catalog_revision_prompt,
+    _is_catalog_field_validation_error,
+)
+from app.services.dictionary_context_service import render_context_for_prompt
 from app.services.protheus_context_service import mask_sensitive_rows, validate_query_security
 from app.services.report_service import ReportService
 
@@ -176,3 +181,50 @@ def test_query_guard_rejects_f1_total_when_used_as_nonexistent_physical_field():
     assert exc_info.value.status_code == 403
     assert "F1_TOTAL" in str(exc_info.value.detail)
     assert "ausente" in str(exc_info.value.detail)
+    assert _is_catalog_field_validation_error(exc_info.value) is True
+
+
+def test_table_security_error_does_not_trigger_catalog_field_retry():
+    exc = HTTPException(
+        status_code=403,
+        detail="Bloqueio de Segurança RBAC: a tabela 'FIXTURE' não está autorizada no snapshot.",
+    )
+
+    assert _is_catalog_field_validation_error(exc) is False
+
+
+def test_catalog_revision_prompt_does_not_invent_replacement_field():
+    revision = _build_catalog_revision_prompt(
+        "Calcule o total recebido",
+        "SELECT SF1.F1_TOTAL FROM SF1010 SF1",
+        "F1_TOTAL ausente",
+    )
+
+    assert "exclusivamente os FIELD listados" in revision
+    assert "Não invente um campo substituto" in revision
+    assert "alias explícito com AS" in revision
+    assert "F1_VALBRUT" not in revision
+
+
+def test_dictionary_prompt_marks_sx3_fields_as_exhaustive_and_omits_x3_relation():
+    context = [{
+        "table": {
+            "table_code": "SF1",
+            "table_name": "SF1010",
+            "module_code": "2",
+        },
+        "fields": [{
+            "field_name": "F1_VALBRUT",
+            "field_label": "Valor bruto",
+            "field_type": "N",
+            "relation_rule": "X3_RELACAO_NAO_DEVE_IR_AO_PROMPT",
+        }],
+        "indexes": [],
+    }]
+
+    rendered = render_context_for_prompt(context)
+
+    assert "SX3_PHYSICAL_FIELDS" in rendered
+    assert "FIELD_PHYSICAL: F1_VALBRUT" in rendered
+    assert "qualquer identificador ausente não existe" in rendered
+    assert "X3_RELACAO_NAO_DEVE_IR_AO_PROMPT" not in rendered
