@@ -16,6 +16,32 @@ const suggestions = [
   { title: 'Clientes com risco', subtitle: 'inadimplência' },
 ];
 
+function makeConversationId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `conversation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function safeStorageRead(key, fallback) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeStorageWrite(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // O histórico persistido no servidor continua sendo a fonte de memória.
+  }
+}
+
+function conversationKey(context) {
+  return [context.tenant_id, context.user || 'anonymous'].map(value => encodeURIComponent(value || 'unknown')).join(':');
+}
+
 async function waitForAgentTask(taskId, timeoutMs = 120000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -45,6 +71,10 @@ function readContextFromUrl() {
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
   const [isLogMode, setIsLogMode] = useState(false);
+  const [conversationId, setConversationId] = useState(() => {
+    const initialContext = readContextFromUrl();
+    return initialContext.session_id || makeConversationId();
+  });
 
   const context = useMemo(
     () => ({
@@ -78,10 +108,20 @@ export default function AgentWorkspace() {
     },
   ]);
 
-  const [history] = useState([
-    { title: 'Faturamento do mês', date: 'Hoje' },
-    { title: 'Títulos vencendo', date: 'Ontem' },
-  ]);
+  const historyStorageKey = useMemo(() => `copilot.conversations:${conversationKey(context)}`, [context]);
+  const [history, setHistory] = useState([]);
+
+  useEffect(() => {
+    const storedHistory = safeStorageRead(historyStorageKey, []);
+    setHistory(Array.isArray(storedHistory) ? storedHistory : []);
+    try {
+      const active = window.localStorage.getItem(`${historyStorageKey}:active`);
+      if (active) setConversationId(active);
+      else window.localStorage.setItem(`${historyStorageKey}:active`, conversationId);
+    } catch {
+      // O backend continuará usando o conversation_id da sessão atual.
+    }
+  }, [historyStorageKey]);
 
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -147,7 +187,23 @@ export default function AgentWorkspace() {
       return;
     }
 
+    const currentHistory = [
+      ...messages,
+      { role: 'user', text },
+    ]
+      .filter(item => ['user', 'assistant'].includes(item.role) && item.text?.trim())
+      .slice(-12)
+      .map(item => ({ role: item.role, content: item.text.trim().slice(0, 4000) }));
+
     setMessages((m) => [...m, { role: 'user', text }]);
+    setHistory((items) => {
+      const next = [
+        { id: conversationId, title: text.trim().slice(0, 52), date: 'Agora' },
+        ...items.filter(item => item.id !== conversationId),
+      ].slice(0, 20);
+      safeStorageWrite(historyStorageKey, next);
+      return next;
+    });
     setLoading(true);
 
     try {
@@ -158,6 +214,9 @@ export default function AgentWorkspace() {
         empresa: context.company,
         filial: context.branch,
         request_id: `REQ-${Date.now()}`,
+        conversation_id: conversationId,
+        session_id: conversationId,
+        history: currentHistory,
         prompt: text,
         execute: true,
       };
@@ -193,6 +252,13 @@ export default function AgentWorkspace() {
   };
 
   const startNewConversation = () => {
+    const nextConversationId = makeConversationId();
+    setConversationId(nextConversationId);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, nextConversationId);
+    } catch {
+      // Sem persistência local, o id ainda permanece válido nesta sessão.
+    }
     setMessages([{ role: 'assistant', text: 'Nova conversa iniciada.' }]);
     setResult(null);
     setSelected(null);
