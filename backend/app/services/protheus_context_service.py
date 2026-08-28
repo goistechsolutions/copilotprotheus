@@ -98,14 +98,66 @@ def _extract_table_refs(sql: str) -> list[tuple[str, str]]:
     return refs
 
 
+def _split_select_items(body: str) -> list[str]:
+    """Separa itens do SELECT sem quebrar funções, CASE ou literais."""
+    items: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if quote:
+            if char == quote:
+                if index + 1 < len(body) and body[index + 1] == quote:
+                    index += 2
+                    continue
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(0, depth - 1)
+        elif char == "," and depth == 0:
+            items.append(body[start:index])
+            start = index + 1
+        index += 1
+    items.append(body[start:])
+    return items
+
+
 def _remove_select_aliases(body: str) -> str:
-    """Remove aliases de apresentação antes de extrair campos físicos."""
-    return re.sub(
-        r"\bAS\s+[A-Z][A-Z0-9_$#]*\b",
-        " ",
-        body,
-        flags=re.IGNORECASE,
-    )
+    """Remove aliases de apresentação, mas preserva campos físicos da expressão.
+
+    Oracle aceita tanto ``expressao AS alias`` quanto ``expressao alias``. A
+    remoção por item impede que aliases calculados com aparência de campo
+    Protheus, como ``SUM(T.F1_VALBRUT) F1_TOTAL``, sejam avaliados pelo RBAC.
+    """
+    cleaned_items: list[str] = []
+    for raw_item in _split_select_items(body):
+        item = raw_item.strip()
+        if not item:
+            continue
+        item = re.sub(
+            r"\s+AS\s+(?:[A-Z][A-Z0-9_$#]*|\"(?:\"\"|[^\"])+\")\s*$",
+            "",
+            item,
+            flags=re.IGNORECASE,
+        ).strip()
+        implicit = re.match(
+            r"^(?P<expression>.+\S)\s+(?P<alias>[A-Z][A-Z0-9_$#]*|\"(?:\"\"|[^\"])+\")$",
+            item,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if implicit:
+            expression = implicit.group("expression").rstrip()
+            # Só considera alias implícito quando há uma expressão composta.
+            # Um campo físico isolado nunca é removido.
+            if re.search(r"[().+*/|'\"]|\bCASE\b", expression, re.IGNORECASE):
+                item = expression
+        cleaned_items.append(item)
+    return ", ".join(cleaned_items)
 
 
 def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
@@ -252,7 +304,7 @@ def validate_query_security(
         if unauthorized:
             raise HTTPException(
                 status_code=403,
-                detail=f"Bloqueio de Segurança RBAC: campo(s) não autorizado(s) no SELECT: {', '.join(unauthorized[:5])}.",
+                detail=f"Bloqueio de Segurança RBAC: campo(s) físico(s) ausente(s) do catálogo SX3 autorizado no SELECT: {', '.join(unauthorized[:5])}.",
             )
 
     if allowed_fields_by_table:
@@ -289,7 +341,7 @@ def validate_query_security(
         if unauthorized_refs:
             raise HTTPException(
                 status_code=403,
-                detail=f"Bloqueio de Segurança RBAC: campo(s) não autorizado(s) no SELECT: {', '.join(sorted(set(unauthorized_refs))[:5])}.",
+                detail=f"Bloqueio de Segurança RBAC: campo(s) físico(s) ausente(s) ou não autorizado(s) para a tabela no SELECT: {', '.join(sorted(set(unauthorized_refs))[:5])}.",
             )
 
     if filter_fields_by_table:
