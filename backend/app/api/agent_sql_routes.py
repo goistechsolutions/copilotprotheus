@@ -30,6 +30,7 @@ from app.services.protheus_context_service import (
 from app.services.protheus_service import ProtheusServiceError, get_tenant_config
 from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.entitlement_guard import EntitlementDenied, EntitlementGuard
+from app.services.protheus_module_catalog import quote_tenant_schema
 
 logger = logging.getLogger("app.api.agent_sql")
 router = APIRouter(prefix="/agent", tags=["agent-sql"])
@@ -266,6 +267,82 @@ def _validate_query_domain(prompt: str, sql: str) -> None:
         )
 
 
+def _load_conversation_history(
+    db: Session,
+    tenant_schema: str,
+    tenant_id: str,
+    company_id: int,
+    conversation_id: str,
+    actor_key: str,
+    limit: int = 12,
+) -> list[dict[str, str]]:
+    """Carrega somente turnos textuais do escopo exato da conversa.
+
+    A tabela memories é reutilizada como armazenamento de contexto textual;
+    linhas, colunas e respostas do ERP nunca são gravadas aqui.
+    """
+    schema = quote_tenant_schema(tenant_schema)
+    rows = db.execute(
+        text(f"""
+            SELECT memory_key, memory_value
+              FROM {schema}.memories
+             WHERE tenant_id = :tenant_id
+               AND company_id = :company_id
+               AND memory_type = 'conversation_turn'
+               AND scope = :conversation_id
+               AND source = :actor_key
+             ORDER BY created_at ASC, id ASC
+             LIMIT :limit
+        """),
+        {
+            "tenant_id": tenant_id,
+            "company_id": int(company_id),
+            "conversation_id": conversation_id,
+            "actor_key": actor_key,
+            "limit": limit,
+        },
+    ).mappings().all()
+    return [
+        {"role": str(row["memory_key"]), "content": str(row["memory_value"])}
+        for row in rows
+        if row.get("memory_key") in {"user", "assistant"} and row.get("memory_value")
+    ]
+
+
+def _append_conversation_turn(
+    db: Session,
+    tenant_schema: str,
+    tenant_id: str,
+    company_id: int,
+    conversation_id: str,
+    actor_key: str,
+    role: str,
+    content: str,
+) -> None:
+    """Persiste somente texto resumido da conversa, nunca o resultado do ERP."""
+    if role not in {"user", "assistant"} or not str(content or "").strip():
+        return
+    schema = quote_tenant_schema(tenant_schema)
+    db.execute(
+        text(f"""
+            INSERT INTO {schema}.memories
+                (tenant_id, company_id, visibility, memory_key, memory_value,
+                 memory_type, scope, source)
+            VALUES
+                (:tenant_id, :company_id, 'private', :role, :content,
+                 'conversation_turn', :conversation_id, :actor_key)
+        """),
+        {
+            "tenant_id": tenant_id,
+            "company_id": int(company_id),
+            "role": role,
+            "content": str(content).strip()[:4000],
+            "conversation_id": conversation_id,
+            "actor_key": actor_key,
+        },
+    )
+
+
 def _normalize_conversation_history(value: Any, limit: int = 12) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
@@ -377,8 +454,6 @@ async def process_agent_task(task_id: str, payload: dict):
                 or context_payload.get("session_id")
                 or session_key
             ).strip()
-            conversation_history = _normalize_conversation_history(payload.get("history"))
-            entitlement_guard = EntitlementGuard()
             user_identity = (
                 payload.get("user_id")
                 or context_payload.get("user_id")
@@ -386,6 +461,30 @@ async def process_agent_task(task_id: str, payload: dict):
                 or context_payload.get("usuario")
             )
             role_id = payload.get("role_id") or context_payload.get("role_id") or context_payload.get("profile") or context_payload.get("perfil")
+            actor_key = str(user_identity or context_payload.get("user") or context_payload.get("usuario") or "anonymous").strip()[:255]
+            persisted_history = _load_conversation_history(
+                db=db,
+                tenant_schema=ctx.schema_name,
+                tenant_id=str(ctx.tenant_id),
+                company_id=ctx.company_id,
+                conversation_id=conversation_id,
+                actor_key=actor_key,
+            )
+            conversation_history = _normalize_conversation_history(
+                persisted_history + _normalize_conversation_history(payload.get("history"))
+            )
+            _append_conversation_turn(
+                db=db,
+                tenant_schema=ctx.schema_name,
+                tenant_id=str(ctx.tenant_id),
+                company_id=ctx.company_id,
+                conversation_id=conversation_id,
+                actor_key=actor_key,
+                role="user",
+                content=str(prompt),
+            )
+            db.commit()
+            entitlement_guard = EntitlementGuard()
             try:
                 entitlement = entitlement_guard.authorize(
                     db,
@@ -728,6 +827,23 @@ async def process_agent_task(task_id: str, payload: dict):
                         entitlement_guard.release_session(db, ctx.tenant_id, entitlement.lease_key)
 
             AGENT_TASKS[task_id] = response
+            if response.get("status") == "success":
+                assistant_memory = "A consulta anterior foi processada pelo Protheus."
+            elif response.get("status") == "execution_failed":
+                assistant_memory = "A consulta anterior não foi executada porque o QueryRest retornou falha."
+            else:
+                assistant_memory = "A consulta anterior foi bloqueada pelas regras de segurança."
+            _append_conversation_turn(
+                db=db,
+                tenant_schema=ctx.schema_name,
+                tenant_id=str(ctx.tenant_id),
+                company_id=ctx.company_id,
+                conversation_id=conversation_id,
+                actor_key=actor_key,
+                role="assistant",
+                content=assistant_memory,
+            )
+            db.commit()
             logger.info("agent_task_completed task_id=%s status=%s elapsed_ms=%s", task_id, response.get("status"), response.get("response_time_ms"))
 
     except HTTPException as e:
