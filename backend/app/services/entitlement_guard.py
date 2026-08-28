@@ -762,10 +762,13 @@ class EntitlementGuard:
                     continue
                 for normalized_table in normalized_tables:
                     field_set = authorization.allowed_fields_by_table.setdefault(normalized_table, set())
+                    # A permissão específica é apenas restritiva. Ela nunca pode
+                    # criar um campo que não veio do catálogo físico SX3.
+                    if field_name not in field_set:
+                        continue
                     if row.get("can_select") is False:
                         field_set.discard(field_name)
-                    elif bool(row.get("can_select")):
-                        field_set.add(field_name)
+                        continue
                     if bool(row.get("can_filter")):
                         authorization.filter_fields_by_table.setdefault(normalized_table, set()).add(field_name)
                     if bool(row.get("can_select")) and bool(row.get("masked_flag")):
