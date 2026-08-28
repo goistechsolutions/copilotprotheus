@@ -27,7 +27,7 @@ from app.services.protheus_context_service import (
     mask_sensitive_rows,
     validate_query_security,
 )
-from app.services.protheus_service import get_tenant_config
+from app.services.protheus_service import ProtheusServiceError, get_tenant_config
 from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.entitlement_guard import EntitlementDenied, EntitlementGuard
 
@@ -107,12 +107,20 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                 history=[],
                 image=image
             )
+    except ProtheusServiceError as e:
+        status_code = e.status_code if e.status_code and 400 <= e.status_code <= 599 else 502
+        logger.error(
+            "[SQL Generator] Falha de integração Protheus status=%s error_type=%s",
+            status_code,
+            type(e).__name__,
+        )
+        raise HTTPException(status_code=status_code, detail=str(e)) from e
     except Exception as e:
         logger.error(f"[SQL Generator] Falha ao acionar provedor LLM ({settings.llm_backend}): {e}")
         raise HTTPException(
-            status_code=503, 
+            status_code=503,
             detail=f"O serviço do provedor de IA ({settings.llm_backend}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
-        )
+        ) from e
 
     if not raw_response or not isinstance(raw_response, str):
         raise HTTPException(status_code=500, detail="Provedor LLM retornou uma resposta vazia na geração de SQL.")
