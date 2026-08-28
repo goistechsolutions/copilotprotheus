@@ -39,7 +39,14 @@ function safeStorageWrite(key, value) {
 }
 
 function conversationKey(context) {
-  return [context.tenant_id, context.user || 'anonymous'].map(value => encodeURIComponent(value || 'unknown')).join(':');
+  return [
+    context.tenant_id,
+    context.user || 'anonymous',
+    context.environment,
+    context.company,
+    context.branch,
+    context.module,
+  ].map(value => encodeURIComponent(value || 'unknown')).join(':');
 }
 
 async function waitForAgentTask(taskId, timeoutMs = 120000) {
