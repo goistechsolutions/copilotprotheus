@@ -22,8 +22,14 @@ export async function saveCompanyModules(companyId, modules) {
   return data;
 }
 
-export async function syncCompanyModules(companyId, forceFullReload = false) {
+export async function syncCompanyModules(companyId, environmentCode, forceFullReload = false) {
+  const environment_code = String(environmentCode || '').trim();
+  if (!environment_code || ['default', 'none', 'null'].includes(environment_code.toLowerCase())) {
+    throw new Error('Ambiente real não informado para sincronização.');
+  }
+
   const { data } = await api.post(`/api/companies/${companyId}/modules/sync`, {
+    environment_code,
     force_full_reload: forceFullReload,
   });
   return data;
