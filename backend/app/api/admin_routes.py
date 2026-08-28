@@ -578,40 +578,24 @@ async def sync_modules(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/protheus-modules/import")
-async def import_protheus_modules(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    admin: str = Depends(verify_admin),
-):
-    """Importa a relação global de módulos a partir de CSV.
+class ModuleCatalogImportError(ValueError):
+    def __init__(self, detail):
+        super().__init__(str(detail))
+        self.detail = detail
 
-    O arquivo contém somente código, sigla e descrição de módulo. Nenhum dado
-    empresarial, conexão, tenant ou registro operacional é aceito ou persistido.
-    A importação é completa: módulos ausentes no arquivo ficam inativos, sem
-    serem apagados.
 
-    """
-    filename = str(file.filename or "").strip().lower()
-    if not filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Envie um arquivo CSV (.csv).")
-
-    content = await file.read(1_048_577)
-    if len(content) > 1_048_576:
-        raise HTTPException(status_code=413, detail="O CSV excede o limite de 1 MB.")
-
+def _parse_module_catalog_csv(content: bytes) -> list[tuple[int, str, str]]:
+    """Valida e normaliza o CSV simples codigo,sigla,descricao."""
     try:
         text_content = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="O CSV deve estar codificado em UTF-8.")
+    except UnicodeDecodeError as exc:
+        raise ModuleCatalogImportError("O CSV deve estar codificado em UTF-8.") from exc
 
     reader = csv.DictReader(io.StringIO(text_content), delimiter=",")
     headers = [str(value or "").strip().lower() for value in (reader.fieldnames or [])]
-    required_headers = ["codigo", "sigla", "descricao"]
-    if headers != required_headers:
-        raise HTTPException(
-            status_code=400,
-            detail="Cabeçalho inválido. Use exatamente: codigo,sigla,descricao",
+    if headers != ["codigo", "sigla", "descricao"]:
+        raise ModuleCatalogImportError(
+            "Cabeçalho inválido. Use exatamente: codigo,sigla,descricao"
         )
 
     records = []
@@ -649,12 +633,41 @@ async def import_protheus_modules(
         records.append((code, sigla, normalized_description))
 
     if errors:
-        raise HTTPException(status_code=400, detail={
+        raise ModuleCatalogImportError({
             "message": "CSV rejeitado; nenhuma alteração foi aplicada.",
             "errors": errors[:50],
         })
     if not records:
-        raise HTTPException(status_code=400, detail="O CSV não contém módulos válidos.")
+        raise ModuleCatalogImportError("O CSV não contém módulos válidos.")
+    return records
+
+
+@router.post("/protheus-modules/import")
+async def import_protheus_modules(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: str = Depends(verify_admin),
+):
+    """Importa a relação global de módulos a partir de CSV.
+
+    O arquivo contém somente código, sigla e descrição de módulo. Nenhum dado
+    empresarial, conexão, tenant ou registro operacional é aceito ou persistido.
+    A importação é completa: módulos ausentes no arquivo ficam inativos, sem
+    serem apagados.
+
+    """
+    filename = str(file.filename or "").strip().lower()
+    if not filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Envie um arquivo CSV (.csv).")
+
+    content = await file.read(1_048_577)
+    if len(content) > 1_048_576:
+        raise HTTPException(status_code=413, detail="O CSV excede o limite de 1 MB.")
+
+    try:
+        records = _parse_module_catalog_csv(content)
+    except ModuleCatalogImportError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
 
     try:
         for code, sigla, description in records:
