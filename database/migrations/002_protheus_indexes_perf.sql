@@ -3,6 +3,11 @@
 -- Baseado nas tabelas mais usadas em BI/Power BI (Tabelas-de-referencia.pdf)
 -- =============================================================================
 
+-- Migration legada desativada.
+-- O Copilot não replica tabelas operacionais do ERP no PostgreSQL; portanto,
+-- não cria índices em protheus.*. Os dados permanecem no ERP e são consultados
+-- somente por QueryRest autorizado.
+\if false
 BEGIN;
 
 -- SE1: Índice composto para dashboard financeiro
@@ -40,3 +45,4 @@ CREATE INDEX IF NOT EXISTS idx_mensagens_conversa_data
     ON copilot.mensagens (conversa_id, criado_em DESC);
 
 COMMIT;
+\endif
