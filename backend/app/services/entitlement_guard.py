@@ -785,6 +785,7 @@ class EntitlementGuard:
         company_id: int | str | None,
         role_id: str | None,
         table_names: Iterable[str],
+        catalog_fields_by_table: Mapping[str, Iterable[str]] | None = None,
     ) -> tuple[set[str], dict[str, set[str]]]:
         """Compatibilidade: retorna apenas tabelas e campos selecionáveis."""
         authorization = self.authorize_dictionary_details(
@@ -795,5 +796,6 @@ class EntitlementGuard:
             company_id=company_id,
             role_id=role_id,
             table_names=table_names,
+            catalog_fields_by_table=catalog_fields_by_table,
         )
         return authorization.allowed_tables, authorization.allowed_fields_by_table
