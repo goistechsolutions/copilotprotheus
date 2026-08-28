@@ -123,3 +123,56 @@ def test_query_guard_still_rejects_unauthorized_physical_field_with_alias():
 
     assert exc_info.value.status_code == 403
     assert "SRC_PRIVADO" in str(exc_info.value.detail)
+
+
+def test_query_guard_allows_explicit_calculated_alias_with_protheus_pattern():
+    sql = (
+        "SELECT SUM(SF1.F1_VALBRUT) AS F1_TOTAL "
+        "FROM SF1010 SF1 "
+        "WHERE SF1.D_E_L_E_T_ <> '*'"
+    )
+
+    validate_query_security(
+        sql,
+        {"SF1010"},
+        filial="0101",
+        allowed_fields={"F1_VALBRUT"},
+        allowed_fields_by_table={"SF1010": {"F1_VALBRUT"}},
+    )
+
+
+def test_query_guard_allows_implicit_calculated_alias_with_protheus_pattern():
+    sql = (
+        "SELECT SUM(SF1.F1_VALBRUT) F1_TOTAL "
+        "FROM SF1010 SF1 "
+        "WHERE SF1.D_E_L_E_T_ <> '*'"
+    )
+
+    validate_query_security(
+        sql,
+        {"SF1010"},
+        filial="0101",
+        allowed_fields={"F1_VALBRUT"},
+        allowed_fields_by_table={"SF1010": {"F1_VALBRUT"}},
+    )
+
+
+def test_query_guard_rejects_f1_total_when_used_as_nonexistent_physical_field():
+    sql = (
+        "SELECT SF1.F1_TOTAL "
+        "FROM SF1010 SF1 "
+        "WHERE SF1.D_E_L_E_T_ <> '*' AND ROWNUM <= 10"
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        validate_query_security(
+            sql,
+            {"SF1010"},
+            filial="0101",
+            allowed_fields={"F1_VALBRUT"},
+            allowed_fields_by_table={"SF1010": {"F1_VALBRUT"}},
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "SF1.F1_TOTAL" in str(exc_info.value.detail)
+    assert "ausente" in str(exc_info.value.detail)
