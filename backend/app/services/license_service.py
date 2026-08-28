@@ -103,15 +103,16 @@ def sync_license_entitlement(
     if expires_at < date.today():
         raise ValueError("A licença está expirada.")
 
+    contract_code = f"license:{tenant}"[:80]
     existing = db.execute(
         text("""
             SELECT id::text AS contract_id
             FROM public.tenant_contracts
             WHERE lower(btrim(tenant_id)) = :tenant_code
-            ORDER BY created_at DESC NULLS LAST, starts_at DESC
+              AND contract_code = :contract_code
             LIMIT 1
         """),
-        {"tenant_code": tenant},
+        {"tenant_code": tenant, "contract_code": contract_code},
     ).mappings().first()
 
     if existing:
@@ -135,7 +136,6 @@ def sync_license_entitlement(
             },
         )
     else:
-        contract_code = f"license:{tenant}"[:80]
         contract_id = str(
             db.execute(
                 text("""
