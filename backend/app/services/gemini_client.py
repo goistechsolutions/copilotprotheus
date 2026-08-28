@@ -130,6 +130,7 @@ async def ask_gemini(
     context: Optional[dict] = None,
     history: Optional[list] = None,
     image: Optional[str] = None,
+    allow_tools: bool = True,
 ) -> str:
     if not GEMINI_API_KEY:
         return "**Erro:** A variável `GEMINI_API_KEY` não está configurada no ambiente."
@@ -154,8 +155,9 @@ async def ask_gemini(
         "systemInstruction": {
             "parts": [{"text": system_instruction_text}]
         },
-        "tools": GEMINI_TOOLS
     }
+    if allow_tools:
+        payload["tools"] = GEMINI_TOOLS
     if generation_config:
         payload["generationConfig"] = generation_config
 
@@ -254,6 +256,7 @@ async def stream_gemini(
     context: Optional[dict] = None,
     history: Optional[list] = None,
     image: Optional[str] = None,
+    allow_tools: bool = True,
 ) -> AsyncGenerator[str, None]:
     """
     Versão streaming para a API da Gemini.
@@ -283,8 +286,9 @@ async def stream_gemini(
         "systemInstruction": {
             "parts": [{"text": system_instruction_text}]
         },
-        "tools": GEMINI_TOOLS
     }
+    if allow_tools:
+        payload["tools"] = GEMINI_TOOLS
     if generation_config:
         payload["generationConfig"] = generation_config
 
