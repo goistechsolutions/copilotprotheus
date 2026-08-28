@@ -88,7 +88,7 @@ def resolve_company(
                 SELECT *
                 FROM {schema}.company_info
                 WHERE id = :company_id
-                  AND status = 'active'
+                  AND LOWER(status) IN ('active', 'ativa')
                 LIMIT 1
             """),
             {"company_id": int(company_id)},
@@ -103,7 +103,7 @@ def resolve_company(
                 FROM {schema}.company_info
                 WHERE company_code = :company_code
                   AND branch_code = :branch
-                  AND status = 'active'
+                  AND LOWER(status) IN ('active', 'ativa')
                 LIMIT 1
             """),
             {
