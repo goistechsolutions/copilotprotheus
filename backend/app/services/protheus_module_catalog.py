@@ -206,6 +206,10 @@ def filter_allowed_dictionary_tables(
         """
         params["environment_id"] = str(environment_id)
 
+    active_filter = ""
+    if "active_flag" in columns:
+        active_filter = "AND COALESCE(dt.active_flag, TRUE) = TRUE"
+
     rows = db.execute(
         text(f"""
             SELECT DISTINCT
@@ -214,11 +218,8 @@ def filter_allowed_dictionary_tables(
                 dt.module_code,
                 COALESCE(dt.description, dt.table_name) AS description{select_optional}
             FROM {schema}.dictionary_tables dt
-            JOIN {schema}.tenant_schemas ts
-              ON ts.chave = dt.table_code
-             AND ts.tabela = dt.table_name
-             AND ts.mod_code::text = dt.module_code::text
             WHERE dt.module_code::text = ANY(:module_codes)
+              {active_filter}
               {company_filter}
               {environment_filter}
             ORDER BY dt.table_code
