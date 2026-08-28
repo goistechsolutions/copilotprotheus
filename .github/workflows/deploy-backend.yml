@@ -157,13 +157,22 @@ jobs:
             echo "📦 Parando containers antigos..."
             docker compose down --remove-orphans || true
 
-            # Compose usa container_name fixo para o banco. Se uma execução
-            # anterior deixou apenas o container órfão, o compose não consegue
-            # recriá-lo. O volume nomeado não é removido, e o backup ocorre em
-            # job separado antes deste deploy na branch main.
+            # Compose usa container_name fixo para o banco. O down pode não
+            # remover um container criado por outro project name. O backup já
+            # ocorreu no job anterior; remover somente o container PostgreSQL
+            # preserva o volume nomeado e evita conflito de nome.
             if docker inspect copilot-protheus-db >/dev/null 2>&1; then
-              echo "🧹 Removendo somente container PostgreSQL órfão (volume preservado)..."
-              docker rm -f copilot-protheus-db
+              DB_IMAGE=$(docker inspect --format '{{.Config.Image}}' copilot-protheus-db)
+              case "$DB_IMAGE" in
+                *postgres*|*copilotprotheus-db*)
+                  echo "🧹 Removendo container PostgreSQL órfão; volume será preservado..."
+                  docker rm -f copilot-protheus-db
+                  ;;
+                *)
+                  echo "❌ /copilot-protheus-db está ocupado por imagem não PostgreSQL: $DB_IMAGE"
+                  exit 1
+                  ;;
+              esac
             fi
 
             echo "🏗️ Build da imagem..."
