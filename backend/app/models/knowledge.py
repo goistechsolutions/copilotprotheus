@@ -86,8 +86,7 @@ class ProtheusModuleMaster(GlobalBase):
     mod_sigla = Column(String(30), unique=True)
     mod_name = Column(String(150), nullable=False)
     description = Column(Text)
-    # Somente metadados SX2/SX3/SIX agrupados por módulo; nunca dados ERP.
-    catalog_metadata = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
