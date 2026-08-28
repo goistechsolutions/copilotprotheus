@@ -469,7 +469,8 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
         "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
-        "pass": None, "status": payload.status or "ativa"
+        "pass": encrypt_password(payload.protheus_password) if payload.protheus_password else None,
+        "status": payload.status or "ativa"
     }).first()
 
     upsert_tenant = text("""
@@ -514,7 +515,8 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "protheus_usuario": payload.protheus_usuario,
         "protheus_rest_url": payload.protheus_rest_url,
         "webapp_url": payload.webapp_url,
-        "licenca_uso": payload.licenca_uso,
+        # CompanyCreate não expõe licenca_uso; não acessar atributo inexistente.
+        "licenca_uso": getattr(payload, "licenca_uso", None),
         "status": payload.status or "ativa",
         "created_at": res[1] if res and res[1] else now,
         "updated_at": res[2] if res and res[2] else now
@@ -573,7 +575,8 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
         "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
         "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
-        "pass": None, "status": payload.status or "ativa"
+        "pass": encrypt_password(payload.protheus_password) if payload.protheus_password else None,
+        "status": payload.status or "ativa"
     }).first()
 
     rest_url = payload.protheus_rest_url or comp_info.get("protheus_rest_url")
