@@ -15,7 +15,7 @@ Seguranca:
 """
 import re
 from app.services.tenant_resolver import resolve_clean_tenant as secure_clean_tenant
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, File, UploadFile
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -23,6 +23,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import os
 import json
+import csv
+import io
+import unicodedata
 import dotenv
 import hashlib
 import logging
@@ -615,6 +618,130 @@ async def sync_modules(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/protheus-modules/import")
+async def import_protheus_modules(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: str = Depends(verify_admin),
+):
+    """Importa a relação global de módulos a partir de CSV.
+
+    O arquivo contém somente código, sigla e descrição de módulo. Nenhum dado
+    empresarial, conexão, tenant ou registro operacional é aceito ou persistido.
+    A importação é completa: módulos ausentes no arquivo ficam inativos, sem
+    serem apagados e sem alterar catalog_metadata SX2/SX3 já existente.
+    """
+    filename = str(file.filename or "").strip().lower()
+    if not filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Envie um arquivo CSV (.csv).")
+
+    content = await file.read(1_048_577)
+    if len(content) > 1_048_576:
+        raise HTTPException(status_code=413, detail="O CSV excede o limite de 1 MB.")
+
+    try:
+        text_content = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="O CSV deve estar codificado em UTF-8.")
+
+    reader = csv.DictReader(io.StringIO(text_content), delimiter=",")
+    headers = [str(value or "").strip().lower() for value in (reader.fieldnames or [])]
+    required_headers = ["codigo", "sigla", "descricao"]
+    if headers != required_headers:
+        raise HTTPException(
+            status_code=400,
+            detail="Cabeçalho inválido. Use exatamente: codigo,sigla,descricao",
+        )
+
+    records = []
+    errors = []
+    codes_seen = set()
+    siglas_seen = set()
+    for row in reader:
+        line_number = reader.line_num
+        if not any(str(value or "").strip() for value in row.values()):
+            continue
+
+        code_raw = str(row.get("codigo") or "").strip()
+        sigla = str(row.get("sigla") or "").strip().upper()
+        description = str(row.get("descricao") or "").strip()
+        normalized_description = unicodedata.normalize("NFKC", description)
+
+        if not re.fullmatch(r"[0-9]{1,6}", code_raw):
+            errors.append(f"Linha {line_number}: codigo deve conter somente números.")
+            continue
+        code = int(code_raw)
+        if not 0 < code <= 999999:
+            errors.append(f"Linha {line_number}: codigo fora do intervalo permitido.")
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]{1,59}", sigla):
+            errors.append(f"Linha {line_number}: sigla inválida.")
+        if not normalized_description or len(normalized_description) > 160:
+            errors.append(f"Linha {line_number}: descricao vazia ou maior que 160 caracteres.")
+
+        sigla_key = sigla.casefold()
+        if code in codes_seen:
+            errors.append(f"Linha {line_number}: codigo duplicado ({code_raw}).")
+        if sigla_key in siglas_seen:
+            errors.append(f"Linha {line_number}: sigla duplicada ({sigla}).")
+        codes_seen.add(code)
+        siglas_seen.add(sigla_key)
+        records.append((code, sigla, normalized_description))
+
+    if errors:
+        raise HTTPException(status_code=400, detail={
+            "message": "CSV rejeitado; nenhuma alteração foi aplicada.",
+            "errors": errors[:50],
+        })
+    if not records:
+        raise HTTPException(status_code=400, detail="O CSV não contém módulos válidos.")
+
+    try:
+        for code, sigla, description in records:
+            db.execute(
+                text("""
+                    INSERT INTO public.protheus_modules_master
+                        (mod_code, mod_sigla, mod_name, active, updated_at)
+                    VALUES (:mod_code, :mod_sigla, :mod_name, TRUE, NOW())
+                    ON CONFLICT (mod_code) DO UPDATE SET
+                        mod_sigla = EXCLUDED.mod_sigla,
+                        mod_name = EXCLUDED.mod_name,
+                        active = TRUE,
+                        updated_at = NOW()
+                """),
+                {
+                    "mod_code": code,
+                    "mod_sigla": sigla,
+                    "mod_name": description,
+                },
+            )
+
+        code_list = ", ".join(str(code) for code in sorted(codes_seen))
+        db.execute(
+            text(f"""
+                UPDATE public.protheus_modules_master
+                   SET active = FALSE, updated_at = NOW()
+                 WHERE mod_code NOT IN ({code_list})
+            """)
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Falha ao importar catálogo global de módulos")
+        raise HTTPException(
+            status_code=409,
+            detail="CSV não aplicado: há conflito com o catálogo global existente.",
+        ) from exc
+
+    return {
+        "success": True,
+        "message": "Catálogo global de módulos importado com sucesso.",
+        "modules_imported": len(records),
+        "active_modules": len(records),
+        "source": "csv",
+        "metadata_only": True,
+    }
 
 
 @router.get("/protheus-modules")
