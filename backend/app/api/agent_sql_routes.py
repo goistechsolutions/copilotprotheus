@@ -47,6 +47,7 @@ async def real_llm_sql_generator(
     tenant_id: str,
     environment_code: str,
     image: str = None,
+    history: list[dict[str, str]] | None = None,
 ) -> str:
     """
     Aciona o provedor LLM oficial configurado no backend (Gemini 2.5 Flash ou Ollama)
@@ -76,7 +77,21 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant/ambiente.
 13. O snapshot SX3 é a única fonte de campos físicos. Um identificador com aparência Protheus, como F1_TOTAL, não é campo válido se não estiver listado em FIELD para a tabela. Para totais calculados, use SUM/COUNT/AVG somente sobre um campo físico listado e atribua um alias de apresentação explícito com AS; o alias não pode ser usado como campo físico, filtro ou chave de JOIN."""
 
-    user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}"
+    domain = _infer_query_domain(prompt)
+    domain_instruction = ""
+    if domain == "sales":
+        domain_instruction = (
+            " A intenção é VENDAS/FATURAMENTO. Use SF2/SD2 para notas de saída "
+            "e SA1 para clientes quando essas famílias estiverem no catálogo; "
+            "nunca use SF1/SD1/SA2, que são entrada/compras/fornecedores."
+        )
+    elif domain == "purchases":
+        domain_instruction = (
+            " A intenção é COMPRAS/ENTRADA. Use SF1/SD1 para notas de entrada "
+            "e SA2 para fornecedores quando essas famílias estiverem no catálogo; "
+            "não trate tabelas de saída como tabelas de entrada."
+        )
+    user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
 
     try:
         if settings.llm_backend == "gemini":
@@ -90,7 +105,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                     "tenant_id": tenant_id,
                     "environment_code": environment_code,
                 },
-                history=[],
+                history=history or [],
                 image=image,
                 allow_tools=False,
             )
@@ -105,7 +120,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                     "tenant_id": tenant_id,
                     "environment_code": environment_code,
                 },
-                history=[],
+                history=history or [],
                 image=image
             )
     except ProtheusServiceError as e:
@@ -152,6 +167,120 @@ def _is_catalog_field_validation_error(exc: HTTPException) -> bool:
         and "campo(s) físico(s)" in str(exc.detail)
         and ("ausente(s)" in str(exc.detail) or "não autorizado(s)" in str(exc.detail))
     )
+
+
+_DOMAIN_TABLE_FAMILIES = {
+    "sales": {"SF2", "SD2", "SA1"},
+    "purchases": {"SF1", "SD1", "SA2"},
+}
+
+
+def _infer_query_domain(prompt: str) -> str | None:
+    normalized = re.sub(r"[^a-z0-9 ]", " ", str(prompt or "").lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    sales_terms = (
+        "venda", "vendas", "vendido", "faturamento", "faturada", "faturadas",
+        "pedido de venda", "nota de saida", "notas de saida", "cliente",
+    )
+    purchase_terms = (
+        "compra", "compras", "comprado", "entrada", "entradas", "fornecedor",
+        "nota de entrada", "notas de entrada", "recebimento",
+    )
+    has_sales = any(term in normalized for term in sales_terms)
+    has_purchases = any(term in normalized for term in purchase_terms)
+    if has_sales and not has_purchases:
+        return "sales"
+    if has_purchases and not has_sales:
+        return "purchases"
+    return None
+
+
+def _table_families_from_context(context: list[dict[str, Any]]) -> set[str]:
+    families = set()
+    for item in context:
+        table = item.get("table") or {}
+        for value in (
+            table.get("table_code"),
+            table.get("table_name"),
+            table.get("physical_name"),
+            table.get("table_alias"),
+        ):
+            compact = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+            for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1"}:
+                if compact.startswith(family):
+                    families.add(family)
+    return families
+
+
+def _table_families_from_sql(sql: str) -> set[str]:
+    families = set()
+    for match in re.finditer(r"\b(?:FROM|JOIN)\s+([A-Z][A-Z0-9_$#]*)", str(sql or "").upper()):
+        compact = re.sub(r"[^A-Z0-9]", "", match.group(1))
+        for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1"}:
+            if compact.startswith(family):
+                families.add(family)
+    return families
+
+
+def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> str | None:
+    domain = _infer_query_domain(prompt)
+    if not domain:
+        return None
+    families = _table_families_from_context(context)
+    required = _DOMAIN_TABLE_FAMILIES[domain]
+    if families.isdisjoint(required):
+        if domain == "sales":
+            return (
+                "A pergunta é de vendas/faturamento, mas o módulo e o snapshot ativos "
+                "não contêm SF2/SD2/SA1. Selecione um módulo de vendas autorizado e "
+                "sincronize o dicionário antes de consultar."
+            )
+        return (
+            "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos não "
+            "contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e "
+            "sincronize o dicionário antes de consultar."
+        )
+    return None
+
+
+def _validate_query_domain(prompt: str, sql: str) -> None:
+    domain = _infer_query_domain(prompt)
+    if not domain:
+        return
+    families = _table_families_from_sql(sql)
+    if domain == "sales":
+        if not families.intersection(_DOMAIN_TABLE_FAMILIES["sales"]):
+            raise HTTPException(
+                status_code=422,
+                detail="A consulta de vendas não referencia SF2, SD2 ou SA1 no SQL gerado.",
+            )
+        if families.intersection({"SF1", "SD1", "SA2"}):
+            raise HTTPException(
+                status_code=422,
+                detail="Consulta de vendas gerou tabela de entrada/fornecedor (SF1, SD1 ou SA2); SQL bloqueado.",
+            )
+    elif families.intersection({"SF2", "SD2", "SA1"}):
+        raise HTTPException(
+            status_code=422,
+            detail="Consulta de compras/entrada gerou tabela de saída/cliente; SQL bloqueado.",
+        )
+
+
+def _normalize_conversation_history(value: Any, limit: int = 12) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    normalized = []
+    for item in value[-limit:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        content = item.get("content", item.get("text"))
+        if role not in {"user", "assistant"} or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if content:
+            normalized.append({"role": role, "content": content[:4000]})
+    return normalized
 
 
 def _build_catalog_revision_prompt(prompt: str, rejected_sql: str, reason: str) -> str:
@@ -240,6 +369,15 @@ async def process_agent_task(task_id: str, payload: dict):
 
             # 2. Entitlements: licença, usuário, módulo, consumo e conexões.
             context_payload = payload.get("context") or {}
+            session_key = payload.get("session_key") or context_payload.get("session_key") or correlation_id
+            conversation_id = str(
+                payload.get("conversation_id")
+                or payload.get("session_id")
+                or context_payload.get("conversation_id")
+                or context_payload.get("session_id")
+                or session_key
+            ).strip()
+            conversation_history = _normalize_conversation_history(payload.get("history"))
             entitlement_guard = EntitlementGuard()
             user_identity = (
                 payload.get("user_id")
@@ -248,7 +386,6 @@ async def process_agent_task(task_id: str, payload: dict):
                 or context_payload.get("usuario")
             )
             role_id = payload.get("role_id") or context_payload.get("role_id") or context_payload.get("profile") or context_payload.get("perfil")
-            session_key = payload.get("session_key") or context_payload.get("session_key") or correlation_id
             try:
                 entitlement = entitlement_guard.authorize(
                     db,
@@ -421,6 +558,17 @@ async def process_agent_task(task_id: str, payload: dict):
                     }
                     return
 
+            domain_block = _domain_context_block(str(prompt), context)
+            if domain_block:
+                AGENT_TASKS[task_id] = {
+                    "status": "error",
+                    "error": domain_block,
+                    "error_code": "DOMAIN_CATALOG_MISMATCH",
+                    "conversation_id": conversation_id,
+                    "correlation_id": correlation_id,
+                }
+                return
+
             context_text = render_context_for_prompt(context)
             allowed_table_names = {
                 str(name).strip()
@@ -449,9 +597,10 @@ async def process_agent_task(task_id: str, payload: dict):
                 tenant_id=str(ctx.tenant_id),
                 environment_code=environment_code,
                 image=image_b64,
-
+                history=conversation_history,
 
             )
+            _validate_query_domain(str(prompt), sql)
 
             # 5. Segurança. Um campo ausente do SX3 nunca é liberado. Quando a
             # primeira geração inventar um identificador, o LLM recebe uma única
@@ -481,7 +630,9 @@ async def process_agent_task(task_id: str, payload: dict):
                     tenant_id=str(ctx.tenant_id),
                     environment_code=environment_code,
                     image=image_b64,
+                    history=conversation_history,
                 )
+                _validate_query_domain(str(prompt), sql)
                 validate_query_security(sql=sql, **validation_args)
 
             context_tables = [
@@ -496,8 +647,10 @@ async def process_agent_task(task_id: str, payload: dict):
             ]
             response = {
                 "status": "success",
-                "correlation_id": correlation_id,
-                "tenant_id": str(ctx.tenant_id),
+                                    "correlation_id": correlation_id,
+                    "conversation_id": conversation_id,
+                    "tenant_id": str(ctx.tenant_id),
+
                 "environment_code": environment_code,
                 "company_id": ctx.company_id,
                 "context_operational": op_context,
