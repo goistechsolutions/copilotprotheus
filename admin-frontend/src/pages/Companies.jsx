@@ -63,8 +63,15 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
   const save = async (e) => {
     e.preventDefault(); setSaving(true); setErr('');
     try {
-      if (isNew) await axios.post('/api/companies', form);
-      else       await axios.put(`/api/companies/${form.id}`, form);
+      const payload = {
+        ...form,
+        // O schema FastAPI exige os nomes canônicos. Mantemos os campos
+        // legados do formulário para compatibilidade com o restante do CRUD.
+        company_code: form.company_code || form.protheus_empresa,
+        company_name: form.company_name || form.razao_social,
+      };
+      if (isNew) await axios.post('/api/companies', payload);
+      else       await axios.put(`/api/companies/${form.id}`, payload);
       onSaved();
     } catch (e) { setErr(formatApiError(e)); }
     finally { setSaving(false); }
