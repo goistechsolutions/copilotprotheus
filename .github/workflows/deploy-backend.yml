@@ -183,7 +183,7 @@ jobs:
 
             echo "⏳ Aguardando PostgreSQL aceitar conexões..."
             for i in $(seq 1 15); do
-              docker compose exec -T db pg_isready -U copilot -d copilotprotheus && break
+              docker compose exec -T db pg_isready -U copilot -d copilotprotheus </dev/null && break
               echo "  tentativa $i/15..."
               sleep 2
             done
@@ -191,7 +191,7 @@ jobs:
             echo "🔄 Executando migrations SQL..."
             
             echo "=== Sincronizando senha do banco de dados ==="
-            docker compose exec -T db psql -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" || true
+            docker compose exec -T db psql -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" </dev/null || true
             
             SQL_COUNT=0
             for sql_file in database/migrations/*.sql; do
@@ -204,7 +204,7 @@ jobs:
               docker compose exec -T db psql \
                 -U copilot \
                 -d copilotprotheus \
-                -f /tmp/"$BASENAME" \
+                -f /tmp/"$BASENAME" </dev/null \
                 && echo "  ✅ $BASENAME aplicado" \
                 || echo "  ⚠️  $BASENAME: já aplicado ou erro não crítico"
             done
