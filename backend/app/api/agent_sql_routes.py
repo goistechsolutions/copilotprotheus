@@ -306,6 +306,22 @@ async def process_agent_task(task_id: str, payload: dict):
                 )
                 if name
             }
+            catalog_fields_by_table = {}
+            for item in context:
+                table = item.get("table") or {}
+                field_names = {
+                    str(field.get("field_name") or "").strip().upper()
+                    for field in item.get("fields", [])
+                    if field.get("field_name")
+                }
+                for table_name in (
+                    table.get("table_name"),
+                    table.get("physical_name"),
+                    table.get("table_alias"),
+                ):
+                    if table_name and field_names:
+                        catalog_fields_by_table.setdefault(str(table_name), set()).update(field_names)
+
             dictionary_authorization = entitlement_guard.authorize_dictionary_details(
                 db=db,
                 tenant_schema=ctx.schema_name,
@@ -314,6 +330,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 company_id=ctx.company_id,
                 role_id=entitlement.role_id,
                 table_names=permission_table_names,
+                catalog_fields_by_table=catalog_fields_by_table,
             )
             allowed_permission_tables = dictionary_authorization.allowed_tables
             allowed_fields_by_table = dictionary_authorization.allowed_fields_by_table
