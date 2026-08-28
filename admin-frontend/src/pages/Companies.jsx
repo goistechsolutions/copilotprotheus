@@ -40,6 +40,19 @@ function SectionTitle({ children }) {
   );
 }
 
+function formatApiError(error) {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map(item => {
+      if (typeof item === 'string') return item;
+      const location = Array.isArray(item?.loc) ? item.loc.join('.') : '';
+      return [location, item?.msg].filter(Boolean).join(': ') || JSON.stringify(item);
+    }).join('; ');
+  }
+  if (detail && typeof detail === 'object') return detail.message || JSON.stringify(detail);
+  return detail || error?.message || 'Falha ao salvar empresa.';
+}
+
 function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
   const [form, setForm] = useState(isNew ? EMPTY : { ...company });
   const [saving, setSaving] = useState(false);
@@ -53,7 +66,7 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
       if (isNew) await axios.post('/api/companies', form);
       else       await axios.put(`/api/companies/${form.id}`, form);
       onSaved();
-    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+    } catch (e) { setErr(formatApiError(e)); }
     finally { setSaving(false); }
   };
 
