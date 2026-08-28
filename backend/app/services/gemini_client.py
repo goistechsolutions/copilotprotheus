@@ -67,7 +67,7 @@ def _build_gemini_messages(question: str, protheus_data: Optional[dict], intent:
             role = "model" if m.get("role") == "assistant" else "user"
             contents.append({
                 "role": role,
-                "parts": [{"text": m.get("text", "")}]
+                "parts": [{"text": m.get("text", m.get("content", ""))}]
             })
             
     # Injetar contexto de dados/telas como mensagem de contexto (user)
