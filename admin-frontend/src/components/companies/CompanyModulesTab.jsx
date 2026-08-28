@@ -112,7 +112,7 @@ export default function CompanyModulesTab({ company }) {
 
     try {
       const environmentCode = String(
-        company?.environment || company?.protheus_ambientes || ''
+        company?.protheus_ambientes || company?.environment || ''
       ).split(',')[0].trim();
       const res = await syncCompanyModules(companyId, environmentCode, false);
       const syncedModules = res?.module_filter?.join(', ') || '-';
