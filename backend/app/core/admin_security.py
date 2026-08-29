@@ -1,13 +1,15 @@
-"""Middleware / dependency para proteger rotas admin via JWT cookie ou Basic Auth"""
-from fastapi import HTTPException, Cookie, Depends, Request
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+"""Dependência única para proteger rotas administrativas via JWT HttpOnly ou Basic Auth."""
 from typing import Optional
-import jwt
-import os
 import hmac
+import os
+
+import jwt
+from fastapi import Cookie, Depends, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 security = HTTPBasic(auto_error=False)
 JWT_ALGORITHM = "HS256"
+JWT_ISSUER = "copilot-protheus-admin"
 
 
 def _get_jwt_secret() -> Optional[str]:
@@ -15,38 +17,50 @@ def _get_jwt_secret() -> Optional[str]:
     return secret if len(secret) >= 32 else None
 
 
+def _decode_admin_token(token: str) -> dict:
+    secret = _get_jwt_secret()
+    if not secret:
+        raise ValueError("ADMIN_JWT_SECRET não configurado com o tamanho mínimo")
+    return jwt.decode(
+        token,
+        secret,
+        algorithms=[JWT_ALGORITHM],
+        issuer=JWT_ISSUER,
+        options={"require": ["exp", "iat", "iss", "sub"]},
+    )
+
+
 async def require_admin(
     credentials: Optional[HTTPBasicCredentials] = Depends(security),
-    admin_token: Optional[str] = Cookie(default=None)
+    admin_token: Optional[str] = Cookie(default=None),
 ):
-    """Dependency FastAPI — valida JWT cookie ou HTTP Basic Auth do admin"""
-    # 1. Valida Cookie JWT se presente
-    jwt_secret = _get_jwt_secret()
-    if admin_token and jwt_secret:
+    """Valida somente uma sessão JWT emitida pelo login ou Basic Auth configurado."""
+    if admin_token:
         try:
-            payload = jwt.decode(admin_token, jwt_secret, algorithms=[JWT_ALGORITHM])
+            payload = _decode_admin_token(admin_token)
             if payload.get("sub") == "admin":
                 return payload
-        except Exception:
+        except (jwt.InvalidTokenError, ValueError):
             pass
 
-    # 2. Valida HTTP Basic Auth se presente nos cabeçalhos
     admin_user = os.environ.get("ADMIN_USER", "").strip()
     admin_pass = os.environ.get("ADMIN_PASSWORD", "").strip()
     if credentials and admin_user and admin_pass:
         user_ok = hmac.compare_digest(credentials.username.strip().lower(), admin_user.lower())
         pass_ok = hmac.compare_digest(credentials.password.strip(), admin_pass)
         if user_ok and pass_ok:
-            return {"sub": credentials.username}
+            return {"sub": credentials.username.strip()}
 
-    raise HTTPException(status_code=401, detail="Sessão não autenticada ou token ausente. Faça login novamente.")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Sessão não autenticada ou token ausente. Faça login novamente.",
+        headers={"WWW-Authenticate": "Basic"},
+    )
 
 
+# Compatibilidade explícita para imports legados: nunca converte falha de autenticação em acesso.
 async def require_admin_flexible(
     credentials: Optional[HTTPBasicCredentials] = Depends(security),
-    admin_token: Optional[str] = Cookie(default=None)
+    admin_token: Optional[str] = Cookie(default=None),
 ):
-    try:
-        return await require_admin(credentials, admin_token)
-    except Exception:
-        return None
+    return await require_admin(credentials, admin_token)

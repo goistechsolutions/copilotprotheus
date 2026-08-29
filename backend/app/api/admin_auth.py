@@ -6,6 +6,9 @@ from pydantic import BaseModel
 import jwt
 import os
 import hmac
+import uuid
+
+from app.core.admin_security import JWT_ISSUER
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 
@@ -44,8 +47,9 @@ def get_admin_credentials():
 
 def create_admin_token() -> str:
     _, _, secret = get_admin_credentials()
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    payload = {"sub": "admin", "exp": expire, "iat": datetime.utcnow()}
+    issued_at = datetime.utcnow()
+    expire = issued_at + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    payload = {"sub": "admin", "iss": JWT_ISSUER, "jti": str(uuid.uuid4()), "exp": expire, "iat": issued_at}
     return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
 
 
@@ -54,7 +58,13 @@ def verify_admin_token(token: str) -> bool:
         return False
     try:
         _, _, secret = get_admin_credentials()
-        payload = jwt.decode(token, secret, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[JWT_ALGORITHM],
+            issuer=JWT_ISSUER,
+            options={"require": ["exp", "iat", "iss", "sub"]},
+        )
         return payload.get("sub") == "admin"
     except Exception:
         return False

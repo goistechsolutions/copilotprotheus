@@ -16,7 +16,6 @@ Seguranca:
 import re
 from app.services.tenant_resolver import resolve_clean_tenant as secure_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, status, Body, File, UploadFile
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -46,7 +45,6 @@ from app.models.knowledge import (
 from app.core.config import settings
 
 router = APIRouter()
-security = HTTPBasic(auto_error=False)
 
 ENV_PATH = Path(".env")
 
@@ -79,50 +77,7 @@ def _safe_config_value(key: str, value: object) -> str:
 # Autenticacao administrativa (Cookie JWT ou HTTP Basic)
 # ─────────────────────────────────────────────────────────────
 
-from fastapi import Cookie, Request
-import jwt
-
-def verify_admin(
-    request: Request,
-    credentials: Optional[HTTPBasicCredentials] = Depends(security),
-    admin_token: Optional[str] = Cookie(None)
-):
-    import hmac
-
-    # 0. Permite chamadas locais do terminal (localhost / 127.0.0.1)
-    client_host = request.client.host if request.client else ""
-    if client_host in ("127.0.0.1", "::1", "localhost"):
-        return "admin_local"
-
-    # 1. Autenticação via Cookie JWT de sessão do Admin Panel
-    if admin_token:
-        try:
-            jwt_secret = os.getenv("ADMIN_JWT_SECRET") or "elitecorp-admin-secret-change-in-prod"
-            payload = jwt.decode(admin_token, jwt_secret, algorithms=["HS256"])
-            if payload.get("sub") == "admin":
-                return "admin"
-        except Exception:
-            pass
-
-    # 2. Autenticação via HTTP Basic (Header Authorization)
-    admin_user = os.getenv("ADMIN_USER", "admin").strip()
-    admin_pass = os.getenv("ADMIN_PASSWORD", "admin123").strip()
-    if credentials:
-        user_ok = hmac.compare_digest(credentials.username.strip().lower(), admin_user.lower()) or credentials.username.strip().lower() == "admin"
-        pass_ok = hmac.compare_digest(credentials.password.strip(), admin_pass) or credentials.password.strip() == "admin123"
-        if user_ok and pass_ok:
-            return credentials.username
-
-    # 3. Autenticação via Header (x-admin-key / x-api-key)
-    admin_key_header = request.headers.get("x-admin-key") or request.headers.get("x-api-key")
-    expected_secret = os.getenv("ADMIN_JWT_SECRET") or "elitecorp-admin-secret-change-in-prod"
-    if admin_key_header and (admin_key_header == expected_secret or admin_key_header == admin_pass or admin_key_header == "admin123"):
-        return "admin"
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciais de administrador inválidas ou sessão expirada"
-    )
+from app.core.admin_security import require_admin as verify_admin
 
 
 # ─────────────────────────────────────────────────────────────
@@ -242,13 +197,17 @@ def update_config(update: ConfigUpdate, admin: str = Depends(verify_admin)):
     if not re.fullmatch(r"[A-Z][A-Z0-9_]{1,99}", key):
         raise HTTPException(status_code=400, detail="Nome de configuração inválido.")
 
+    if _is_sensitive_config_key(key):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Segredos e credenciais devem ser alterados somente no ambiente seguro de implantação.",
+        )
+
     config_dict = dotenv.dotenv_values(ENV_PATH)
     if key not in config_dict and key not in _MANAGED_CONFIG_KEYS:
         raise HTTPException(status_code=400, detail="Configuração não permitida pelo painel.")
 
     value = str(update.value or "")
-    if _is_sensitive_config_key(key) and value.strip().lower() in _CONFIG_SENTINELS:
-        raise HTTPException(status_code=400, detail="Informe um novo valor somente para substituir o segredo.")
 
     config_dict[key] = value
     with open(ENV_PATH, "w", encoding="utf-8") as f:
