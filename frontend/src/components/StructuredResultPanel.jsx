@@ -373,12 +373,12 @@ export default function StructuredResultPanel({ result, onClose, embedded = fals
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 id="result-workspace-title" className="truncate text-[16px] font-bold text-[#1e3b5e] sm:text-[18px]">Análise do Protheus</h2>
+                <h2 id="result-workspace-title" className="truncate text-[16px] font-bold text-[#1e3b5e] sm:text-[18px]">{result?.title || result?.titulo || 'Análise do Protheus'}</h2>
                 <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${isError ? 'bg-[#fff0f0] text-[#aa5050]' : 'bg-[#eff9f3] text-[#2f835d]'}`}>
                   {isError ? 'Execução com bloqueio' : 'Consulta concluída'}
                 </span>
               </div>
-              <p className="mt-1 truncate text-[11px] text-[#8597aa]">Dados estruturados da última consulta autorizada</p>
+              <p className="mt-1 truncate text-[11px] text-[#8597aa]">{result?.subtitle || result?.description || 'Dados estruturados da última consulta autorizada'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -413,6 +413,20 @@ export default function StructuredResultPanel({ result, onClose, embedded = fals
               <StatCard icon={CheckCircle2} label="Fonte" value="QueryRest" tone="slate" />
             </div>
 
+            {Array.isArray(result?.kpis) && result.kpis.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                {result.kpis.slice(0, 8).map((kpi, index) => (
+                  <StatCard
+                    key={`${kpi.label || 'kpi'}-${index}`}
+                    icon={kpi.color === 'red' ? X : kpi.color === 'green' ? CheckCircle2 : LayoutList}
+                    label={kpi.label || `Indicador ${index + 1}`}
+                    value={displayValue(kpi.value)}
+                    tone={kpi.color === 'green' ? 'green' : kpi.color === 'yellow' ? 'amber' : kpi.color === 'red' ? 'amber' : 'blue'}
+                  />
+                ))}
+              </div>
+            )}
+
             <EntitlementStatus entitlement={result?.entitlement} />
 
             {exportError && (
@@ -424,10 +438,24 @@ export default function StructuredResultPanel({ result, onClose, embedded = fals
 
             {summaryText && (
               <div className="rounded-2xl border border-[#e1eaf2] bg-white px-4 py-4 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-5">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#8397aa]">Resumo da consulta</p>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#8397aa]">Resumo executivo</p>
                 <div className="prose prose-sm prose-slate max-w-none text-[12px] leading-relaxed prose-p:my-1 prose-table:text-[11px]">
                   <ReactMarkdown>{summaryText}</ReactMarkdown>
                 </div>
+              </div>
+            )}
+
+            {result?.details && (
+              <div className="rounded-2xl border border-[#e1eaf2] bg-white px-4 py-4 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-5">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#8397aa]">Detalhamento</p>
+                <div className="prose prose-sm prose-slate max-w-none text-[12px] leading-relaxed prose-p:my-1 prose-table:text-[11px]"><ReactMarkdown>{String(result.details)}</ReactMarkdown></div>
+              </div>
+            )}
+
+            {result?.insights && (
+              <div className="rounded-2xl border border-[#d6e8f4] bg-[#f3f9fd] px-4 py-4 text-[12px] leading-relaxed text-[#496a85] shadow-[0_4px_16px_rgba(43,78,112,0.03)] sm:px-5">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#5c86a5]">Insights da IA</p>
+                <ReactMarkdown>{String(result.insights)}</ReactMarkdown>
               </div>
             )}
 
