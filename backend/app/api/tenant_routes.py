@@ -18,11 +18,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.admin_security import require_admin, require_admin_flexible
+from app.core.admin_security import require_admin
 from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import Tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
-from app.services.protheus_token_service import invalidate_access_token, get_valid_access_token, ProtheusAuthError
+from app.services.protheus_token_service import invalidate_access_token
+from app.schemas.protheus_context import ProtheusContext
+from app.services.protheus_integration_service import IntegrationFailure, ProtheusIntegrationService
 from app.services.tenant_resolver import resolve_clean_tenant
 from app.services.license_service import sync_license_entitlement
 
@@ -107,12 +109,13 @@ def _sync_tenant_license_contract(db: Session, tenant: Tenant, tenant_schema: st
 
 
 async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: dict):
-    """Grava na tabela public.protheus_rest_connections e valida a autenticação."""
+    """Grava a conexão cifrada e valida OAuth2 pela fachada única de integração."""
     env_code = conn_info["env_code"]
     rest_url = conn_info["rest_url"]
     username = conn_info["username"]
     password = conn_info["password"]
     auth_mode = conn_info["auth_mode"]
+    ProtheusIntegrationService._validate_base_url(rest_url)
 
     existing_password = db.execute(
         text("""
@@ -161,20 +164,16 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: di
     })
     db.commit()
 
-    # Valida credenciais obtendo o token OAuth2
+    # Valida credenciais obtendo o token OAuth2, sem retornar o token ou o body remoto.
     try:
         invalidate_access_token(db, tenant_code, env_code)
-        await get_valid_access_token(db, tenant_code, env_code)
-    except ProtheusAuthError as exc:
+        context = ProtheusContext(tenant_code=tenant_code, environment_code=env_code)
+        await ProtheusIntegrationService(db, context).authenticate()
+    except IntegrationFailure as exc:
         raise HTTPException(
-            status_code=502,
-            detail=f"Falha ao autenticar no REST Protheus (HTTP {exc.status_code}): {exc.response_body or str(exc)}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Erro ao validar Conexão Protheus ({tenant_code}/{env_code}): {str(e)}"
-        )
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": str(exc), "retryable": exc.retryable},
+        ) from exc
 
 
 def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Tenant]:
@@ -246,13 +245,13 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
 
 @router.get("", response_model=List[dict])
 @router.get("/", response_model=List[dict], include_in_schema=False)
-def list_tenants(db: Session = Depends(get_db), _admin=Depends(require_admin_flexible)):
+def list_tenants(db: Session = Depends(get_db), _admin=Depends(require_admin)):
     tenants = db.query(Tenant).order_by(Tenant.created_at.desc()).all()
     return [_to_tenant_dict(db, t) for t in tenants]
 
 
 @router.get("/{tenant_id}", response_model=dict)
-def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin_flexible)):
+def get_tenant(tenant_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
