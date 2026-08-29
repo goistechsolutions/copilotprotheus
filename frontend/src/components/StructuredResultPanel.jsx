@@ -256,7 +256,7 @@ function ChartView({ rows, columns }) {
   );
 }
 
-export default function StructuredResultPanel({ result, onClose }) {
+export default function StructuredResultPanel({ result, onClose, embedded = false }) {
   const [view, setView] = useState('table');
   const [search, setSearch] = useState('');
   const [filterColumn, setFilterColumn] = useState('all');
@@ -363,9 +363,9 @@ export default function StructuredResultPanel({ result, onClose }) {
   );
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-5 lg:p-8">
-      <button type="button" aria-label="Fechar tela auxiliar" onClick={onClose} className="absolute inset-0 cursor-default bg-[#152b45]/50 backdrop-blur-sm" />
-      <section role="dialog" aria-modal="true" aria-labelledby="result-workspace-title" className="relative flex h-full max-h-[940px] w-full max-w-[1380px] flex-col overflow-hidden rounded-[26px] border border-[#dce7f0] bg-[#f5f9fc] shadow-[0_24px_80px_rgba(18,49,78,0.28)]">
+    <div className={embedded ? 'flex h-full min-h-0 w-full' : 'fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-5 lg:p-8'}>
+      {!embedded && <button type="button" aria-label="Fechar tela auxiliar" onClick={onClose} className="absolute inset-0 cursor-default bg-[#152b45]/50 backdrop-blur-sm" />}
+      <section role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-labelledby="result-workspace-title" className={embedded ? 'relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f5f9fc]' : 'relative flex h-full max-h-[940px] w-full max-w-[1380px] flex-col overflow-hidden rounded-[26px] border border-[#dce7f0] bg-[#f5f9fc] shadow-[0_24px_80px_rgba(18,49,78,0.28)]'}>
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[#e1eaf2] bg-white px-4 py-4 sm:px-7">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#267ac4]">
