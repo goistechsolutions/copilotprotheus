@@ -23,8 +23,14 @@ def build_dictionary_context(
     possui esse valor.
     """
     clean_tenant = str(tenant_id or "").strip().lower()
+    clean_environment = str(environment_id or "").strip()
+    if not clean_tenant or not clean_environment:
+        return []
     schema = quote_tenant_schema(clean_tenant)
-    params: Dict[str, Any] = {"tenant_id": clean_tenant}
+    params: Dict[str, Any] = {
+        "tenant_id": clean_tenant,
+        "environment_id": clean_environment,
+    }
 
     sql_tables = f"""
         SELECT DISTINCT
@@ -32,7 +38,6 @@ def build_dictionary_context(
             COALESCE(dt.description, dt.table_name) AS table_label,
             dt.module_code,
             dt.table_code,
-            dt.table_alias,
             dt.physical_name,
             dt.unique_index,
             dt.usa_empresa,
@@ -45,20 +50,15 @@ def build_dictionary_context(
             dt.x2_modoemp,
             dt.x2_tamemp
         FROM {schema}.dictionary_tables dt
-        JOIN {schema}.tenant_schemas ts
-          ON ts.chave = dt.table_code
-         AND ts.tabela = dt.table_name
-         AND ts.mod_code::text = dt.module_code::text
-        WHERE 1 = 1
+        WHERE dt.tenant_id = :tenant_id
+          AND COALESCE(dt.active_flag, TRUE) = TRUE
     """
 
     if company_id is not None:
         sql_tables += " AND (dt.company_id = :company_id OR dt.company_id IS NULL)"
-        params["company_id"] = str(company_id)
+        params["company_id"] = int(company_id)
 
-    if environment_id is not None:
-        sql_tables += " AND (dt.environment_id = :environment_id OR dt.environment_id IS NULL)"
-        params["environment_id"] = str(environment_id)
+    sql_tables += " AND dt.environment_id = :environment_id"
 
     if module_filter:
         normalized_modules = [str(module).strip() for module in module_filter if str(module).strip()]
@@ -78,11 +78,14 @@ def build_dictionary_context(
         table_data = dict(table)
         table_name = str(table_data.get("table_name") or "").strip()
         table_code = str(table_data.get("table_code") or "").strip()
-        field_params: Dict[str, Any] = {"table_name": table_name, "table_code": table_code}
-        field_scope = "(df.table_name = :table_name OR df.table_code = :table_code)"
-        if environment_id is not None:
-            field_scope += " AND (df.environment_id = :environment_id OR df.environment_id IS NULL)"
-            field_params["environment_id"] = str(environment_id)
+        field_params: Dict[str, Any] = {
+            "tenant_id": clean_tenant,
+            "table_name": table_name,
+            "table_code": table_code,
+        }
+        field_scope = "df.tenant_id = :tenant_id AND df.table_code = :table_code"
+        field_scope += " AND df.environment_id = :environment_id"
+        field_params["environment_id"] = clean_environment
 
         fields = db.execute(
             text(f"""
@@ -93,8 +96,6 @@ def build_dictionary_context(
                     df.length_num AS field_length,
                     df.decimal_num AS field_decimal,
                     df.validation_rule,
-                    df.relation_rule,
-                    df.when_rule,
                     df.sxg_group,
                     df.sxg_size
                 FROM {schema}.dictionary_fields df
@@ -108,10 +109,17 @@ def build_dictionary_context(
             text(f"""
                 SELECT index_order, nickname, expression
                 FROM {schema}.dictionary_indexes
-                WHERE table_name IN (:table_name, :table_code)
+                WHERE tenant_id = :tenant_id
+                  AND table_code = :table_code
+                  AND environment_id = :environment_id
                 ORDER BY index_order
             """),
-            {"table_name": table_name, "table_code": table_code},
+            {
+                "tenant_id": clean_tenant,
+                "table_name": table_name,
+                "table_code": table_code,
+                "environment_id": clean_environment,
+            },
         ).mappings().all()
 
         context.append({
