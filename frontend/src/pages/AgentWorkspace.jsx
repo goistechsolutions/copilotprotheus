@@ -313,9 +313,11 @@ export default function AgentWorkspace() {
     setSelected(null);
   };
 
+  const showWorkspace = Boolean(result || isLogMode);
+
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f4f8fc] font-sans text-[#203c60] xl:flex-row">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f5f9fc] xl:h-full">
+    <div className={`flex h-screen w-full flex-col overflow-hidden bg-[#f4f8fc] font-sans text-[#203c60] ${showWorkspace ? 'xl:flex-row' : ''}`}>
+      {showWorkspace && <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f5f9fc] xl:h-full">
         <header className="z-10 flex shrink-0 items-center justify-between gap-4 border-b border-[#e1eaf2] bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2476bd]">
@@ -355,9 +357,9 @@ export default function AgentWorkspace() {
             </div>
           )}
         </div>
-      </main>
+      </main>}
 
-      <aside className="flex h-[48vh] w-full shrink-0 flex-col overflow-hidden border-t border-[#dfe9f2] bg-white xl:h-full xl:w-[420px] xl:border-l xl:border-t-0">
+      <aside className={`flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-[#dfe9f2] bg-white ${showWorkspace ? 'h-full xl:h-full xl:w-[420px] xl:border-l' : 'h-full border-t'}`}>
         <header className="flex shrink-0 items-center justify-between border-b border-[#edf2f7] px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2879bf]"><Bot size={20} strokeWidth={1.8} aria-hidden="true" /></div>
