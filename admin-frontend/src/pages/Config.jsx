@@ -36,29 +36,30 @@ function ConfigField({ configKey, value, draft, sensitive, saving, saved, onChan
         <div className="relative min-w-0 flex-1">
           <input
             id={`config-${configKey}`}
-            type={sensitive ? 'password' : 'text'}
-            value={sensitive ? draft : draft ?? ''}
+            type="text"
+            value={sensitive ? (isConfigured ? '••••••••••••••••' : 'Não configurado') : draft ?? ''}
             onChange={event => onChange(configKey, event.target.value)}
-            onKeyDown={event => { if (event.key === 'Enter') onSave(configKey); }}
-            placeholder={sensitive ? (isConfigured ? 'Informe um novo valor para substituir' : 'Informe o valor com segurança') : 'Não informado'}
+            onKeyDown={event => { if (event.key === 'Enter' && !sensitive) onSave(configKey); }}
+            placeholder={sensitive ? 'Gerenciado no ambiente de implantação' : 'Não informado'}
             autoComplete="off"
+            readOnly={sensitive}
             disabled={saving}
-            className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-[#64748B] focus:border-[#60A5FA] focus:ring-2 focus:ring-[#60A5FA]/15 disabled:opacity-60"
+            className={`w-full rounded-lg border border-[#263550] px-3 py-2.5 text-sm outline-none transition placeholder:text-[#64748B] focus:border-[#60A5FA] focus:ring-2 focus:ring-[#60A5FA]/15 disabled:opacity-60 ${sensitive ? 'bg-[#0B1220]/70 font-mono tracking-widest text-[#64748B]' : 'bg-[#0B1220] text-white'}`}
           />
           {sensitive && <EyeOff className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />}
         </div>
-        <button
+        {!sensitive && <button
           type="button"
           onClick={() => onSave(configKey)}
-          disabled={saving || (sensitive && !draft?.trim())}
-          title={sensitive ? 'Substituir segredo' : 'Salvar configuração'}
+          disabled={saving}
+          title="Salvar configuração"
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#2B3850] bg-[#1E293B] px-3 text-xs font-medium text-[#CBD5E1] transition hover:border-[#60A5FA]/60 hover:bg-[#24344F] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           {saved ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Save className="h-4 w-4" />}
           <span className="hidden sm:inline">{saved ? 'Salvo' : 'Salvar'}</span>
-        </button>
+        </button>}
       </div>
-      {sensitive && <p className="mt-2 flex items-center gap-1.5 text-[10px] leading-4 text-[#64748B]"><ShieldCheck className="h-3 w-3 shrink-0" />O valor atual nunca é retornado pela API nem revelado nesta tela.</p>}
+      {sensitive && <p className="mt-2 flex items-center gap-1.5 text-[10px] leading-4 text-[#64748B]"><ShieldCheck className="h-3 w-3 shrink-0" />Credencial protegida. A alteração deve ser feita no ambiente seguro de implantação; o conteúdo nunca é retornado pela API.</p>}
     </div>
   );
 }
@@ -92,8 +93,8 @@ export default function Config() {
 
   const save = async key => {
     const value = String(drafts[key] ?? '');
-    if (isSensitiveKey(key) && !value.trim()) {
-      setError('Para um segredo, informe um novo valor. O valor atual não pode ser recuperado pelo painel.');
+    if (isSensitiveKey(key)) {
+      setError('Credenciais e segredos não podem ser alterados pelo painel administrativo.');
       return;
     }
     setSavingKey(key);
