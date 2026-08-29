@@ -80,9 +80,9 @@ export default function SnapshotsPage() {
     const value = snapshot.ultima_atualizacao ? new Date(snapshot.ultima_atualizacao).getTime() : 0;
     return value > latest ? value : latest;
   }, 0);
-  const tenantLabel = tenants.find(tenant => String(tenant.tenant_code || tenant.id) === String(selectedTenant))?.tenant_name
-    || tenants.find(tenant => String(tenant.tenant_code || tenant.id) === String(selectedTenant))?.name
-    || selectedTenant;
+  const selectedTenantRecord = tenants.find(tenant => String(tenant.tenant_code || tenant.tenant_id || tenant.id) === String(selectedTenant));
+  const selectedTenantName = selectedTenantRecord?.tenant_name || selectedTenantRecord?.name || '';
+  const tenantLabel = selectedTenantName ? `${selectedTenant} — ${selectedTenantName}` : selectedTenant;
 
   return (
     <div className="space-y-6">
@@ -97,7 +97,8 @@ export default function SnapshotsPage() {
       <section className="rounded-2xl border border-[#2B3850] bg-gradient-to-br from-[#172554] via-[#161B27] to-[#111827] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div><div className="mb-2 flex items-center gap-2 text-[#93C5FD]"><Layers3 className="h-4 w-4" /><span className="text-xs font-semibold uppercase tracking-wider">Escopo do catálogo</span></div><h2 className="text-base font-semibold text-white">Selecione o tenant para consultar seus metadados</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[#94A3B8]">Os números abaixo são lidos do schema autorizado do tenant. Quando não houver snapshot, o painel informa a ausência sem criar dados de preenchimento.</p></div>
-          <div className="w-full lg:max-w-xs"><label htmlFor="snapshot-tenant" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#CBD5E1]">Tenant</label><select id="snapshot-tenant" value={selectedTenant} onChange={event => setSelectedTenant(event.target.value)} disabled={loadingTenants} className="w-full rounded-lg border border-[#334155] bg-[#0B1220] px-3 py-2.5 text-sm text-white outline-none focus:border-[#60A5FA] disabled:opacity-60"><option value="">{loadingTenants ? 'Carregando tenants…' : 'Selecione um tenant'}</option>{tenants.map(tenant => { const value = String(tenant.tenant_code || tenant.id || ''); return <option key={value} value={value}>{tenant.tenant_name || tenant.name || value}</option>; })}</select></div>
+                      <div className="w-full lg:max-w-xs"><label htmlFor="snapshot-tenant" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[#CBD5E1]">Tenant</label><select id="snapshot-tenant" value={selectedTenant} onChange={event => setSelectedTenant(event.target.value)} disabled={loadingTenants} className="w-full rounded-lg border border-[#334155] bg-[#0B1220] px-3 py-2.5 text-sm text-white outline-none focus:border-[#60A5FA] disabled:opacity-60"><option value="">{loadingTenants ? 'Carregando tenants…' : 'Selecione um tenant'}</option>{tenants.map(tenant => { const value = String(tenant.tenant_code || tenant.tenant_id || tenant.id || ''); const name = tenant.tenant_name || tenant.name || ''; return <option key={value} value={value}>{name ? `${value} — ${name}` : value}</option>; })}</select></div>
+
         </div>
       </section>
 
