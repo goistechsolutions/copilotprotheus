@@ -16,21 +16,17 @@ def get_allowed_catalog(session, tenant_id: str, environment_id: str, role_ids: 
                dt.description,
                df.field_name,
                df.title,
-               tfp.can_select,
-               tfp.can_filter,
-               tfp.masked_flag,
-               ttp.can_query,
-               ttp.can_list,
-               ttp.can_describe
+               COALESCE(tfp.can_select, TRUE) AS can_select,
+               COALESCE(tfp.can_filter, TRUE) AS can_filter,
+               COALESCE(tfp.masked_flag, FALSE) AS masked_flag,
+               TRUE AS can_query,
+               TRUE AS can_list,
+               TRUE AS can_describe
           FROM dictionary_tables dt
-          JOIN tenant_table_permissions ttp
-            ON ttp.tenant_id = dt.tenant_id
-           AND ttp.environment_id = dt.environment_id
-           AND ttp.table_name = dt.table_name
           LEFT JOIN dictionary_fields df
             ON df.tenant_id = dt.tenant_id
            AND df.environment_id = dt.environment_id
-           AND df.table_name = dt.table_name
+           AND df.table_code = dt.table_code
           LEFT JOIN tenant_field_permissions tfp
             ON tfp.tenant_id = df.tenant_id
            AND tfp.environment_id = df.environment_id
@@ -39,8 +35,7 @@ def get_allowed_catalog(session, tenant_id: str, environment_id: str, role_ids: 
            AND tfp.role_id IN :role_ids
          WHERE dt.tenant_id = :tenant_id
            AND dt.environment_id = :environment_id
-           AND ttp.role_id IN :role_ids
-           AND (ttp.can_describe = TRUE OR ttp.can_query = TRUE OR ttp.can_list = TRUE)
+           AND COALESCE(dt.active_flag, TRUE) = TRUE
          ORDER BY dt.table_name, df.field_name
     """).bindparams(bindparam("role_ids", expanding=True))
     
