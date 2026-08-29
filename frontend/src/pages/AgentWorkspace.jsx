@@ -2,12 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
 import ContextBanner from '../components/ContextBanner';
 import Composer from '../components/Composer';
-import HistoryRail from '../components/HistoryRail';
 import SuggestionCards from '../components/SuggestionCards';
 import Conversation from '../components/Conversation';
-import ResultPane from '../components/ResultPane';
 import LogViewer from '../components/LogViewer';
-import { Bot, ChevronDown, Plus, Sparkles } from 'lucide-react';
+import StructuredResultPanel from '../components/StructuredResultPanel';
+import { BarChart3, Bot, ChevronDown, Plus } from 'lucide-react';
 
 const suggestions = [
   { title: 'Faturamento do mês', subtitle: 'por filial' },
@@ -301,119 +300,80 @@ export default function AgentWorkspace() {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#f4f8fc] font-sans text-[#203c60]">
-      <div className="hidden md:flex">
-        <HistoryRail
-          items={history}
-          onSelect={selectConversation}
-          onNew={startNewConversation}
-        />
-      </div>
-
-      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f8fbfe]">
-        <header className="z-10 border-b border-[#e3ecf4] bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
-          <div className="mx-auto flex w-full max-w-[1180px] items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2476bd]">
-                <Bot size={21} strokeWidth={1.8} aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="truncate text-[15px] font-bold tracking-[-0.01em] text-[#1e3b5e]">
-                    Protheus Copiloto
-                  </h1>
-                  <span className="hidden rounded-full bg-[#f0f6fb] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7790a9] sm:inline-flex">
-                    Assistente IA
-                  </span>
-                </div>
-                <p className="mt-0.5 truncate text-[11px] text-[#8495a8]">
-                  Consultas seguras sobre o seu ERP
-                </p>
-              </div>
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f4f8fc] font-sans text-[#203c60] xl:flex-row">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f5f9fc] xl:h-full">
+        <header className="z-10 flex shrink-0 items-center justify-between gap-4 border-b border-[#e1eaf2] bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2476bd]">
+              <BarChart3 size={21} strokeWidth={1.8} aria-hidden="true" />
             </div>
-
-            <div className="flex min-w-0 items-center gap-2">
-              <ContextBanner state={state} />
-              <button
-                type="button"
-                onClick={startNewConversation}
-                className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#dfe9f2] bg-white px-3 text-[11px] font-semibold text-[#5f7893] transition-colors hover:border-[#bdd7ed] hover:bg-[#f6fbff] hover:text-[#2377bd] sm:flex"
-              >
-                <Plus size={14} strokeWidth={2} aria-hidden="true" />
-                Nova conversa
-              </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-[15px] font-bold tracking-[-0.01em] text-[#1e3b5e]">Workspace Executivo</h1>
+                <span className="hidden rounded-full bg-[#eff9f3] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#2f835d] sm:inline-flex">Read-only</span>
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-[#8495a8]">Resultados, relatórios e indicadores gerados pela IA</p>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <ContextBanner state={state} />
+            <button type="button" onClick={() => setResult(null)} className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#dfe9f2] bg-white px-3 text-[11px] font-semibold text-[#5f7893] transition-colors hover:border-[#bdd7ed] hover:bg-[#f6fbff] sm:flex">
+              Limpar painel
+            </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth">
-          <div className="mx-auto flex w-full max-w-[980px] flex-col px-4 pb-6 pt-8 sm:px-8 sm:pt-11">
-            <section className="mb-8 flex items-start gap-3 sm:mb-10 sm:gap-4">
-              <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2879bf] shadow-[0_4px_12px_rgba(42,119,184,0.08)] sm:h-11 sm:w-11">
-                <Sparkles size={20} strokeWidth={1.7} aria-hidden="true" />
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          {isLogMode ? (
+            <LogViewer onClose={() => setIsLogMode(false)} />
+          ) : result ? (
+            <StructuredResultPanel result={result} embedded onClose={() => setResult(null)} />
+          ) : (
+            <div className="flex min-h-full flex-col items-center justify-center px-6 py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-white text-[#8cafc8] shadow-[0_12px_30px_rgba(43,83,119,0.08)]">
+                <BarChart3 size={28} strokeWidth={1.5} aria-hidden="true" />
               </div>
-              <div className="min-w-0">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7190ad]">
-                  Seu assistente de dados
-                </p>
-                <h2 className="text-[25px] font-semibold leading-tight tracking-[-0.03em] text-[#1c3a5e] sm:text-[31px]">
-                  Olá, como posso ajudar você hoje?
-                </h2>
-                <p className="mt-2 max-w-[620px] text-[13px] leading-relaxed text-[#7b8fa6]">
-                  Faça uma pergunta sobre o Protheus e receba uma resposta contextualizada para a empresa, filial e módulo ativos.
-                </p>
+              <p className="mt-5 text-[15px] font-bold text-[#385873]">Seu painel executivo aparecerá aqui</p>
+              <p className="mt-2 max-w-[410px] text-[12px] leading-relaxed text-[#8295a8]">Faça uma pergunta no Copiloto ao lado. A IA preencherá este espaço com o resumo, KPIs, tabela, gráfico e insights que existirem no resultado real.</p>
+              <div className="mt-6 flex flex-wrap justify-center gap-2 text-[10px] font-semibold text-[#7390a9]">
+                {['Resumo executivo', 'KPIs', 'Tabela filtrável', 'Gráficos', 'Exportação'].map(item => <span key={item} className="rounded-full border border-[#dce8f1] bg-white px-3 py-1.5">{item}</span>)}
               </div>
-            </section>
-
-            {messages.length <= 1 && !selected && (
-              <div className="mb-8">
-                <SuggestionCards
-                  items={suggestions}
-                  disabled={loading}
-                  onPick={(item) => send(item.title)}
-                />
-              </div>
-            )}
-
-            <Conversation messages={messages} />
-
-            {loading && (
-              <div className="mt-2 flex items-center gap-2.5 text-[12px] text-[#7790a9]" aria-live="polite">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]">
-                  <Bot size={16} className="animate-pulse" strokeWidth={1.8} aria-hidden="true" />
-                </span>
-                <span className="rounded-2xl rounded-bl-md border border-[#e1eaf2] bg-white px-4 py-2.5 shadow-[0_3px_12px_rgba(49,84,117,0.05)]">
-                  Consultando o Protheus…
-                </span>
-              </div>
-            )}
-
-            {selected && (
-              <div className="mt-5 flex items-center gap-2 rounded-2xl border border-[#cfe3f4] bg-[#f0f7fd] px-4 py-3 text-[12px] text-[#3d6f98]">
-                <ChevronDown size={15} className="rotate-[-90deg]" aria-hidden="true" />
-                Histórico selecionado: <strong>{selected.title}</strong>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="border-t border-[#e6eef5] bg-white/90 px-4 pb-3 pt-3 backdrop-blur sm:px-8 sm:pb-4">
-          <div className="mx-auto w-full max-w-[980px]">
-            <Composer
-              disabled={loading}
-              onSend={send}
-              placeholder="Pergunte qualquer coisa sobre o Protheus... (ou digite /log)"
-            />
-          </div>
+            </div>
+          )}
         </div>
       </main>
 
-      <aside className={`w-full shrink-0 flex-col overflow-y-auto border-t border-[#e1eaf2] bg-white xl:w-[420px] xl:border-l xl:border-t-0 ${result || isLogMode ? 'flex' : 'hidden'}`}>
-        {isLogMode ? (
-          <LogViewer onClose={() => setIsLogMode(false)} />
-        ) : (
-          <ResultPane result={result} />
-        )}
+      <aside className="flex h-[48vh] w-full shrink-0 flex-col overflow-hidden border-t border-[#dfe9f2] bg-white xl:h-full xl:w-[420px] xl:border-l xl:border-t-0">
+        <header className="flex shrink-0 items-center justify-between border-b border-[#edf2f7] px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2879bf]"><Bot size={20} strokeWidth={1.8} aria-hidden="true" /></div>
+            <div>
+              <p className="text-[13px] font-bold text-[#203c60]">Protheus Copiloto</p>
+              <p className="mt-0.5 text-[10px] text-[#8da0b2]">Assistente executivo conectado</p>
+            </div>
+          </div>
+          <button type="button" onClick={startNewConversation} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce8f1] bg-white px-3 text-[11px] font-semibold text-[#52718e] transition-colors hover:border-[#bad6ec] hover:bg-[#f5fbff] hover:text-[#2476bd]"><Plus size={14} /> Nova</button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="mb-4"><ContextBanner state={state} /></div>
+          <div className="mb-5 rounded-2xl border border-[#edf2f7] bg-[#fbfdff] p-3">
+            <div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#93a4b4]">Conversas recentes</p><span className="text-[10px] text-[#b0bdc8]">{history.length}</span></div>
+            {history.length ? <div className="space-y-1">{history.slice(0, 5).map(item => <button key={item.id} type="button" onClick={() => selectConversation(item)} className={`block w-full truncate rounded-xl px-3 py-2 text-left text-[11px] transition-colors ${selected?.id === item.id ? 'bg-[#eaf4fc] font-semibold text-[#2476bd]' : 'text-[#607992] hover:bg-[#f1f7fb]'}`}>{item.title}</button>)}</div> : <p className="text-[11px] leading-relaxed text-[#9aaabd]">Suas perguntas aparecerão aqui neste contexto.</p>}
+          </div>
+
+          {messages.length <= 1 && !selected && (
+            <div className="mb-5"><SuggestionCards items={suggestions} disabled={loading} onPick={(item) => send(item.title)} /></div>
+          )}
+          <Conversation messages={messages} />
+          {loading && <div className="mt-3 flex items-center gap-2.5 text-[12px] text-[#7790a9]" aria-live="polite"><span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]"><Bot size={16} className="animate-pulse" strokeWidth={1.8} aria-hidden="true" /></span><span className="rounded-2xl rounded-bl-md border border-[#e1eaf2] bg-white px-4 py-2.5 shadow-[0_3px_12px_rgba(49,84,117,0.05)]">Consultando o Protheus…</span></div>}
+          {selected && <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[#cfe3f4] bg-[#f0f7fd] px-3 py-2.5 text-[11px] text-[#3d6f98]"><ChevronDown size={14} className="rotate-[-90deg]" aria-hidden="true" /> Histórico: <strong className="truncate">{selected.title}</strong></div>}
+        </div>
+
+        <div className="shrink-0 border-t border-[#e6eef5] bg-white px-4 pb-4 pt-3 sm:px-5">
+          <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." />
+          <p className="mt-2 text-center text-[10px] text-[#a1afbd]">Consultas somente leitura, limitadas ao contexto ativo.</p>
+        </div>
       </aside>
     </div>
   );
