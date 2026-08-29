@@ -164,6 +164,7 @@ export default function AgentWorkspace() {
   useEffect(() => {
     const handleMessage = (event) => {
       if (!event?.data || !['PROTHEUS_CONTEXT', 'cprot-context-update'].includes(event.data.type)) return;
+      if (event.source !== window.parent && event.source !== window) return;
 
       const incoming = event.data.payload || event.data.context || {};
       setExternalContext((prev) => ({
