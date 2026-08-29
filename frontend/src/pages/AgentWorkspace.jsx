@@ -63,13 +63,13 @@ async function waitForAgentTask(taskId, timeoutMs = 120000) {
 function readContextFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
-    tenant_id: params.get('tenant') || '',
+    tenant_id: params.get('tenant_id') || params.get('tenant') || '',
     company: params.get('company') || '',
     branch: params.get('branch') || '',
     user: params.get('user') || '',
     profile: params.get('profile') || 'Negócio',
     session_id: params.get('session_id') || '',
-    environment: params.get('environment') || '',
+    environment: params.get('environment_code') || params.get('environment') || '',
     module: params.get('module') || '',
   };
 }
@@ -127,7 +127,14 @@ export default function AgentWorkspace() {
       if (activeId) setConversationId(activeId);
       if (!active) window.localStorage.setItem(`${historyStorageKey}:active`, activeId);
       const activeConversation = conversations.find(item => item.id === activeId);
-      if (activeConversation?.messages?.length) setMessages(activeConversation.messages);
+      if (activeConversation?.messages?.length) {
+        setMessages(activeConversation.messages);
+        setSelected(activeConversation);
+      } else {
+        setMessages([{ role: 'assistant', text: 'Pronto. Posso ajudar com consultas, análises e relatórios.' }]);
+        setSelected(null);
+        setResult(null);
+      }
     } catch {
       // O backend continuará usando o conversation_id da sessão atual.
     }
@@ -156,18 +163,18 @@ export default function AgentWorkspace() {
 
   useEffect(() => {
     const handleMessage = (event) => {
-      if (!event?.data || event.data.type !== 'PROTHEUS_CONTEXT') return;
+      if (!event?.data || !['PROTHEUS_CONTEXT', 'cprot-context-update'].includes(event.data.type)) return;
 
-      const incoming = event.data.context || {};
+      const incoming = event.data.payload || event.data.context || {};
       setExternalContext((prev) => ({
         ...prev,
-        tenant_id: event.data.tenantId || prev.tenant_id,
-        company: incoming.company || prev.company,
+        tenant_id: incoming.tenant_id || event.data.tenantId || prev.tenant_id,
+        company: incoming.company_code || incoming.company || prev.company,
         branch: incoming.branch || prev.branch,
         user: incoming.user || prev.user,
         profile: incoming.profile || prev.profile || 'Negócio',
         session_id: incoming.session_id || prev.session_id,
-        environment: incoming.environment || prev.environment,
+        environment: incoming.environment_code || incoming.environment || prev.environment,
         module: incoming.module || prev.module,
       }));
     };
@@ -175,6 +182,12 @@ export default function AgentWorkspace() {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, []);
+
+  useEffect(() => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'cprot-result-state', open: Boolean(result) }, '*');
+    }
+  }, [result]);
 
   useEffect(() => {
     const readyMessage = hasContext
