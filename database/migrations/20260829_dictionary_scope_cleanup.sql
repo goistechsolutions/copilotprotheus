@@ -209,6 +209,11 @@ BEGIN
                 DROP COLUMN IF EXISTS raw_payload',
             tenant_row.schema_name
         );
+        EXECUTE format(
+            'ALTER TABLE %I.dictionary_groups
+                DROP COLUMN IF EXISTS raw_payload',
+            tenant_row.schema_name
+        );
 
         EXECUTE format(
             'CREATE INDEX IF NOT EXISTS ix_dictionary_tables_scope
