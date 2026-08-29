@@ -208,7 +208,6 @@ def _table_families_from_context(context: list[dict[str, Any]]) -> set[str]:
             table.get("table_code"),
             table.get("table_name"),
             table.get("physical_name"),
-            table.get("table_alias"),
         ):
             compact = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
             for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1"}:
@@ -581,7 +580,6 @@ async def process_agent_task(task_id: str, payload: dict):
                 for table_name in (
                     table.get("table_name"),
                     table.get("physical_name"),
-                    table.get("table_alias"),
                 ):
                     if table_name and field_names:
                         catalog_fields_by_table.setdefault(str(table_name), set()).update(field_names)
@@ -631,7 +629,6 @@ async def process_agent_task(task_id: str, payload: dict):
                         for name in (
                             table.get("table_name"),
                             table.get("physical_name"),
-                            table.get("table_alias"),
                         )
                         if name
                     }
