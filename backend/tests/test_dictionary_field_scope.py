@@ -25,6 +25,7 @@ class _DictionaryDB:
         if "information_schema.columns" in sql:
             return _MappingsResult([
                 {"column_name": "id"},
+                {"column_name": "tenant_id"},
                 {"column_name": "table_code"},
                 {"column_name": "table_name"},
                 {"column_name": "field_name"},
