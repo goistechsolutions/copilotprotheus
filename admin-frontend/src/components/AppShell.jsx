@@ -217,4 +217,3 @@ export default function AppShell() {
 }
 
 export { nav };
-export default AppShell;
