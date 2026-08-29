@@ -1043,41 +1043,75 @@ async def sync_schema(
                 }
             )
             
-            comp_row = db.execute(text(f'SELECT id FROM "{clean_tenant}".company_info ORDER BY id ASC LIMIT 1')).first()
+            comp_row = db.execute(text(f'SELECT id, company_code FROM "{clean_tenant}".company_info ORDER BY id ASC LIMIT 1')).first()
             comp_id = comp_row[0] if comp_row else None
+            comp_code = str(comp_row[1]).strip() if comp_row and comp_row[1] is not None else None
+            module_code = str(mod_int) if mod_int else mod_sigla
+            physical_name = str(meta.get("tabela", "") or "").strip()
 
-            # V5: dictionary_tables
+            # V6: dictionary_tables é o snapshot autoritativo do Tenant.
             db.execute(
                 text(f"""
-                    INSERT INTO "{clean_tenant}".dictionary_tables 
-                    (company_id, table_code, table_name, module_code, description)
-                    VALUES (:cid, :tbl, :alias, :mc, :desc)
+                    INSERT INTO "{clean_tenant}".dictionary_tables
+                    (tenant_id, company_id, environment_id, company_code,
+                     table_code, table_name, physical_name, module_code, description)
+                    VALUES (:tenant_id, :cid, :environment_id, :company_code,
+                            :table_code, :table_name, :physical_name, :module_code, :description)
+                    ON CONFLICT (tenant_id, environment_id, table_name)
+                    DO UPDATE SET
+                        company_id = EXCLUDED.company_id,
+                        company_code = EXCLUDED.company_code,
+                        table_code = EXCLUDED.table_code,
+                        physical_name = EXCLUDED.physical_name,
+                        module_code = EXCLUDED.module_code,
+                        description = EXCLUDED.description,
+                        active_flag = TRUE,
+                        updated_at = NOW()
                 """),
                 {
+                    "tenant_id": clean_tenant,
                     "cid": comp_id,
-                    "tbl": chave,
-                    "alias": meta.get("tabela", ""),
-                    "mc": str(mod_int) if mod_int else mod_sigla,
-                    "desc": meta.get("nome", "")
+                    "environment_id": environment_code,
+                    "company_code": comp_code,
+                    "table_code": chave,
+                    "table_name": chave,
+                    "physical_name": physical_name,
+                    "module_code": module_code,
+                    "description": meta.get("nome", "")
                 }
             )
 
-            # V5: dictionary_fields
+            # V6: dictionary_fields mantém o mesmo escopo do registro SX2 pai.
             campos_list = meta.get("campos", [])
             for c in campos_list:
                 db.execute(
                     text(f"""
-                        INSERT INTO "{clean_tenant}".dictionary_fields 
-                        (table_code, field_name, title, field_type, length_num, decimal_num)
-                        VALUES (:tbl, :fld, :title, :type, :len, :dec)
+                        INSERT INTO "{clean_tenant}".dictionary_fields
+                        (tenant_id, company_id, environment_id,
+                         table_code, table_name, field_name, title, field_type, length_num, decimal_num)
+                        VALUES (:tenant_id, :cid, :environment_id,
+                                :table_code, :table_name, :field_name, :title, :field_type, :length_num, :decimal_num)
+                        ON CONFLICT (tenant_id, environment_id, table_name, field_name)
+                        DO UPDATE SET
+                            company_id = EXCLUDED.company_id,
+                            table_code = EXCLUDED.table_code,
+                            title = EXCLUDED.title,
+                            field_type = EXCLUDED.field_type,
+                            length_num = EXCLUDED.length_num,
+                            decimal_num = EXCLUDED.decimal_num,
+                            updated_at = NOW()
                     """),
                     {
-                        "tbl": chave,
-                        "fld": c.get("campo", ""),
+                        "tenant_id": clean_tenant,
+                        "cid": comp_id,
+                        "environment_id": environment_code,
+                        "table_code": chave,
+                        "table_name": chave,
+                        "field_name": str(c.get("campo", "") or "").strip().upper(),
                         "title": c.get("descricao", ""),
-                        "type": c.get("tipo", ""),
-                        "len": int(c.get("tamanho") or 0) or None,
-                        "dec": int(c.get("decimal") or 0) or None
+                        "field_type": c.get("tipo", ""),
+                        "length_num": int(c.get("tamanho") or 0) or None,
+                        "decimal_num": int(c.get("decimal") or 0) or None
                     }
                 )
         db.commit()
