@@ -910,7 +910,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 ADD COLUMN IF NOT EXISTS company_code VARCHAR(20),
                 ADD COLUMN IF NOT EXISTS physical_name VARCHAR(80),
                 ADD COLUMN IF NOT EXISTS active_flag BOOLEAN DEFAULT TRUE,
-                ADD COLUMN IF NOT EXISTS raw_payload JSONB,
                 ADD COLUMN IF NOT EXISTS usa_empresa VARCHAR(1),
                 ADD COLUMN IF NOT EXISTS usa_unidade VARCHAR(1),
                 ADD COLUMN IF NOT EXISTS usa_filial VARCHAR(1),
@@ -934,8 +933,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 ADD COLUMN IF NOT EXISTS relation_rule TEXT,
                 ADD COLUMN IF NOT EXISTS when_rule TEXT,
                 ADD COLUMN IF NOT EXISTS sxg_group VARCHAR(80),
-                ADD COLUMN IF NOT EXISTS sxg_size INTEGER,
-                ADD COLUMN IF NOT EXISTS raw_payload JSONB;
+                ADD COLUMN IF NOT EXISTS sxg_size INTEGER;
             ALTER TABLE "{clean_tenant}".dictionary_fields ALTER COLUMN table_code DROP NOT NULL;
 
             ALTER TABLE "{clean_tenant}".dictionary_indexes
