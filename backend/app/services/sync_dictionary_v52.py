@@ -281,7 +281,7 @@ def run_snapshot(
                             description=EXCLUDED.description, physical_name=EXCLUDED.physical_name,
                             raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
                     """), {
-                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id),
+                        "tenant_id": str(tenant_id), "company_id": int(company_id) if company_id not in (None, "") else None, "environment_id": str(environment_code),
                         "table_name": t_name,
                         "table_alias": str(r.get("X2_ARQUIVO") or r.get("table_alias") or "").strip(),
                         "module_code": mod_code,
@@ -314,7 +314,7 @@ def run_snapshot(
                             relation_rule=EXCLUDED.relation_rule, when_rule=EXCLUDED.when_rule,
                             raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
                     """), {
-                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id),
+                        "tenant_id": str(tenant_id), "company_id": int(company_id) if company_id not in (None, "") else None, "environment_id": str(environment_code),
                         "table_name": table_name,
                         "field_name": str(r.get("X3_CAMPO") or r.get("field_name") or "").strip().upper(),
                         "title": str(r.get("X3_TITULO") or r.get("title") or "").strip(),
@@ -346,7 +346,7 @@ def run_snapshot(
                             nickname=EXCLUDED.nickname, expression=EXCLUDED.expression,
                             raw_payload=EXCLUDED.raw_payload
                     """), {
-                        "tenant_id": str(tenant_id), "company_id": str(company_id) if company_id else None, "environment_id": str(environment_id),
+                        "tenant_id": str(tenant_id), "company_id": int(company_id) if company_id not in (None, "") else None, "environment_id": str(environment_code),
                         "table_name": table_name,
                         "index_order": str(r.get("SIX_ORDEM") or r.get("index_order") or "").strip(),
                         "nickname": str(r.get("SIX_DESCRIC") or r.get("nickname") or "").strip(),
