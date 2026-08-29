@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'copilot-frontend/**'
+      - 'frontend/**'
       - '.github/workflows/deploy-copilot-frontend.yml'
   workflow_dispatch:
 
@@ -30,11 +30,11 @@ jobs:
           node-version: '24'
 
       - name: Install Dependencies
-        working-directory: copilot-frontend
+        working-directory: frontend
         run: npm install
 
       - name: Build
-        working-directory: copilot-frontend
+        working-directory: frontend
         run: npm run build
 
       - name: Garantir projeto Cloudflare Pages existe
@@ -70,7 +70,7 @@ jobs:
           fi
 
       - name: Deploy to Cloudflare Pages
-        working-directory: copilot-frontend
+        working-directory: frontend
         run: |
           npx wrangler@3 pages deploy dist \
             --project-name="$CF_PAGES_PROJECT" \
