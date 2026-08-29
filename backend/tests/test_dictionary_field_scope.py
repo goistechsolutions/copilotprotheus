@@ -49,10 +49,12 @@ def test_load_dictionary_fields_prioritizes_sx2_key_and_limits_legacy_fallback()
 
     query, params = db.calls[-1]
     assert fields[0]["field_name"] == "F1_VALBRUT"
-    assert "df.table_code" in query
-    assert "NULLIF(BTRIM(COALESCE(df.table_code, '')), '') IS NULL" in query
-    assert "df.table_name IN (:table_code, :table_name)" in query
+    assert "df.table_code = :table_code" in query
+    assert "NULLIF(BTRIM(COALESCE(df.table_code, '')), '') IS NULL" not in query
+    assert "df.table_name IN (:table_code, :table_name)" not in query
+    assert "df.tenant_id = :tenant_id" in query
     assert params == {
+        "tenant_id": "tenant_fixture",
         "table_code": "SF1",
         "table_name": "SF1010",
         "environment_id": "env_fixture",
@@ -68,6 +70,7 @@ class _TablesDB:
         self.calls.append((sql, dict(params or {})))
         if "information_schema.columns" in sql:
             return _MappingsResult([
+                {"column_name": "tenant_id"},
                 {"column_name": "table_code"},
                 {"column_name": "table_name"},
                 {"column_name": "module_code"},
@@ -98,4 +101,9 @@ def test_dictionary_tables_is_the_direct_imported_catalog_scope():
     assert 'FROM "tenant_fixture".dictionary_tables dt' in query
     assert "tenant_schemas" not in query
     assert "COALESCE(dt.active_flag, TRUE) = TRUE" in query
-    assert params == {"module_codes": ["2"], "environment_id": "env_fixture"}
+    assert "dt.tenant_id = :tenant_id" in query
+    assert params == {
+        "tenant_id": "tenant_fixture",
+        "module_codes": ["2"],
+        "environment_id": "env_fixture",
+    }
