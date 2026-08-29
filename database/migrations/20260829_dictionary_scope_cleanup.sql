@@ -58,7 +58,9 @@ BEGIN
         EXECUTE format(
             'ALTER TABLE %I.dictionary_tables
                 ALTER COLUMN company_code TYPE VARCHAR(20)
-                USING company_code::text',
+                USING company_code::text,
+                ALTER COLUMN table_code TYPE VARCHAR(20)
+                USING table_code::text',
             tenant_row.schema_name
         );
 
@@ -68,7 +70,7 @@ BEGIN
         EXECUTE format(
             'UPDATE %I.dictionary_tables dt
                 SET tenant_id = %L,
-                    company_code = COALESCE(NULLIF(BTRIM(dt.company_code), ''''), ci.company_code),
+                    company_code = COALESCE(NULLIF(BTRIM(dt.company_code), ''''), ci.company_code::text),
                     environment_id = COALESCE(
                         NULLIF(BTRIM(dt.environment_id), ''''),
                         (
@@ -88,7 +90,7 @@ BEGIN
                      LIMIT 1
                ) ci',
             tenant_row.schema_name,
-            tenant_row.tenant_code,
+            tenant_row.schema_name,
             tenant_row.tenant_code,
             tenant_row.schema_name
         );
@@ -105,9 +107,9 @@ BEGIN
               WHERE (dt.table_code = df.table_code OR dt.table_name = df.table_code)
                 AND dt.tenant_id = %L',
             tenant_row.schema_name,
-            tenant_row.tenant_code,
             tenant_row.schema_name,
-            tenant_row.tenant_code
+            tenant_row.schema_name,
+            tenant_row.schema_name
         );
 
         EXECUTE format(
@@ -120,9 +122,9 @@ BEGIN
               WHERE dt.table_code = di.table_name
                 AND dt.tenant_id = %L',
             tenant_row.schema_name,
-            tenant_row.tenant_code,
             tenant_row.schema_name,
-            tenant_row.tenant_code
+            tenant_row.schema_name,
+            tenant_row.schema_name
         );
 
         EXECUTE format(
