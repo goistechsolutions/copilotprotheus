@@ -221,6 +221,12 @@ def run_snapshot(
     clean_tenant = resolve_clean_tenant(session, raw_tenant)
     ensure_tenant_tables(session, clean_tenant)
     session.execute(text(f'SET search_path TO "{clean_tenant}", public'))
+    company_code = None
+    if company_id not in (None, ""):
+        company_code = session.execute(
+            text("SELECT company_code FROM company_info WHERE id = :company_id"),
+            {"company_id": int(company_id)},
+        ).scalar()
 
     allowed_snapshot_tables = set()
     try:
@@ -270,24 +276,27 @@ def run_snapshot(
                     allowed_snapshot_tables.add(t_name)
                     session.execute(text("""
                         INSERT INTO dictionary_tables
-                        (tenant_id, company_id, environment_id,
-                         table_name, table_alias, module_code, description, physical_name, raw_payload)
-                        VALUES (:tenant_id,:company_id,:environment_id,
-                                :table_name,:table_alias,:module_code,:description,:physical_name,
-                                CAST(:raw_payload AS JSONB))
+                        (tenant_id, company_id, environment_id, company_code,
+                         table_code, table_name, physical_name, module_code, description)
+                        VALUES (:tenant_id,:company_id,:environment_id,:company_code,
+                                :table_code,:table_name,:physical_name,:module_code,:description)
                         ON CONFLICT (tenant_id, environment_id, table_name)
                         DO UPDATE SET
-                            table_alias=EXCLUDED.table_alias, module_code=EXCLUDED.module_code,
-                            description=EXCLUDED.description, physical_name=EXCLUDED.physical_name,
-                            raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
+                            company_code=EXCLUDED.company_code,
+                            table_code=EXCLUDED.table_code,
+                            physical_name=EXCLUDED.physical_name,
+                            module_code=EXCLUDED.module_code,
+                            description=EXCLUDED.description,
+                            active_flag=TRUE,
+                            updated_at=NOW()
                     """), {
                         "tenant_id": str(tenant_id), "company_id": int(company_id) if company_id not in (None, "") else None, "environment_id": str(environment_code),
+                        "company_code": str(company_code).strip() if company_code is not None else None,
+                        "table_code": t_name,
                         "table_name": t_name,
-                        "table_alias": str(r.get("X2_ARQUIVO") or r.get("table_alias") or "").strip(),
+                        "physical_name": str(r.get("X2_ARQUIVO") or r.get("X2_ARQFIS") or r.get("physical_name") or "").strip(),
                         "module_code": mod_code,
-                        "description": str(r.get("X2_NOME") or r.get("description") or "").strip(),
-                        "physical_name": str(r.get("X2_ARQFIS") or r.get("physical_name") or "").strip(),
-                        "raw_payload": json.dumps(r)
+                        "description": str(r.get("X2_NOME") or r.get("description") or "").strip()
                     })
             elif source_type == "SX3":
                 for r in rows:
@@ -297,24 +306,21 @@ def run_snapshot(
                     session.execute(text("""
                         INSERT INTO dictionary_fields
                         (tenant_id, company_id, environment_id,
-                         table_name, field_name, title, field_type, length_num, decimal_num,
-                         required_flag, browse_flag, virtual_flag,
-                         validation_rule, relation_rule, when_rule, raw_payload)
+                         table_code, table_name, field_name, title, field_type, length_num, decimal_num,
+                         required_flag, browse_flag, virtual_flag, validation_rule)
                         VALUES (:tenant_id,:company_id,:environment_id,
-                                :table_name,:field_name,:title,:field_type,:length_num,:decimal_num,
-                                :required_flag,:browse_flag,:virtual_flag,
-                                :validation_rule,:relation_rule,:when_rule,
-                                CAST(:raw_payload AS JSONB))
+                                :table_code,:table_name,:field_name,:title,:field_type,:length_num,:decimal_num,
+                                :required_flag,:browse_flag,:virtual_flag,:validation_rule)
                         ON CONFLICT (tenant_id, environment_id, table_name, field_name)
                         DO UPDATE SET
                             title=EXCLUDED.title, field_type=EXCLUDED.field_type,
                             length_num=EXCLUDED.length_num, decimal_num=EXCLUDED.decimal_num,
                             required_flag=EXCLUDED.required_flag, browse_flag=EXCLUDED.browse_flag,
                             virtual_flag=EXCLUDED.virtual_flag, validation_rule=EXCLUDED.validation_rule,
-                            relation_rule=EXCLUDED.relation_rule, when_rule=EXCLUDED.when_rule,
-                            raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
+                            table_code=EXCLUDED.table_code, updated_at=NOW()
                     """), {
                         "tenant_id": str(tenant_id), "company_id": int(company_id) if company_id not in (None, "") else None, "environment_id": str(environment_code),
+                        "table_code": table_name,
                         "table_name": table_name,
                         "field_name": str(r.get("X3_CAMPO") or r.get("field_name") or "").strip().upper(),
                         "title": str(r.get("X3_TITULO") or r.get("title") or "").strip(),
@@ -325,9 +331,6 @@ def run_snapshot(
                         "browse_flag": str(r.get("X3_VISUAL", "")).strip().upper() in ("S", "1", "T", "TRUE", "V"),
                         "virtual_flag": str(r.get("X3_CONTEXT", "")).strip().upper() == "V",
                         "validation_rule": str(r.get("X3_VALID") or "").strip(),
-                        "relation_rule": str(r.get("X3_RELACAO") or "").strip(),
-                        "when_rule": str(r.get("X3_WHEN") or "").strip(),
-                        "raw_payload": json.dumps(r),
                     })
             elif source_type == "SIX":
                 for r in rows:
@@ -337,40 +340,35 @@ def run_snapshot(
                     session.execute(text("""
                         INSERT INTO dictionary_indexes
                         (tenant_id, company_id, environment_id,
-                         table_name, index_order, nickname, expression, raw_payload)
+                         table_code, table_name, index_order, nickname, expression)
                         VALUES (:tenant_id,:company_id,:environment_id,
-                                :table_name,:index_order,:nickname,:expression,
-                                CAST(:raw_payload AS JSONB))
+                                :table_code,:table_name,:index_order,:nickname,:expression)
                         ON CONFLICT (tenant_id, environment_id, table_name, index_order)
                         DO UPDATE SET
-                            nickname=EXCLUDED.nickname, expression=EXCLUDED.expression,
-                            raw_payload=EXCLUDED.raw_payload
+                            table_code=EXCLUDED.table_code,
+                            nickname=EXCLUDED.nickname, expression=EXCLUDED.expression
                     """), {
                         "tenant_id": str(tenant_id), "company_id": int(company_id) if company_id not in (None, "") else None, "environment_id": str(environment_code),
+                        "table_code": table_name,
                         "table_name": table_name,
                         "index_order": str(r.get("SIX_ORDEM") or r.get("index_order") or "").strip(),
                         "nickname": str(r.get("SIX_DESCRIC") or r.get("nickname") or "").strip(),
-                        "expression": str(r.get("SIX_CHAVE") or r.get("expression") or "").strip(),
-                        "raw_payload": json.dumps(r)
+                        "expression": str(r.get("SIX_CHAVE") or r.get("expression") or "").strip()
                     })
             elif source_type == "SXG":
                 for r in rows:
                     session.execute(text("""
                         INSERT INTO dictionary_groups
-                        (tenant_id, company_id, environment_id,
-                         group_name, description, raw_payload)
-                        VALUES (:tenant_id,:company_id,:environment_id,
-                                :group_name,:description,CAST(:raw_payload AS JSONB))
+                        (tenant_id, company_id, environment_id, group_name, description)
+                        VALUES (:tenant_id,:company_id,:environment_id,:group_name,:description)
                         ON CONFLICT (tenant_id, environment_id, group_name)
-                        DO UPDATE SET description=EXCLUDED.description, raw_payload=EXCLUDED.raw_payload
+                        DO UPDATE SET description=EXCLUDED.description
                     """), {
                         "tenant_id": str(tenant_id),
-                        "company_id": str(company_id) if company_id else None,
-                        "environment_id": str(environment_id),
-                        
+                        "company_id": int(company_id) if company_id not in (None, "") else None,
+                        "environment_id": str(environment_code),
                         "group_name": str(r.get("XG_GRUPO") or "").strip().upper(),
                         "description": str(r.get("XG_DESC") or "").strip(),
-                        "raw_payload": json.dumps(r),
                     })
 
             _mark_source(session, tenant_id, company_id, environment_code, source_type, "done")
