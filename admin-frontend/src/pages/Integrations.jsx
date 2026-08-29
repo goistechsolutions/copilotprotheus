@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart2, RefreshCw, Play, Loader2, CheckCircle2, AlertCircle, ExternalLink, Sparkles } from 'lucide-react';
+import { Activity, BarChart2, RefreshCw, Play, Loader2, CheckCircle2, AlertCircle, ExternalLink, Sparkles, ShieldCheck } from 'lucide-react';
 import { apiCall } from '../hooks/useApi';
 import PageHeader from '../components/ui/PageHeader';
 import Badge from '../components/ui/Badge';
@@ -223,6 +223,53 @@ function LeonardoPanel() {
   );
 }
 
+function ProtheusDiagnosticsPanel() {
+  const [tenantCode, setTenantCode] = useState('');
+  const [environmentCode, setEnvironmentCode] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const runDiagnostics = async () => {
+    if (!tenantCode.trim() || !environmentCode.trim()) {
+      setError('Informe o tenant_id e o environment_code reais.');
+      return;
+    }
+    setLoading(true); setError(''); setResult(null);
+    try {
+      const params = new URLSearchParams({ tenant_code: tenantCode.trim(), environment_code: environmentCode.trim() });
+      const response = await apiCall(`/api/integration/diagnostics?${params.toString()}`, 'GET');
+      setResult(response);
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail || requestError.detail;
+      setError(typeof detail === 'object' ? `${detail.code || 'DIAGNOSTIC_FAILED'}: ${detail.message || 'Diagnóstico recusado.'}` : requestError.message || 'Não foi possível executar o diagnóstico.');
+    } finally { setLoading(false); }
+  };
+
+  const stepStyle = step => step?.status === 'passed'
+    ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300'
+    : step?.status === 'failed'
+      ? 'border-red-400/20 bg-red-400/[0.06] text-red-300'
+      : 'border-slate-700 bg-slate-900/40 text-slate-400';
+
+  return (
+    <div className="rounded-2xl border border-cyan-400/15 bg-gradient-to-br from-[#10233b] via-[#111827] to-[#0d1422] p-6 xl:col-span-2">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300"><Activity className="h-5 w-5" /></div><div><h3 className="font-semibold text-white">Diagnóstico Protheus</h3><p className="mt-1 text-xs text-slate-400">Valide OAuth2 e QueryRest usando apenas identificadores técnicos.</p></div></div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/[0.06] px-2.5 py-1 text-[10px] font-semibold text-cyan-200"><ShieldCheck className="h-3 w-3" />Sem persistência de dados empresariais</span>
+      </div>
+      <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <F label="Tenant ID" value={tenantCode} onChange={setTenantCode} placeholder="rodol_prod" />
+        <F label="Environment code" value={environmentCode} onChange={setEnvironmentCode} placeholder="c8te0u_prod" />
+        <button onClick={runDiagnostics} disabled={loading} className="inline-flex h-[42px] items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}{loading ? 'Validando...' : 'Executar diagnóstico'}</button>
+      </div>
+      {error && <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs text-red-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
+      {result && <div className="mt-5 grid gap-2 sm:grid-cols-3">{[result.authentication, result.queryrest, result.dictionary].map(step => <div key={step.name} className={`rounded-xl border px-3 py-3 ${stepStyle(step)}`}><div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold uppercase tracking-wider">{step.name}</span><span className="text-[10px]">{step.status}</span></div><p className="mt-2 text-[11px] leading-4 opacity-80">{step.message || 'Sem mensagem adicional.'}</p>{step.duration_ms != null && <p className="mt-2 font-mono text-[10px] opacity-60">{step.duration_ms} ms</p>}</div>)}</div>}
+      <p className="mt-4 text-[10px] leading-4 text-slate-500">O diagnóstico executa somente uma verificação técnica. O token, senha e conteúdo empresarial não são mostrados na interface.</p>
+    </div>
+  );
+}
+
 /* ═══════════════════ PAGE ═══════════════════ */
 export default function Integrations() {
   return (
@@ -231,7 +278,8 @@ export default function Integrations() {
         title="Integrações"
         description="Power BI Embedded e Leonardo AI conectados ao Copilot Protheus"
       />
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <ProtheusDiagnosticsPanel />
         <PowerBIPanel />
         <LeonardoPanel />
       </div>
