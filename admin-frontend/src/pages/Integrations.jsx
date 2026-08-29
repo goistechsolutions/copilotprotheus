@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart2, Image, RefreshCw, Play, Loader2, CheckCircle2, AlertCircle, ExternalLink, Sparkles } from 'lucide-react';
+import { BarChart2, RefreshCw, Play, Loader2, CheckCircle2, AlertCircle, ExternalLink, Sparkles } from 'lucide-react';
 import { apiCall } from '../hooks/useApi';
 import PageHeader from '../components/ui/PageHeader';
 import Badge from '../components/ui/Badge';
