@@ -313,7 +313,7 @@ export default function AgentWorkspace() {
     setSelected(null);
   };
 
-  const showWorkspace = Boolean(result || isLogMode);
+  const showWorkspace = Boolean(result);
 
   return (
     <div className={`flex h-screen w-full flex-col overflow-hidden bg-[#f4f8fc] font-sans text-[#203c60] ${showWorkspace ? 'xl:flex-row' : ''}`}>
