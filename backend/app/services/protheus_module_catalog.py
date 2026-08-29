@@ -101,11 +101,13 @@ def resolve_tenant_module_codes(
     rows = db.execute(
         text(f"""
             SELECT DISTINCT
-                mod_code::text AS module_code
-            FROM {schema}.tenant_schemas
-            WHERE mod_code = :mod_code
+                module_code::text AS module_code
+            FROM {schema}.dictionary_tables
+            WHERE tenant_id = :tenant_id
+              AND module_code::text = :mod_code
+              AND COALESCE(active_flag, TRUE) = TRUE
         """),
-        {"mod_code": resolved["mod_code"]},
+        {"tenant_id": str(tenant_schema), "mod_code": resolved["mod_code"]},
     ).mappings().all()
 
     return [str(row["module_code"]) for row in rows]
@@ -170,9 +172,11 @@ def filter_allowed_dictionary_tables(
     if not {"table_code", "table_name", "module_code"}.issubset(columns):
         raise RuntimeError("Snapshot dictionary_tables não possui as colunas mínimas esperadas.")
 
-    params: dict[str, Any] = {"module_codes": [str(code) for code in module_codes]}
+    params: dict[str, Any] = {
+        "tenant_id": schema_name,
+        "module_codes": [str(code) for code in module_codes],
+    }
     optional_columns = {
-        "table_alias": "dt.table_alias",
         "physical_name": "dt.physical_name",
         "unique_index": "dt.unique_index",
         "usa_empresa": "dt.usa_empresa",
@@ -201,9 +205,7 @@ def filter_allowed_dictionary_tables(
 
     environment_filter = ""
     if environment_id is not None and "environment_id" in columns:
-        environment_filter = """
-            AND (dt.environment_id = :environment_id OR dt.environment_id IS NULL)
-        """
+        environment_filter = "AND dt.environment_id = :environment_id"
         params["environment_id"] = str(environment_id)
 
     active_filter = ""
@@ -218,7 +220,8 @@ def filter_allowed_dictionary_tables(
                 dt.module_code,
                 COALESCE(dt.description, dt.table_name) AS description{select_optional}
             FROM {schema}.dictionary_tables dt
-            WHERE dt.module_code::text = ANY(:module_codes)
+            WHERE dt.tenant_id = :tenant_id
+              AND dt.module_code::text = ANY(:module_codes)
               {active_filter}
               {company_filter}
               {environment_filter}
@@ -251,8 +254,6 @@ def load_dictionary_fields(
         "length_num": "df.length_num AS field_length",
         "decimal_num": "df.decimal_num AS field_decimal",
         "validation_rule": "df.validation_rule",
-        "relation_rule": "df.relation_rule",
-        "when_rule": "df.when_rule",
         "sxg_group": "df.sxg_group",
         "sxg_size": "df.sxg_size",
     }
@@ -264,27 +265,16 @@ def load_dictionary_fields(
         "table_code": str(table_code or "").strip(),
         "table_name": str(table_name or "").strip(),
     }
-    if "table_code" in columns and "table_name" in columns:
-        # SX3.X3_ARQUIVO referencia a chave lógica SX2.X2_CHAVE. Portanto,
-        # table_code é a chave primária do vínculo; table_name só atende
-        # snapshots legados nos quais table_code ainda não foi preenchido.
-        field_scope = """
-            NULLIF(BTRIM(COALESCE(df.table_code, '')), '') = :table_code
-            OR (
-                NULLIF(BTRIM(COALESCE(df.table_code, '')), '') IS NULL
-                AND df.table_name IN (:table_code, :table_name)
-            )
-        """
-    elif "table_code" in columns:
+    if "table_code" in columns:
         field_scope = "df.table_code = :table_code"
     elif "table_name" in columns:
-        field_scope = "df.table_name IN (:table_code, :table_name)"
+        field_scope = "df.table_name = :table_name"
     else:
         return []
 
     environment_filter = ""
     if environment_id is not None and "environment_id" in columns:
-        environment_filter = " AND (df.environment_id = :environment_id OR df.environment_id IS NULL)"
+        environment_filter = " AND df.environment_id = :environment_id"
         params["environment_id"] = str(environment_id)
     order_by = "df.id" if "id" in columns else "df.field_name"
     rows = db.execute(
@@ -309,7 +299,7 @@ def load_dictionary_indexes(
     schema_name = str(tenant_schema or "").strip()
     schema = quote_tenant_schema(schema_name)
     columns = _available_columns(db, schema_name, "dictionary_indexes")
-    if "table_name" not in columns:
+    if "table_code" not in columns and "table_name" not in columns:
         return []
 
     select_parts = []
@@ -323,11 +313,16 @@ def load_dictionary_indexes(
     if not select_parts:
         return []
 
+    if "table_code" in columns:
+        index_scope = "di.table_code = :table_code"
+    else:
+        index_scope = "di.table_name = :table_name"
+
     rows = db.execute(
         text(f"""
             SELECT {', '.join(select_parts)}
             FROM {schema}.dictionary_indexes di
-            WHERE di.table_name IN (:table_name, :table_code)
+            WHERE {index_scope}
             ORDER BY {"di.index_order" if "index_order" in columns else "di.table_name"}
         """),
         {"table_name": str(table_name or ""), "table_code": str(table_code or "")},
