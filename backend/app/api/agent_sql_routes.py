@@ -1053,12 +1053,16 @@ async def ask_v2_status(task_id: str):
     if task_id not in AGENT_TASKS:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
     
-    # Se erro for gerado, retornamos como JSON normal com 'summary' mapeado para o frontend renderizar
+    # Mantém os campos error/error_code e também summary por compatibilidade com clientes antigos.
     if AGENT_TASKS[task_id].get("status") == "error":
+        task = AGENT_TASKS[task_id]
         return {
             "status": "error",
-            "summary": AGENT_TASKS[task_id].get("error"),
-            "correlation_id": AGENT_TASKS[task_id].get("correlation_id"),
+            "error": task.get("error") or task.get("summary"),
+            "error_code": task.get("error_code"),
+            "summary": task.get("error") or task.get("summary"),
+            "conversation_id": task.get("conversation_id"),
+            "correlation_id": task.get("correlation_id"),
         }
 
     return AGENT_TASKS[task_id]

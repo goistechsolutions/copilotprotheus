@@ -1,5 +1,7 @@
+import asyncio
 from types import SimpleNamespace
 
+from app.api.agent_sql_routes import AGENT_TASKS, ask_v2_status
 from app.services.protheus_context_resolver import resolve_company
 
 
@@ -57,6 +59,25 @@ def test_resolve_company_preserves_tenant_schema_scope():
 
     assert 'FROM "rodol_prod".company_info' in db.sql
     assert "FROM public.company_info" not in db.sql
+
+
+def test_ask_v2_status_preserves_specific_context_error():
+    task_id = "test-context-error-shape"
+    AGENT_TASKS[task_id] = {
+        "status": "error",
+        "error": "environment_code real é obrigatório para execução no Protheus.",
+        "error_code": "INVALID_CONTEXT",
+        "correlation_id": "test-correlation",
+    }
+
+    try:
+        result = asyncio.run(ask_v2_status(task_id))
+    finally:
+        AGENT_TASKS.pop(task_id, None)
+
+    assert result["error"] == "environment_code real é obrigatório para execução no Protheus."
+    assert result["error_code"] == "INVALID_CONTEXT"
+    assert result["summary"] == result["error"]
 
 
 __all__ = ["SimpleNamespace"]

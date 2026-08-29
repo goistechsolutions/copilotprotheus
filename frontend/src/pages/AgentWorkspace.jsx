@@ -96,7 +96,14 @@ export default function AgentWorkspace() {
     [externalContext]
   );
 
-  const hasContext = !!(context.tenant_id || context.company || context.branch || context.user || context.module);
+  const requiredContextValues = [
+    context.tenant_id,
+    context.environment,
+    context.company,
+    context.branch,
+    context.module,
+  ];
+  const hasContext = requiredContextValues.every(value => String(value || '').trim().length > 0);
 
   const [state, setState] = useState({
     ready: hasContext,
@@ -264,7 +271,8 @@ export default function AgentWorkspace() {
       if (res.status === 'execution_failed') {
         replyMessage = `Consulta não executada no Protheus: ${res.execution_error || 'o ERP retornou uma falha.'}`;
       } else if (res.status === 'error') {
-        replyMessage = `Consulta bloqueada: ${res.error || 'o contexto não foi validado.'}`;
+        const detail = res.error || res.summary || res.message || 'o contexto não foi validado.';
+        replyMessage = `Consulta bloqueada: ${detail}`;
       } else if (res.summary) replyMessage = res.summary;
       else if (res.message) replyMessage = res.message;
       else if (res.answer) replyMessage = res.answer;
