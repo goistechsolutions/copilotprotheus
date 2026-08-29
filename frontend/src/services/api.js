@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://copilot-api.elitecorp.tec.br/api';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'https://copilot-api.elitecorp.tec.br/api';
 
 async function fetchWithRetry(url, options = {}, retries = 2) {
   let lastError;
