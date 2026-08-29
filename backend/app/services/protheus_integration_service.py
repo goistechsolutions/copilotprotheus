@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
+from app.models.knowledge import Tenant
 from app.schemas.protheus_context import IntegrationErrorCode, ProtheusContext
 from app.services.protheus_queryrest_client import (
     ProtheusQueryRestClient,
@@ -54,7 +55,17 @@ class ProtheusIntegrationService:
             self.context.require_company_scope()
         return self.context
 
+    def _ensure_tenant_exists(self) -> None:
+        tenant = self.db.query(Tenant).filter(Tenant.tenant_code == self.tenant_code).first()
+        if tenant is None:
+            raise IntegrationFailure(
+                IntegrationErrorCode.CONTEXT_INVALID,
+                "O tenant informado não existe ou não está disponível para esta operação.",
+                404,
+            )
+
     def _load_connection_or_failure(self) -> dict[str, Any]:
+        self._ensure_tenant_exists()
         try:
             connection = load_connection(self.db, self.tenant_code, self.environment_code)
         except ValueError as exc:
