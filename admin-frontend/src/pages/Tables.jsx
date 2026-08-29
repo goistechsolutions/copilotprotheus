@@ -86,11 +86,15 @@ export default function Tables() {
             className="appearance-none bg-[#161B27] border border-[#1E2535] text-white text-sm rounded-lg pl-3 pr-8 py-2 focus:outline-none focus:border-[#2196F3] transition-all cursor-pointer"
           >
             <option value="default">Default (Global)</option>
-            {tenants.map(t => (
-              <option key={t.id} value={t.tenant_id || t.protheus_grupo}>
-                {t.razao_social || t.name}
-              </option>
-            ))}
+            {tenants.map(t => {
+              const tenantCode = t.tenant_id || t.protheus_grupo || t.id;
+              const tenantName = t.razao_social || t.name || '';
+              return (
+                <option key={t.id} value={tenantCode}>
+                  {tenantName ? `${tenantCode} — ${tenantName}` : tenantCode}
+                </option>
+              );
+            })}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8892A4] pointer-events-none" />
         </div>
