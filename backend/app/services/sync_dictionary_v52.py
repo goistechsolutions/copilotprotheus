@@ -436,9 +436,18 @@ def _mark_source(session, tenant_id, company_id, environment_id, source_type, st
 
 def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id):
     """
-    Persiste resultado da consulta unificada SX2+SX3+SXG (snapshot curado).
-    Cada linha representa uma combinação tabela+campo com flags de compartilhamento.
+    Persiste o snapshot curado usando o contrato canônico do dicionário.
+
+    O catálogo mantém somente metadados SX2/SX3/SXG. Não grava a linha bruta
+    retornada pelo ERP e preserva company_code como texto para códigos como 01.
     """
+    company_code = None
+    if company_id not in (None, ""):
+        company_code = session.execute(
+            text("SELECT company_code FROM company_info WHERE id = :company_id"),
+            {"company_id": int(company_id)},
+        ).scalar()
+
     for r in rows:
         table_key = str(r.get("X2_CHAVE") or "").strip().upper()
         if not table_key:
@@ -447,32 +456,36 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id):
         # Upsert em dictionary_tables
         session.execute(text("""
             INSERT INTO dictionary_tables
-            (tenant_id, company_id, environment_id,
-             table_name, table_alias, module_code, description,
+            (tenant_id, company_id, environment_id, company_code,
+             table_code, table_name, physical_name, module_code, description,
              usa_empresa, usa_unidade, usa_filial,
              x2_modo, x2_tamfil, x2_modoun, x2_tamun, x2_modoemp, x2_tamemp,
-             unique_index, raw_payload)
-            VALUES (:tenant_id,:company_id,:environment_id,
-                    :table_name,:table_alias,:module_code,:description,
+             unique_index)
+            VALUES (:tenant_id,:company_id,:environment_id,:company_code,
+                    :table_code,:table_name,:physical_name,:module_code,:description,
                     :usa_empresa,:usa_unidade,:usa_filial,
                     :x2_modo,:x2_tamfil,:x2_modoun,:x2_tamun,:x2_modoemp,:x2_tamemp,
-                    :unique_index,CAST(:raw_payload AS JSONB))
+                    :unique_index)
             ON CONFLICT (tenant_id, environment_id, table_name)
             DO UPDATE SET
-                table_alias=EXCLUDED.table_alias, module_code=EXCLUDED.module_code,
+                company_code=EXCLUDED.company_code,
+                physical_name=EXCLUDED.physical_name, module_code=EXCLUDED.module_code,
                 description=EXCLUDED.description,
                 usa_empresa=EXCLUDED.usa_empresa, usa_unidade=EXCLUDED.usa_unidade,
                 usa_filial=EXCLUDED.usa_filial,
-                x2_modo=EXCLUDED.x2_modo, x2_modoun=EXCLUDED.x2_modoun,
-                x2_modoemp=EXCLUDED.x2_modoemp, unique_index=EXCLUDED.unique_index,
-                raw_payload=EXCLUDED.raw_payload, updated_at=NOW()
+                x2_modo=EXCLUDED.x2_modo, x2_tamfil=EXCLUDED.x2_tamfil,
+                x2_modoun=EXCLUDED.x2_modoun, x2_tamun=EXCLUDED.x2_tamun,
+                x2_modoemp=EXCLUDED.x2_modoemp, x2_tamemp=EXCLUDED.x2_tamemp,
+                unique_index=EXCLUDED.unique_index, updated_at=NOW()
         """), {
             "tenant_id": str(tenant_id),
-            "company_id": str(company_id) if company_id else None,
+            "company_id": int(company_id) if company_id not in (None, "") else None,
             "environment_id": str(environment_id),
-            
+            "company_code": str(company_code).strip() if company_code is not None else None,
+
+            "table_code": table_key,
             "table_name": table_key,
-            "table_alias": str(r.get("X2_ARQUIVO") or "").strip(),
+            "physical_name": str(r.get("X2_ARQUIVO") or "").strip(),
             "module_code": str(r.get("X2_MODULO") or "").strip(),
             "description": str(r.get("X2_NOME") or "").strip(),
             "usa_empresa": str(r.get("USA_EMPRESA") or "N").strip(),
@@ -485,7 +498,6 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id):
             "x2_modoemp": str(r.get("X2_MODOEMP") or "").strip(),
             "x2_tamemp":  r.get("X2_TAMEMP"),
             "unique_index": str(r.get("X2_UNICO") or "").strip(),
-            "raw_payload": json.dumps(r),
         })
 
         # Upsert em dictionary_fields
@@ -496,22 +508,23 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id):
         session.execute(text("""
             INSERT INTO dictionary_fields
             (tenant_id, company_id, environment_id,
-             table_name, field_name, title, field_type, length_num,
-             sxg_group, sxg_size, raw_payload)
+             table_code, table_name, field_name, title, field_type, length_num,
+             sxg_group, sxg_size)
             VALUES (:tenant_id,:company_id,:environment_id,
-                    :table_name,:field_name,:title,:field_type,:length_num,
-                    :sxg_group,:sxg_size,CAST(:raw_payload AS JSONB))
+                    :table_code,:table_name,:field_name,:title,:field_type,:length_num,
+                    :sxg_group,:sxg_size)
             ON CONFLICT (tenant_id, environment_id, table_name, field_name)
             DO UPDATE SET
                 title=EXCLUDED.title, field_type=EXCLUDED.field_type,
                 length_num=EXCLUDED.length_num, sxg_group=EXCLUDED.sxg_group,
-                sxg_size=EXCLUDED.sxg_size, raw_payload=EXCLUDED.raw_payload,
+                sxg_size=EXCLUDED.sxg_size, table_code=EXCLUDED.table_code,
                 updated_at=NOW()
         """), {
             "tenant_id": str(tenant_id),
-            "company_id": str(company_id) if company_id else None,
+            "company_id": int(company_id) if company_id not in (None, "") else None,
             "environment_id": str(environment_id),
-            
+
+            "table_code": table_key,
             "table_name": table_key,
             "field_name": field_name,
             "title":      str(r.get("X3_DESCRIC") or "").strip(),
@@ -534,22 +547,21 @@ def _persist_six_rows(session, rows, tenant_id, company_id, environment_id):
         session.execute(text("""
             INSERT INTO dictionary_indexes
             (tenant_id, company_id, environment_id,
-             table_name, index_order, nickname, expression, raw_payload)
+             table_code, table_name, index_order, nickname, expression)
             VALUES (:tenant_id,:company_id,:environment_id,
-                    :table_name,:index_order,:nickname,:expression,
-                    CAST(:raw_payload AS JSONB))
+                    :table_code,:table_name,:index_order,:nickname,:expression)
             ON CONFLICT (tenant_id, environment_id, table_name, index_order)
             DO UPDATE SET
                 nickname=EXCLUDED.nickname, expression=EXCLUDED.expression,
                 raw_payload=EXCLUDED.raw_payload
         """), {
             "tenant_id": str(tenant_id),
-            "company_id": str(company_id) if company_id else None,
+            "company_id": int(company_id) if company_id not in (None, "") else None,
             "environment_id": str(environment_id),
-            
+
+            "table_code": table_name,
             "table_name": table_name,
             "index_order": index_order,
             "nickname":    str(r.get("SIX_DESCRIC") or "").strip(),
             "expression":  str(r.get("SIX_CHAVE") or "").strip(),
-            "raw_payload": json.dumps(r),
         })

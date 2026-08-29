@@ -660,7 +660,7 @@ TENANT_REQUIRED_TABLES = {
 }
 
 TENANT_REQUIRED_COLUMNS = {
-    "dictionary_tables": {"tenant_id", "environment_id", "table_name", "table_alias", "module_code"},
+    "dictionary_tables": {"tenant_id", "environment_id", "company_code", "table_code", "table_name", "physical_name", "module_code"},
     "dictionary_fields": {"tenant_id", "environment_id", "table_name", "field_name"},
     "dictionary_indexes": {"tenant_id", "environment_id", "table_name", "index_order"},
 }
@@ -850,10 +850,15 @@ def ensure_tenant_tables(db, clean_tenant: str):
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_tables (
                 id SERIAL PRIMARY KEY,
                 company_id INT REFERENCES "{clean_tenant}".company_info(id) ON DELETE CASCADE,
-                table_code VARCHAR(10) NOT NULL,
+                tenant_id VARCHAR(100),
+                environment_id VARCHAR(100),
+                company_code VARCHAR(20),
+                table_code VARCHAR(20) NOT NULL,
                 table_name VARCHAR(50) NOT NULL,
+                physical_name VARCHAR(80),
                 module_code VARCHAR(10),
                 description VARCHAR(255),
+                active_flag BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
@@ -902,7 +907,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
             ALTER TABLE "{clean_tenant}".dictionary_tables
                 ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
                 ADD COLUMN IF NOT EXISTS environment_id VARCHAR(100),
-                ADD COLUMN IF NOT EXISTS table_alias VARCHAR(80),
+                ADD COLUMN IF NOT EXISTS company_code VARCHAR(20),
                 ADD COLUMN IF NOT EXISTS physical_name VARCHAR(80),
                 ADD COLUMN IF NOT EXISTS active_flag BOOLEAN DEFAULT TRUE,
                 ADD COLUMN IF NOT EXISTS raw_payload JSONB,
