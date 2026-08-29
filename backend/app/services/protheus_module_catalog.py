@@ -265,10 +265,14 @@ def load_dictionary_fields(
         "table_code": str(table_code or "").strip(),
         "table_name": str(table_name or "").strip(),
     }
+    tenant_scope = ""
+    if "tenant_id" in columns:
+        tenant_scope = "df.tenant_id = :tenant_id AND "
+        params["tenant_id"] = schema_name
     if "table_code" in columns:
-        field_scope = "df.table_code = :table_code"
+        field_scope = f"{tenant_scope}df.table_code = :table_code"
     elif "table_name" in columns:
-        field_scope = "df.table_name = :table_name"
+        field_scope = f"{tenant_scope}df.table_name = :table_name"
     else:
         return []
 
