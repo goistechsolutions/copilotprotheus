@@ -413,17 +413,26 @@ class DictionaryTable(TenantBase):
     __tablename__ = "dictionary_tables"
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("company_info.id", ondelete="CASCADE"), nullable=True)
-    table_code = Column(String(10), nullable=False)
+    tenant_id = Column(String(100), nullable=False)
+    environment_id = Column(String(100), nullable=False)
+    company_code = Column(String(20))
+    table_code = Column(String(20), nullable=False)
     table_name = Column(String(50), nullable=False)
+    physical_name = Column(String(80))
     module_code = Column(String(10))
     description = Column(String(255))
+    active_flag = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class DictionaryField(TenantBase):
     __tablename__ = "dictionary_fields"
     id = Column(Integer, primary_key=True, index=True)
-    table_code = Column(String(10), nullable=False)
+    tenant_id = Column(String(100), nullable=False)
+    environment_id = Column(String(100), nullable=False)
+    company_id = Column(Integer, nullable=True)
+    table_code = Column(String(20), nullable=False)
+    table_name = Column(String(50), nullable=False)
     field_name = Column(String(50), nullable=False)
     title = Column(String(100))
     field_type = Column(String(1))
@@ -435,7 +444,11 @@ class DictionaryField(TenantBase):
 class DictionaryIndex(TenantBase):
     __tablename__ = "dictionary_indexes"
     id = Column(Integer, primary_key=True, index=True)
-    table_code = Column(String(10), nullable=False)
+    tenant_id = Column(String(100), nullable=False)
+    environment_id = Column(String(100), nullable=False)
+    company_id = Column(Integer, nullable=True)
+    table_code = Column(String(20), nullable=False)
+    table_name = Column(String(50), nullable=False)
     index_order = Column(Integer, nullable=False)
     nickname = Column(String(100))
     expression = Column(Text)
