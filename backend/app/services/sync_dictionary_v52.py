@@ -107,8 +107,14 @@ ORDER BY SI.TABELA, SI.INDICE
 # ---------------------------------------------------------------------------
 
 def _build_modules_in(modules: List[str]) -> str:
-    """Monta o IN clause seguro com aspas simples."""
-    return ", ".join(f"'{m.strip().upper()}'" for m in modules if m.strip())
+    """Monta um IN seguro somente com códigos numéricos de módulo SX2."""
+    normalized: list[str] = []
+    for raw_module in modules:
+        value = str(raw_module or "").strip()
+        if not re.fullmatch(r"[0-9]{1,6}", value):
+            raise ValueError("module_filter deve conter somente códigos numéricos SX2.")
+        normalized.append(str(int(value)))
+    return ", ".join(normalized)
 
 
 def _run_async(coroutine):
@@ -219,6 +225,9 @@ def run_snapshot(
         session = get_tenant_session(raw_tenant)
         own_session = True
     clean_tenant = resolve_clean_tenant(session, raw_tenant)
+    if not clean_tenant or clean_tenant == "public":
+        raise ValueError("tenant_code deve resolver para um schema de tenant válido.")
+    tenant_id = clean_tenant
     ensure_tenant_tables(session, clean_tenant)
     session.execute(text(f'SET search_path TO "{clean_tenant}", public'))
     company_code = None
@@ -248,7 +257,6 @@ def run_snapshot(
             session.commit()
 
             return {
-                
                 "status": "done",
                 "mode": "curated",
                 "modules": module_filter,
@@ -372,10 +380,9 @@ def run_snapshot(
                     })
 
             _mark_source(session, tenant_id, company_id, environment_code, source_type, "done")
-            session.commit()
 
+        session.commit()
         return {
-            
             "status": "done",
             "mode": "full",
             "message": "Dicionário Protheus sincronizado com sucesso.",
@@ -429,7 +436,6 @@ def _mark_source(session, tenant_id, company_id, environment_id, source_type, st
             "environment_id": str(environment_id),
             "source_type": source_type,
         })
-    session.commit()
 
 
 def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id):
@@ -530,7 +536,6 @@ def _persist_dict_rows(session, rows, tenant_id, company_id, environment_id):
             "length_num": r.get("X3_TAMANHO"),
             "sxg_group":  str(r.get("X3_GRPSXG") or "").strip(),
             "sxg_size":   r.get("XG_SIZE"),
-            "raw_payload": json.dumps(r),
         })
 
 
