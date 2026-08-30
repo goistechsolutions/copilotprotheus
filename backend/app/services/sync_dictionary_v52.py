@@ -15,7 +15,6 @@ Regras obrigatórias (Base_Conhecimento.pdf):
 - JOINs baseados em SIX/X2_UNICO, nunca em X3_RELACAO.
 """
 import asyncio
-import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -115,6 +114,58 @@ def _build_modules_in(modules: List[str]) -> str:
             raise ValueError("module_filter deve conter somente códigos numéricos SX2.")
         normalized.append(str(int(value)))
     return ", ".join(normalized)
+
+
+def normalize_metadata_rows(source_type: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normaliza somente chaves e atributos estruturais conhecidos do dicionário."""
+    source = str(source_type or "").strip().upper()
+    if source not in {"SX2", "SX3", "SIX"}:
+        raise ValueError(f"Tipo de fonte de dicionário não suportado: {source_type}")
+
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if source == "SX2":
+            table_code = str(row.get("X2_CHAVE") or row.get("table_code") or "").strip().upper()
+            if not table_code:
+                continue
+            normalized.append({
+                "source_type": source,
+                "module_code": str(row.get("X2_MODULO") or row.get("module_code") or "").strip(),
+                "table_code": table_code,
+                "physical_name": str(row.get("X2_ARQUIVO") or row.get("physical_name") or "").strip().upper(),
+                "description": str(row.get("X2_NOME") or row.get("description") or "").strip(),
+                "unique_index": str(row.get("X2_UNICO") or row.get("unique_index") or "").strip(),
+            })
+        elif source == "SX3":
+            table_code = str(row.get("X3_ARQUIVO") or row.get("table_code") or "").strip().upper()
+            field_name = str(row.get("X3_CAMPO") or row.get("field_name") or "").strip().upper()
+            if not table_code or not field_name:
+                continue
+            normalized.append({
+                "source_type": source,
+                "table_code": table_code,
+                "field_name": field_name,
+                "title": str(row.get("X3_DESCRIC") or row.get("X3_TITULO") or row.get("title") or "").strip(),
+                "field_type": str(row.get("X3_TIPO") or row.get("field_type") or "").strip().upper(),
+                "length_num": row.get("X3_TAMANHO") or row.get("length_num"),
+                "decimal_num": row.get("X3_DECIMAL") or row.get("decimal_num"),
+                "sxg_group": str(row.get("X3_GRPSXG") or row.get("sxg_group") or "").strip().upper(),
+            })
+        else:
+            table_code = str(row.get("SIX_ARQUIVO") or row.get("table_code") or "").strip().upper()
+            index_order = str(row.get("SIX_ORDEM") or row.get("index_order") or "").strip()
+            if not table_code or not index_order:
+                continue
+            normalized.append({
+                "source_type": source,
+                "table_code": table_code,
+                "index_order": index_order,
+                "nickname": str(row.get("SIX_DESCRIC") or row.get("nickname") or "").strip(),
+                "expression": str(row.get("SIX_CHAVE") or row.get("expression") or "").strip(),
+            })
+    return normalized
 
 
 def _run_async(coroutine):

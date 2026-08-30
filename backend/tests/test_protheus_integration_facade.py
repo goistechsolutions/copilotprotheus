@@ -36,3 +36,30 @@ def test_rest_url_rejects_endpoint_specific_paths():
 
     with pytest.raises(IntegrationFailure, match="não inclua QueryRest"):
         ProtheusIntegrationService._validate_base_url("https://erp.example.com/rest/api/oauth2/v1/token")
+
+
+def test_module_filter_accepts_only_numeric_codes():
+    from app.services.sync_dictionary_v52 import _build_modules_in
+
+    assert _build_modules_in(["02", "3"]) == "2, 3"
+    with pytest.raises(ValueError, match="códigos numéricos"):
+        _build_modules_in(["SIGAFAT"])
+
+
+def test_metadata_normalization_discards_incomplete_rows():
+    from app.services.sync_dictionary_v52 import normalize_metadata_rows
+
+    rows = normalize_metadata_rows("SX3", [
+        {"X3_ARQUIVO": " sf1 ", "X3_CAMPO": " f1_doc ", "X3_TIPO": "C"},
+        {"X3_ARQUIVO": "SF1", "X3_CAMPO": ""},
+    ])
+    assert rows == [{
+        "source_type": "SX3",
+        "table_code": "SF1",
+        "field_name": "F1_DOC",
+        "title": "",
+        "field_type": "C",
+        "length_num": None,
+        "decimal_num": None,
+        "sxg_group": "",
+    }]
