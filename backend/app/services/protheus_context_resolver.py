@@ -134,12 +134,23 @@ def resolve_context(
     if not module or not str(module).strip():
         raise ValueError("module é obrigatório para execução no Protheus.")
 
-    branch = raw_context.get("branch") or raw_context.get("filial")
+    branch = (
+        raw_context.get("branch")
+        or raw_context.get("filial")
+        or payload.get("branch")
+        or payload.get("filial")
+    )
     if not branch or not str(branch).strip():
         raise ValueError("branch/filial é obrigatório para execução no Protheus.")
 
     company_id = raw_context.get("company_id") or payload.get("company_id")
-    company_code = raw_context.get("company_code") or raw_context.get("company")
+    company_code = (
+        raw_context.get("company_code")
+        or raw_context.get("company")
+        or payload.get("company_code")
+        or payload.get("company")
+        or payload.get("empresa")
+    )
     if company_id in (None, "") and not company_code:
         raise ValueError("company_id ou company_code é obrigatório para execução no Protheus.")
 
