@@ -116,6 +116,14 @@ def _build_modules_in(modules: List[str]) -> str:
     return ", ".join(normalized)
 
 
+def _parse_index_order(raw_value: Any) -> int:
+    """Converte a ordem SIX para inteiro sem aceitar valores inventados."""
+    value = str(raw_value or "").strip()
+    if not re.fullmatch(r"[0-9]+", value):
+        raise ValueError("SIX_ORDEM/index_order inválido: esperado inteiro não negativo.")
+    return int(value)
+
+
 def normalize_metadata_rows(source_type: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Normaliza somente chaves e atributos estruturais conhecidos do dicionário."""
     source = str(source_type or "").strip().upper()
@@ -408,7 +416,7 @@ def run_snapshot(
                         "tenant_id": str(tenant_id), "company_id": int(company_id) if company_id not in (None, "") else None,
                         "table_code": table_name,
                         "table_name": table_name,
-                        "index_order": str(r.get("SIX_ORDEM") or r.get("index_order") or "").strip(),
+                        "index_order": _parse_index_order(r.get("SIX_ORDEM") or r.get("index_order")),
                         "nickname": str(r.get("SIX_DESCRIC") or r.get("nickname") or "").strip(),
                         "expression": str(r.get("SIX_CHAVE") or r.get("expression") or "").strip()
                     })

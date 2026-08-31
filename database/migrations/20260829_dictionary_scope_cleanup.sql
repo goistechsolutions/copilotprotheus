@@ -136,17 +136,16 @@ BEGIN
             tenant_row.schema_name
         );
 
-        -- Nenhum registro de catálogo pode permanecer sem identidade de Tenant,
-        -- ambiente ou chave lógica SX2.
+        -- Nenhum registro de catálogo pode permanecer sem identidade de Tenant
+        -- ou chave lógica SX2. O ambiente pertence somente à conexão.
         EXECUTE format(
             'SELECT COUNT(*) FROM %I.dictionary_tables
               WHERE tenant_id IS NULL OR BTRIM(tenant_id) = ''''
-                 OR environment_id IS NULL OR BTRIM(environment_id) = ''''
                  OR table_code IS NULL OR BTRIM(table_code) = ''''',
             tenant_row.schema_name
         ) INTO null_count;
         IF null_count > 0 THEN
-            RAISE EXCEPTION 'dictionary_tables do schema % possui linhas sem tenant_id, environment_id ou table_code', tenant_row.schema_name;
+            RAISE EXCEPTION 'dictionary_tables do schema % possui linhas sem tenant_id ou table_code', tenant_row.schema_name;
         END IF;
 
         EXECUTE format(
@@ -172,7 +171,6 @@ BEGIN
         EXECUTE format(
             'ALTER TABLE %I.dictionary_tables
                 ALTER COLUMN tenant_id SET NOT NULL,
-                ALTER COLUMN environment_id SET NOT NULL,
                 ALTER COLUMN table_code SET NOT NULL',
             tenant_row.schema_name
         );
@@ -217,17 +215,17 @@ BEGIN
 
         EXECUTE format(
             'CREATE INDEX IF NOT EXISTS ix_dictionary_tables_scope
-                ON %I.dictionary_tables (tenant_id, environment_id, company_code, module_code, table_code)',
+                ON %I.dictionary_tables (tenant_id, company_id, company_code, module_code, table_code)',
             tenant_row.schema_name
         );
         EXECUTE format(
             'CREATE INDEX IF NOT EXISTS ix_dictionary_fields_scope
-                ON %I.dictionary_fields (tenant_id, environment_id, table_code, field_name)',
+                ON %I.dictionary_fields (tenant_id, company_id, table_code, field_name)',
             tenant_row.schema_name
         );
         EXECUTE format(
             'CREATE INDEX IF NOT EXISTS ix_dictionary_indexes_scope
-                ON %I.dictionary_indexes (tenant_id, environment_id, table_code, index_order)',
+                ON %I.dictionary_indexes (tenant_id, company_id, table_code, index_order)',
             tenant_row.schema_name
         );
     END LOOP;

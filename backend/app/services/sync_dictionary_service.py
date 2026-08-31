@@ -1,75 +1,72 @@
-"""
-app/services/sync_dictionary_service.py
+"""Serviço de leitura do catálogo estrutural por módulos.
 
-Serviço de sincronização do dicionário (tenant_schemas) por tenant.
-Usa module_sync_resolver.resolve_modules_to_numeric_codes para garantir
-que a busca é feita usando o código numérico do módulo (requisito arquitetural).
+O catálogo canônico é composto por ``dictionary_tables`` e
+``dictionary_fields`` no schema do tenant. ``tenant_schemas`` não é mais
+utilizada por este fluxo.
 """
 
+import re
 from typing import List
-from sqlalchemy import text
+
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.engine import Result
 
 from app.services.module_sync_resolver import resolve_modules_to_numeric_codes
 
+
+def _safe_schema_name(value: str) -> str:
+    schema = str(value or "").strip().lower()
+    if not re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", schema):
+        raise HTTPException(status_code=400, detail="Schema de tenant inválido.")
+    return schema
+
+
 def sync_selected_modules(db, tenant_schema: str, selected_modules: List[str]):
-    """
-    Busca linhas em {tenant}.tenant_schemas para os módulos selecionados.
+    """Lê tabelas e campos do catálogo canônico para os módulos selecionados."""
+    schema = _safe_schema_name(tenant_schema)
+    module_codes = resolve_modules_to_numeric_codes(db, schema, selected_modules)
 
-    Args:
-        db: SQLAlchemy Session
-        tenant_schema: nome do schema (ex: 'rodol')
-        selected_modules: lista de siglas ou códigos vindos do frontend
-
-    Returns:
-        list[Row] das linhas do tenant_schemas
-    Raises:
-        HTTPException se não encontrar ou erro
-    """
-    # Resolve para códigos numéricos (strings)
-    modulo_codes = resolve_modules_to_numeric_codes(db, tenant_schema, selected_modules)
-
-    if not modulo_codes:
+    if not module_codes:
         raise HTTPException(status_code=400, detail="Nenhum módulo resolvido para sincronização.")
 
-    # Query: retorna todo o payload necessário para gerar snapshot local
-    sql = text(f'''
+    sql = text(f"""
         SELECT
-            modulo,
-            codmod,
-            chave,
-            tabela,
-            nome,
-            campo,
-            campo_titulo,
-            campo_tipo,
-            campo_tamanho,
-            campo_decimal,
-            campo_obrigatorio,
-            campo_usado,
-            campo_descricao,
-            is_customizado,
-            schema_json
-        FROM "{tenant_schema}".tenant_schemas
-        WHERE CAST(modulo AS VARCHAR) = ANY(:modules)
-        ORDER BY tabela, campo
-    ''')
+            dt.module_code,
+            dt.table_code AS chave,
+            COALESCE(NULLIF(BTRIM(dt.physical_name), ''), dt.table_name) AS tabela,
+            dt.table_name AS nome,
+            df.field_name AS campo,
+            df.title AS campo_titulo,
+            df.field_type AS campo_tipo,
+            df.length_num AS campo_tamanho,
+            df.decimal_num AS campo_decimal
+        FROM {schema}.dictionary_tables dt
+        LEFT JOIN {schema}.dictionary_fields df
+          ON df.tenant_id = dt.tenant_id
+         AND (df.company_id = dt.company_id OR df.company_id IS NULL)
+         AND df.table_code = dt.table_code
+        WHERE dt.active_flag = TRUE
+          AND dt.module_code::text = ANY(CAST(:modules AS text[]))
+        ORDER BY dt.table_code, df.field_name
+    """)
 
     try:
-        result: Result = db.execute(sql, {"modules": modulo_codes})
+        result: Result = db.execute(sql, {"modules": module_codes})
         rows = result.fetchall()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao consultar tenant_schemas: {e}")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível consultar o catálogo estrutural do tenant.",
+        ) from exc
 
     if not rows:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Nenhuma tabela encontrada para os módulos selecionados: {', '.join(selected_modules)}. "
-                f"Códigos resolvidos: {', '.join(modulo_codes)}."
-            )
+                f"Nenhuma tabela encontrada para os módulos selecionados: "
+                f"{', '.join(selected_modules)}. Códigos resolvidos: {', '.join(module_codes)}."
+            ),
         )
 
-    # Retorna as rows (cada row é um SQLAlchemy Row)
     return rows

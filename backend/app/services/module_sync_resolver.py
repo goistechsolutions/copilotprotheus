@@ -1,70 +1,63 @@
-"""
-app/services/module_sync_resolver.py
+"""Resolução segura de módulos para sincronização do dicionário.
 
-Resolver de módulos para sincronização do dicionário por tenant.
-
-Regras:
-- A UI pode enviar a sigla (ex: 'SIGAEST') ou o código numérico (ex: '04').
-- As tabelas por tenant usam o campo numérico 'modulo' como chave lógica.
-- Este resolver retorna a lista de códigos numéricos (strings) para uso nas queries.
+A seleção aceita a sigla ou o código numérico do catálogo global
+``public.protheus_modules_master``. O schema do tenant não participa da
+resolução de módulos; ele é usado somente para persistir o catálogo estrutural
+já associado à empresa.
 """
 
 from typing import List
+
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.engine import Result
-from fastapi import HTTPException
+
 
 def resolve_modules_to_numeric_codes(db, tenant_schema: str, selected_modules: List[str]) -> List[str]:
-    """
-    Resolve uma lista de módulos (siglas ou códigos) para os códigos numéricos
-    armazenados em {tenant}.protheus_modules.modulo.
+    """Resolve siglas/códigos para códigos do catálogo global ativo.
 
-    Args:
-        db: SQLAlchemy Session
-        tenant_schema: nome do schema do tenant (ex: 'rodol')
-        selected_modules: lista de strings (ex: ['SIGAEST', 'SIGACOM', '04'])
-
-    Returns:
-        lista de strings com os códigos numéricos (ex: ['04','02'])
-    Raises:
-        HTTPException 400 se nada for encontrado ou input inválido
+    ``tenant_schema`` é mantido na assinatura por compatibilidade com os
+    chamadores legados, mas não é interpolado nem consultado aqui.
     """
+    del tenant_schema
+
     if not selected_modules:
         raise HTTPException(status_code=400, detail="Selecione ao menos um módulo para sincronizar.")
 
-    normalized = [m.strip().upper() for m in selected_modules if m and m.strip()]
+    normalized = [str(module).strip().upper() for module in selected_modules if module and str(module).strip()]
     if not normalized:
         raise HTTPException(status_code=400, detail="Lista de módulos inválida.")
 
-    # Query: tenta casar tanto com codmod (sigla) quanto com modulo (numérico).
-    sql = text(f"""
+    sql = text("""
         SELECT DISTINCT
-            CAST(modulo AS VARCHAR) AS modulo,
-            UPPER(TRIM(COALESCE(codmod, ''))) AS codmod
-        FROM "{tenant_schema}".protheus_modules
-        WHERE
-            CAST(modulo AS VARCHAR) = ANY(:mods)
-            OR UPPER(TRIM(COALESCE(codmod, ''))) = ANY(:mods)
+            pm.mod_code::text AS modulo,
+            UPPER(BTRIM(COALESCE(pm.mod_sigla, ''))) AS codmod
+        FROM public.protheus_modules_master pm
+        WHERE pm.active = TRUE
+          AND (
+                pm.mod_code::text = ANY(CAST(:mods AS text[]))
+                OR UPPER(BTRIM(COALESCE(pm.mod_sigla, ''))) = ANY(CAST(:mods AS text[]))
+              )
+        ORDER BY pm.mod_code::text
     """)
 
-    # Executa e obtém rows
     try:
         result: Result = db.execute(sql, {"mods": normalized})
         rows = result.fetchall()
-    except Exception as e:
-        # Erro DB — repassa como 500
-        raise HTTPException(status_code=500, detail=f"Erro ao consultar módulos do tenant: {e}")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível consultar o catálogo global de módulos.",
+        ) from exc
 
     if not rows:
         raise HTTPException(
             status_code=400,
-            detail=f"Nenhum módulo válido encontrado no tenant para a seleção informada: {', '.join(normalized)}"
+            detail=f"Nenhum módulo ativo encontrado para a seleção: {', '.join(normalized)}",
         )
 
-    # Extrai códigos únicos
-    modulo_codes = sorted({str(r.modulo).strip() for r in rows if r.modulo is not None and str(r.modulo).strip() != ""})
+    module_codes = sorted({str(row.modulo).strip() for row in rows if row.modulo is not None and str(row.modulo).strip()})
+    if not module_codes:
+        raise HTTPException(status_code=400, detail="Os módulos selecionados não possuem código válido.")
 
-    if not modulo_codes:
-        raise HTTPException(status_code=400, detail="Os módulos selecionados não possuem código numérico válido.")
-
-    return modulo_codes
+    return module_codes

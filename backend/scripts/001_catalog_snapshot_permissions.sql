@@ -121,11 +121,11 @@ CREATE TABLE IF NOT EXISTS tenant_field_permissions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dictionary_tables_lookup
-    ON dictionary_tables (tenant_id, environment_id, table_name);
+    ON dictionary_tables (tenant_id, company_id, table_code);
 CREATE INDEX IF NOT EXISTS idx_dictionary_fields_lookup
-    ON dictionary_fields (tenant_id, environment_id, table_name, field_name);
+    ON dictionary_fields (tenant_id, company_id, table_code, field_name);
 CREATE INDEX IF NOT EXISTS idx_dictionary_indexes_lookup
-    ON dictionary_indexes (tenant_id, environment_id, table_name);
+    ON dictionary_indexes (tenant_id, company_id, table_code, index_order);
 CREATE INDEX IF NOT EXISTS idx_perm_table_lookup
     ON tenant_table_permissions (tenant_id, environment_id, role_id, table_name);
 CREATE INDEX IF NOT EXISTS idx_perm_field_lookup

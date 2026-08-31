@@ -866,7 +866,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
                 company_id INT,
-                table_code VARCHAR(10) NOT NULL,
+                table_code VARCHAR(60) NOT NULL,
                 field_name VARCHAR(50) NOT NULL,
                 title VARCHAR(100),
                 field_type VARCHAR(1),
@@ -880,7 +880,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL,
                 company_id INT,
-                table_code VARCHAR(10) NOT NULL,
+                table_code VARCHAR(60) NOT NULL,
                 index_order INT NOT NULL,
                 nickname VARCHAR(100),
                 expression TEXT,
@@ -905,7 +905,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
         # Snapshot v5.3: amplia as tabelas V4 de forma aditiva. As colunas novas
         # permanecem nullable para não invalidar registros históricos; os novos
-        # fluxos sempre enviam tenant_id e environment_id explicitamente.
+        # fluxos sempre enviam tenant_id e company_id explicitamente.
         db.execute(text(f"""
             ALTER TABLE "{clean_tenant}".dictionary_tables
                 ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
@@ -948,14 +948,13 @@ def ensure_tenant_tables(db, clean_tenant: str):
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_groups (
                 id BIGSERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100),
-                company_id VARCHAR(100),
-                environment_id VARCHAR(100),
+                company_id INTEGER,
                 snapshot_code VARCHAR(60),
                 group_name VARCHAR(80) NOT NULL,
                 description TEXT,
                 raw_payload JSONB,
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                UNIQUE (tenant_id, environment_id, group_name)
+                UNIQUE (tenant_id, company_id, group_name)
             );
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_dictionary_sources (
