@@ -61,6 +61,45 @@ class FakeDB:
         pass
 
 
+def test_history_scope_casts_company_id_for_legacy_schema_types():
+    captured = {}
+
+    class HistoryDB:
+        def execute(self, statement, params=None):
+            captured["sql"] = str(statement)
+            captured["params"] = params
+            return FakeMappings([])
+
+    result = agent_sql_routes._load_conversation_history(
+        db=HistoryDB(),
+        tenant_schema="rodol_prod",
+        tenant_id="rodol_prod",
+        company_id=7,
+        conversation_id="conversation-1",
+        actor_key="operador",
+    )
+
+    assert result == []
+    assert "company_id::text = CAST(:company_id AS text)" in captured["sql"]
+    assert captured["params"]["company_id"] == "7"
+
+
+def test_tenant_bootstrap_requires_agent_memories_columns():
+    from app.db.database import TENANT_REQUIRED_COLUMNS
+
+    assert {
+        "id",
+        "tenant_id",
+        "company_id",
+        "memory_key",
+        "memory_value",
+        "memory_type",
+        "scope",
+        "source",
+        "created_at",
+    }.issubset(TENANT_REQUIRED_COLUMNS["memories"])
+
+
 def test_extension_context_reaches_queryrest_with_explicit_environment(monkeypatch):
     calls = {}
 
