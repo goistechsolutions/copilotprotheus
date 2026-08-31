@@ -1,11 +1,10 @@
-import ReactMarkdown from 'react-markdown';
 import { Bot, User } from 'lucide-react';
 
 export default function Conversation({ messages }) {
   if (!messages.length) return null;
 
   return (
-    <div className="flex w-full flex-col gap-5 py-2" aria-live="polite">
+    <div className="flex w-full flex-col gap-4 py-1" aria-live="polite">
       {messages.map((message, index) => {
         const isUser = message.role === 'user';
 
@@ -15,13 +14,13 @@ export default function Conversation({ messages }) {
             className={`flex items-end gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}
           >
             {!isUser && (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc] shadow-[0_3px_10px_rgba(49,111,161,0.07)]">
                 <Bot size={16} strokeWidth={1.8} aria-hidden="true" />
               </div>
             )}
 
             <div
-              className={`max-w-[min(88%,680px)] rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-[0_3px_12px_rgba(49,84,117,0.05)] ${
+              className={`max-w-[min(88%,680px)] rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-[0_3px_12px_rgba(49,84,117,0.045)] ${
                 isUser
                   ? 'rounded-br-md border border-[#cde3f7] bg-[#eaf4fd] text-[#245c8e]'
                   : 'rounded-bl-md border border-[#e1eaf2] bg-white text-[#3f5872]'
