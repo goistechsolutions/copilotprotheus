@@ -222,7 +222,8 @@ class EntitlementGuard:
                     pm.mod_name,
                     tmc.status
                 FROM public.tenant_module_contracts tmc
-                JOIN public.protheus_modules_master pm ON pm.id = tmc.module_id
+                JOIN public.protheus_modules_master pm
+                  ON pm.id::text = tmc.module_id::text
                 WHERE lower(btrim(tmc.tenant_id)) = :tenant_code
                   AND tmc.contract_id::text = :contract_id
                   AND lower(btrim(tmc.status)) IN ('active', 'enabled', 'allowed')
