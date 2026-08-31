@@ -6,7 +6,6 @@ import jwt
 from sqlalchemy import text
 
 from app.core.config import settings
-from app.services.protheus_module_catalog import quote_tenant_schema
 
 
 LICENSE_SECRET = settings.jwt_secret + "-license-key-salt"
@@ -68,7 +67,8 @@ def sync_license_entitlement(
 
     A função não cria planos, limites, módulos ou datas arbitrárias. O plano deve
     existir e estar ativo em ``public.license_plans``; a validade vem do token
-    assinado; e os módulos vêm exclusivamente de ``<tenant>.protheus_modules``.
+    assinado; e os módulos vêm exclusivamente de ``public.protheus_modules_master``.
+
     Sem token, nada é alterado para preservar contratos administrados diretamente.
     """
     token = str(license_token or "").strip()
@@ -155,7 +155,9 @@ def sync_license_entitlement(
             ).scalar()
         )
 
-    schema = quote_tenant_schema(str(tenant_schema or tenant).strip().lower())
+    # O catálogo global é a única fonte de módulos contratáveis. Não há
+    # dependência de uma tabela por tenant que possa não existir após o
+    # provisionamento; o tenant continua isolado pelo tenant_id do contrato.
     db.execute(
         text("""
             DELETE FROM public.tenant_module_contracts
@@ -165,7 +167,7 @@ def sync_license_entitlement(
         {"contract_id": contract_id, "tenant_code": tenant},
     )
     db.execute(
-        text(f"""
+        text("""
             INSERT INTO public.tenant_module_contracts
                 (tenant_id, contract_id, module_id, status)
             SELECT
@@ -173,9 +175,7 @@ def sync_license_entitlement(
                 CAST(:contract_id AS uuid),
                 pm.id,
                 'allowed'
-            FROM {schema}.protheus_modules tm
-            JOIN public.protheus_modules_master pm
-              ON pm.mod_code = tm.mod_code
+            FROM public.protheus_modules_master pm
             WHERE pm.active = TRUE
         """),
         {"contract_id": contract_id, "tenant_code": tenant},
