@@ -82,7 +82,7 @@ def test_sync_license_requires_existing_active_plan():
     assert db.commits == 0
 
 
-def test_sync_license_creates_isolated_contract_and_copies_selected_modules():
+def test_sync_license_creates_isolated_contract_and_copies_active_global_modules():
     db = FakeDB(plan={"plan_id": "plan-fixture", "plan_code": "starter"})
 
     result = sync_license_entitlement(
@@ -98,7 +98,8 @@ def test_sync_license_creates_isolated_contract_and_copies_selected_modules():
     assert result["contract_id"] == "contract-fixture"
     assert result["plan_code"] == "starter"
     assert "INSERT INTO public.tenant_contracts" in sql
-    assert 'FROM "rodol_prod".protheus_modules tm' in sql
+    assert "FROM public.protheus_modules_master pm" in sql
+    assert 'FROM "rodol_prod".protheus_modules' not in sql
     assert "INSERT INTO public.tenant_module_contracts" in sql
     assert db.commits == 1
 
