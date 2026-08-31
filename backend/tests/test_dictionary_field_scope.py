@@ -30,7 +30,6 @@ class _DictionaryDB:
                 {"column_name": "table_name"},
                 {"column_name": "field_name"},
                 {"column_name": "title"},
-                {"column_name": "environment_id"},
             ])
         return _MappingsResult([
             {"field_name": "F1_VALBRUT", "field_label": "Valor bruto"},
@@ -45,7 +44,6 @@ def test_load_dictionary_fields_prioritizes_sx2_key_and_limits_legacy_fallback()
         tenant_schema="tenant_fixture",
         table_code="SF1",
         table_name="SF1010",
-        environment_id="env_fixture",
     )
 
     query, params = db.calls[-1]
@@ -58,7 +56,6 @@ def test_load_dictionary_fields_prioritizes_sx2_key_and_limits_legacy_fallback()
         "tenant_id": "tenant_fixture",
         "table_code": "SF1",
         "table_name": "SF1010",
-        "environment_id": "env_fixture",
     }
 
 
@@ -77,7 +74,6 @@ class _TablesDB:
                 {"column_name": "module_code"},
                 {"column_name": "description"},
                 {"column_name": "active_flag"},
-                {"column_name": "environment_id"},
             ])
         return _MappingsResult([{
             "table_code": "SF1",
@@ -94,7 +90,6 @@ def test_dictionary_tables_is_the_direct_imported_catalog_scope():
         db=db,
         tenant_schema="tenant_fixture",
         module_codes=["2"],
-        environment_id="env_fixture",
     )
 
     query, params = db.calls[-1]
@@ -106,5 +101,4 @@ def test_dictionary_tables_is_the_direct_imported_catalog_scope():
     assert params == {
         "tenant_id": "tenant_fixture",
         "module_codes": ["2"],
-        "environment_id": "env_fixture",
     }
