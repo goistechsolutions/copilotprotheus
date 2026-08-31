@@ -69,7 +69,14 @@ export default function CompanyDictionary({ company }) {
     setLoading(true);
     setSyncResult(null);
     try {
-      const res = await axios.get(`/api/admin/schemas?tenant_id=${tenantId}`);
+      const envCode = await resolveEnvironmentCode(company);
+      if (!envCode) throw new Error('environment_code não configurado para esta empresa.');
+      const params = new URLSearchParams({
+        tenant_id: tenantId,
+        environment_code: envCode,
+      });
+      if (company?.id) params.set('company_id', String(company.id));
+      const res = await axios.get(`/api/admin/schemas?${params.toString()}`);
       setSchemas(res.data.schemas || []);
     } catch (error) {
       console.error("Erro ao carregar schemas:", error);

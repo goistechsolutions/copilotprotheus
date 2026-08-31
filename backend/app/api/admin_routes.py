@@ -14,6 +14,8 @@ Seguranca:
   - ADMIN_USER / ADMIN_PASSWORD via env.
 """
 import re
+from datetime import datetime, timezone, timedelta
+from uuid import uuid4
 from app.services.tenant_resolver import resolve_clean_tenant as secure_clean_tenant
 from fastapi import APIRouter, Depends, HTTPException, status, Body, File, UploadFile
 from pydantic import BaseModel, Field
@@ -43,6 +45,13 @@ from app.models.knowledge import (
 )
 
 from app.core.config import settings
+from app.schemas.dictionary_sync import (
+    DictionarySyncMode,
+    DictionarySyncPreviewResponse,
+    DictionarySyncRequest,
+    DictionarySourceSummary,
+    DictionarySyncDiff,
+)
 
 router = APIRouter()
 
@@ -746,6 +755,206 @@ def get_protheus_modules(
 # SYNC SCHEMA  (V4: TenantSchema + DictionarySnapshot)
 # ─────────────────────────────────────────────────────────────
 
+@router.post("/sync-schema/preview", response_model=DictionarySyncPreviewResponse)
+def preview_sync_schema(
+    request: DictionarySyncRequest,
+    db: Session = Depends(get_db),
+    admin: str = Depends(verify_admin),
+):
+    """Coleta e valida SX2/SX3/SIX sem INSERT, UPDATE, DELETE ou COMMIT."""
+    correlation_id = uuid4().hex
+    generated_at = datetime.now(timezone.utc)
+    expires_at = generated_at + timedelta(minutes=15)
+
+    try:
+        clean_tenant = secure_clean_tenant(request.tenant_code)
+        if not clean_tenant or clean_tenant == "public":
+            raise HTTPException(status_code=400, detail="tenant_code inválido.")
+        ensure_tenant_tables(db, clean_tenant)
+
+        if request.company_id is not None:
+            company = db.execute(
+                text(f'''
+                    SELECT id, company_code, branch_code
+                      FROM "{clean_tenant}".company_info
+                     WHERE id = :company_id
+                       AND LOWER(status) IN ('active', 'ativa')
+                     LIMIT 1
+                '''),
+                {"company_id": request.company_id},
+            ).mappings().first()
+            if not company:
+                raise HTTPException(status_code=400, detail="Empresa ativa não localizada no tenant.")
+
+        if request.mode == DictionarySyncMode.CURATED and not request.module_codes:
+            raise HTTPException(status_code=400, detail="Informe ao menos um módulo para o modo curated.")
+
+        from app.services.sync_dictionary_v52 import (
+            fetch_curated_by_modules,
+            fetch_rows_from_protheus,
+            normalize_metadata_rows,
+        )
+
+        if request.mode == DictionarySyncMode.CURATED:
+            collected = fetch_curated_by_modules(
+                db=db,
+                tenant_code=clean_tenant,
+                environment_code=request.environment_code,
+                modules=request.module_codes,
+            )
+            raw_sx2 = []
+            raw_sx3 = []
+            for row in collected.get("dict_rows", []):
+                if not isinstance(row, dict):
+                    continue
+                raw_sx2.append(row)
+                raw_sx3.append({
+                    "X3_ARQUIVO": row.get("X2_CHAVE"),
+                    "X3_CAMPO": row.get("X3_CAMPO"),
+                    "X3_DESCRIC": row.get("X3_DESCRIC"),
+                    "X3_TIPO": row.get("X3_TIPO"),
+                    "X3_TAMANHO": row.get("X3_TAMANHO"),
+                    "X3_GRPSXG": row.get("X3_GRPSXG"),
+                })
+            raw_six = collected.get("six_rows", [])
+        else:
+            raw_sx2 = fetch_rows_from_protheus(db, clean_tenant, request.environment_code, "SX2")
+            raw_sx3 = fetch_rows_from_protheus(db, clean_tenant, request.environment_code, "SX3")
+            raw_six = fetch_rows_from_protheus(db, clean_tenant, request.environment_code, "SIX")
+
+        normalized_sx2 = normalize_metadata_rows("SX2", raw_sx2)
+        normalized_sx3 = normalize_metadata_rows("SX3", raw_sx3)
+        normalized_six = normalize_metadata_rows("SIX", raw_six)
+        source_data = {
+            "SX2": (raw_sx2, normalized_sx2),
+            "SX3": (raw_sx3, normalized_sx3),
+            "SIX": (raw_six, normalized_six),
+        }
+
+        summaries = []
+        for source_type, (raw_rows, normalized_rows) in source_data.items():
+            summaries.append(DictionarySourceSummary(
+                source_type=source_type,
+                status="loaded" if normalized_rows else "failed",
+                received_count=len(raw_rows),
+                normalized_count=len(normalized_rows),
+                invalid_count=max(0, len(raw_rows) - len(normalized_rows)),
+                error_code=None if normalized_rows else "EMPTY_METADATA",
+            ))
+
+        scope_params = {
+            "tenant_id": clean_tenant,
+            "environment_code": request.environment_code,
+        }
+        company_filter = ""
+        if request.company_id is not None:
+            company_filter = " AND company_id = :company_id"
+            scope_params["company_id"] = request.company_id
+
+        current_tables = db.execute(text(f'''
+            SELECT table_code, physical_name, module_code, description
+              FROM "{clean_tenant}".dictionary_tables
+             WHERE tenant_id = :tenant_id
+               AND environment_id = :environment_code
+               AND active_flag = TRUE{company_filter}
+        '''), scope_params).mappings().all()
+        current_fields = db.execute(text(f'''
+            SELECT table_code, field_name, title, field_type, length_num, decimal_num
+              FROM "{clean_tenant}".dictionary_fields
+             WHERE tenant_id = :tenant_id
+               AND environment_id = :environment_code{company_filter}
+        '''), scope_params).mappings().all()
+        current_indexes = db.execute(text(f'''
+            SELECT table_code, index_order, nickname, expression
+              FROM "{clean_tenant}".dictionary_indexes
+             WHERE tenant_id = :tenant_id
+               AND environment_id = :environment_code{company_filter}
+        '''), scope_params).mappings().all()
+
+        incoming_tables = {
+            row["table_code"]: row for row in normalized_sx2
+        }
+        incoming_fields = {
+            (row["table_code"], row["field_name"]): row for row in normalized_sx3
+        }
+        incoming_indexes = {
+            (row["table_code"], row["index_order"]): row for row in normalized_six
+        }
+        existing_tables = {str(row["table_code"]).upper(): row for row in current_tables}
+        existing_fields = {
+            (str(row["table_code"]).upper(), str(row["field_name"]).upper()): row
+            for row in current_fields
+        }
+        existing_indexes = {
+            (str(row["table_code"]).upper(), str(row["index_order"])): row
+            for row in current_indexes
+        }
+
+        def changed(incoming, existing, fields):
+            return any(str(incoming.get(i) or "") != str(existing.get(e) or "") for i, e in fields)
+
+        diff = DictionarySyncDiff(
+            tables_added=len(set(incoming_tables) - set(existing_tables)),
+            tables_changed=sum(
+                changed(incoming_tables[key], existing_tables[key], [
+                    ("physical_name", "physical_name"), ("module_code", "module_code"),
+                    ("description", "description"),
+                ])
+                for key in set(incoming_tables) & set(existing_tables)
+            ),
+            tables_removed=len(set(existing_tables) - set(incoming_tables)),
+            fields_added=len(set(incoming_fields) - set(existing_fields)),
+            fields_changed=sum(
+                changed(incoming_fields[key], existing_fields[key], [
+                    ("title", "title"), ("field_type", "field_type"),
+                    ("length_num", "length_num"), ("decimal_num", "decimal_num"),
+                ])
+                for key in set(incoming_fields) & set(existing_fields)
+            ),
+            fields_removed=len(set(existing_fields) - set(incoming_fields)),
+            indexes_added=len(set(incoming_indexes) - set(existing_indexes)),
+            indexes_changed=sum(
+                changed(incoming_indexes[key], existing_indexes[key], [
+                    ("nickname", "nickname"), ("expression", "expression"),
+                ])
+                for key in set(incoming_indexes) & set(existing_indexes)
+            ),
+            indexes_removed=len(set(existing_indexes) - set(incoming_indexes)),
+        )
+        can_publish = (
+            request.company_id is not None
+            and all(item.status == "loaded" and item.invalid_count == 0 for item in summaries)
+            and bool(normalized_sx2)
+        )
+        message = (
+            "Preview válido para publicação transacional."
+            if can_publish else
+            "Preview concluído, mas a publicação está bloqueada até que o contexto e todos os metadados sejam válidos."
+        )
+        return DictionarySyncPreviewResponse(
+            success=True,
+            tenant_code=clean_tenant,
+            environment_code=request.environment_code,
+            company_id=request.company_id,
+            mode=request.mode,
+            generated_at=generated_at,
+            expires_at=expires_at,
+            correlation_id=correlation_id,
+            sources=summaries,
+            diff=diff,
+            can_publish=can_publish,
+            message=message,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Falha no preview de sincronização tenant=%s correlation_id=%s", request.tenant_code, correlation_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível gerar o preview do dicionário Protheus.",
+        ) from exc
+
+
 @router.post("/sync-schema")
 async def sync_schema(
     payload: dict = Body(...),
@@ -1133,41 +1342,110 @@ async def sync_schema(
 @router.get("/schemas")
 def get_schemas(
     tenant_id: str,
-    db: Session   = Depends(get_db),
-    admin: str    = Depends(verify_admin),
+    environment_code: str,
+    company_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    admin: str = Depends(verify_admin),
 ):
-    import re
-    clean_tenant = secure_clean_tenant(str(tenant_id))
-
-    ensure_tenant_tables(db, clean_tenant)
-
+    """Monta o catálogo de tabelas, campos e índices sem ler o cache tenant_schemas."""
     try:
-        rows = db.execute(
-            text(f'SELECT id, mod_code, mod_sigla, chave, tabela, nome, schema_json FROM "{clean_tenant}".tenant_schemas ORDER BY chave')
-        ).mappings().all()
+        clean_tenant = secure_clean_tenant(str(tenant_id))
+        if not clean_tenant or clean_tenant == "public":
+            raise HTTPException(status_code=400, detail="tenant_id inválido.")
+        normalized_environment = str(environment_code or "").strip()
+        if not normalized_environment or normalized_environment.lower() in {"default", "none", "null"}:
+            raise HTTPException(status_code=400, detail="environment_code real é obrigatório.")
 
-        schemas_list = []
-        for s in rows:
-            schema_json = s.get("schema_json") or {}
-            if isinstance(schema_json, str):
-                try: schema_json = json.loads(schema_json)
-                except Exception: schema_json = {}
+        ensure_tenant_tables(db, clean_tenant)
+        scope = "AND dt.company_id = :company_id" if company_id is not None else ""
+        params = {"tenant_id": clean_tenant, "environment_code": normalized_environment}
+        if company_id is not None:
+            params["company_id"] = company_id
 
-            schemas_list.append({
-                "id": s["id"],
-                "mod_code": s.get("mod_code"),
-                "mod_sigla": s.get("mod_sigla"),
-                "chave": s["chave"],
-                "tabela": s["tabela"],
-                "nome": s["nome"],
-                "campos_count": len(schema_json.get("campos", [])) if isinstance(schema_json, dict) else 0,
-                "compartilhamento": schema_json.get("compartilhamento", {}) if isinstance(schema_json, dict) else {}
+        table_rows = db.execute(text(f'''
+            SELECT dt.id, dt.module_code AS mod_code, dt.table_code AS chave,
+                   COALESCE(dt.physical_name, '') AS tabela,
+                   COALESCE(dt.description, '') AS nome,
+                   dt.company_id, dt.company_code, dt.environment_id
+              FROM "{clean_tenant}".dictionary_tables dt
+             WHERE dt.tenant_id = :tenant_id
+               AND dt.environment_id = :environment_code
+               AND dt.active_flag = TRUE
+               {scope}
+             ORDER BY dt.module_code, dt.table_code
+        '''), params).mappings().all()
+
+        field_rows = db.execute(text(f'''
+            SELECT df.table_code, df.field_name, df.title, df.field_type,
+                   df.length_num, df.decimal_num
+              FROM "{clean_tenant}".dictionary_fields df
+             WHERE df.tenant_id = :tenant_id
+               AND df.environment_id = :environment_code
+               {"AND df.company_id = :company_id" if company_id is not None else ""}
+             ORDER BY df.table_code, df.field_name
+        '''), params).mappings().all()
+
+        index_rows = db.execute(text(f'''
+            SELECT di.table_code, di.index_order, di.nickname, di.expression
+              FROM "{clean_tenant}".dictionary_indexes di
+             WHERE di.tenant_id = :tenant_id
+               AND di.environment_id = :environment_code
+               {"AND di.company_id = :company_id" if company_id is not None else ""}
+             ORDER BY di.table_code, di.index_order
+        '''), params).mappings().all()
+
+        fields_by_table: dict[str, list[dict]] = {}
+        for row in field_rows:
+            fields_by_table.setdefault(str(row["table_code"]).upper(), []).append({
+                "campo": row["field_name"],
+                "descricao": row["title"] or "",
+                "tipo": row["field_type"] or "",
+                "tamanho": row["length_num"],
+                "decimal": row["decimal_num"],
+            })
+        indexes_by_table: dict[str, list[dict]] = {}
+        for row in index_rows:
+            indexes_by_table.setdefault(str(row["table_code"]).upper(), []).append({
+                "ordem": row["index_order"],
+                "apelido": row["nickname"] or "",
+                "expressao": row["expression"] or "",
             })
 
-        return {"schemas": schemas_list}
-    except Exception as e:
-        logger.error(f"Erro ao buscar schemas para {clean_tenant}: {e}")
-        return {"schemas": []}
+        schemas_list = []
+        for row in table_rows:
+            table_code = str(row["chave"]).upper()
+            schemas_list.append({
+                "id": row["id"],
+                "mod_code": row["mod_code"],
+                "mod_sigla": None,
+                "chave": row["chave"],
+                "tabela": row["tabela"],
+                "nome": row["nome"],
+                "company_id": row["company_id"],
+                "company_code": row["company_code"],
+                "environment_code": row["environment_id"],
+                "campos_count": len(fields_by_table.get(table_code, [])),
+                "campos": fields_by_table.get(table_code, []),
+                "indices": indexes_by_table.get(table_code, []),
+                "compartilhamento": {},
+            })
+
+        return {
+            "schemas": schemas_list,
+            "source": "dictionary_tables",
+            "tenant": clean_tenant,
+            "environment_code": normalized_environment,
+            "company_id": company_id,
+            "total": len(schemas_list),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Falha ao montar catálogo de schemas do tenant=%s", tenant_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível consultar o catálogo estrutural do tenant.",
+        ) from exc
 
 
 @router.post("/recreate-schema-tables")

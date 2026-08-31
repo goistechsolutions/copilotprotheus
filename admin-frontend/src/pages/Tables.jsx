@@ -15,7 +15,10 @@ export default function Tables() {
   const [syncResult, setSyncResult]   = useState(null);
 
   useEffect(() => { fetchTenants(); }, []);
-  useEffect(() => { if (selectedTenant) fetchSchemas(selectedTenant); }, [selectedTenant]);
+  useEffect(() => {
+    if (selectedTenant && selectedTenant !== 'default') fetchSchemas(selectedTenant);
+    else setSchemas([]);
+  }, [selectedTenant]);
   useEffect(() => {
     const q = search.toLowerCase();
     setFiltered(q ? schemas.filter(s =>
@@ -30,9 +33,17 @@ export default function Tables() {
   };
 
   const fetchSchemas = async (tenantId) => {
+    const target = tenants.find(t => (t.tenant_id || t.protheus_grupo || t.id) === tenantId);
+    const environmentCode = target?.environment_code || target?.protheus_ambientes || target?.environment || '';
+    if (!environmentCode) {
+      setSchemas([]);
+      return;
+    }
     setLoading(true); setSyncResult(null);
     try {
-      const res = await axios.get(`/api/admin/schemas?tenant_id=${tenantId}`);
+      const params = new URLSearchParams({ tenant_id: tenantId, environment_code: environmentCode });
+      if (target?.id) params.set('company_id', String(target.id));
+      const res = await axios.get(`/api/admin/schemas?${params.toString()}`);
       setSchemas(res.data.schemas || []);
     } catch { setSchemas([]); }
     setLoading(false);
