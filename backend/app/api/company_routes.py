@@ -422,14 +422,34 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         pass
 
     clean_tenant = resolve_clean_tenant(db, tenant_code)
+    if not clean_tenant or clean_tenant == "public":
+        raise HTTPException(status_code=400, detail="tenant_id inválido para criação da empresa.")
+
+    # Registra o tenant antes do bootstrap do schema específico.
+    db.execute(text("""
+        INSERT INTO public.tenant (tenant_code, tenant_name, schema_name, status)
+        VALUES (:tenant_code, :tenant_name, :schema_name, 'active')
+        ON CONFLICT (tenant_code) DO UPDATE SET
+            tenant_name = EXCLUDED.tenant_name,
+            schema_name = EXCLUDED.schema_name,
+            status = 'active',
+            updated_at = NOW()
+    """), {
+        "tenant_code": clean_tenant,
+        "tenant_name": (payload.razao_social or payload.company_name).strip(),
+        "schema_name": clean_tenant,
+    })
+    db.commit()
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
 
-    c_code = payload.protheus_empresa
-    b_code = payload.protheus_filial
-    c_name = payload.razao_social
-    c_env  = payload.protheus_ambientes
+    c_code = (payload.protheus_empresa or payload.company_code).strip()
+    b_code = (payload.protheus_filial or payload.branch_code or "").strip()
+    c_name = (payload.razao_social or payload.company_name).strip()
+    c_env  = (payload.protheus_ambientes or payload.environment or "").strip()
+    if not c_code or not b_code or not c_name:
+        raise HTTPException(status_code=400, detail="company_code, branch_code e company_name são obrigatórios.")
 
     upsert_company_info = text(f"""
         INSERT INTO "{clean_tenant}".company_info (
