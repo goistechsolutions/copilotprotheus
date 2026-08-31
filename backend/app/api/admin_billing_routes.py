@@ -20,6 +20,16 @@ from app.models.knowledge import LicensePlan, ProtheusModuleMaster, Tenant, Tena
 router = APIRouter()
 
 
+@router.get("/tenant-options")
+def list_tenant_options(db: Session = Depends(get_db), _admin: str = Depends(verify_admin)):
+    """Retorna apenas identificadores estáveis para selects administrativos."""
+    tenants = db.query(Tenant).filter(Tenant.status.notin_(["inactive", "deleted"])).order_by(Tenant.tenant_code).all()
+    return {"items": [
+        {"id": str(tenant.id), "tenant_code": tenant.tenant_code, "tenant_name": tenant.tenant_name, "status": tenant.status}
+        for tenant in tenants
+    ]}
+
+
 class PlanPayload(BaseModel):
     plan_code: str = Field(min_length=2, max_length=60, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
     plan_name: str = Field(min_length=2, max_length=150)
