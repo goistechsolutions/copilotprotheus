@@ -197,10 +197,13 @@ def filter_allowed_dictionary_tables(
 
     company_filter = ""
     if company_id is not None and "company_id" in columns:
+        # Compatibilidade com snapshots legados que ainda possuem company_id
+        # textual. A comparação textual evita UndefinedFunction (text = integer)
+        # sem alterar ou copiar dados operacionais do Protheus.
         company_filter = """
-            AND (dt.company_id = :company_id OR dt.company_id IS NULL)
+            AND (dt.company_id::text = CAST(:company_id AS text) OR dt.company_id IS NULL)
         """
-        params["company_id"] = int(company_id)
+        params["company_id"] = str(company_id)
 
     active_filter = ""
     if "active_flag" in columns:
