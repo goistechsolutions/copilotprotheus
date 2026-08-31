@@ -723,9 +723,11 @@ class EntitlementGuard:
 
         schema_name = self._clean(tenant_schema).lower()
         schema = quote_tenant_schema(schema_name)
+        # environment_code pertence somente à conexão REST/OAuth2/QueryRest.
+        # O catálogo e suas permissões são relacionais por tenant e empresa;
+        # environment_id não existe mais nas estruturas SX2/SX3/SIX.
         params = {
             "tenant_code": self._lower(tenant_code),
-            "environment_code": self._clean(environment_code),
             "role_id": self._clean(role_id),
             "company_id": self._clean(company_id),
         }
@@ -749,7 +751,6 @@ class EntitlementGuard:
                     SELECT table_name, field_name, can_select, can_filter, masked_flag
                     FROM {schema}.tenant_field_permissions
                     WHERE lower(btrim(tenant_id)) = :tenant_code
-                      AND environment_id = :environment_code
                       {role_match}
                       AND (company_id IS NULL OR company_id::text = :company_id)
                 """),
