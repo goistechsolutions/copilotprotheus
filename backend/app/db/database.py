@@ -663,6 +663,13 @@ TENANT_REQUIRED_COLUMNS = {
     "dictionary_tables": {"tenant_id", "company_code", "table_code", "table_name", "physical_name", "module_code"},
     "dictionary_fields": {"tenant_id", "company_id", "table_code", "table_name", "field_name"},
     "dictionary_indexes": {"tenant_id", "company_id", "table_code", "table_name", "index_order"},
+    # O Agent lê e grava o histórico textual antes de montar o snapshot. Essa
+    # verificação evita considerar um schema legado como pronto quando memories
+    # existe, mas ainda não possui o contrato mínimo usado pelo fluxo.
+    "memories": {
+        "id", "tenant_id", "company_id", "memory_key", "memory_value",
+        "memory_type", "scope", "source", "created_at",
+    },
 }
 
 
@@ -1034,6 +1041,19 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+            -- Compatibilidade aditiva com schemas legados. Não altera dados e
+            -- deixa company_id textual ou inteiro conforme a instalação existente.
+            ALTER TABLE "{clean_tenant}".memories
+                ADD COLUMN IF NOT EXISTS id BIGSERIAL,
+                ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS company_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS memory_key VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS memory_value TEXT,
+                ADD COLUMN IF NOT EXISTS memory_type VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS scope VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS source VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE,
+                ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE;
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".documents (
                 id SERIAL PRIMARY KEY,
                 tenant_id VARCHAR(100) NOT NULL DEFAULT 'default',
