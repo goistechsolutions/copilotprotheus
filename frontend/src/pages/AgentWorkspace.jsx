@@ -185,7 +185,7 @@ export default function AgentWorkspace() {
     } catch {
       // O backend continuará usando o conversation_id da sessão atual.
     }
-  }, [historyStorageKey]);
+  }, [historyStorageKey, conversationId, hasContext]);
 
   useEffect(() => {
     const textMessages = messages
