@@ -1102,7 +1102,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
 def ensure_all_registered_tenant_schemas(db):
     """
     Garante que todos os tenants cadastrados em public.tenant
-    (e, se existir, public.companies) possuam seus schemas criados no PostgreSQL.
+    possuam seus schemas criados no PostgreSQL.
     """
     ensure_public_tables(db)
     tenant_ids = set()
@@ -1111,12 +1111,6 @@ def ensure_all_registered_tenant_schemas(db):
         for row in res1.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]))
-    except Exception:
-        db.rollback()
-    try:
-        res2 = db.execute(text("SELECT tenant_id FROM public.companies WHERE tenant_id IS NOT NULL"))
-        for row in res2.fetchall():
-            if row[0]: tenant_ids.add(str(row[0]))
     except Exception:
         db.rollback()
     try:

@@ -151,7 +151,7 @@ jobs:
       - name: Executar deploy e migrations
         run: |
           ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'DEPLOYCMD'
-            set -e
+            set -Eeuo pipefail
             cd /root/copilotprotheus
 
             echo "📦 Parando containers antigos..."
@@ -190,9 +190,9 @@ jobs:
 
             echo "🔄 Executando migrations SQL..."
             
-            echo "=== Sincronizando senha do banco de dados ==="
-            docker compose exec -T db psql -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -c "ALTER USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';" </dev/null || true
-            
+            echo "=== Validando acesso ao banco ==="
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U copilot -d copilotprotheus -c "SELECT current_database(), current_user;" </dev/null
+
             SQL_COUNT=0
             for sql_file in database/migrations/*.sql; do
               [ -f "$sql_file" ] || { echo "⚠️  Nenhum arquivo SQL encontrado em database/migrations/"; break; }
@@ -202,11 +202,11 @@ jobs:
               docker cp "$sql_file" "$(docker compose ps -q db)":/tmp/"$BASENAME"
               echo "→ Aplicando $BASENAME..."
               docker compose exec -T db psql \
+                -v ON_ERROR_STOP=1 \
                 -U copilot \
                 -d copilotprotheus \
-                -f /tmp/"$BASENAME" </dev/null \
-                && echo "  ✅ $BASENAME aplicado" \
-                || echo "  ⚠️  $BASENAME: já aplicado ou erro não crítico"
+                -f /tmp/"$BASENAME" </dev/null
+              echo "  ✅ $BASENAME aplicado"
             done
             echo "📊 Total de migrations processadas: $SQL_COUNT"
 
