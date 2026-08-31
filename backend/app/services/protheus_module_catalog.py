@@ -215,7 +215,7 @@ def filter_allowed_dictionary_tables(
                 COALESCE(dt.description, dt.table_name) AS description{select_optional}
             FROM {schema}.dictionary_tables dt
             WHERE dt.tenant_id = :tenant_id
-              AND dt.module_code::text = ANY(:module_codes)
+              AND dt.module_code::text = ANY(CAST(:module_codes AS text[]))
               {active_filter}
               {company_filter}
             ORDER BY dt.table_code

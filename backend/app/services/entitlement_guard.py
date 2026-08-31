@@ -228,10 +228,10 @@ class EntitlementGuard:
                   AND lower(btrim(tmc.status)) IN ('active', 'enabled', 'allowed')
                   AND pm.active = TRUE
                   AND (
-                        pm.mod_code::text = :token
-                     OR upper(btrim(COALESCE(pm.mod_sigla, ''))) = :token
-                     OR upper(btrim(COALESCE(pm.mod_sigla, ''))) = 'SIGA' || :token
-                     OR upper(COALESCE(pm.mod_name, '')) LIKE '%' || :token || '%'
+                        pm.mod_code::text = CAST(:token AS text)
+                     OR upper(btrim(COALESCE(pm.mod_sigla, ''))) = CAST(:token AS text)
+                     OR upper(btrim(COALESCE(pm.mod_sigla, ''))) = 'SIGA' || CAST(:token AS text)
+                     OR upper(COALESCE(pm.mod_name, '')) LIKE '%' || CAST(:token AS text) || '%'
                   )
                 LIMIT 1
             """),
