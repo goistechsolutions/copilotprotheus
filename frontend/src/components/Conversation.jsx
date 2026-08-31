@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown';
 import { Bot, User } from 'lucide-react';
 
 export default function Conversation({ messages }) {
