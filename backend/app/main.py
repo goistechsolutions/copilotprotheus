@@ -143,6 +143,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 from app.api.admin_routes import router as admin_router
+from app.api.admin_billing_routes import router as admin_billing_router
 from app.api.auth_routes import router as auth_router
 from app.api.governance_routes import router as governance_router
 from app.api.catalog_v52_routes import router as catalog_v52_router
@@ -156,6 +157,7 @@ app.include_router(company_router, prefix="/api")
 app.include_router(tenant_router, prefix="/api")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(admin_router, prefix="/api/admin")
+app.include_router(admin_billing_router, prefix="/api/admin")
 app.include_router(admin_auth_router)
 app.include_router(governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")

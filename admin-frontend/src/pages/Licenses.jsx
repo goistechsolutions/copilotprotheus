@@ -1,155 +1,60 @@
-import { useState } from 'react';
-import axios from '../api/axios';
-import { Key, Copy, CheckCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, KeyRound, Loader2, Pencil, Plus, RefreshCw, Save, ShieldCheck, Trash2, X } from 'lucide-react';
+import api from '../api/axios';
+import PageHeader from '../components/ui/PageHeader';
+import DataTable from '../components/ui/DataTable';
+import Badge from '../components/ui/Badge';
+
+const EMPTY_PLAN = { plan_code: '', plan_name: '', billing_cycle: 'monthly', query_limit: '', concurrent_sessions_limit: 1, overage_mode: 'block', active: true };
+const EMPTY_CONTRACT = { tenant_id: '', plan_id: '', contract_code: '', contract_status: 'active', starts_at: new Date().toISOString().slice(0, 10), ends_at: '', query_limit_override: '', concurrent_sessions_override: '', overage_mode_override: '', notes: '' };
+
+function messageOf(error, fallback) {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) return detail.map(item => item?.msg || String(item)).join('; ');
+  if (detail && typeof detail === 'object') return detail.message || detail.msg || fallback;
+  return detail || error?.message || fallback;
+}
+
+function Modal({ title, children, onClose }) {
+  return <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-8 backdrop-blur-sm"><div className="w-full max-w-2xl rounded-2xl border border-[#2B3850] bg-[#161B27] shadow-2xl"><div className="flex items-center justify-between border-b border-[#1E2A3D] px-6 py-4"><div><h2 className="text-base font-semibold text-white">{title}</h2><p className="mt-1 text-xs text-[#94A3B8]">Alterações administrativas não persistem dados operacionais do Protheus.</p></div><button onClick={onClose} className="rounded-lg p-1.5 text-[#94A3B8] hover:bg-[#1E2535] hover:text-white"><X className="h-5 w-5" /></button></div>{children}</div></div>;
+}
+
+function Field({ label, children, wide = false }) { return <label className={wide ? 'block md:col-span-2' : 'block'}><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">{label}</span>{children}</label>; }
+function Input({ value, onChange, type = 'text', required = false, placeholder = '', disabled = false }) { return <input type={type} value={value ?? ''} required={required} disabled={disabled} placeholder={placeholder} onChange={event => onChange(event.target.value)} className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2.5 text-sm text-white outline-none placeholder:text-[#64748B] focus:border-[#60A5FA] disabled:cursor-not-allowed disabled:opacity-50" />; }
+function Select({ value, onChange, children }) { return <select value={value ?? ''} onChange={event => onChange(event.target.value)} className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2.5 text-sm text-white outline-none focus:border-[#60A5FA]">{children}</select>; }
+function Button({ children, onClick, type = 'button', disabled = false, secondary = false }) { return <button type={type} onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${secondary ? 'border border-[#2B3850] text-[#CBD5E1] hover:bg-[#1E2535]' : 'bg-[#2563EB] text-white hover:bg-[#1D4ED8]'}`}>{children}</button>; }
+
+function PlanModal({ item, onClose, onSaved }) {
+  const [form, setForm] = useState(item ? { ...item, query_limit: item.query_limit ?? '', concurrent_sessions_limit: item.concurrent_sessions_limit ?? 1 } : EMPTY_PLAN);
+  const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  const set = (key, value) => setForm(previous => ({ ...previous, [key]: value }));
+  const save = async event => { event.preventDefault(); setSaving(true); setError(''); try { const payload = { ...form, query_limit: form.query_limit === '' ? null : Number(form.query_limit), concurrent_sessions_limit: Number(form.concurrent_sessions_limit) }; if (item?.id) await api.put(`/api/admin/license-plans/${item.id}`, payload); else await api.post('/api/admin/license-plans', payload); onSaved(); } catch (e) { setError(messageOf(e, 'Não foi possível salvar o plano.')); } finally { setSaving(false); } };
+  return <Modal title={item ? 'Editar plano' : 'Novo plano'} onClose={onClose}><form onSubmit={save} className="grid gap-4 p-6 md:grid-cols-2"><Field label="Código do plano *"><Input value={form.plan_code} onChange={value => set('plan_code', value)} required placeholder="enterprise" /></Field><Field label="Nome do plano *"><Input value={form.plan_name} onChange={value => set('plan_name', value)} required placeholder="Enterprise" /></Field><Field label="Ciclo de cobrança"><Select value={form.billing_cycle} onChange={value => set('billing_cycle', value)}><option value="monthly">Mensal</option><option value="quarterly">Trimestral</option><option value="annual">Anual</option><option value="one_time">Única</option></Select></Field><Field label="Modo de excedente"><Select value={form.overage_mode} onChange={value => set('overage_mode', value)}><option value="block">Bloquear</option><option value="allow">Permitir</option><option value="charge">Cobrar excedente</option><option value="overage">Registrar excedente</option></Select></Field><Field label="Limite de consultas"><Input type="number" min="0" value={form.query_limit} onChange={value => set('query_limit', value)} placeholder="Vazio = sem limite" /></Field><Field label="Conexões simultâneas *"><Input type="number" min="1" value={form.concurrent_sessions_limit} onChange={value => set('concurrent_sessions_limit', value)} required /></Field><label className="flex items-center gap-2 text-sm text-[#CBD5E1] md:col-span-2"><input type="checkbox" checked={Boolean(form.active)} onChange={event => set('active', event.target.checked)} /> Plano disponível para novos contratos</label>{error && <div className="md:col-span-2 rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2.5 text-sm text-red-200">{error}</div>}<div className="flex justify-end gap-2 border-t border-[#1E2A3D] pt-4 md:col-span-2"><Button secondary onClick={onClose}>Cancelar</Button><Button type="submit" disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar plano</Button></div></form></Modal>;
+}
+
+function ContractModal({ item, plans, tenants, onClose, onSaved }) {
+  const [form, setForm] = useState(item ? { ...item, starts_at: String(item.starts_at || '').slice(0, 10), ends_at: item.ends_at ? String(item.ends_at).slice(0, 10) : '' } : EMPTY_CONTRACT);
+  const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  const set = (key, value) => setForm(previous => ({ ...previous, [key]: value }));
+  const save = async event => { event.preventDefault(); setSaving(true); setError(''); try { const payload = { ...form, plan_id: form.plan_id, ends_at: form.ends_at || null, query_limit_override: form.query_limit_override === '' ? null : Number(form.query_limit_override), concurrent_sessions_override: form.concurrent_sessions_override === '' ? null : Number(form.concurrent_sessions_override), overage_mode_override: form.overage_mode_override || null }; if (item?.id) await api.put(`/api/admin/contracts/${item.id}`, payload); else await api.post('/api/admin/contracts', payload); onSaved(); } catch (e) { setError(messageOf(e, 'Não foi possível salvar o contrato.')); } finally { setSaving(false); } };
+  return <Modal title={item ? 'Editar contrato' : 'Novo contrato'} onClose={onClose}><form onSubmit={save} className="grid gap-4 p-6 md:grid-cols-2"><Field label="Tenant *"><Select value={form.tenant_id} onChange={value => set('tenant_id', value)}><option value="">Selecione um tenant</option>{tenants.map(tenant => <option key={tenant.tenant_code || tenant.id} value={tenant.tenant_code || tenant.id}>{tenant.tenant_name || tenant.name || tenant.tenant_code}</option>)}</Select></Field><Field label="Plano *"><Select value={form.plan_id} onChange={value => set('plan_id', value)}><option value="">Selecione um plano</option>{plans.filter(plan => plan.active || plan.id === form.plan_id).map(plan => <option key={plan.id} value={plan.id}>{plan.plan_code} — {plan.plan_name}</option>)}</Select></Field><Field label="Código do contrato *"><Input value={form.contract_code} onChange={value => set('contract_code', value)} required placeholder="contrato-rodol-2026" /></Field><Field label="Status"><Select value={form.contract_status} onChange={value => set('contract_status', value)}><option value="draft">Rascunho</option><option value="active">Ativo</option><option value="suspended">Suspenso</option><option value="cancelled">Cancelado</option><option value="expired">Expirado</option></Select></Field><Field label="Início *"><Input type="date" value={form.starts_at} onChange={value => set('starts_at', value)} required /></Field><Field label="Fim"><Input type="date" value={form.ends_at} onChange={value => set('ends_at', value)} /></Field><Field label="Limite de consultas (override)"><Input type="number" min="0" value={form.query_limit_override} onChange={value => set('query_limit_override', value)} placeholder="Usar limite do plano" /></Field><Field label="Conexões simultâneas (override)"><Input type="number" min="1" value={form.concurrent_sessions_override} onChange={value => set('concurrent_sessions_override', value)} placeholder="Usar limite do plano" /></Field><Field label="Observações" wide><textarea value={form.notes || ''} onChange={event => set('notes', event.target.value)} rows={3} className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2.5 text-sm text-white outline-none focus:border-[#60A5FA]" /></Field>{error && <div className="md:col-span-2 rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2.5 text-sm text-red-200">{error}</div>}<div className="flex justify-end gap-2 border-t border-[#1E2A3D] pt-4 md:col-span-2"><Button secondary onClick={onClose}>Cancelar</Button><Button type="submit" disabled={saving || !plans.length || !tenants.length}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar contrato</Button></div></form></Modal>;
+}
 
 export default function Licenses() {
-  const [adminKey, setAdminKey] = useState('');
-  const [cnpj, setCnpj] = useState('');
-  const [plan, setPlan] = useState('premium');
-  const [days, setDays] = useState(365);
-  const [token, setToken] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const handleGenerate = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setToken('');
-    
-    // Calcula a data de expiração com base nos dias escolhidos
-    const expiration = new Date();
-    expiration.setDate(expiration.getDate() + parseInt(days));
-    const expirationIso = expiration.toISOString();
-
-    try {
-      const res = await axios.post('/api/license/generate', 
-        {
-          cnpj: cnpj.replace(/[^0-9]/g, ''),
-          expiration_date: expirationIso,
-          plan_level: plan
-        },
-        {
-          headers: { 'X-Admin-Key': adminKey }
-        }
-      );
-      setToken(res.data.token);
-    } catch (error) {
-      alert("Erro ao gerar licença: " + (error.response?.data?.detail || error.message));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Gerador de Licenças Offline</h2>
-        <p className="text-slate-500">Crie tokens JWT seguros para ativar empresas clientes (SaaS) sem necessidade de banco de dados na nuvem para validação.</p>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
-        
-        {/* Formulário */}
-        <div className="p-6 md:w-1/2 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50/50">
-          <form onSubmit={handleGenerate} className="space-y-5">
-            
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Chave Admin (X-Admin-Key)</label>
-              <input 
-                type="password" 
-                required
-                className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
-                placeholder="Insira a ADMIN_PASSWORD"
-                value={adminKey}
-                onChange={e => setAdminKey(e.target.value)}
-              />
-              <p className="text-xs text-slate-500 mt-2 font-medium">Requerido para assinar criptograficamente o JWT.</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">CNPJ da Empresa</label>
-              <input 
-                type="text" 
-                required
-                className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
-                placeholder="Ex: 00.000.000/0001-00"
-                value={cnpj}
-                onChange={e => setCnpj(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nível do Plano</label>
-                <select 
-                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
-                  value={plan}
-                  onChange={e => setPlan(e.target.value)}
-                >
-                  <option value="basic">Básico</option>
-                  <option value="premium">Premium</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Validade (Dias)</label>
-                <input 
-                  type="number" 
-                  min="1"
-                  required
-                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
-                  value={days}
-                  onChange={e => setDays(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-lg font-bold transition-all mt-4 shadow-sm"
-            >
-              <Key size={18} />
-              {loading ? "Gerando..." : "Gerar Token de Licença"}
-            </button>
-          </form>
-        </div>
-
-        {/* Resultado */}
-        <div className="p-6 md:w-1/2 bg-white flex flex-col items-center justify-center min-h-[300px]">
-          {!token ? (
-            <div className="text-center text-slate-400">
-              <Key size={48} className="mx-auto mb-4 opacity-30 text-slate-300" />
-              <p className="font-medium text-slate-500">O token gerado aparecerá aqui.</p>
-            </div>
-          ) : (
-            <div className="w-full h-full flex flex-col">
-              <label className="block text-sm font-bold text-emerald-600 mb-3 flex items-center gap-2">
-                <CheckCircle size={18} /> Licença Gerada com Sucesso!
-              </label>
-              <textarea 
-                readOnly
-                value={token}
-                className="w-full flex-1 p-4 bg-slate-900 text-emerald-400 font-mono text-sm rounded-xl border border-slate-800 focus:outline-none mb-4 resize-none break-all shadow-inner"
-              />
-              <button 
-                onClick={handleCopy}
-                className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-3 rounded-lg transition-colors border border-emerald-200"
-              >
-                {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
-                {copied ? "Copiado para a área de transferência!" : "Copiar Token"}
-              </button>
-            </div>
-          )}
-        </div>
-
-      </div>
-    </div>
-  );
+  const [tab, setTab] = useState('contracts'); const [plans, setPlans] = useState([]); const [contracts, setContracts] = useState([]); const [modules, setModules] = useState([]); const [tenants, setTenants] = useState([]); const [selectedContract, setSelectedContract] = useState(''); const [assigned, setAssigned] = useState([]); const [modal, setModal] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const [planRes, contractRes, moduleRes, tenantRes] = await Promise.all([api.get('/api/admin/license-plans'), api.get('/api/admin/contracts'), api.get('/api/admin/protheus-modules?tenant_id=global'), api.get('/api/tenants')]); setPlans(planRes.data?.items || []); setContracts(contractRes.data?.items || []); setModules(moduleRes.data?.modules || []); setTenants(Array.isArray(tenantRes.data) ? tenantRes.data : tenantRes.data?.items || tenantRes.data?.tenants || []); } catch (e) { setError(messageOf(e, 'Não foi possível carregar o centro de licenciamento.')); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!selectedContract) { setAssigned([]); return; } api.get(`/api/admin/contracts/${selectedContract}/modules`).then(response => setAssigned((response.data?.items || []).map(item => item.module_id))).catch(e => setError(messageOf(e, 'Não foi possível carregar os módulos do contrato.'))); }, [selectedContract]);
+  const selected = useMemo(() => contracts.find(contract => contract.id === selectedContract), [contracts, selectedContract]);
+  const saveModules = async () => { try { await api.put(`/api/admin/contracts/${selectedContract}/modules`, { module_ids: assigned }); setNotice('Módulos do contrato atualizados.'); } catch (e) { setError(messageOf(e, 'Não foi possível atualizar os módulos.')); } };
+  const removePlan = async plan => { if (!window.confirm(`Desativar/excluir o plano ${plan.plan_code}?`)) return; try { await api.delete(`/api/admin/license-plans/${plan.id}`); setNotice('Plano excluído.'); load(); } catch (e) { setError(messageOf(e, 'O plano não pode ser excluído enquanto estiver vinculado.')); } };
+  const removeContract = async contract => { if (!window.confirm(`Excluir o contrato ${contract.contract_code}?`)) return; try { await api.delete(`/api/admin/contracts/${contract.id}`); setNotice('Contrato excluído.'); load(); } catch (e) { setError(messageOf(e, 'O contrato possui vínculos e não pode ser excluído.')); } };
+  const planColumns = [{ key: 'plan_code', label: 'Código', render: value => <span className="font-mono text-xs text-cyan-300">{value}</span> }, { key: 'plan_name', label: 'Plano' }, { key: 'billing_cycle', label: 'Ciclo' }, { key: 'query_limit', label: 'Consultas', render: value => value ?? 'Sem limite' }, { key: 'concurrent_sessions_limit', label: 'Sessões' }, { key: 'active', label: 'Status', render: value => <Badge variant={value ? 'green' : 'yellow'}>{value ? 'Ativo' : 'Inativo'}</Badge> }, { key: 'id', label: 'Ações', render: (_, row) => <div className="flex gap-1"><button onClick={() => setModal({ type: 'plan', item: row })} className="rounded-md p-1.5 text-[#94A3B8] hover:bg-blue-500/10 hover:text-blue-300"><Pencil className="h-3.5 w-3.5" /></button><button onClick={() => removePlan(row)} className="rounded-md p-1.5 text-[#94A3B8] hover:bg-red-500/10 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button></div> }];
+  const contractColumns = [{ key: 'contract_code', label: 'Contrato', render: value => <span className="font-mono text-xs text-cyan-300">{value}</span> }, { key: 'tenant_id', label: 'Tenant' }, { key: 'plan_code', label: 'Plano', render: (value, row) => value || row.plan_name || '—' }, { key: 'starts_at', label: 'Vigência', render: (value, row) => `${String(value || '').slice(0, 10)} → ${row.ends_at ? String(row.ends_at).slice(0, 10) : 'aberto'}` }, { key: 'contract_status', label: 'Status', render: value => <Badge variant={value === 'active' ? 'green' : 'yellow'}>{value}</Badge> }, { key: 'id', label: 'Ações', render: (_, row) => <div className="flex gap-1"><button onClick={() => setModal({ type: 'contract', item: row })} className="rounded-md p-1.5 text-[#94A3B8] hover:bg-blue-500/10 hover:text-blue-300"><Pencil className="h-3.5 w-3.5" /></button><button onClick={() => removeContract(row)} className="rounded-md p-1.5 text-[#94A3B8] hover:bg-red-500/10 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button></div> }];
+  return <div className="space-y-6"><PageHeader title="Planos e contratos" description="Administre licenciamento, franquia, sessões e módulos autorizados por tenant." actions={<><Button secondary onClick={load}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Atualizar</Button>{tab === 'plans' && <Button onClick={() => setModal({ type: 'plan' })}><Plus className="h-4 w-4" />Novo plano</Button>}{tab === 'contracts' && <Button onClick={() => setModal({ type: 'contract' })}><Plus className="h-4 w-4" />Novo contrato</Button>}</>} />
+    {error && <div className="flex items-start gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200"><AlertCircle className="mt-0.5 h-4 w-4" />{error}</div>}{notice && <div className="flex items-start gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"><CheckCircle2 className="mt-0.5 h-4 w-4" />{notice}</div>}
+    <div className="flex flex-wrap gap-2 border-b border-[#1E2A3D] pb-3"><button onClick={() => setTab('contracts')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'contracts' ? 'bg-blue-500/15 text-blue-200' : 'text-[#94A3B8] hover:bg-[#1E2535]'}`}><KeyRound className="mr-2 inline h-4 w-4" />Contratos ({contracts.length})</button><button onClick={() => setTab('plans')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'plans' ? 'bg-blue-500/15 text-blue-200' : 'text-[#94A3B8] hover:bg-[#1E2535]'}`}><ShieldCheck className="mr-2 inline h-4 w-4" />Planos ({plans.length})</button><button onClick={() => setTab('modules')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'modules' ? 'bg-blue-500/15 text-blue-200' : 'text-[#94A3B8] hover:bg-[#1E2535]'}`}><ShieldCheck className="mr-2 inline h-4 w-4" />Módulos contratados</button></div>
+    {loading ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-[#1E2A3D] bg-[#161B27]"><Loader2 className="h-6 w-6 animate-spin text-blue-300" /></div> : tab === 'plans' ? <DataTable columns={planColumns} data={plans} emptyMessage="Nenhum plano cadastrado. Crie o primeiro plano para habilitar contratos." /> : tab === 'contracts' ? <DataTable columns={contractColumns} data={contracts} emptyMessage="Nenhum contrato cadastrado. Crie um contrato para habilitar módulos e usuários." /> : <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]"><section className="rounded-2xl border border-[#1E2A3D] bg-[#161B27] p-5"><h3 className="text-sm font-semibold text-white">Selecione um contrato</h3><p className="mt-1 text-xs text-[#64748B]">Apenas módulos ativos do catálogo global podem ser associados.</p><div className="mt-4"><Select value={selectedContract} onChange={setSelectedContract}><option value="">Selecione um contrato</option>{contracts.map(contract => <option key={contract.id} value={contract.id}>{contract.contract_code} — {contract.tenant_id}</option>)}</Select></div>{selected && <div className="mt-4 space-y-2 text-xs text-[#94A3B8]"><div>Tenant: <strong className="text-white">{selected.tenant_id}</strong></div><div>Plano: <strong className="text-white">{selected.plan_code || selected.plan_name || '—'}</strong></div><div>Status: <Badge variant={selected.contract_status === 'active' ? 'green' : 'yellow'}>{selected.contract_status}</Badge></div></div>}</section><section className="rounded-2xl border border-[#1E2A3D] bg-[#161B27] p-5"><div className="flex items-center justify-between"><div><h3 className="text-sm font-semibold text-white">Módulos autorizados</h3><p className="mt-1 text-xs text-[#64748B]">A seleção controla o escopo do catálogo e do agente.</p></div><Button onClick={saveModules} disabled={!selectedContract}><Save className="h-4 w-4" />Salvar módulos</Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{modules.map(module => <label key={module.id} className="flex items-start gap-3 rounded-xl border border-[#263550] bg-[#0B1220] p-3 text-sm text-[#CBD5E1]"><input type="checkbox" checked={assigned.includes(module.id)} onChange={() => setAssigned(previous => previous.includes(module.id) ? previous.filter(id => id !== module.id) : [...previous, module.id])} /><span><strong className="font-mono text-cyan-300">{module.mod_sigla || module.mod_code}</strong><span className="mt-0.5 block text-xs text-[#64748B]">{module.mod_name}</span></span></label>)}{!modules.length && <p className="text-sm text-[#94A3B8]">O catálogo global está vazio. Importe os módulos na tela de Sincronização.</p>}</div></section></div>}
+    {modal?.type === 'plan' && <PlanModal item={modal.item} onClose={() => setModal(null)} onSaved={() => { setModal(null); setNotice('Plano salvo com sucesso.'); load(); }} />}{modal?.type === 'contract' && <ContractModal item={modal.item} plans={plans} tenants={tenants} onClose={() => setModal(null)} onSaved={() => { setModal(null); setNotice('Contrato salvo com sucesso.'); load(); }} />}
+  </div>;
 }

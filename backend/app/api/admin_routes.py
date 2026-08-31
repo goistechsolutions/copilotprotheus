@@ -38,6 +38,7 @@ from app.db.database import get_db, ensure_tenant_tables
 from app.models.knowledge import (
     AuditLog, Tenant, Company,
     TenantContract,
+    LicensePlan,
     ProtheusModuleMaster,
     User, Role,
     Memory,
@@ -744,6 +745,7 @@ def get_protheus_modules(
     return {
         "modules": [
             {
+                "id":          str(m.id),
                 "mod_code":    m.mod_code,
                 "mod_sigla":   m.mod_sigla,
                 "mod_name":    m.mod_name,
@@ -1497,12 +1499,17 @@ def list_users(
         clean_tenant = resolve_clean_tenant(db, tenant_id)
         q = q.filter((User.tenant_id == clean_tenant) | (User.tenant_id == tenant_id))
     users = q.order_by(User.created_at.desc()).all()
+    role_codes = {
+        str(role.id): role.role_code
+        for role in db.query(Role).all()
+    }
     return [
         {
             "id":        str(u.id),
             "tenant_id": str(u.tenant_id) if u.tenant_id else None,
             "email":     u.email,
             "full_name": u.full_name,
+            "role_code": role_codes.get(str(u.role_id)) if u.role_id else None,
             "status":    u.status,
             "created_at":u.created_at,
         }
@@ -1516,13 +1523,19 @@ def create_user(
     db: Session = Depends(get_db),
     admin: str  = Depends(verify_admin),
 ):
+    clean_tenant = secure_clean_tenant(req.tenant_id)
+    if not clean_tenant or clean_tenant == "public":
+        raise HTTPException(status_code=400, detail="tenant_id inválido.")
+    tenant = db.query(Tenant).filter(Tenant.tenant_code == clean_tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado.")
     if db.query(User).filter(User.email == req.email).first():
         raise HTTPException(status_code=409, detail="E-mail ja cadastrado.")
 
     new_user = User(
-        tenant_id    =req.tenant_id,
-        email        =req.email,
-        full_name    =req.full_name,
+        tenant_id    =clean_tenant,
+        email        =req.email.strip().lower(),
+        full_name    =req.full_name.strip(),
         password_hash=_hash(req.password),
     )
     db.add(new_user)
