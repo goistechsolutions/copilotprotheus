@@ -1,18 +1,35 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  BarChart3,
+  Bell,
+  Bot,
+  Building2,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  FileText,
+  History,
+  MapPin,
+  MessageSquarePlus,
+  Plus,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+} from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
-import ContextBanner from '../components/ContextBanner';
 import Composer from '../components/Composer';
-import SuggestionCards from '../components/SuggestionCards';
 import Conversation from '../components/Conversation';
 import LogViewer from '../components/LogViewer';
 import StructuredResultPanel from '../components/StructuredResultPanel';
-import { BarChart3, Bot, ChevronDown, Plus } from 'lucide-react';
+import SuggestionCards from '../components/SuggestionCards';
 
 const suggestions = [
-  { title: 'Faturamento do mês', subtitle: 'por filial' },
-  { title: 'Títulos vencendo na semana', subtitle: 'contas a pagar' },
-  { title: 'Top 5 produtos', subtitle: 'mais vendidos' },
-  { title: 'Clientes com risco', subtitle: 'inadimplência' },
+  { title: 'Faturamento do mês', subtitle: 'Consolidar dados por filial' },
+  { title: 'Títulos vencendo na semana', subtitle: 'Consultar contas a pagar' },
+  { title: 'Top 5 produtos', subtitle: 'Identificar itens mais vendidos' },
+  { title: 'Clientes com risco', subtitle: 'Analisar inadimplência' },
 ];
 
 function makeConversationId() {
@@ -74,6 +91,29 @@ function readContextFromUrl() {
   };
 }
 
+function StatusPill({ ready }) {
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold ${ready ? 'border-[#ccebd9] bg-[#f0fbf4] text-[#268052]' : 'border-[#f3dfb4] bg-[#fffaf0] text-[#9b7127]'}`}>
+      <span className={`flex h-5 w-5 items-center justify-center rounded-full ${ready ? 'bg-[#2eaa6b] text-white' : 'bg-[#e7b95f] text-white'}`}>
+        {ready ? <Check size={12} strokeWidth={2.5} aria-hidden="true" /> : <CircleAlert size={12} strokeWidth={2.2} aria-hidden="true" />}
+      </span>
+      {ready ? 'Contexto conectado' : 'Contexto incompleto'}
+    </div>
+  );
+}
+
+function ContextChip({ icon: Icon, label, value }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
+      <Icon size={14} className="shrink-0 text-[#6d99bc]" strokeWidth={1.8} aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#99aabd]">{label}</p>
+        <p className="truncate text-[11px] font-semibold text-[#405d78]">{value || 'Não informado'}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
   const [isLogMode, setIsLogMode] = useState(false);
@@ -117,7 +157,7 @@ export default function AgentWorkspace() {
       role: 'assistant',
       text: hasContext
         ? 'Pronto. Posso ajudar com consultas, análises e relatórios.'
-        : 'Pronto. Posso ajudar mesmo sem contexto validado do Protheus.',
+        : 'Pronto. Posso ajudar, mas preciso de um contexto validado do Protheus para consultar dados reais.',
     },
   ]);
 
@@ -138,7 +178,7 @@ export default function AgentWorkspace() {
         setMessages(activeConversation.messages);
         setSelected(activeConversation);
       } else {
-        setMessages([{ role: 'assistant', text: 'Pronto. Posso ajudar com consultas, análises e relatórios.' }]);
+        setMessages([{ role: 'assistant', text: hasContext ? 'Pronto. Posso ajudar com consultas, análises e relatórios.' : 'Pronto. Posso ajudar, mas preciso de um contexto validado do Protheus para consultar dados reais.' }]);
         setSelected(null);
         setResult(null);
       }
@@ -225,8 +265,8 @@ export default function AgentWorkspace() {
     ].filter(([, value]) => !value?.trim()).map(([name]) => name);
 
     if (missingContext.length > 0) {
-      setMessages((messages) => [
-        ...messages,
+      setMessages((currentMessages) => [
+        ...currentMessages,
         {
           role: 'assistant',
           text: `Consulta bloqueada: contexto do Protheus incompleto (${missingContext.join(', ')}). Abra o Copilot dentro do ERP com o ambiente, empresa, filial e módulo selecionados.`,
@@ -235,7 +275,7 @@ export default function AgentWorkspace() {
       return;
     }
 
-    setMessages((m) => [...m, { role: 'user', text }]);
+    setMessages((currentMessages) => [...currentMessages, { role: 'user', text }]);
     setHistory((items) => {
       const next = [
         { id: conversationId, title: text.trim().slice(0, 52), date: 'Agora' },
@@ -277,14 +317,14 @@ export default function AgentWorkspace() {
       else if (res.message) replyMessage = res.message;
       else if (res.answer) replyMessage = res.answer;
 
-      setMessages((m) => [
-        ...m,
+      setMessages((currentMessages) => [
+        ...currentMessages,
         { role: 'assistant', text: replyMessage },
       ]);
-    } catch (e) {
-      setMessages((m) => [
-        ...m,
-        { role: 'assistant', text: `Erro: ${String(e.message || e)}` },
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        { role: 'assistant', text: `Erro: ${String(error.message || error)}` },
       ]);
     }
 
@@ -306,6 +346,7 @@ export default function AgentWorkspace() {
     }
     setResult(null);
     setSelected(item);
+    setIsLogMode(false);
   };
 
   const startNewConversation = () => {
@@ -316,90 +357,200 @@ export default function AgentWorkspace() {
     } catch {
       // Sem persistência local, o id ainda permanece válido nesta sessão.
     }
-    setMessages([{ role: 'assistant', text: 'Nova conversa iniciada.' }]);
+    setMessages([{ role: 'assistant', text: hasContext ? 'Nova conversa iniciada. Como posso ajudar?' : 'Nova conversa iniciada. Valide o contexto do Protheus antes de consultar dados reais.' }]);
     setResult(null);
     setSelected(null);
+    setIsLogMode(false);
   };
 
-  const showWorkspace = Boolean(result);
+  const contextSummary = [context.tenant_id, context.environment, context.company, context.branch, context.module].filter(Boolean).join(' · ');
 
   return (
-    <div className={`flex h-screen w-full flex-col overflow-hidden bg-[#f4f8fc] font-sans text-[#203c60] ${showWorkspace ? 'xl:flex-row' : ''}`}>
-      {showWorkspace && <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f5f9fc] xl:h-full">
-        <header className="z-10 flex shrink-0 items-center justify-between gap-4 border-b border-[#e1eaf2] bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2476bd]">
-              <BarChart3 size={21} strokeWidth={1.8} aria-hidden="true" />
+    <div className="flex min-h-screen w-full flex-col bg-[#edf3f8] font-sans text-[#1d3c5d]">
+      <header className="shrink-0 border-b border-[#dfe8f0] bg-white/95 shadow-[0_1px_10px_rgba(44,78,108,0.04)] backdrop-blur">
+        <div className="mx-auto flex min-h-[72px] w-full max-w-[1680px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex shrink-0 items-center gap-2.5 pr-1 sm:pr-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#edf6fd] text-[#206aa7]">
+              <Sparkles size={19} strokeWidth={1.8} aria-hidden="true" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="truncate text-[15px] font-bold tracking-[-0.01em] text-[#1e3b5e]">Workspace Executivo</h1>
-                <span className="hidden rounded-full bg-[#eff9f3] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#2f835d] sm:inline-flex">Read-only</span>
-              </div>
-              <p className="mt-0.5 truncate text-[11px] text-[#8495a8]">Resultados, relatórios e indicadores gerados pela IA</p>
+            <span className="text-[20px] font-extrabold tracking-[-0.04em] text-[#16466e]">Protheus</span>
+          </div>
+
+          <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
+            <div className="flex min-w-0 max-w-[230px] items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
+              <Building2 size={15} className="shrink-0 text-[#7198b6]" strokeWidth={1.8} aria-hidden="true" />
+              <span className="truncate text-[11px] font-semibold text-[#4c6881]">{context.tenant_id || 'Tenant não informado'}</span>
+              <ChevronDown size={13} className="shrink-0 text-[#99aabd]" aria-hidden="true" />
+            </div>
+            <div className="flex min-w-0 max-w-[210px] items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
+              <MapPin size={15} className="shrink-0 text-[#7198b6]" strokeWidth={1.8} aria-hidden="true" />
+              <span className="truncate text-[11px] font-semibold text-[#4c6881]">{context.branch || 'Filial não informada'}</span>
+              <ChevronDown size={13} className="shrink-0 text-[#99aabd]" aria-hidden="true" />
+            </div>
+            <div className="ml-2 flex min-w-0 max-w-[280px] items-center gap-2 rounded-xl border border-[#e8eef4] bg-[#f8fbfd] px-3 py-2 text-[#9aaabd]">
+              <Search size={15} strokeWidth={1.8} aria-hidden="true" />
+              <span className="truncate text-[11px]">Buscar no sistema...</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <ContextBanner state={state} />
-            <button type="button" onClick={() => setResult(null)} className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#dfe9f2] bg-white px-3 text-[11px] font-semibold text-[#5f7893] transition-colors hover:border-[#bdd7ed] hover:bg-[#f6fbff] sm:flex">
-              Limpar painel
+
+          <div className="ml-auto flex items-center gap-3">
+            <StatusPill ready={state.ready} />
+            <button type="button" aria-label="Notificações" title="Notificações" className="relative hidden h-9 w-9 items-center justify-center rounded-xl text-[#6e8aa3] transition-colors hover:bg-[#f2f7fb] hover:text-[#2e76b5] sm:flex">
+              <Bell size={17} strokeWidth={1.8} aria-hidden="true" />
+              <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e56f55]" aria-hidden="true" />
             </button>
-          </div>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          {isLogMode ? (
-            <LogViewer onClose={() => setIsLogMode(false)} />
-          ) : result ? (
-            <StructuredResultPanel result={result} embedded onClose={() => setResult(null)} />
-          ) : (
-            <div className="flex min-h-full flex-col items-center justify-center px-6 py-16 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-white text-[#8cafc8] shadow-[0_12px_30px_rgba(43,83,119,0.08)]">
-                <BarChart3 size={28} strokeWidth={1.5} aria-hidden="true" />
+            <div className="hidden items-center gap-2 border-l border-[#e7eef4] pl-3 sm:flex">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eaf3fa] text-[#3979aa]">
+                <UserRound size={17} strokeWidth={1.8} aria-hidden="true" />
               </div>
-              <p className="mt-5 text-[15px] font-bold text-[#385873]">Seu painel executivo aparecerá aqui</p>
-              <p className="mt-2 max-w-[410px] text-[12px] leading-relaxed text-[#8295a8]">Faça uma pergunta no Copiloto ao lado. A IA preencherá este espaço com o resumo, KPIs, tabela, gráfico e insights que existirem no resultado real.</p>
-              <div className="mt-6 flex flex-wrap justify-center gap-2 text-[10px] font-semibold text-[#7390a9]">
-                {['Resumo executivo', 'KPIs', 'Tabela filtrável', 'Gráficos', 'Exportação'].map(item => <span key={item} className="rounded-full border border-[#dce8f1] bg-white px-3 py-1.5">{item}</span>)}
+              <div className="hidden min-w-0 lg:block">
+                <p className="max-w-[130px] truncate text-[11px] font-bold text-[#2b4863]">{context.user || 'Usuário atual'}</p>
+                <p className="text-[10px] text-[#92a3b2]">{context.profile}</p>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </main>}
+      </header>
 
-      <aside className={`flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-[#dfe9f2] bg-white ${showWorkspace ? 'h-full xl:h-full xl:w-[420px] xl:border-l' : 'h-full border-t'}`}>
-        <header className="flex shrink-0 items-center justify-between border-b border-[#edf2f7] px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#2879bf]"><Bot size={20} strokeWidth={1.8} aria-hidden="true" /></div>
-            <div>
-              <p className="text-[13px] font-bold text-[#203c60]">Protheus Copiloto</p>
-              <p className="mt-0.5 text-[10px] text-[#8da0b2]">Assistente executivo conectado</p>
+      <div className="mx-auto flex min-h-0 w-full max-w-[1680px] flex-1 flex-col gap-4 p-3 sm:p-5 lg:p-6 xl:flex-row">
+        <main className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-[26px] border border-[#dfe9f1] bg-white shadow-[0_18px_50px_rgba(51,86,117,0.09)] xl:h-[calc(100vh-120px)]">
+          <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#e8eff5] px-5 py-4 sm:px-7 sm:py-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2374b5]">
+                <BarChart3 size={20} strokeWidth={1.8} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="truncate text-[17px] font-extrabold tracking-[-0.025em] text-[#1d3c5d]">Workspace analítico</h1>
+                  <span className="hidden rounded-full bg-[#f0f8f3] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.13em] text-[#37805d] sm:inline-flex">Somente leitura</span>
+                </div>
+                <p className="mt-1 max-w-[680px] truncate text-[11px] text-[#899cac]">Resultados reais do Protheus organizados para análise e decisão</p>
+              </div>
             </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setIsLogMode(true)} className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8] sm:flex">
+                <ShieldCheck size={14} strokeWidth={1.8} aria-hidden="true" /> Diagnóstico
+              </button>
+              {result && !isLogMode && (
+                <button type="button" onClick={() => setResult(null)} className="h-9 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8]">
+                  Limpar painel
+                </button>
+              )}
+            </div>
+          </header>
+
+          <div className="flex shrink-0 flex-wrap gap-2 border-b border-[#eef3f7] bg-[#fcfdff] px-5 py-3 sm:px-7">
+            <ContextChip icon={CalendarDays} label="Ambiente" value={context.environment} />
+            <ContextChip icon={Building2} label="Empresa" value={context.company} />
+            <ContextChip icon={MapPin} label="Filial" value={context.branch} />
+            <ContextChip icon={FileText} label="Módulo" value={context.module} />
           </div>
-          <button type="button" onClick={startNewConversation} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce8f1] bg-white px-3 text-[11px] font-semibold text-[#52718e] transition-colors hover:border-[#bad6ec] hover:bg-[#f5fbff] hover:text-[#2476bd]"><Plus size={14} /> Nova</button>
-        </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          <div className="mb-4"><ContextBanner state={state} /></div>
-          <div className="mb-5 rounded-2xl border border-[#edf2f7] bg-[#fbfdff] p-3">
-            <div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#93a4b4]">Conversas recentes</p><span className="text-[10px] text-[#b0bdc8]">{history.length}</span></div>
-            {history.length ? <div className="space-y-1">{history.slice(0, 5).map(item => <button key={item.id} type="button" onClick={() => selectConversation(item)} className={`block w-full truncate rounded-xl px-3 py-2 text-left text-[11px] transition-colors ${selected?.id === item.id ? 'bg-[#eaf4fc] font-semibold text-[#2476bd]' : 'text-[#607992] hover:bg-[#f1f7fb]'}`}>{item.title}</button>)}</div> : <p className="text-[11px] leading-relaxed text-[#9aaabd]">Suas perguntas aparecerão aqui neste contexto.</p>}
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#fbfdff]">
+            {isLogMode ? (
+              <LogViewer onClose={() => setIsLogMode(false)} />
+            ) : result ? (
+              <StructuredResultPanel result={result} embedded onClose={() => setResult(null)} />
+            ) : (
+              <div className="flex min-h-full flex-col items-center justify-center px-6 py-16 text-center">
+                <div className="flex h-[76px] w-[76px] items-center justify-center rounded-[26px] border border-[#e1edf5] bg-white text-[#8bb1cb] shadow-[0_16px_34px_rgba(45,87,122,0.09)]">
+                  <BarChart3 size={31} strokeWidth={1.5} aria-hidden="true" />
+                </div>
+                <p className="mt-6 text-[16px] font-extrabold tracking-[-0.015em] text-[#345670]">Seu painel aparecerá aqui</p>
+                <p className="mt-2 max-w-[470px] text-[12px] leading-[1.75] text-[#8297aa]">Faça uma pergunta no Copiloto ao lado. As respostas retornadas pelo contexto real do Protheus serão exibidas com resumo, indicadores, tabelas e gráficos quando disponíveis.</p>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {['Resumo executivo', 'Indicadores', 'Tabela filtrável', 'Gráficos', 'Exportação'].map(item => (
+                    <span key={item} className="rounded-full border border-[#dfebf3] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#7892a8]">{item}</span>
+                  ))}
+                </div>
+                {!hasContext && (
+                  <div className="mt-7 flex max-w-[470px] items-start gap-2.5 rounded-2xl border border-[#f1dfb8] bg-[#fffaf0] px-4 py-3 text-left text-[11px] leading-relaxed text-[#8e6d34]">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+                    <span>O contexto ainda não está completo. A consulta será bloqueada até que tenant, ambiente, empresa, filial e módulo sejam validados.</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </main>
+
+        <aside className="flex min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-[#dfe9f1] bg-white shadow-[0_18px_50px_rgba(51,86,117,0.09)] xl:h-[calc(100vh-120px)] xl:w-[420px] xl:shrink-0">
+          <header className="flex shrink-0 items-center justify-between border-b border-[#e8eff5] px-5 py-4 sm:px-6 sm:py-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2679bd]">
+                <Bot size={20} strokeWidth={1.8} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-extrabold tracking-[-0.015em] text-[#203e5e]">Protheus Copiloto</p>
+                <p className="mt-0.5 truncate text-[10px] text-[#91a2b1]">Assistente para consultas seguras</p>
+              </div>
+            </div>
+            <button type="button" onClick={startNewConversation} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce8f1] bg-white px-3 text-[11px] font-bold text-[#52718e] transition-colors hover:border-[#bad6ec] hover:bg-[#f5fbff] hover:text-[#2476bd]" aria-label="Iniciar nova conversa">
+              <Plus size={14} strokeWidth={2} aria-hidden="true" /> Nova
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-5">
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-[#e8f0f5] bg-[#fbfdff] px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${state.ready ? 'bg-[#31ab6c] shadow-[0_0_0_4px_rgba(49,171,108,0.12)]' : 'bg-[#d7a343] shadow-[0_0_0_4px_rgba(215,163,67,0.12)]'}`} aria-hidden="true" />
+                <span className="truncate text-[11px] font-semibold text-[#55718a]">{state.message}</span>
+              </div>
+              <span className="shrink-0 text-[10px] font-semibold text-[#9aaabd]">{context.module || 'Sem módulo'}</span>
+            </div>
+
+            {messages.length <= 1 && !selected && !isLogMode && (
+              <div className="mb-5 rounded-[22px] border border-[#e7eff5] bg-gradient-to-br from-[#f9fcff] to-[#f4f9fd] p-4 sm:p-5">
+                <p className="text-[19px] font-extrabold leading-tight tracking-[-0.025em] text-[#254864]">Olá, como posso ajudar você hoje?</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-[#8297aa]">Escolha uma sugestão ou escreva uma pergunta sobre o contexto ativo.</p>
+              </div>
+            )}
+
+            {messages.length <= 1 && !selected && !isLogMode && (
+              <div className="mb-5">
+                <SuggestionCards items={suggestions} disabled={loading} onPick={(item) => send(item.title)} />
+              </div>
+            )}
+
+            {history.length > 0 && !isLogMode && (
+              <details className="group mb-5 rounded-2xl border border-[#e8eff5] bg-[#fcfdff]" open={messages.length > 1}>
+                <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-3 text-[10px] font-bold uppercase tracking-[0.13em] text-[#91a3b2] [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><History size={14} strokeWidth={1.8} aria-hidden="true" /> Conversas recentes</span>
+                  <ChevronDown size={14} className="transition-transform group-open:rotate-180" strokeWidth={1.8} aria-hidden="true" />
+                </summary>
+                <div className="space-y-1 border-t border-[#edf2f6] px-2.5 py-2.5">
+                  {history.slice(0, 5).map(item => (
+                    <button key={item.id} type="button" onClick={() => selectConversation(item)} className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] transition-colors ${selected?.id === item.id ? 'bg-[#eaf4fc] font-bold text-[#2476bd]' : 'text-[#607992] hover:bg-[#f1f7fb]'}`}>
+                      <MessageSquarePlus size={13} className="shrink-0" strokeWidth={1.8} aria-hidden="true" />
+                      <span className="truncate">{item.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            <Conversation messages={messages} />
+            {loading && (
+              <div className="mt-3 flex items-center gap-2.5 text-[12px] text-[#7790a9]" aria-live="polite">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]"><Bot size={16} className="animate-pulse" strokeWidth={1.8} aria-hidden="true" /></span>
+                <span className="rounded-2xl rounded-bl-md border border-[#e1eaf2] bg-white px-4 py-2.5 shadow-[0_3px_12px_rgba(49,84,117,0.05)]">Consultando o Protheus…</span>
+              </div>
+            )}
+            {selected && (
+              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[#cfe3f4] bg-[#f0f7fd] px-3 py-2.5 text-[11px] text-[#3d6f98]">
+                <ChevronDown size={14} className="rotate-[-90deg]" aria-hidden="true" />
+                Histórico: <strong className="truncate">{selected.title}</strong>
+              </div>
+            )}
           </div>
 
-          {messages.length <= 1 && !selected && (
-            <div className="mb-5"><SuggestionCards items={suggestions} disabled={loading} onPick={(item) => send(item.title)} /></div>
-          )}
-          <Conversation messages={messages} />
-          {loading && <div className="mt-3 flex items-center gap-2.5 text-[12px] text-[#7790a9]" aria-live="polite"><span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]"><Bot size={16} className="animate-pulse" strokeWidth={1.8} aria-hidden="true" /></span><span className="rounded-2xl rounded-bl-md border border-[#e1eaf2] bg-white px-4 py-2.5 shadow-[0_3px_12px_rgba(49,84,117,0.05)]">Consultando o Protheus…</span></div>}
-          {selected && <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[#cfe3f4] bg-[#f0f7fd] px-3 py-2.5 text-[11px] text-[#3d6f98]"><ChevronDown size={14} className="rotate-[-90deg]" aria-hidden="true" /> Histórico: <strong className="truncate">{selected.title}</strong></div>}
-        </div>
-
-        <div className="shrink-0 border-t border-[#e6eef5] bg-white px-4 pb-4 pt-3 sm:px-5">
-          <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." />
-          <p className="mt-2 text-center text-[10px] text-[#a1afbd]">Consultas somente leitura, limitadas ao contexto ativo.</p>
-        </div>
-      </aside>
+          <div className="shrink-0 border-t border-[#e6eef5] bg-white px-4 pb-4 pt-3 sm:px-5">
+            <Composer disabled={loading} onSend={send} placeholder="Faça sua pergunta sobre o Protheus..." />
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-[#9aaabd]"><ShieldCheck size={12} strokeWidth={1.8} aria-hidden="true" /> Consultas somente leitura, limitadas ao contexto ativo.</p>
+            {contextSummary && <span className="sr-only">Contexto atual: {contextSummary}</span>}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
-
