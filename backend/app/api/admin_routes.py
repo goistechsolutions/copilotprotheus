@@ -271,7 +271,7 @@ def _get_active_contract(db: Session, tenant_id: str) -> Optional[TenantContract
 @router.get("/tables")
 def get_tables(
     tenant_id: str,
-    environment_code: Optional[str] = None,
+    company_id: Optional[int] = None,
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin),
 ):
@@ -283,7 +283,10 @@ def get_tables(
         if not clean_tenant or clean_tenant == "public":
             raise HTTPException(status_code=400, detail="tenant_id inválido.")
 
-        normalized_environment = str(environment_code or "").strip() or None
+        company_filter = "AND dt.company_id = :company_id" if company_id is not None else ""
+        params = {"tenant_id": str(tenant_id).strip().lower()}
+        if company_id is not None:
+            params["company_id"] = company_id
         rows = db.execute(
             text(f'''
                 SELECT
@@ -292,23 +295,19 @@ def get_tables(
                     COALESCE(dt.physical_name, '') AS tabela,
                     COALESCE(dt.description, '') AS description,
                     dt.company_code,
-                    dt.environment_id AS environment_code,
                     COUNT(df.id)::int AS field_count
                 FROM "{clean_tenant}".dictionary_tables dt
                 LEFT JOIN "{clean_tenant}".dictionary_fields df
                   ON df.tenant_id = dt.tenant_id
-                 AND df.environment_id = dt.environment_id
+                 AND df.company_id IS NOT DISTINCT FROM dt.company_id
                  AND df.table_code = dt.table_code
                 WHERE dt.tenant_id = :tenant_id
                   AND dt.active_flag = TRUE
-                  AND (:environment_code IS NULL OR dt.environment_id = :environment_code)
+                  {company_filter}
                 GROUP BY dt.module_code, dt.table_code, dt.physical_name,
-                         dt.description, dt.company_code, dt.environment_id
+                         dt.description, dt.company_code
                 ORDER BY dt.module_code, dt.table_code
-            ''').bindparams(
-                tenant_id=str(tenant_id).strip().lower(),
-                environment_code=normalized_environment,
-            )
+            '''), params
         ).mappings().all()
 
         result = [
@@ -318,7 +317,6 @@ def get_tables(
                 "tabela": r["tabela"],
                 "description": r["description"],
                 "company_code": r["company_code"],
-                "environment_code": r["environment_code"],
                 "field_count": r["field_count"],
             }
             for r in rows
@@ -327,7 +325,7 @@ def get_tables(
             "tables": result,
             "source": "dictionary_tables",
             "tenant": str(tenant_id).strip().lower(),
-            "environment_code": normalized_environment,
+            "company_id": company_id,
             "total": len(result),
         }
     except HTTPException:
@@ -842,10 +840,7 @@ def preview_sync_schema(
                 error_code=None if normalized_rows else "EMPTY_METADATA",
             ))
 
-        scope_params = {
-            "tenant_id": clean_tenant,
-            "environment_code": request.environment_code,
-        }
+        scope_params = {"tenant_id": clean_tenant}
         company_filter = ""
         if request.company_id is not None:
             company_filter = " AND company_id = :company_id"
@@ -855,20 +850,17 @@ def preview_sync_schema(
             SELECT table_code, physical_name, module_code, description
               FROM "{clean_tenant}".dictionary_tables
              WHERE tenant_id = :tenant_id
-               AND environment_id = :environment_code
                AND active_flag = TRUE{company_filter}
         '''), scope_params).mappings().all()
         current_fields = db.execute(text(f'''
             SELECT table_code, field_name, title, field_type, length_num, decimal_num
               FROM "{clean_tenant}".dictionary_fields
-             WHERE tenant_id = :tenant_id
-               AND environment_id = :environment_code{company_filter}
+             WHERE tenant_id = :tenant_id{company_filter}
         '''), scope_params).mappings().all()
         current_indexes = db.execute(text(f'''
             SELECT table_code, index_order, nickname, expression
               FROM "{clean_tenant}".dictionary_indexes
-             WHERE tenant_id = :tenant_id
-               AND environment_id = :environment_code{company_filter}
+             WHERE tenant_id = :tenant_id{company_filter}
         '''), scope_params).mappings().all()
 
         incoming_tables = {
@@ -1262,11 +1254,11 @@ async def sync_schema(
             db.execute(
                 text(f"""
                     INSERT INTO "{clean_tenant}".dictionary_tables
-                    (tenant_id, company_id, environment_id, company_code,
+                    (tenant_id, company_id, company_code,
                      table_code, table_name, physical_name, module_code, description)
-                    VALUES (:tenant_id, :cid, :environment_id, :company_code,
+                    VALUES (:tenant_id, :cid, :company_code,
                             :table_code, :table_name, :physical_name, :module_code, :description)
-                    ON CONFLICT (tenant_id, environment_id, table_name)
+                    ON CONFLICT (tenant_id, company_id, table_code)
                     DO UPDATE SET
                         company_id = EXCLUDED.company_id,
                         company_code = EXCLUDED.company_code,
@@ -1280,7 +1272,6 @@ async def sync_schema(
                 {
                     "tenant_id": clean_tenant,
                     "cid": comp_id,
-                    "environment_id": environment_code,
                     "company_code": comp_code,
                     "table_code": chave,
                     "table_name": chave,
@@ -1296,11 +1287,11 @@ async def sync_schema(
                 db.execute(
                     text(f"""
                         INSERT INTO "{clean_tenant}".dictionary_fields
-                        (tenant_id, company_id, environment_id,
+                        (tenant_id, company_id,
                          table_code, table_name, field_name, title, field_type, length_num, decimal_num)
-                        VALUES (:tenant_id, :cid, :environment_id,
+                        VALUES (:tenant_id, :cid,
                                 :table_code, :table_name, :field_name, :title, :field_type, :length_num, :decimal_num)
-                        ON CONFLICT (tenant_id, environment_id, table_name, field_name)
+                        ON CONFLICT (tenant_id, company_id, table_code, field_name)
                         DO UPDATE SET
                             company_id = EXCLUDED.company_id,
                             table_code = EXCLUDED.table_code,
@@ -1313,7 +1304,6 @@ async def sync_schema(
                     {
                         "tenant_id": clean_tenant,
                         "cid": comp_id,
-                        "environment_id": environment_code,
                         "table_code": chave,
                         "table_name": chave,
                         "field_name": str(c.get("campo", "") or "").strip().upper(),
@@ -1342,7 +1332,6 @@ async def sync_schema(
 @router.get("/schemas")
 def get_schemas(
     tenant_id: str,
-    environment_code: str,
     company_id: Optional[int] = None,
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin),
@@ -1352,13 +1341,9 @@ def get_schemas(
         clean_tenant = secure_clean_tenant(str(tenant_id))
         if not clean_tenant or clean_tenant == "public":
             raise HTTPException(status_code=400, detail="tenant_id inválido.")
-        normalized_environment = str(environment_code or "").strip()
-        if not normalized_environment or normalized_environment.lower() in {"default", "none", "null"}:
-            raise HTTPException(status_code=400, detail="environment_code real é obrigatório.")
-
         ensure_tenant_tables(db, clean_tenant)
         scope = "AND dt.company_id = :company_id" if company_id is not None else ""
-        params = {"tenant_id": clean_tenant, "environment_code": normalized_environment}
+        params = {"tenant_id": clean_tenant}
         if company_id is not None:
             params["company_id"] = company_id
 
@@ -1366,10 +1351,9 @@ def get_schemas(
             SELECT dt.id, dt.module_code AS mod_code, dt.table_code AS chave,
                    COALESCE(dt.physical_name, '') AS tabela,
                    COALESCE(dt.description, '') AS nome,
-                   dt.company_id, dt.company_code, dt.environment_id
+                   dt.company_id, dt.company_code
               FROM "{clean_tenant}".dictionary_tables dt
              WHERE dt.tenant_id = :tenant_id
-               AND dt.environment_id = :environment_code
                AND dt.active_flag = TRUE
                {scope}
              ORDER BY dt.module_code, dt.table_code
@@ -1380,7 +1364,6 @@ def get_schemas(
                    df.length_num, df.decimal_num
               FROM "{clean_tenant}".dictionary_fields df
              WHERE df.tenant_id = :tenant_id
-               AND df.environment_id = :environment_code
                {"AND df.company_id = :company_id" if company_id is not None else ""}
              ORDER BY df.table_code, df.field_name
         '''), params).mappings().all()
@@ -1389,7 +1372,6 @@ def get_schemas(
             SELECT di.table_code, di.index_order, di.nickname, di.expression
               FROM "{clean_tenant}".dictionary_indexes di
              WHERE di.tenant_id = :tenant_id
-               AND di.environment_id = :environment_code
                {"AND di.company_id = :company_id" if company_id is not None else ""}
              ORDER BY di.table_code, di.index_order
         '''), params).mappings().all()
@@ -1423,7 +1405,6 @@ def get_schemas(
                 "nome": row["nome"],
                 "company_id": row["company_id"],
                 "company_code": row["company_code"],
-                "environment_code": row["environment_id"],
                 "campos_count": len(fields_by_table.get(table_code, [])),
                 "campos": fields_by_table.get(table_code, []),
                 "indices": indexes_by_table.get(table_code, []),
@@ -1434,7 +1415,6 @@ def get_schemas(
             "schemas": schemas_list,
             "source": "dictionary_tables",
             "tenant": clean_tenant,
-            "environment_code": normalized_environment,
             "company_id": company_id,
             "total": len(schemas_list),
         }

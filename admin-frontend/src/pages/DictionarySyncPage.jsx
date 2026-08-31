@@ -19,7 +19,7 @@ export default function DictionarySyncPage() {
   const payload = useMemo(() => ({
     tenant_id: tenantId.trim(),
     company_id: companyId.trim() || null,
-    environment_id: envId.trim(),
+    environment_code: envId.trim(),
     modules: modules
       ? modules.split(',').map(value => value.trim()).filter(Boolean)
       : null,
@@ -175,7 +175,7 @@ export default function DictionarySyncPage() {
             placeholder="ID da empresa/filial (opcional)"
           />
           <Field
-            label="Environment ID"
+            label="Environment Code (conexão)"
             value={envId}
             onChange={setEnvId}
             placeholder="Código real do ambiente Protheus"
@@ -217,7 +217,7 @@ export default function DictionarySyncPage() {
           <div className="space-y-1">
             <p className="text-emerald-400 text-sm font-medium">Sincronização aceita</p>
             <p className="text-[#8892A4] text-sm">Status: <span className="text-white font-mono">{status.status}</span></p>
-            <p className="text-[#8892A4] text-sm">Ambiente: <span className="text-white font-mono">{status.environment_id}</span></p>
+            <p className="text-[#8892A4] text-sm">Ambiente: <span className="text-white font-mono">{status.environment_code}</span></p>
             <p className="text-[#8892A4]/70 text-xs flex items-center gap-1 mt-1">
               <Info className="w-3.5 h-3.5" /> O progresso deve ser acompanhado nos logs e no catálogo do tenant.
             </p>

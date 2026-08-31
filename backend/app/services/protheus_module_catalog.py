@@ -161,7 +161,6 @@ def filter_allowed_dictionary_tables(
     tenant_schema: str,
     module_codes: Sequence[str],
     company_id: int | None = None,
-    environment_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if not module_codes:
         return []
@@ -203,11 +202,6 @@ def filter_allowed_dictionary_tables(
         """
         params["company_id"] = int(company_id)
 
-    environment_filter = ""
-    if environment_id is not None and "environment_id" in columns:
-        environment_filter = "AND dt.environment_id = :environment_id"
-        params["environment_id"] = str(environment_id)
-
     active_filter = ""
     if "active_flag" in columns:
         active_filter = "AND COALESCE(dt.active_flag, TRUE) = TRUE"
@@ -224,7 +218,6 @@ def filter_allowed_dictionary_tables(
               AND dt.module_code::text = ANY(:module_codes)
               {active_filter}
               {company_filter}
-              {environment_filter}
             ORDER BY dt.table_code
         """),
         params,
@@ -238,7 +231,6 @@ def load_dictionary_fields(
     tenant_schema: str,
     table_code: str | None,
     table_name: str | None,
-    environment_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Lê campos do snapshot sem assumir colunas opcionais de versões antigas."""
     schema_name = str(tenant_schema or "").strip()
@@ -276,16 +268,12 @@ def load_dictionary_fields(
     else:
         return []
 
-    environment_filter = ""
-    if environment_id is not None and "environment_id" in columns:
-        environment_filter = " AND df.environment_id = :environment_id"
-        params["environment_id"] = str(environment_id)
     order_by = "df.id" if "id" in columns else "df.field_name"
     rows = db.execute(
         text(f"""
             SELECT {', '.join(select_parts)}
             FROM {schema}.dictionary_fields df
-            WHERE ({field_scope}){environment_filter}
+            WHERE ({field_scope})
             ORDER BY {order_by}
         """),
         params,

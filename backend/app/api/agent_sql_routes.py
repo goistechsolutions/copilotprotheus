@@ -527,7 +527,6 @@ async def process_agent_task(task_id: str, payload: dict):
                 tenant_schema=ctx.schema_name,
                 module_codes=[ctx.module_code],
                 company_id=ctx.company_id,
-                environment_id=environment_code,
             )
 
             # O LLM recebe campos e índices por leitores compatíveis com snapshots legados.
@@ -539,7 +538,6 @@ async def process_agent_task(task_id: str, payload: dict):
                     tenant_schema=ctx.schema_name,
                     table_code=table_data.get("table_code"),
                     table_name=table_data.get("table_name"),
-                    environment_id=environment_code,
                 )
                 indexes = load_dictionary_indexes(
                     db=db,

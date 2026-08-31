@@ -41,7 +41,7 @@ router = APIRouter(tags=["catalog-v52-governance"])
 
 class SnapshotRequest(BaseModel):
     tenant_id: str = Field(..., min_length=1, max_length=100, description="ID real do tenant")
-    environment_id: str = Field(..., min_length=1, max_length=100, description="Código real do ambiente Protheus")
+    environment_code: str = Field(..., min_length=1, max_length=100, description="Código real do ambiente Protheus")
     company_id: Optional[str] = Field(None, description="ID opcional da empresa/filial")
     modules: Optional[List[str]] = Field(None, description="Módulos Protheus a sincronizar")
     async_mode: bool = Field(False, description="Executar em segundo plano")
@@ -86,28 +86,44 @@ def _read_tenant_schemas(
     mod_sigla: Optional[str] = None,
     chave_filter: Optional[str] = None,
 ) -> list:
-    """Lê tenant_schemas do schema do tenant com filtros opcionais."""
-    conditions = []
-    params: Dict[str, Any] = {}
-
+    """Adapter de compatibilidade: lê o catálogo normalizado, não tenant_schemas."""
+    conditions = ["dt.tenant_id = :tenant_id", "dt.active_flag = TRUE"]
+    params: Dict[str, Any] = {"tenant_id": clean_tenant}
     if mod_sigla:
-        conditions.append("mod_sigla = :mod_sigla")
+        conditions.append("dt.module_code::text = :mod_sigla")
         params["mod_sigla"] = mod_sigla.strip().upper()
-
     if chave_filter:
-        conditions.append("chave ILIKE :chave")
+        conditions.append("dt.table_code ILIKE :chave")
         params["chave"] = f"%{chave_filter.strip().upper()}%"
 
-    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-    sql = (
-        f'SELECT id, mod_code, mod_sigla, chave, tabela, nome, schema_json, updated_at '
-        f'FROM "{clean_tenant}".tenant_schemas {where} ORDER BY mod_code, chave'
-    )
     try:
-        return list(db.execute(text(sql), params).mappings().all())
-    except Exception as e:
-        logger.error(f"Erro ao ler tenant_schemas de {clean_tenant}: {e}")
-        return []
+        rows = db.execute(text(f'''
+            SELECT dt.id, dt.module_code AS mod_code, NULL AS mod_sigla,
+                   dt.table_code AS chave, COALESCE(dt.physical_name, '') AS tabela,
+                   COALESCE(dt.description, '') AS nome, dt.company_id
+              FROM "{clean_tenant}".dictionary_tables dt
+             WHERE {' AND '.join(conditions)}
+             ORDER BY dt.module_code, dt.table_code
+        '''), params).mappings().all()
+        for row in rows:
+            fields = db.execute(text(f'''
+                SELECT field_name AS campo, COALESCE(title, '') AS descricao,
+                       COALESCE(field_type, '') AS tipo, length_num AS tamanho
+                  FROM "{clean_tenant}".dictionary_fields
+                 WHERE tenant_id = :tenant_id
+                   AND table_code = :table_code
+                   AND company_id IS NOT DISTINCT FROM :company_id
+                 ORDER BY field_name
+            '''), {
+                "tenant_id": clean_tenant,
+                "table_code": row["chave"],
+                "company_id": row["company_id"],
+            }).mappings().all()
+            row["schema_json"] = {"campos": [dict(field) for field in fields], "compartilhamento": {}}
+        return [dict(row) for row in rows]
+    except Exception:
+        logger.exception("Erro ao ler catálogo normalizado de %s", clean_tenant)
+        raise HTTPException(status_code=502, detail="Não foi possível ler o catálogo estrutural do tenant.")
 
 
 def _parse_schema_json(raw) -> dict:
@@ -151,11 +167,11 @@ async def trigger_dictionary_snapshot(
     admin: str  = Depends(verify_admin),
 ):
     """Sincroniza o dicionário real do ambiente Protheus informado."""
-    environment_code = req.environment_id.strip()
+    environment_code = req.environment_code.strip()
     if environment_code.lower() in {"default", "none", "null"}:
         raise HTTPException(
             status_code=400,
-            detail="environment_id deve identificar um ambiente Protheus real.",
+            detail="environment_code deve identificar um ambiente Protheus real.",
         )
 
     module_filter = [module.strip() for module in (req.modules or []) if module and module.strip()]
@@ -173,7 +189,7 @@ async def trigger_dictionary_snapshot(
             "status": "processing",
             "message": "Sincronização do dicionário acionada para o ambiente informado.",
             "tenant_id": req.tenant_id,
-            "environment_id": environment_code,
+            "environment_code": environment_code,
         }
 
     try:
@@ -181,7 +197,7 @@ async def trigger_dictionary_snapshot(
         return {
             "status": result.get("status", "done") if isinstance(result, dict) else "done",
             "tenant_id": req.tenant_id,
-            "environment_id": environment_code,
+            "environment_code": environment_code,
             "result": result,
         }
     except RuntimeError as exc:

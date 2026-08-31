@@ -414,7 +414,6 @@ class DictionaryTable(TenantBase):
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("company_info.id", ondelete="CASCADE"), nullable=True)
     tenant_id = Column(String(100), nullable=False)
-    environment_id = Column(String(100), nullable=False)
     company_code = Column(String(20))
     table_code = Column(String(20), nullable=False)
     table_name = Column(String(50), nullable=False)
@@ -429,7 +428,6 @@ class DictionaryField(TenantBase):
     __tablename__ = "dictionary_fields"
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String(100), nullable=False)
-    environment_id = Column(String(100), nullable=False)
     company_id = Column(Integer, nullable=True)
     table_code = Column(String(20), nullable=False)
     table_name = Column(String(50), nullable=False)
@@ -445,7 +443,6 @@ class DictionaryIndex(TenantBase):
     __tablename__ = "dictionary_indexes"
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(String(100), nullable=False)
-    environment_id = Column(String(100), nullable=False)
     company_id = Column(Integer, nullable=True)
     table_code = Column(String(20), nullable=False)
     table_name = Column(String(50), nullable=False)

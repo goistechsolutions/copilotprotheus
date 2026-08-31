@@ -660,9 +660,9 @@ TENANT_REQUIRED_TABLES = {
 }
 
 TENANT_REQUIRED_COLUMNS = {
-    "dictionary_tables": {"tenant_id", "environment_id", "company_code", "table_code", "table_name", "physical_name", "module_code"},
-    "dictionary_fields": {"tenant_id", "environment_id", "table_name", "field_name"},
-    "dictionary_indexes": {"tenant_id", "environment_id", "table_name", "index_order"},
+    "dictionary_tables": {"tenant_id", "company_code", "table_code", "table_name", "physical_name", "module_code"},
+    "dictionary_fields": {"tenant_id", "company_id", "table_code", "table_name", "field_name"},
+    "dictionary_indexes": {"tenant_id", "company_id", "table_code", "table_name", "index_order"},
 }
 
 
@@ -851,7 +851,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 id SERIAL PRIMARY KEY,
                 company_id INT REFERENCES "{clean_tenant}".company_info(id) ON DELETE CASCADE,
                 tenant_id VARCHAR(100),
-                environment_id VARCHAR(100),
                 company_code VARCHAR(20),
                 table_code VARCHAR(20) NOT NULL,
                 table_name VARCHAR(50) NOT NULL,
@@ -865,6 +864,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_fields (
                 id SERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id INT,
                 table_code VARCHAR(10) NOT NULL,
                 field_name VARCHAR(50) NOT NULL,
                 title VARCHAR(100),
@@ -877,6 +878,8 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
             CREATE TABLE IF NOT EXISTS "{clean_tenant}".dictionary_indexes (
                 id SERIAL PRIMARY KEY,
+                tenant_id VARCHAR(100) NOT NULL,
+                company_id INT,
                 table_code VARCHAR(10) NOT NULL,
                 index_order INT NOT NULL,
                 nickname VARCHAR(100),
@@ -906,7 +909,6 @@ def ensure_tenant_tables(db, clean_tenant: str):
         db.execute(text(f"""
             ALTER TABLE "{clean_tenant}".dictionary_tables
                 ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
-                ADD COLUMN IF NOT EXISTS environment_id VARCHAR(100),
                 ADD COLUMN IF NOT EXISTS company_code VARCHAR(20),
                 ADD COLUMN IF NOT EXISTS physical_name VARCHAR(80),
                 ADD COLUMN IF NOT EXISTS active_flag BOOLEAN DEFAULT TRUE,
@@ -924,7 +926,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
             ALTER TABLE "{clean_tenant}".dictionary_fields
                 ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
-                ADD COLUMN IF NOT EXISTS environment_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS company_id INTEGER,
                 ADD COLUMN IF NOT EXISTS table_name VARCHAR(50),
                 ADD COLUMN IF NOT EXISTS required_flag BOOLEAN DEFAULT FALSE,
                 ADD COLUMN IF NOT EXISTS browse_flag BOOLEAN DEFAULT FALSE,
@@ -938,7 +940,7 @@ def ensure_tenant_tables(db, clean_tenant: str):
 
             ALTER TABLE "{clean_tenant}".dictionary_indexes
                 ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100),
-                ADD COLUMN IF NOT EXISTS environment_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS company_id INTEGER,
                 ADD COLUMN IF NOT EXISTS table_name VARCHAR(50),
                 ADD COLUMN IF NOT EXISTS raw_payload JSONB;
             ALTER TABLE "{clean_tenant}".dictionary_indexes ALTER COLUMN table_code DROP NOT NULL;
@@ -1003,12 +1005,12 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 UNIQUE (tenant_id, environment_id, role_id, table_name, field_name)
             );
 
-            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_tables_snapshot"
-                ON "{clean_tenant}".dictionary_tables (tenant_id, environment_id, table_name);
-            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_fields_snapshot"
-                ON "{clean_tenant}".dictionary_fields (tenant_id, environment_id, table_name, field_name);
-            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_indexes_snapshot"
-                ON "{clean_tenant}".dictionary_indexes (tenant_id, environment_id, table_name, index_order);
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_tables_snapshot_v2"
+                ON "{clean_tenant}".dictionary_tables (tenant_id, company_id, table_code);
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_fields_snapshot_v2"
+                ON "{clean_tenant}".dictionary_fields (tenant_id, company_id, table_code, field_name);
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_dictionary_indexes_snapshot_v2"
+                ON "{clean_tenant}".dictionary_indexes (tenant_id, company_id, table_code, index_order);
         """))
         
         # 5. Não remover tabelas legadas/duplicadas durante o bootstrap.
