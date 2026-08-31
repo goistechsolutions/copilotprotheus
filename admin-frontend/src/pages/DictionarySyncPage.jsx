@@ -132,7 +132,7 @@ export default function DictionarySyncPage() {
                 }}
                 className="block w-full cursor-pointer rounded-lg border border-[#2A3850] bg-[#0F1117] text-sm text-[#AAB4C5] file:mr-4 file:border-0 file:bg-[#1D4ED8] file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2196F3]/40"
               />
-              <p className="mt-2 text-[11px] text-[#718096]">Cabeçalho obrigatório: <code className="text-[#AAB4C5]">codigo,sigla,descricao</code> · UTF-8 · até 1 MB</p>
+              <p className="mt-2 text-[11px] text-[#718096]">Cabeçalho aceito: <code className="text-[#AAB4C5]">codigo;sigla;descricao</code> ou <code className="text-[#AAB4C5]">codigo,sigla,descricao</code> · UTF-8 · até 1 MB</p>
             </div>
             <button
               type="button"

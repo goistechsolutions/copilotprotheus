@@ -598,11 +598,15 @@ def _parse_module_catalog_csv(content: bytes) -> list[tuple[int, str, str]]:
     except UnicodeDecodeError as exc:
         raise ModuleCatalogImportError("O CSV deve estar codificado em UTF-8.") from exc
 
-    reader = csv.DictReader(io.StringIO(text_content), delimiter=",")
+    # Exportações do Excel em pt-BR normalmente usam ponto e vírgula;
+    # também aceitamos vírgula para preservar compatibilidade com CSV UTF-8.
+    first_line = next((line for line in text_content.splitlines() if line.strip()), "")
+    delimiter = ";" if first_line.count(";") >= 2 else ","
+    reader = csv.DictReader(io.StringIO(text_content), delimiter=delimiter)
     headers = [str(value or "").strip().lower() for value in (reader.fieldnames or [])]
     if headers != ["codigo", "sigla", "descricao"]:
         raise ModuleCatalogImportError(
-            "Cabeçalho inválido. Use exatamente: codigo,sigla,descricao"
+            "Cabeçalho inválido. Use: codigo;sigla;descricao ou codigo,sigla,descricao"
         )
 
     records = []

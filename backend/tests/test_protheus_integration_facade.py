@@ -63,3 +63,33 @@ def test_metadata_normalization_discards_incomplete_rows():
         "decimal_num": None,
         "sxg_group": "",
     }]
+
+
+def test_module_catalog_csv_accepts_pt_br_semicolon_delimiter():
+    from app.api.admin_routes import _parse_module_catalog_csv
+
+    records = _parse_module_catalog_csv(
+        "\ufeffcodigo;sigla;descricao\n01;SIGAATF;Ativo Fixo\n02;SIGACOM;Compras\n".encode("utf-8")
+    )
+
+    assert records == [
+        (1, "SIGAATF", "Ativo Fixo"),
+        (2, "SIGACOM", "Compras"),
+    ]
+
+
+def test_module_catalog_csv_still_accepts_comma_delimiter():
+    from app.api.admin_routes import _parse_module_catalog_csv
+
+    records = _parse_module_catalog_csv(
+        "codigo,sigla,descricao\n1,SIGAATF,Ativo Fixo\n".encode("utf-8")
+    )
+
+    assert records == [(1, "SIGAATF", "Ativo Fixo")]
+
+
+def test_module_catalog_csv_rejects_unexpected_header():
+    from app.api.admin_routes import ModuleCatalogImportError, _parse_module_catalog_csv
+
+    with pytest.raises(ModuleCatalogImportError, match="Cabeçalho inválido"):
+        _parse_module_catalog_csv(b"codigo;nome;descricao\n1;SIGAATF;Ativo Fixo\n")
