@@ -696,7 +696,8 @@ async def import_protheus_modules(
                 },
             )
 
-        code_list = ", ".join(str(code) for code in sorted(codes_seen))
+        imported_codes = sorted({code for code, _sigla, _description in records})
+        code_list = ", ".join(str(code) for code in imported_codes)
         db.execute(
             text(f"""
                 UPDATE public.protheus_modules_master

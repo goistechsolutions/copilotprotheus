@@ -42,7 +42,11 @@ export default function DictionarySyncPage() {
     try {
       const formData = new FormData();
       formData.append('file', moduleFile);
-      const { data } = await api.post('/api/admin/protheus-modules/import', formData);
+      const { data } = await api.post('/api/admin/protheus-modules/import', formData, {
+        // Permite que o navegador defina multipart/form-data com o boundary correto.
+        // O cliente Axios possui JSON como padrão para as demais requisições.
+        headers: { 'Content-Type': undefined },
+      });
       setModuleImportResult(data);
     } catch (e) {
       const detail = e.response?.data?.detail;
