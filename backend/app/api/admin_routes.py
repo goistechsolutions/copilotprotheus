@@ -731,7 +731,7 @@ async def import_protheus_modules(
 
 @router.get("/protheus-modules")
 def get_protheus_modules(
-    tenant_id: str,
+    tenant_id: Optional[str] = None,
     db: Session   = Depends(get_db),
     admin: str    = Depends(verify_admin),
 ):
