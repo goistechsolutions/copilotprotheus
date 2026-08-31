@@ -221,21 +221,20 @@ async def _request_password_token(
 ) -> ProtheusToken:
     token_url = _token_url(base_rest_url)
 
-    # 1. Opção B (Padrão TOTVS Form-Urlencoded no Body sem parâmetros na URL)
+    # 1. Contrato oficial TOTVS: grant_type na query e credenciais somente
+    # no endpoint /token, via headers. Essas credenciais nunca são usadas no
+    # QueryRest.
     response = await client.post(
         token_url,
+        params={"grant_type": "password"},
         headers={
             "Accept": "application/json",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data={
-            "grant_type": "password",
             "username": username,
             "password": password,
         },
     )
 
-    # 2. Opção A (Form-Urlencoded com grant_type na URL)
+    # 2. Compatibilidade com releases que exigem form-urlencoded no body
     if response.status_code >= 400:
         try:
             response_alt = await client.post(
@@ -255,7 +254,7 @@ async def _request_password_token(
         except Exception:
             pass
 
-    # 3. Opção C (JSON body se o AppServer estiver configurado para JSON)
+    # 3. Compatibilidade adicional com AppServer configurado para JSON
     if response.status_code >= 400:
         try:
             response_json = await client.post(
