@@ -214,14 +214,26 @@ def replace_contract_modules(contract_id: UUID, payload: ContractModulePayload, 
         if len(available) != len(module_ids):
             raise HTTPException(status_code=400, detail="Um ou mais módulos não estão ativos no catálogo global.")
     try:
-        db.execute(text("DELETE FROM public.tenant_module_contracts WHERE contract_id = :contract_id"), {"contract_id": str(contract_id)})
+        db.execute(
+            text("DELETE FROM public.tenant_module_contracts WHERE contract_id = CAST(:contract_id AS uuid)"),
+            {"contract_id": str(contract_id)},
+        )
         for module_id in module_ids:
+            # id e created_at são gerados pelos defaults do banco. Isso evita
+            # binding de UUID no cliente e mantém a geração centralizada.
             db.execute(text("""
-                INSERT INTO public.tenant_module_contracts (id, tenant_id, contract_id, module_id, status, created_at, updated_at)
-                VALUES (:id, :tenant_id, :contract_id, :module_id, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            """), {"id": str(uuid4()), "tenant_id": contract.tenant_id, "contract_id": str(contract_id), "module_id": module_id})
+                INSERT INTO public.tenant_module_contracts
+                    (tenant_id, contract_id, module_id, status, created_at)
+                VALUES
+                    (:tenant_id, CAST(:contract_id AS uuid), CAST(:module_id AS uuid), 'active', CURRENT_TIMESTAMP)
+            """), {
+                "tenant_id": contract.tenant_id,
+                "contract_id": str(contract_id),
+                "module_id": module_id,
+            })
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Não foi possível atualizar os módulos do contrato.")
+        logger.exception("Falha ao substituir módulos do contrato", extra={"contract_id": str(contract_id)})
+        raise HTTPException(status_code=409, detail="Não foi possível atualizar os módulos do contrato; verifique o schema e as constraints do catálogo.") from exc
     return {"success": True, "modules_assigned": len(module_ids)}
