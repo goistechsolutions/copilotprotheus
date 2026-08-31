@@ -291,7 +291,7 @@ def _load_conversation_history(
             SELECT memory_key, memory_value
               FROM {schema}.memories
              WHERE tenant_id = :tenant_id
-               AND company_id = :company_id
+               AND company_id::text = CAST(:company_id AS text)
                AND memory_type = 'conversation_turn'
                AND scope = :conversation_id
                AND source = :actor_key
@@ -300,7 +300,10 @@ def _load_conversation_history(
         """),
         {
             "tenant_id": tenant_id,
-            "company_id": int(company_id),
+            # O schema histórico pode armazenar company_id como INTEGER ou
+            # VARCHAR(100). O cast no SQL e o valor textual mantêm o filtro
+            # compatível sem cruzar o escopo de tenant/empresa.
+            "company_id": str(company_id),
             "conversation_id": conversation_id,
             "actor_key": actor_key,
             "limit": limit,
@@ -337,8 +340,10 @@ def _append_conversation_turn(
                  'conversation_turn', :conversation_id, :actor_key)
         """),
         {
+            # String numérica é aceita tanto por instalações com company_id
+            # INTEGER quanto por schemas legados com company_id textual.
             "tenant_id": tenant_id,
-            "company_id": int(company_id),
+            "company_id": str(company_id),
             "role": role,
             "content": str(content).strip()[:4000],
             "conversation_id": conversation_id,
