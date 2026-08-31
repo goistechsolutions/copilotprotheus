@@ -262,32 +262,73 @@ def _get_active_contract(db: Session, tenant_id: str) -> Optional[TenantContract
 @router.get("/tables")
 def get_tables(
     tenant_id: str,
+    environment_code: Optional[str] = None,
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin),
 ):
-    """Retorna tabelas carregadas no schema do tenant (V5: tenant_schemas)."""
-    from app.db.database import ensure_tenant_tables, resolve_clean_tenant
-    clean_tenant = resolve_clean_tenant(db, tenant_id)
+    """Retorna somente tabelas SX2 publicadas no catálogo canônico do tenant."""
+    from app.db.database import resolve_clean_tenant
 
     try:
+        clean_tenant = resolve_clean_tenant(db, tenant_id)
+        if not clean_tenant or clean_tenant == "public":
+            raise HTTPException(status_code=400, detail="tenant_id inválido.")
+
+        normalized_environment = str(environment_code or "").strip() or None
         rows = db.execute(
-            text(f'SELECT mod_code, mod_sigla, chave, tabela, nome FROM "{clean_tenant}".tenant_schemas ORDER BY mod_code, chave')
+            text(f'''
+                SELECT
+                    dt.module_code AS mod_code,
+                    dt.table_code AS alias,
+                    COALESCE(dt.physical_name, '') AS tabela,
+                    COALESCE(dt.description, '') AS description,
+                    dt.company_code,
+                    dt.environment_id AS environment_code,
+                    COUNT(df.id)::int AS field_count
+                FROM "{clean_tenant}".dictionary_tables dt
+                LEFT JOIN "{clean_tenant}".dictionary_fields df
+                  ON df.tenant_id = dt.tenant_id
+                 AND df.environment_id = dt.environment_id
+                 AND df.table_code = dt.table_code
+                WHERE dt.tenant_id = :tenant_id
+                  AND dt.active_flag = TRUE
+                  AND (:environment_code IS NULL OR dt.environment_id = :environment_code)
+                GROUP BY dt.module_code, dt.table_code, dt.physical_name,
+                         dt.description, dt.company_code, dt.environment_id
+                ORDER BY dt.module_code, dt.table_code
+            ''').bindparams(
+                tenant_id=str(tenant_id).strip().lower(),
+                environment_code=normalized_environment,
+            )
         ).mappings().all()
 
         result = [
             {
-                "mod_code":    r["mod_code"],
-                "mod_sigla":   r["mod_sigla"],
-                "alias":       r["chave"],
-                "tabela":      r["tabela"] or "",
-                "description": r["nome"] or "",
+                "mod_code": r["mod_code"],
+                "alias": r["alias"],
+                "tabela": r["tabela"],
+                "description": r["description"],
+                "company_code": r["company_code"],
+                "environment_code": r["environment_code"],
+                "field_count": r["field_count"],
             }
             for r in rows
         ]
-        return {"tables": result, "source": "v5", "tenant": clean_tenant, "total": len(result)}
-    except Exception as e:
-        logger.error(f"Erro ao buscar tabelas do schema {clean_tenant}: {e}")
-        return {"tables": [], "source": "v5", "tenant": clean_tenant, "total": 0}
+        return {
+            "tables": result,
+            "source": "dictionary_tables",
+            "tenant": str(tenant_id).strip().lower(),
+            "environment_code": normalized_environment,
+            "total": len(result),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Falha ao consultar catálogo de tabelas do tenant=%s", tenant_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível consultar o catálogo estrutural do tenant.",
+        ) from exc
 
 
 class TableItem(BaseModel):
