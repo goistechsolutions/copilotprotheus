@@ -104,10 +104,10 @@ def resolve_tenant_module_codes(
                 module_code::text AS module_code
             FROM {schema}.dictionary_tables
             WHERE tenant_id = :tenant_id
-              AND module_code::text = :mod_code
+              AND module_code::text = CAST(:mod_code AS text)
               AND COALESCE(active_flag, TRUE) = TRUE
         """),
-        {"tenant_id": str(tenant_schema), "mod_code": resolved["mod_code"]},
+        {"tenant_id": str(tenant_schema), "mod_code": str(resolved["mod_code"])},
     ).mappings().all()
 
     return [str(row["module_code"]) for row in rows]

@@ -210,7 +210,9 @@ async def dashboard_stats(
     except Exception:
         tenants = 0
     try:
-        users = db.execute(text("SELECT COUNT(*) FROM agent_users")).scalar() or 0
+        # agent_users era uma tabela legada e pode não existir após a
+        # reconstrução do schema. O cadastro canônico de usuários é public.users.
+        users = db.execute(text("SELECT COUNT(*) FROM public.users")).scalar() or 0
     except Exception:
         users = 0
     try:
