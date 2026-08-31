@@ -364,6 +364,7 @@ export default function AgentWorkspace() {
   };
 
   const contextSummary = [context.tenant_id, context.environment, context.company, context.branch, context.module].filter(Boolean).join(' · ');
+  const showWorkspace = Boolean(result || isLogMode);
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f4f8fb] font-sans text-[#1d3c5d]">
@@ -412,8 +413,8 @@ export default function AgentWorkspace() {
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1680px] flex-1 flex-col gap-5 p-3 sm:p-5 lg:p-6 xl:flex-row">
-        <main className="agent-panel flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border bg-white xl:h-[calc(100vh-120px)]">
+      <div className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-5 p-3 sm:p-5 lg:p-6 ${showWorkspace ? 'max-w-[1680px]' : 'max-w-[760px]'}`}>
+        {showWorkspace && <main className="agent-panel flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border bg-white xl:h-[calc(100vh-120px)]">
           <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#e8eff5] px-5 py-4 sm:px-7 sm:py-5">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2374b5]">
@@ -431,9 +432,9 @@ export default function AgentWorkspace() {
               <button type="button" onClick={() => setIsLogMode(true)} className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8] sm:flex">
                 <ShieldCheck size={14} strokeWidth={1.8} aria-hidden="true" /> Diagnóstico
               </button>
-              {result && !isLogMode && (
-                <button type="button" onClick={() => setResult(null)} className="h-9 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8]">
-                  Limpar painel
+              {showWorkspace && (
+                <button type="button" onClick={() => { setResult(null); setIsLogMode(false); }} className="h-9 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8]">
+                  Voltar ao chat
                 </button>
               )}
             </div>
@@ -472,9 +473,9 @@ export default function AgentWorkspace() {
               </div>
             )}
           </div>
-        </main>
+        </main>}
 
-        <aside className="agent-panel flex min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-3xl border bg-white xl:sticky xl:top-[96px] xl:h-[calc(100vh-120px)] xl:w-[420px] xl:shrink-0">
+        {!showWorkspace && <aside className="agent-panel flex min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-3xl border bg-white xl:sticky xl:top-[96px] xl:h-[calc(100vh-120px)] xl:w-[420px] xl:shrink-0">
           <header className="flex shrink-0 items-center justify-between border-b border-[#e8eff5] px-5 py-4 sm:px-6 sm:py-5">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2679bd]">
@@ -549,7 +550,7 @@ export default function AgentWorkspace() {
             <p className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-[#9aaabd]"><ShieldCheck size={12} strokeWidth={1.8} aria-hidden="true" /> Consultas somente leitura, limitadas ao contexto ativo.</p>
             {contextSummary && <span className="sr-only">Contexto atual: {contextSummary}</span>}
           </div>
-        </aside>
+        </aside>}
       </div>
     </div>
   );
