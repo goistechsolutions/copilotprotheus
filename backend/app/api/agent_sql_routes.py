@@ -14,6 +14,7 @@ import time
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 
 from app.db.database import get_db, SessionLocal
 from app.core.config import settings
@@ -77,7 +78,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 9. Filtros de negócio usuais, como F2_TIPO='N' ou F4_DUPLIC='S', só podem ser usados quando o campo estiver no snapshot e forem pertinentes ao pedido.
 10. Nunca acessar campos marcados como sigilosos/mascarados e nunca retornar senha, token, JWT, secret, certificado ou chave.
 11. Contexto operacional: empresa='{empresa}', filial='{filial}', XFILIAL='{xfilial}'. Se o snapshot não sustentar a regra necessária, informe a impossibilidade em vez de fabricar SQL.
-12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant/ambiente.
+12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant, empresa e filial. O environment_code identifica exclusivamente a conexão/API e não deve ser usado para relacionar tabelas, campos ou índices.
 13. O snapshot SX3 é a única fonte de campos físicos. Um identificador com aparência Protheus, como F1_TOTAL, não é campo válido se não estiver listado em FIELD para a tabela. Para totais calculados, use SUM/COUNT/AVG somente sobre um campo físico listado e atribua um alias de apresentação explícito com AS; o alias não pode ser usado como campo físico, filtro ou chave de JOIN."""
 
     domain = _infer_query_domain(prompt)
@@ -848,6 +849,15 @@ async def process_agent_task(task_id: str, payload: dict):
     except HTTPException as e:
         AGENT_TASKS[task_id] = {"status": "error", "error": e.detail, "correlation_id": correlation_id}
         logger.warning("agent_task_failed task_id=%s status=%s", task_id, e.status_code)
+    except ProgrammingError as e:
+        db_error = str(e).splitlines()[0][:240]
+        logger.error("agent_task_failed task_id=%s error_type=ProgrammingError db_error=%s", task_id, db_error)
+        AGENT_TASKS[task_id] = {
+            "status": "error",
+            "error": "O catálogo ou o schema do banco está incompatível com a versão do backend.",
+            "error_code": "DATABASE_SCHEMA_MISMATCH",
+            "correlation_id": correlation_id,
+        }
     except Exception as e:
         logger.error("agent_task_failed task_id=%s error_type=%s", task_id, type(e).__name__)
         AGENT_TASKS[task_id] = {"status": "error", "error": "Falha interna ao processar a tarefa.", "correlation_id": correlation_id}
