@@ -366,8 +366,8 @@ export default function AgentWorkspace() {
   const contextSummary = [context.tenant_id, context.environment, context.company, context.branch, context.module].filter(Boolean).join(' · ');
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-[#edf3f8] font-sans text-[#1d3c5d]">
-      <header className="shrink-0 border-b border-[#dfe8f0] bg-white/95 shadow-[0_1px_10px_rgba(44,78,108,0.04)] backdrop-blur">
+    <div className="flex min-h-screen w-full flex-col bg-[#f4f8fb] font-sans text-[#1d3c5d]">
+      <header className="sticky top-0 z-30 shrink-0 border-b border-[#dfe8f0] bg-white/90 shadow-[0_1px_10px_rgba(44,78,108,0.04)] backdrop-blur-xl">
         <div className="mx-auto flex min-h-[72px] w-full max-w-[1680px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex shrink-0 items-center gap-2.5 pr-1 sm:pr-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#edf6fd] text-[#206aa7]">
@@ -412,8 +412,8 @@ export default function AgentWorkspace() {
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1680px] flex-1 flex-col gap-4 p-3 sm:p-5 lg:p-6 xl:flex-row">
-        <main className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-[26px] border border-[#dfe9f1] bg-white shadow-[0_18px_50px_rgba(51,86,117,0.09)] xl:h-[calc(100vh-120px)]">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1680px] flex-1 flex-col gap-5 p-3 sm:p-5 lg:p-6 xl:flex-row">
+        <main className="agent-panel flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border bg-white xl:h-[calc(100vh-120px)]">
           <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#e8eff5] px-5 py-4 sm:px-7 sm:py-5">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2374b5]">
@@ -446,7 +446,7 @@ export default function AgentWorkspace() {
             <ContextChip icon={FileText} label="Módulo" value={context.module} />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#fbfdff]">
+          <div className="agent-surface min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#fbfdff]">
             {isLogMode ? (
               <LogViewer onClose={() => setIsLogMode(false)} />
             ) : result ? (
@@ -474,7 +474,7 @@ export default function AgentWorkspace() {
           </div>
         </main>
 
-        <aside className="flex min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-[#dfe9f1] bg-white shadow-[0_18px_50px_rgba(51,86,117,0.09)] xl:h-[calc(100vh-120px)] xl:w-[420px] xl:shrink-0">
+        <aside className="agent-panel flex min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-3xl border bg-white xl:sticky xl:top-[96px] xl:h-[calc(100vh-120px)] xl:w-[420px] xl:shrink-0">
           <header className="flex shrink-0 items-center justify-between border-b border-[#e8eff5] px-5 py-4 sm:px-6 sm:py-5">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2679bd]">
@@ -490,7 +490,7 @@ export default function AgentWorkspace() {
             </button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-5">
+          <div className="agent-surface min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-5">
             <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-[#e8f0f5] bg-[#fbfdff] px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${state.ready ? 'bg-[#31ab6c] shadow-[0_0_0_4px_rgba(49,171,108,0.12)]' : 'bg-[#d7a343] shadow-[0_0_0_4px_rgba(215,163,67,0.12)]'}`} aria-hidden="true" />
