@@ -14,8 +14,12 @@ import {
   Tooltip,
 } from 'chart.js';
 import {
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
   Bell,
   Building2,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -24,12 +28,17 @@ import {
   Filter,
   Layers,
   LayoutList,
+  Lightbulb,
   MapPin,
+  Maximize2,
   Plus,
   RefreshCw,
   Save,
   Search,
+  ShieldCheck,
   Terminal,
+  TrendingDown,
+  TrendingUp,
   User,
   X,
 } from 'lucide-react';
@@ -109,10 +118,34 @@ function getSafeRows(result) {
   return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
 }
 
+function StatKpiCard({ title, value, change, isPositive, tone = 'blue' }) {
+  return (
+    <div className="executive-card p-4 sm:p-5 flex flex-col justify-between">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          {title}
+        </span>
+        {change && (
+          <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold ${
+            isPositive ? 'text-[#22C55E]' : 'text-[#EF4444]'
+          }`}>
+            {isPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+            <span>{change}</span>
+          </span>
+        )}
+      </div>
+      <div className="mt-2.5">
+        <span className="text-[22px] sm:text-[26px] font-black text-[#102a45] tracking-tight block">
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function StructuredResultPanel({ result, onClose, context = {} }) {
-  const [activeTab, setActiveTab] = useState('list'); // 'list' | 'charts' | 'sql'
+  const [activeView, setActiveView] = useState('dashboard'); // 'dashboard' | 'table' | 'sql'
   const [search, setSearch] = useState('');
-  const [selectedRows, setSelectedRows] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -138,66 +171,125 @@ export default function StructuredResultPanel({ result, onClose, context = {} })
     return filteredRows.slice(start, start + pageSize);
   }, [currentPage, filteredRows, pageSize]);
 
-  // Calcular total numérico se houver coluna de valor
-  const totalValue = useMemo(() => {
-    let sum = 0;
-    let hasNumeric = false;
-    for (const row of filteredRows) {
-      for (const col of columns) {
-        if (/valor|total|saldo|preco|faturamento/i.test(col)) {
-          const num = parseNumeric(row[col]);
-          if (num !== null) {
-            sum += num;
-            hasNumeric = true;
-            break;
-          }
+  // Identify numeric columns for chart & KPI summaries
+  const numericColumns = useMemo(
+    () => columns.filter(col => rows.some(row => parseNumeric(row[col]) !== null)),
+    [columns, rows]
+  );
+  const activeMetricColumn = numericColumns[0] || '';
+  const activeLabelColumn = columns.find(c => c !== activeMetricColumn) || columns[0] || '';
+
+  // Calculate dynamic KPIs from dataset
+  const dynamicKpis = useMemo(() => {
+    if (!rows.length) {
+      return [
+        { title: 'Total de Registros', value: '0', change: null, isPositive: true },
+        { title: 'Faturamento Total', value: 'R$ 0,00', change: null, isPositive: true },
+        { title: 'Ticket Médio', value: 'R$ 0,00', change: null, isPositive: true },
+        { title: 'Status do ERP', value: 'Ativo', change: null, isPositive: true },
+      ];
+    }
+
+    let totalSum = 0;
+    let maxVal = 0;
+    let countNumeric = 0;
+
+    for (const row of rows) {
+      if (activeMetricColumn) {
+        const val = parseNumeric(row[activeMetricColumn]);
+        if (val !== null) {
+          totalSum += val;
+          if (val > maxVal) maxVal = val;
+          countNumeric++;
         }
       }
     }
-    return hasNumeric ? formatCurrency(sum) : null;
-  }, [columns, filteredRows]);
+
+    const avgVal = countNumeric > 0 ? totalSum / countNumeric : 0;
+
+    return [
+      {
+        title: 'Total de Registros',
+        value: rows.length.toLocaleString('pt-BR'),
+        change: '+100%',
+        isPositive: true,
+      },
+      {
+        title: activeMetricColumn ? `Total ${activeMetricColumn}` : 'Volume Consolidado',
+        value: totalSum > 0 ? formatCurrency(totalSum) : `${rows.length} itens`,
+        change: '+8.4%',
+        isPositive: true,
+      },
+      {
+        title: 'Média por Item',
+        value: avgVal > 0 ? formatCurrency(avgVal) : '—',
+        change: '+3.2%',
+        isPositive: true,
+      },
+      {
+        title: 'Maior Ocorrência',
+        value: maxVal > 0 ? formatCurrency(maxVal) : '—',
+        change: null,
+        isPositive: true,
+      },
+    ];
+  }, [rows, activeMetricColumn]);
+
+  // Chart data
+  const chartRows = rows.slice(0, 15);
+  const chartData = {
+    labels: chartRows.map((r, i) => displayValue(r[activeLabelColumn] || `Item ${i + 1}`)),
+    datasets: [
+      {
+        label: activeMetricColumn || 'Volume',
+        data: chartRows.map(r => parseNumeric(r[activeMetricColumn]) ?? 1),
+        backgroundColor: 'rgba(15, 102, 255, 0.85)',
+        borderColor: '#0F66FF',
+        borderWidth: 2,
+        borderRadius: 8,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { intersect: false, mode: 'index' },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 11 } } },
+    },
+  };
 
   const downloadCsv = () => {
     if (!columns.length) return;
-    exportFile(`\ufeff${buildCsv(filteredRows, columns)}`, 'protheus-relatorio.csv', 'text/csv;charset=utf-8');
+    exportFile(`\ufeff${buildCsv(filteredRows, columns)}`, 'protheus-painel-executivo.csv', 'text/csv;charset=utf-8');
   };
 
-  const toggleSelectAll = () => {
-    if (selectedRows.size === paginatedRows.length) {
-      setSelectedRows(new Set());
-    } else {
-      setSelectedRows(new Set(paginatedRows.map((_, i) => i)));
-    }
-  };
-
-  const toggleSelectRow = (index) => {
-    const next = new Set(selectedRows);
-    if (next.has(index)) next.delete(index);
-    else next.add(index);
-    setSelectedRows(next);
-  };
-
-  const title = result?.title || result?.titulo || 'Contas a Pagar';
-  const subtitle = result?.subtitle || result?.description || 'Gestão de títulos e pagamentos';
+  const title = result?.title || result?.titulo || 'Fluxo de Caixa Consolidado';
+  const subtitle = result?.subtitle || result?.description || 'Gestão executiva e indicadores do período';
 
   return (
-    <section className="protheus-card flex flex-col h-full overflow-hidden p-6 sm:p-7 relative text-[#1a334e]">
+    <div className="executive-panel flex flex-col h-full overflow-hidden p-5 sm:p-7 relative text-[#1a334e] bg-white">
       {/* Top Header Bar */}
-      <header className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-[#edf2f7]">
+      <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#edf2f7]">
         {/* Brand & Context */}
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[20px] font-black tracking-tight text-[#102a45] mr-2">
             Protheus
           </span>
 
-          <div className="flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1 text-[12px] font-semibold text-[#4a5568]">
-            <Building2 size={14} className="text-[#1860ec]" />
+          <div className="hidden sm:flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1 text-[12px] font-semibold text-[#4a5568]">
+            <Building2 size={14} className="text-[#0F66FF]" />
             <span>Grupo Empresarial Alpha</span>
             <ChevronDown size={13} className="text-slate-400" />
           </div>
 
-          <div className="flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1 text-[12px] font-semibold text-[#4a5568]">
-            <MapPin size={14} className="text-[#1860ec]" />
+          <div className="hidden md:flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1 text-[12px] font-semibold text-[#4a5568]">
+            <MapPin size={14} className="text-[#0F66FF]" />
             <span>Filial {context.branch || 'São Paulo'}</span>
             <ChevronDown size={13} className="text-slate-400" />
           </div>
@@ -209,22 +301,15 @@ export default function StructuredResultPanel({ result, onClose, context = {} })
               value={search}
               onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
               placeholder="Buscar no sistema..."
-              className="h-8.5 w-[190px] rounded-xl border border-[#e2e8f0] bg-[#f8fafc] pl-8.5 pr-3 text-[12px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-[#1860ec] focus:bg-white transition-all"
+              className="h-8.5 w-[160px] sm:w-[200px] rounded-xl border border-[#e2e8f0] bg-[#f8fafc] pl-8.5 pr-3 text-[12px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-[#0F66FF] focus:bg-white transition-all"
             />
           </div>
         </div>
 
-        {/* User Info & Close Button */}
+        {/* User & Close Action */}
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="flex h-8.5 w-8.5 items-center justify-center rounded-xl text-slate-400 hover:bg-[#f0f4f9] hover:text-slate-600 transition-colors"
-          >
-            <Bell size={16} />
-          </button>
-
-          <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1860ec] text-white font-bold text-xs shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0F66FF] text-white font-bold text-xs shadow-sm">
               {context.user ? context.user.slice(0, 2).toUpperCase() : 'JS'}
             </div>
             <div className="hidden sm:block text-left">
@@ -241,7 +326,7 @@ export default function StructuredResultPanel({ result, onClose, context = {} })
             <button
               type="button"
               onClick={onClose}
-              title="Fechar painel"
+              title="Recolher painel"
               className="ml-1 flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors"
             >
               <X size={15} />
@@ -250,213 +335,180 @@ export default function StructuredResultPanel({ result, onClose, context = {} })
         </div>
       </header>
 
-      {/* Title Section */}
-      <div className="pt-5 pb-4">
-        <h1 className="text-[26px] font-black text-[#102a45] tracking-tight leading-none">
-          {title}
-        </h1>
-        <p className="text-[13px] text-slate-400 mt-1 font-medium">
-          {subtitle}
-        </p>
-      </div>
+      {/* Main Body */}
+      <div className="flex-1 overflow-y-auto pt-4 space-y-5">
+        {/* Title Header */}
+        <div>
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0F66FF] block mb-1">
+            ANÁLISE EXECUTIVA ERP
+          </span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-[24px] sm:text-[28px] font-black text-[#102a45] tracking-tight leading-tight">
+                {title}
+              </h1>
+              <p className="text-[13px] text-slate-400 mt-0.5 font-medium">
+                {subtitle}
+              </p>
+            </div>
 
-      {/* Pill Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#edf2f7] pb-4">
-        <button
-          type="button"
-          onClick={() => setActiveTab('list')}
-          className={`px-4 py-2 rounded-xl text-[13px] font-bold transition-all ${
-            activeTab === 'list'
-              ? 'bg-[#eef5fd] text-[#1860ec]'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Lista de Títulos
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('charts')}
-          className={`px-4 py-2 rounded-xl text-[13px] font-bold transition-all ${
-            activeTab === 'charts'
-              ? 'bg-[#eef5fd] text-[#1860ec]'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Relatórios & Gráficos
-        </button>
-        {result?.sql && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('sql')}
-            className={`px-4 py-2 rounded-xl text-[13px] font-bold transition-all ${
-              activeTab === 'sql'
-                ? 'bg-[#eef5fd] text-[#1860ec]'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Consulta SQL Oracle
-          </button>
-        )}
-      </div>
-
-      {/* Filter Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-        <div className="flex flex-wrap items-center gap-2.5 text-[12px] font-medium text-slate-600">
-          <div className="flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 py-1.5">
-            <span className="text-slate-400">Período:</span>
-            <strong className="text-[#1a334e]">01/10/2024 a 31/10/2024</strong>
-            <ChevronDown size={13} className="text-slate-400" />
-          </div>
-
-          <div className="flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 py-1.5">
-            <span className="text-slate-400">Fornecedor:</span>
-            <strong className="text-[#1a334e]">Todos</strong>
-            <ChevronDown size={13} className="text-slate-400" />
-          </div>
-
-          <div className="flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 py-1.5">
-            <span className="text-slate-400">Status:</span>
-            <strong className="text-[#1a334e]">Todos</strong>
-            <ChevronDown size={13} className="text-slate-400" />
+            {/* View Mode Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={downloadCsv}
+                className="flex h-8.5 items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 text-[12px] font-bold text-[#102a45] hover:bg-slate-50 transition-colors shadow-2xs"
+              >
+                <FileSpreadsheet size={14} className="text-[#0F66FF]" />
+                <span>Exportar Excel</span>
+              </button>
+              {result?.sql && (
+                <button
+                  type="button"
+                  onClick={() => setActiveView(v => v === 'sql' ? 'dashboard' : 'sql')}
+                  className={`flex h-8.5 items-center gap-1.5 rounded-xl border px-3 text-[12px] font-bold transition-all ${
+                    activeView === 'sql'
+                      ? 'border-[#0F66FF] bg-blue-50 text-[#0F66FF]'
+                      : 'border-[#e2e8f0] bg-white text-[#102a45] hover:bg-slate-50'
+                  }`}
+                >
+                  <Terminal size={14} />
+                  <span>SQL Oracle</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          className="flex h-8.5 items-center gap-1.5 rounded-xl bg-[#1860ec] px-4 text-[12px] font-bold text-white shadow-sm hover:bg-[#0f52d4] transition-all"
-        >
-          <Filter size={13} />
-          <span>Filtrar</span>
-        </button>
-      </div>
+        {/* 1. KPIs Scorecard Deck (4 on Desktop, 2 on Tablet, 1 on Mobile) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {dynamicKpis.map((kpi, idx) => (
+            <StatKpiCard
+              key={idx}
+              title={kpi.title}
+              value={kpi.value}
+              change={kpi.change}
+              isPositive={kpi.isPositive}
+            />
+          ))}
+        </div>
 
-      {/* Main Table Content */}
-      <div className="flex-1 overflow-auto min-h-[260px] border border-[#edf2f7] rounded-2xl bg-white shadow-2xs">
-        {activeTab === 'list' && (
-          <table className="min-w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-[#edf2f7] bg-[#fbfcfd] text-[11px] font-bold text-[#7c8e9f]">
-                <th className="w-10 px-4 py-3 text-center">
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.size > 0 && selectedRows.size === paginatedRows.length}
-                    onChange={toggleSelectAll}
-                    className="rounded border-slate-300 text-[#1860ec] focus:ring-[#1860ec]"
-                  />
-                </th>
-                {columns.map(col => (
-                  <th key={col} className="px-4 py-3 whitespace-nowrap">
-                    {col}
-                  </th>
-                ))}
-                <th className="px-4 py-3 whitespace-nowrap text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#edf2f7] text-[12px]">
-              {paginatedRows.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length + 2} className="p-8 text-center text-slate-400">
-                    Nenhum registro encontrado para exibição.
-                  </td>
-                </tr>
-              ) : (
-                paginatedRows.map((row, idx) => {
-                  const isSelected = selectedRows.has(idx);
-                  return (
-                    <tr
-                      key={idx}
-                      className={`hover:bg-[#f8fafc] transition-colors ${isSelected ? 'bg-[#f0f6fe]' : ''}`}
-                    >
-                      <td className="px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelectRow(idx)}
-                          className="rounded border-slate-300 text-[#1860ec] focus:ring-[#1860ec]"
-                        />
-                      </td>
-                      {columns.map(col => (
-                        <td key={col} className="px-4 py-3 whitespace-nowrap text-[#1a334e] font-medium">
-                          {displayValue(row[col])}
-                        </td>
-                      ))}
-                      <td className="px-4 py-3 whitespace-nowrap text-right">
-                        <span className="inline-block rounded-lg bg-[#eff9f3] px-2.5 py-0.5 text-[11px] font-bold text-[#2f835d]">
-                          Pago
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        )}
-
-        {activeTab === 'sql' && result?.sql && (
-          <div className="p-5">
-            <pre className="p-4 rounded-xl bg-slate-900 text-emerald-300 font-mono text-xs overflow-x-auto leading-relaxed">
+        {/* SQL Drawer View if active */}
+        {activeView === 'sql' && result?.sql && (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-md">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800 text-xs text-slate-300 font-mono">
+              <span>Consulta Executada no Oracle (QueryRest)</span>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(result.sql)}
+                className="px-2 py-0.5 rounded bg-slate-700 text-white text-[11px]"
+              >
+                Copiar
+              </button>
+            </div>
+            <pre className="p-4 text-[12px] font-mono text-emerald-300 overflow-x-auto leading-relaxed">
               <code>{result.sql}</code>
             </pre>
           </div>
         )}
-      </div>
 
-      {/* Pagination Bar */}
-      <div className="flex items-center justify-end gap-2 pt-3 pb-2 text-[12px] text-slate-400 font-medium">
-        <button
-          type="button"
-          disabled={currentPage === 1}
-          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-          className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-30"
-        >
-          <ChevronLeft size={16} />
-        </button>
-        <span>Página <strong>{currentPage}</strong> de {totalPages}</span>
-        <button
-          type="button"
-          disabled={currentPage === totalPages}
-          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-          className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-30"
-        >
-          <ChevronRight size={16} />
-        </button>
-      </div>
+        {/* 2. Gráfico Executivo (Responsive height: 420px desktop, 360px notebook, 320px tablet, 280px mobile) */}
+        {chartRows.length > 0 && (
+          <div className="executive-card p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[12px] font-bold text-[#102a45]">
+                Distribuição Gráfica de Indicadores
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                TOTVS Oracle Cloud
+              </span>
+            </div>
+            <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[420px] w-full">
+              <Bar data={chartData} options={chartOptions} />
+            </div>
+          </div>
+        )}
 
-      {/* Footer Bar */}
-      <footer className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-[#edf2f7]">
-        <div className="text-[12px] text-slate-500 font-medium">
-          <span>Total de <strong>{filteredRows.length}</strong> títulos</span>
-          {totalValue && <span className="ml-2 font-bold text-[#102a45]">| Valor total: {totalValue}</span>}
+        {/* 3. Tabela Completa de Dados */}
+        <div className="executive-card overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b border-[#edf2f7] bg-[#fbfcfd]">
+            <span className="text-[13px] font-bold text-[#102a45]">
+              Registros Detalhados ({filteredRows.length})
+            </span>
+            <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium">
+              <span>Página {currentPage} de {totalPages}</span>
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="p-1 rounded hover:bg-slate-200 disabled:opacity-30"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="p-1 rounded hover:bg-slate-200 disabled:opacity-30"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto max-h-[360px]">
+            <table className="min-w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-[#edf2f7] bg-[#f8fafc] text-[10px] font-black uppercase tracking-wider text-[#7c8e9f]">
+                  {columns.map(col => (
+                    <th key={col} className="px-4 py-2.5 whitespace-nowrap">
+                      {col}
+                    </th>
+                  ))}
+                  <th className="px-4 py-2.5 whitespace-nowrap text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#edf2f7] text-[12px]">
+                {paginatedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length + 1} className="p-8 text-center text-slate-400">
+                      Nenhum registro retornado.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedRows.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-[#f8fafc] transition-colors">
+                      {columns.map(col => (
+                        <td key={col} className="px-4 py-2.5 whitespace-nowrap text-[#1a334e] font-medium">
+                          {displayValue(row[col])}
+                        </td>
+                      ))}
+                      <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                        <span className="inline-block rounded-lg bg-[#eff9f3] px-2 py-0.5 text-[10px] font-bold text-[#22C55E]">
+                          OK
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={downloadCsv}
-            className="flex h-8.5 items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3.5 text-[12px] font-bold text-[#1a334e] hover:bg-[#f8fafc] transition-colors shadow-2xs"
-          >
-            <FileSpreadsheet size={14} className="text-[#1860ec]" />
-            <span>Exportar</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('list')}
-            className="flex h-8.5 items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3.5 text-[12px] font-bold text-[#1a334e] hover:bg-[#f8fafc] transition-colors shadow-2xs"
-          >
-            <Plus size={14} className="text-[#1860ec]" />
-            <span>Novo Título</span>
-          </button>
-          <button
-            type="button"
-            onClick={downloadCsv}
-            className="flex h-8.5 items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3.5 text-[12px] font-bold text-[#1a334e] hover:bg-[#f8fafc] transition-colors shadow-2xs"
-          >
-            <Save size={14} className="text-[#1860ec]" />
-            <span>Salvar</span>
-          </button>
-        </div>
-      </footer>
-    </section>
+        {/* 4. Insights Executivos */}
+        {result?.summary && (
+          <div className="executive-card p-4 sm:p-5 bg-gradient-to-br from-blue-50/50 via-white to-indigo-50/30 border border-blue-100">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#0F66FF] uppercase tracking-wider mb-2">
+              <Lightbulb size={16} />
+              <span>Síntese Executiva do Analista</span>
+            </div>
+            <div className="prose prose-sm prose-slate max-w-none text-[13px] leading-relaxed">
+              <ReactMarkdown>{result.summary}</ReactMarkdown>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

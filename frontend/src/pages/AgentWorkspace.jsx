@@ -3,12 +3,11 @@ import {
   Bot,
   CheckCircle2,
   ChevronDown,
-  Clock3,
   Layers,
+  MessageSquare,
   Sparkles,
   User,
   X,
-  Zap,
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
 import Composer from '../components/Composer';
@@ -65,7 +64,7 @@ function readContextFromUrl() {
     tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
     company: params.get('company_id') || params.get('company') || '01',
     branch: params.get('branch') || '0101',
-    user: params.get('user') || 'admin',
+    user: params.get('user') || 'João Silva',
     profile: params.get('profile') || 'Gerente Financeiro',
     session_id: params.get('session_id') || '',
     environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
@@ -75,6 +74,7 @@ function readContextFromUrl() {
 
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [conversationId, setConversationId] = useState(() => {
     const initialContext = readContextFromUrl();
     return initialContext.session_id || makeConversationId();
@@ -153,17 +153,14 @@ export default function AgentWorkspace() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  useEffect(() => {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'cprot-result-state', open: Boolean(result) }, '*');
-    }
-  }, [result]);
-
   const send = async (text) => {
     if (!text?.trim()) return;
 
     setMessages((current) => [...current, { role: 'user', text }]);
     setLoading(true);
+    if (window.innerWidth < 1024) {
+      setMobileDrawerOpen(false);
+    }
 
     try {
       const payload = {
@@ -211,70 +208,78 @@ export default function AgentWorkspace() {
     setLoading(false);
   };
 
-  const showWorkspace = Boolean(result);
-
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-3 sm:p-6 lg:p-8">
-      <div className={`w-full flex gap-6 items-stretch justify-center transition-all duration-300 ${
-        showWorkspace ? 'max-w-[1580px]' : 'max-w-[480px]'
-      }`}>
-        {/* Left Side: Auxiliary Workspace Screen (Only open when query result is present) */}
-        {showWorkspace && (
-          <div className="flex-1 min-w-0 h-[720px] max-h-[85vh]">
-            <StructuredResultPanel
-              result={result}
-              context={context}
-              onClose={() => setResult(null)}
-            />
-          </div>
-        )}
+    <div className="min-h-screen w-full bg-[#EEF3F8] p-3 sm:p-5 lg:p-6 flex flex-col items-center justify-center antialiased">
+      {/* Main Responsive Grid Layout */}
+      <div className="w-full max-w-[1840px] flex-1 flex flex-col lg:flex-row gap-5 items-stretch min-h-[calc(100vh-48px)]">
+        {/* Left Side: Painel Executivo (70% on 1440px+, 65% on 1024px-1439px, Protagonist on Tablet/Mobile) */}
+        <main className="flex-1 w-full lg:w-[65%] 2xl:w-[70%] min-w-0 flex flex-col min-h-[620px]">
+          <StructuredResultPanel
+            result={result}
+            context={context}
+            onClose={result ? () => setResult(null) : undefined}
+          />
+        </main>
 
-        {/* Right Side: Protheus Copiloto Chat Card */}
-        <div className={`protheus-card flex flex-col p-6 sm:p-7 relative overflow-hidden ${
-          showWorkspace ? 'w-[440px] xl:w-[480px] shrink-0 h-[720px] max-h-[85vh]' : 'w-full'
-        }`}>
+        {/* Right Side: Protheus Copiloto (30% on 1440px+, 35% on 1024px-1439px, Drawer on Tablet/Mobile) */}
+        <aside className={`
+          copiloto-panel flex flex-col p-5 sm:p-6 relative overflow-hidden bg-white
+          w-full lg:w-[35%] 2xl:w-[30%] shrink-0 min-h-[580px] lg:h-auto
+          ${mobileDrawerOpen ? 'fixed inset-4 z-50 shadow-2xl border border-slate-200' : 'hidden lg:flex'}
+        `}>
           {/* Header */}
-          <header className="flex items-center justify-between pb-4 border-b border-[#edf2f7]">
+          <header className="flex items-center justify-between pb-3.5 border-b border-[#edf2f7]">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#eef5fd] text-[#1860ec]">
-                <Sparkles size={20} strokeWidth={2.2} />
+              <div className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-[#EEF3F8] text-[#0F66FF]">
+                <Sparkles size={18} strokeWidth={2.2} />
               </div>
               <div>
-                <h2 className="text-[17px] font-bold text-[#102a45] leading-tight">
+                <h2 className="text-[16px] font-bold text-[#102a45] leading-tight">
                   Protheus Copiloto
                 </h2>
-                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#2f835d] font-semibold">
-                  <span className="h-2 w-2 rounded-full bg-[#2f835d]" />
-                  <span>Conectado ao Protheus</span>
+                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#22C55E] font-semibold">
+                  <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
+                  <span>Conectado</span>
                 </div>
               </div>
             </div>
+
+            {/* Mobile close drawer */}
+            {mobileDrawerOpen && (
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(false)}
+                className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            )}
           </header>
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto py-4 space-y-4">
-            {/* Greeting */}
+            {/* Executive Greeting (Sizes: 40px desktop, 32px notebook, 28px tablet, 24px mobile) */}
             {messages.length === 0 && (
               <div className="pt-2 pb-1">
-                <h1 className="text-[22px] font-bold text-[#1a334e] tracking-tight leading-snug">
-                  Olá, como posso ajudar você hoje?
+                <h1 className="text-[24px] sm:text-[28px] lg:text-[32px] 2xl:text-[40px] font-black text-[#102a45] tracking-tight leading-tight">
+                  Olá, como posso ajudar hoje?
                 </h1>
               </div>
             )}
 
-            {/* Suggestions Grid (Visible initially) */}
+            {/* Suggestions Grid */}
             {messages.length === 0 && (
               <SuggestionCards disabled={loading} onPick={send} />
             )}
 
-            {/* Conversation Messages */}
+            {/* Messages Thread */}
             <Conversation messages={messages} />
 
             {/* Loading Indicator */}
             {loading && (
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#f0f6fe] text-[12px] text-[#1860ec] font-semibold">
+              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#EEF3F8] text-[12px] text-[#0F66FF] font-semibold">
                 <Sparkles size={16} className="animate-spin" />
-                <span>Consultando dados no Protheus...</span>
+                <span>Consultando o Protheus via QueryRest Oracle...</span>
               </div>
             )}
           </div>
@@ -283,7 +288,19 @@ export default function AgentWorkspace() {
           <div className="pt-3 border-t border-[#edf2f7]">
             <Composer disabled={loading} onSend={send} />
           </div>
-        </div>
+        </aside>
+      </div>
+
+      {/* Floating Action Button for Tablet/Mobile: "✦ Abrir Copiloto" */}
+      <div className="lg:hidden fixed bottom-5 right-5 z-40">
+        <button
+          type="button"
+          onClick={() => setMobileDrawerOpen(true)}
+          className="flex items-center gap-2 rounded-full bg-[#0F66FF] px-5 py-3 text-white font-bold text-sm shadow-xl shadow-[#0F66FF]/30 active:scale-95 transition-all"
+        >
+          <Sparkles size={16} />
+          <span>✦ Perguntar ao Copiloto</span>
+        </button>
       </div>
     </div>
   );

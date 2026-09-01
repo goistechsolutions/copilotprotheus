@@ -1,35 +1,35 @@
 import React from 'react';
 import {
-  FileText,
   TrendingUp,
-  Calendar,
+  Building2,
+  FileText,
   BarChart3
 } from 'lucide-react';
 
 const defaultSuggestions = [
   {
-    icon: FileText,
-    title: 'Consultar contas a pagar',
-    subtitle: 'Listar títulos do período atual',
-    prompt: 'Liste os títulos a pagar em aberto com fornecedor, valor e data de vencimento.',
-  },
-  {
     icon: TrendingUp,
-    title: 'Prever recebimentos',
-    subtitle: 'Análise de recebimentos esperados',
-    prompt: 'Qual a previsão de contas a receber para os próximos 30 dias?',
+    title: 'Fluxo de Caixa',
+    subtitle: 'Consultar fluxo e recebimentos',
+    prompt: 'Qual a previsão de fluxo de caixa e recebimentos para os próximos 30 dias?',
   },
   {
-    icon: Calendar,
-    title: 'Melhor data de pagamento',
-    subtitle: 'Simular datas para economia',
-    prompt: 'Quais títulos a pagar vencem nesta semana ordenados por valor?',
+    icon: Building2,
+    title: 'Comparar Filiais',
+    subtitle: 'Faturamento por unidade',
+    prompt: 'Compare o faturamento consolidado entre as filiais no mês atual.',
+  },
+  {
+    icon: FileText,
+    title: 'Contas a Pagar',
+    subtitle: 'Títulos e compromissos',
+    prompt: 'Liste os principais títulos a pagar em aberto com fornecedor e vencimento.',
   },
   {
     icon: BarChart3,
-    title: 'Análise de vendas',
-    subtitle: 'Resumo de vendas do mês',
-    prompt: 'Qual o resumo consolidado de faturamento e vendas deste mês por filial?',
+    title: 'Análise de Vendas',
+    subtitle: 'Resumo executivo do mês',
+    prompt: 'Apresente a análise de vendas e faturamento do período com curva ABC.',
   },
 ];
 
@@ -38,11 +38,7 @@ export default function SuggestionCards({ items, disabled, onPick }) {
 
   return (
     <div className="w-full">
-      <h3 className="text-[15px] font-bold text-[#1a334e] mb-3.5">
-        Sugestões de consulta
-      </h3>
-
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
         {list.map((item, index) => {
           const Icon = item.icon || defaultSuggestions[index % 4].icon;
           return (
@@ -51,10 +47,10 @@ export default function SuggestionCards({ items, disabled, onPick }) {
               type="button"
               disabled={disabled}
               onClick={() => onPick(item.prompt || item.title)}
-              className="protheus-subcard p-3.5 text-left flex flex-col justify-between min-h-[110px] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="executive-card p-3.5 text-left flex flex-col justify-between min-h-[105px] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eef5fd] text-[#1860ec] mb-2.5">
-                <Icon size={18} strokeWidth={2} />
+              <div className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-[#EEF3F8] text-[#0F66FF] mb-2.5">
+                <Icon size={17} strokeWidth={2} />
               </div>
               <div>
                 <strong className="block text-[13px] font-bold text-[#1a334e] leading-snug">
