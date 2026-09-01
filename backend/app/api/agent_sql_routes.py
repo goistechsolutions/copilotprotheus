@@ -1,5 +1,5 @@
 import base64
-
+import os
 import json
 import re
 import unicodedata
@@ -97,8 +97,12 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
         )
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
 
+    backend_mode = (getattr(settings, "llm_backend", "") or os.getenv("LLM_BACKEND", "") or "gemini").lower()
+    has_gemini_key = bool(getattr(settings, "gemini_api_key", None) or os.getenv("GEMINI_API_KEY"))
+    use_gemini = (backend_mode == "gemini" or (has_gemini_key and not os.getenv("OLLAMA_URL")))
+
     try:
-        if settings.llm_backend == "gemini":
+        if use_gemini:
             from app.services.gemini_client import ask_gemini
             raw_response = await ask_gemini(
                 question=user_query,
@@ -136,10 +140,10 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
         )
         raise HTTPException(status_code=status_code, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"[SQL Generator] Falha ao acionar provedor LLM ({settings.llm_backend}): {e}")
+        logger.error(f"[SQL Generator] Falha ao acionar provedor LLM ({backend_mode}): {e}")
         raise HTTPException(
             status_code=503,
-            detail=f"O serviço do provedor de IA ({settings.llm_backend}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
+            detail=f"O serviço do provedor de IA ({backend_mode}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
         ) from e
 
     if not raw_response or not isinstance(raw_response, str):
