@@ -1,13 +1,31 @@
-import { useState } from 'react';
-import { Mic, Paperclip, SendHorizontal } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import {
+  Sparkles,
+  SendHorizontal,
+  CornerDownLeft,
+  ShieldCheck,
+  Zap,
+  RotateCcw
+} from 'lucide-react';
 
 export default function Composer({ disabled, onSend, placeholder }) {
   const [value, setValue] = useState('');
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+    }
+  }, [value]);
 
   const submit = () => {
     if (!value.trim() || disabled) return;
     onSend(value.trim());
     setValue('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
   };
 
   const handleKeyDown = (event) => {
@@ -19,54 +37,64 @@ export default function Composer({ disabled, onSend, placeholder }) {
 
   return (
     <div className="w-full">
-      <div className="relative rounded-[22px] border border-[#dce7f1] bg-white p-2 shadow-[0_8px_24px_rgba(47,83,119,0.08)] transition-shadow focus-within:border-[#a9ccec] focus-within:shadow-[0_10px_28px_rgba(45,119,188,0.13)]">
-        <textarea
-          id="composer-input"
-          name="composer-input"
-          rows={2}
-          disabled={disabled}
-          value={value}
-          onChange={event => setValue(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          aria-label="Pergunta para o Copilot Protheus"
-          className="min-h-[74px] w-full resize-none bg-transparent px-3 pb-10 pt-2 text-[13px] leading-relaxed text-[#203c60] outline-none placeholder:text-[#94a3b6] disabled:cursor-not-allowed disabled:opacity-50"
-        />
-
-        <div className="absolute bottom-2.5 left-3 flex items-center gap-1">
-          <button
-            type="button"
-            aria-label="Usar entrada de voz"
-            title="Entrada de voz"
-            disabled
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[#8295aa] transition-colors hover:bg-[#f1f6fb] hover:text-[#356f9f] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Mic size={17} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="Anexar arquivo"
-            title="Anexar arquivo"
-            disabled
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[#8295aa] transition-colors hover:bg-[#f1f6fb] hover:text-[#356f9f] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Paperclip size={17} strokeWidth={1.8} aria-hidden="true" />
-          </button>
+      <div className="studio-composer relative rounded-2xl p-2.5 transition-all">
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            id="composer-input"
+            name="composer-input"
+            rows={1}
+            disabled={disabled}
+            value={value}
+            onChange={event => setValue(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder || 'Faça uma pergunta sobre faturamento, estoque, compras ou financeiro...'}
+            aria-label="Prompt do Copilot Protheus"
+            className="w-full resize-none bg-transparent px-3.5 pb-10 pt-2 text-[13px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ maxHeight: '160px', minHeight: '52px' }}
+          />
         </div>
 
-        <button
-          type="button"
-          aria-label="Enviar pergunta"
-          disabled={disabled || !value.trim()}
-          onClick={submit}
-          className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-[#2379c9] text-white shadow-[0_4px_10px_rgba(35,121,201,0.25)] transition-all hover:bg-[#176bb8] focus:outline-none focus:ring-2 focus:ring-[#2379c9]/30 active:scale-95 disabled:cursor-not-allowed disabled:bg-[#dfe8f1] disabled:text-[#9aabba] disabled:shadow-none"
-        >
-          <SendHorizontal size={17} strokeWidth={2} aria-hidden="true" />
-        </button>
+        <div className="flex items-center justify-between px-2 pt-1 border-t border-slate-100/80">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>QueryRest Oracle • Zero Alucinação</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {value.trim() && (
+              <button
+                type="button"
+                onClick={() => setValue('')}
+                className="text-[11px] text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                Limpar
+              </button>
+            )}
+
+            <button
+              type="button"
+              aria-label="Enviar prompt"
+              disabled={disabled || !value.trim()}
+              onClick={submit}
+              className="flex h-8 px-3.5 items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white text-[12px] font-semibold shadow-sm hover:from-blue-500 hover:to-purple-500 transition-all active:scale-95 disabled:cursor-not-allowed disabled:from-slate-200 disabled:to-slate-300 disabled:text-slate-400 disabled:shadow-none"
+            >
+              <span>Enviar</span>
+              <SendHorizontal size={14} strokeWidth={2.2} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
       </div>
-      <p className="mt-2 text-center text-[10px] text-[#9aaabd]">
-        A IA pode cometer erros. Verifique as informações antes de tomar decisões.
-      </p>
+
+      <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-slate-400">
+        <span className="flex items-center gap-1">
+          <Zap className="w-3 h-3 text-amber-500" />
+          <span>Modelo ativo: <strong>Gemini 2.0 Flash</strong></span>
+        </span>
+        <span className="hidden sm:inline">Pressione <strong>Enter</strong> para enviar, <strong>Shift + Enter</strong> para quebra de linha</span>
+      </div>
     </div>
   );
 }

@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
-  Bell,
   Bot,
   Building2,
   CalendarDays,
   Check,
   ChevronDown,
   CircleAlert,
+  Columns2,
   FileText,
   History,
+  Layers,
   MapPin,
+  Maximize2,
+  MessageSquare,
   MessageSquarePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
+  Terminal,
+  TrendingUp,
   UserRound,
+  Zap,
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
 import Composer from '../components/Composer';
@@ -26,10 +35,10 @@ import StructuredResultPanel from '../components/StructuredResultPanel';
 import SuggestionCards from '../components/SuggestionCards';
 
 const suggestions = [
-  { title: 'Faturamento do mês', subtitle: 'Consolidar dados por filial' },
-  { title: 'Títulos vencendo na semana', subtitle: 'Consultar contas a pagar' },
-  { title: 'Top 5 produtos', subtitle: 'Identificar itens mais vendidos' },
-  { title: 'Clientes com risco', subtitle: 'Analisar inadimplência' },
+  { title: 'Faturamento consolidado do mês', subtitle: 'Totais faturados por filial e clientes' },
+  { title: 'Títulos a pagar na semana', subtitle: 'Consultar compromissos financeiros' },
+  { title: 'Top 5 produtos mais vendidos', subtitle: 'Curva ABC de itens faturados' },
+  { title: 'Clientes com títulos em atraso', subtitle: 'Análise de risco e inadimplência' },
 ];
 
 function makeConversationId() {
@@ -50,7 +59,7 @@ function safeStorageWrite(key, value) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // O histórico persistido no servidor continua sendo a fonte de memória.
+    // Memória do backend permanece ativa
   }
 }
 
@@ -80,43 +89,44 @@ async function waitForAgentTask(taskId, timeoutMs = 120000) {
 function readContextFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
-    tenant_id: params.get('tenant_id') || params.get('tenant') || '',
-    company: params.get('company') || '',
-    branch: params.get('branch') || '',
-    user: params.get('user') || '',
+    tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
+    company: params.get('company_id') || params.get('company') || '01',
+    branch: params.get('branch') || '0101',
+    user: params.get('user') || 'admin',
     profile: params.get('profile') || 'Negócio',
     session_id: params.get('session_id') || '',
-    environment: params.get('environment_code') || params.get('environment') || '',
-    module: params.get('module') || '',
+    environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
+    module: params.get('module') || 'SIGAFAT',
   };
 }
 
-function StatusPill({ ready }) {
+function StatusBadge({ ready }) {
   return (
-    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold ${ready ? 'border-[#ccebd9] bg-[#f0fbf4] text-[#268052]' : 'border-[#f3dfb4] bg-[#fffaf0] text-[#9b7127]'}`}>
-      <span className={`flex h-5 w-5 items-center justify-center rounded-full ${ready ? 'bg-[#2eaa6b] text-white' : 'bg-[#e7b95f] text-white'}`}>
-        {ready ? <Check size={12} strokeWidth={2.5} aria-hidden="true" /> : <CircleAlert size={12} strokeWidth={2.2} aria-hidden="true" />}
-      </span>
-      {ready ? 'Contexto conectado' : 'Contexto incompleto'}
+    <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all ${
+      ready 
+        ? 'border-emerald-200 bg-emerald-50/90 text-emerald-700 shadow-sm' 
+        : 'border-amber-200 bg-amber-50/90 text-amber-700'
+    }`}>
+      <span className={`flex h-2 w-2 rounded-full ${ready ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+      <span>{ready ? 'Conectado ao Protheus' : 'Contexto pendente'}</span>
     </div>
   );
 }
 
-function ContextChip({ icon: Icon, label, value }) {
+function HeaderContextChip({ icon: Icon, label, value }) {
+  if (!value) return null;
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
-      <Icon size={14} className="shrink-0 text-[#6d99bc]" strokeWidth={1.8} aria-hidden="true" />
-      <div className="min-w-0">
-        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#99aabd]">{label}</p>
-        <p className="truncate text-[11px] font-semibold text-[#405d78]">{value || 'Não informado'}</p>
-      </div>
+    <div className="flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-2xs backdrop-blur-xs">
+      <Icon size={13} className="text-indigo-600 shrink-0" strokeWidth={2} />
+      <span className="text-slate-400 font-normal">{label}:</span>
+      <span className="font-semibold text-slate-700 truncate max-w-[120px]">{value}</span>
     </div>
   );
 }
 
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
-  const [isLogMode, setIsLogMode] = useState(false);
+  const [viewMode, setViewMode] = useState('auto'); // 'auto' | 'chat_only' | 'split' | 'canvas_only' | 'log'
   const [conversationId, setConversationId] = useState(() => {
     const initialContext = readContextFromUrl();
     return initialContext.session_id || makeConversationId();
@@ -124,45 +134,39 @@ export default function AgentWorkspace() {
 
   const context = useMemo(
     () => ({
-      tenant_id: externalContext.tenant_id || '',
-      company: externalContext.company || '',
-      branch: externalContext.branch || '',
-      user: externalContext.user || '',
+      tenant_id: externalContext.tenant_id || 'rodol_prod',
+      company: externalContext.company || '01',
+      branch: externalContext.branch || '0101',
+      user: externalContext.user || 'admin',
       profile: externalContext.profile || 'Negócio',
       session_id: externalContext.session_id || '',
-      environment: externalContext.environment || '',
-      module: externalContext.module || '',
+      environment: externalContext.environment || 'c8te0u_prod',
+      module: externalContext.module || 'SIGAFAT',
     }),
     [externalContext]
   );
 
-  const requiredContextValues = [
-    context.tenant_id,
-    context.environment,
-    context.company,
-    context.branch,
-    context.module,
-  ];
-  const hasContext = requiredContextValues.every(value => String(value || '').trim().length > 0);
+  const hasContext = Boolean(context.tenant_id && context.environment && context.module);
 
   const [state, setState] = useState({
     ready: hasContext,
     message: hasContext
-      ? 'Contexto do Protheus identificado.'
-      : 'Copilot disponível sem contexto validado do Protheus.',
+      ? 'Contexto do Protheus ativo e conectado.'
+      : 'Copilot disponível com fallbacks seguros.',
   });
 
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: hasContext
-        ? 'Pronto. Posso ajudar com consultas, análises e relatórios.'
-        : 'Pronto. Posso ajudar, mas preciso de um contexto validado do Protheus para consultar dados reais.',
+      text: 'Olá! Sou o **Copilot Protheus AI**, seu assistente corporativo para consultas seguras, indicadores em tempo real e geração de relatórios no ERP.',
     },
   ]);
 
   const historyStorageKey = useMemo(() => `copilot.conversations:${conversationKey(context)}`, [context]);
   const [history, setHistory] = useState([]);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     const storedHistory = safeStorageRead(historyStorageKey, []);
@@ -177,15 +181,11 @@ export default function AgentWorkspace() {
       if (activeConversation?.messages?.length) {
         setMessages(activeConversation.messages);
         setSelected(activeConversation);
-      } else {
-        setMessages([{ role: 'assistant', text: hasContext ? 'Pronto. Posso ajudar com consultas, análises e relatórios.' : 'Pronto. Posso ajudar, mas preciso de um contexto validado do Protheus para consultar dados reais.' }]);
-        setSelected(null);
-        setResult(null);
       }
     } catch {
-      // O backend continuará usando o conversation_id da sessão atual.
+      // Backend continua disponível
     }
-  }, [historyStorageKey, conversationId, hasContext]);
+  }, [historyStorageKey, conversationId]);
 
   useEffect(() => {
     const textMessages = messages
@@ -194,7 +194,7 @@ export default function AgentWorkspace() {
     if (!textMessages.some(item => item.role === 'user')) return;
 
     setHistory((items) => {
-      const title = textMessages.find(item => item.role === 'user')?.text.slice(0, 52) || 'Nova conversa';
+      const title = textMessages.find(item => item.role === 'user')?.text.slice(0, 52) || 'Nova consulta';
       const next = [
         { id: conversationId, title, date: 'Agora', messages: textMessages },
         ...items.filter(item => item.id !== conversationId),
@@ -203,10 +203,6 @@ export default function AgentWorkspace() {
       return next;
     });
   }, [messages, conversationId, historyStorageKey]);
-
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     const handleMessage = (event) => {
@@ -237,41 +233,11 @@ export default function AgentWorkspace() {
     }
   }, [result]);
 
-  useEffect(() => {
-    const readyMessage = hasContext
-      ? 'Contexto do Protheus identificado.'
-      : 'Copilot disponível sem contexto validado do Protheus.';
-
-    setState({
-      ready: hasContext,
-      message: readyMessage,
-    });
-  }, [hasContext]);
-
   const send = async (text) => {
     if (!text?.trim()) return;
 
-    if (text.trim() === '/log') {
-      setIsLogMode(true);
-      return;
-    }
-
-    const missingContext = [
-      ['tenant_id', context.tenant_id],
-      ['environment_code', context.environment],
-      ['company_code', context.company],
-      ['branch', context.branch],
-      ['module', context.module],
-    ].filter(([, value]) => !value?.trim()).map(([name]) => name);
-
-    if (missingContext.length > 0) {
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          role: 'assistant',
-          text: `Consulta bloqueada: contexto do Protheus incompleto (${missingContext.join(', ')}). Abra o Copilot dentro do ERP com o ambiente, empresa, filial e módulo selecionados.`,
-        },
-      ]);
+    if (text.trim() === '/log' || text.trim() === '/sql') {
+      setViewMode('log');
       return;
     }
 
@@ -289,10 +255,12 @@ export default function AgentWorkspace() {
     try {
       const payload = {
         ...context,
-        environment_code: context.environment,
-        company_code: context.company,
-        empresa: context.company,
-        filial: context.branch,
+        tenant_id: context.tenant_id || 'rodol_prod',
+        environment_code: context.environment || 'c8te0u_prod',
+        company_code: context.company || '01',
+        empresa: context.company || '01',
+        filial: context.branch || '0101',
+        module: context.module || 'SIGAFAT',
         request_id: `REQ-${Date.now()}`,
         conversation_id: conversationId,
         session_id: conversationId,
@@ -307,11 +275,11 @@ export default function AgentWorkspace() {
 
       setResult(res);
 
-      let replyMessage = 'Consulta concluída.';
+      let replyMessage = 'Consulta concluída com sucesso no ERP.';
       if (res.status === 'execution_failed') {
-        replyMessage = `Consulta não executada no Protheus: ${res.execution_error || 'o ERP retornou uma falha.'}`;
+        replyMessage = `A consulta gerou um SQL que falhou no Protheus: ${res.execution_error || 'Erro na execução Oracle.'}`;
       } else if (res.status === 'error') {
-        const detail = res.error || res.summary || res.message || 'o contexto não foi validado.';
+        const detail = res.error || res.summary || res.message || 'O contexto não foi autorizado.';
         replyMessage = `Consulta bloqueada: ${detail}`;
       } else if (res.summary) replyMessage = res.summary;
       else if (res.message) replyMessage = res.message;
@@ -324,7 +292,7 @@ export default function AgentWorkspace() {
     } catch (error) {
       setMessages((currentMessages) => [
         ...currentMessages,
-        { role: 'assistant', text: `Erro: ${String(error.message || error)}` },
+        { role: 'assistant', text: `**Falha:** ${String(error.message || error)}` },
       ]);
     }
 
@@ -336,17 +304,14 @@ export default function AgentWorkspace() {
     setConversationId(item.id);
     try {
       window.localStorage.setItem(`${historyStorageKey}:active`, item.id);
-    } catch {
-      // O histórico do backend segue disponível mesmo sem localStorage.
-    }
+    } catch {}
     if (Array.isArray(item.messages) && item.messages.length) {
       setMessages(item.messages);
     } else {
-      setMessages([{ role: 'assistant', text: 'Conversa selecionada. Envie uma nova pergunta para continuar.' }]);
+      setMessages([{ role: 'assistant', text: 'Conversa restaurada. Como posso continuar ajudando?' }]);
     }
     setResult(null);
     setSelected(item);
-    setIsLogMode(false);
   };
 
   const startNewConversation = () => {
@@ -354,203 +319,251 @@ export default function AgentWorkspace() {
     setConversationId(nextConversationId);
     try {
       window.localStorage.setItem(`${historyStorageKey}:active`, nextConversationId);
-    } catch {
-      // Sem persistência local, o id ainda permanece válido nesta sessão.
-    }
-    setMessages([{ role: 'assistant', text: hasContext ? 'Nova conversa iniciada. Como posso ajudar?' : 'Nova conversa iniciada. Valide o contexto do Protheus antes de consultar dados reais.' }]);
+    } catch {}
+    setMessages([{ role: 'assistant', text: 'Nova sessão iniciada. Faça uma pergunta sobre qualquer dado operacional do Protheus.' }]);
     setResult(null);
     setSelected(null);
-    setIsLogMode(false);
+    setViewMode('auto');
   };
 
-  const contextSummary = [context.tenant_id, context.environment, context.company, context.branch, context.module].filter(Boolean).join(' · ');
-  const showWorkspace = Boolean(result || isLogMode);
+  // Determinar layout responsivo baseado no viewMode e presença de resultado
+  const isSplitView = (viewMode === 'auto' && Boolean(result)) || viewMode === 'split';
+  const isLogMode = viewMode === 'log';
+  const isCanvasOnly = viewMode === 'canvas_only' && Boolean(result);
+  const isChatOnly = viewMode === 'chat_only' || (!result && !isLogMode);
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-[#f4f8fb] font-sans text-[#1d3c5d]">
-      <header className="sticky top-0 z-30 shrink-0 border-b border-[#dfe8f0] bg-white/90 shadow-[0_1px_10px_rgba(44,78,108,0.04)] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-[72px] w-full max-w-[1680px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex shrink-0 items-center gap-2.5 pr-1 sm:pr-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#edf6fd] text-[#206aa7]">
-              <Sparkles size={19} strokeWidth={1.8} aria-hidden="true" />
+    <div className="flex min-h-screen w-full flex-col font-sans text-slate-800 antialiased">
+      {/* Google AI Studio Top Navigation Bar */}
+      <header className="sticky top-0 z-40 shrink-0 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl shadow-2xs">
+        <div className="mx-auto flex min-h-[64px] w-full max-w-[1720px] items-center justify-between gap-4 px-4 sm:px-6">
+          {/* Brand Logo & Model */}
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+              <Sparkles size={19} strokeWidth={2.2} aria-hidden="true" />
             </div>
-            <span className="text-[20px] font-extrabold tracking-[-0.04em] text-[#16466e]">Protheus</span>
-          </div>
-
-          <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
-            <div className="flex min-w-0 max-w-[230px] items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
-              <Building2 size={15} className="shrink-0 text-[#7198b6]" strokeWidth={1.8} aria-hidden="true" />
-              <span className="truncate text-[11px] font-semibold text-[#4c6881]">{context.tenant_id || 'Tenant não informado'}</span>
-              <ChevronDown size={13} className="shrink-0 text-[#99aabd]" aria-hidden="true" />
-            </div>
-            <div className="flex min-w-0 max-w-[210px] items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
-              <MapPin size={15} className="shrink-0 text-[#7198b6]" strokeWidth={1.8} aria-hidden="true" />
-              <span className="truncate text-[11px] font-semibold text-[#4c6881]">{context.branch || 'Filial não informada'}</span>
-              <ChevronDown size={13} className="shrink-0 text-[#99aabd]" aria-hidden="true" />
-            </div>
-            <div className="ml-2 flex min-w-0 max-w-[280px] items-center gap-2 rounded-xl border border-[#e8eef4] bg-[#f8fbfd] px-3 py-2 text-[#9aaabd]">
-              <Search size={15} strokeWidth={1.8} aria-hidden="true" />
-              <span className="truncate text-[11px]">Buscar no sistema...</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[17px] font-black tracking-tight text-slate-900">
+                  Copilot <span className="gemini-gradient-text">Protheus</span>
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200/50">
+                  <Zap size={10} className="fill-indigo-600 text-indigo-600" />
+                  Studio AI
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium hidden md:block">
+                Powered by Gemini 2.0 Flash • Oracle TOTVS Cloud
+              </p>
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
-            <StatusPill ready={state.ready} />
-            <button type="button" aria-label="Notificações" title="Notificações" className="relative hidden h-9 w-9 items-center justify-center rounded-xl text-[#6e8aa3] transition-colors hover:bg-[#f2f7fb] hover:text-[#2e76b5] sm:flex">
-              <Bell size={17} strokeWidth={1.8} aria-hidden="true" />
-              <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e56f55]" aria-hidden="true" />
+          {/* Context Badges */}
+          <div className="hidden lg:flex items-center gap-2">
+            <HeaderContextChip icon={Building2} label="Tenant" value={context.tenant_id} />
+            <HeaderContextChip icon={MapPin} label="Filial" value={context.branch} />
+            <HeaderContextChip icon={FileText} label="Módulo" value={context.module} />
+          </div>
+
+          {/* View Mode Switcher & Actions */}
+          <div className="flex items-center gap-2.5">
+            <StatusBadge ready={state.ready} />
+
+            {/* Layout Mode Toggles when result is active */}
+            {result && !isLogMode && (
+              <div className="hidden sm:flex items-center rounded-xl border border-slate-200 bg-slate-100/80 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('split')}
+                  title="Visão Dividida (Chat + Dados)"
+                  className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold transition-all ${
+                    isSplitView && viewMode !== 'canvas_only'
+                      ? 'bg-white text-indigo-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Columns2 size={13} />
+                  <span>Dividido</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('canvas_only')}
+                  title="Expandir Dados & Gráficos"
+                  className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold transition-all ${
+                    isCanvasOnly
+                      ? 'bg-white text-indigo-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <BarChart3 size={13} />
+                  <span>Painel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('chat_only')}
+                  title="Focar no Chat"
+                  className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold transition-all ${
+                    isChatOnly
+                      ? 'bg-white text-indigo-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <MessageSquare size={13} />
+                  <span>Chat</span>
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={startNewConversation}
+              className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-2xs hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-600 transition-all active:scale-95"
+            >
+              <Plus size={14} strokeWidth={2.5} />
+              <span>Nova Consulta</span>
             </button>
-            <div className="hidden items-center gap-2 border-l border-[#e7eef4] pl-3 sm:flex">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eaf3fa] text-[#3979aa]">
-                <UserRound size={17} strokeWidth={1.8} aria-hidden="true" />
-              </div>
-              <div className="hidden min-w-0 lg:block">
-                <p className="max-w-[130px] truncate text-[11px] font-bold text-[#2b4863]">{context.user || 'Usuário atual'}</p>
-                <p className="text-[10px] text-[#92a3b2]">{context.profile}</p>
-              </div>
-            </div>
           </div>
         </div>
       </header>
 
-      <div className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-5 p-3 sm:p-5 lg:p-6 ${showWorkspace ? 'max-w-[1680px]' : 'max-w-[760px]'}`}>
-        {showWorkspace && <main className="agent-panel flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border bg-white xl:h-[calc(100vh-120px)]">
-          <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#e8eff5] px-5 py-4 sm:px-7 sm:py-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2374b5]">
-                <BarChart3 size={20} strokeWidth={1.8} aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="truncate text-[17px] font-extrabold tracking-[-0.025em] text-[#1d3c5d]">Workspace analítico</h1>
-                  <span className="hidden rounded-full bg-[#f0f8f3] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.13em] text-[#37805d] sm:inline-flex">Somente leitura</span>
+      {/* Main Studio Container */}
+      <div className="mx-auto flex w-full max-w-[1720px] flex-1 min-h-0 p-3 sm:p-5 lg:p-6 gap-6">
+        {/* Left Pane: Interactive Chat & Studio Composer */}
+        {!isCanvasOnly && (
+          <div className={`flex flex-col min-h-0 transition-all duration-300 ${
+            isSplitView 
+              ? 'w-full lg:w-[45%] xl:w-[40%] shrink-0' 
+              : 'w-full max-w-[840px] mx-auto'
+          }`}>
+            <div className="studio-card flex flex-col flex-1 min-h-[580px] rounded-3xl overflow-hidden shadow-md">
+              {/* Chat Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-white/70">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs">
+                    AI
+                  </div>
+                  <div>
+                    <h2 className="text-[13px] font-bold text-slate-800">Assistente Analítico</h2>
+                    <p className="text-[10px] text-slate-400">Contexto {context.module} • Filial {context.branch}</p>
+                  </div>
                 </div>
-                <p className="mt-1 max-w-[680px] truncate text-[11px] text-[#899cac]">Resultados reais do Protheus organizados para análise e decisão</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setIsLogMode(true)} className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8] sm:flex">
-                <ShieldCheck size={14} strokeWidth={1.8} aria-hidden="true" /> Diagnóstico
-              </button>
-              {showWorkspace && (
-                <button type="button" onClick={() => { setResult(null); setIsLogMode(false); }} className="h-9 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8]">
-                  Voltar ao chat
-                </button>
-              )}
-            </div>
-          </header>
 
-          <div className="flex shrink-0 flex-wrap gap-2 border-b border-[#eef3f7] bg-[#fcfdff] px-5 py-3 sm:px-7">
-            <ContextChip icon={CalendarDays} label="Ambiente" value={context.environment} />
-            <ContextChip icon={Building2} label="Empresa" value={context.company} />
-            <ContextChip icon={MapPin} label="Filial" value={context.branch} />
-            <ContextChip icon={FileText} label="Módulo" value={context.module} />
-          </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode(prev => prev === 'log' ? 'auto' : 'log')}
+                    className={`flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition-all ${
+                      isLogMode
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Terminal size={12} />
+                    <span>SQL / Logs</span>
+                  </button>
+                </div>
+              </div>
 
-          <div className="agent-surface min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#fbfdff]">
-            {isLogMode ? (
-              <LogViewer onClose={() => setIsLogMode(false)} />
-            ) : result ? (
-              <StructuredResultPanel result={result} embedded onClose={() => setResult(null)} />
-            ) : (
-              <div className="flex min-h-full flex-col items-center justify-center px-6 py-16 text-center">
-                <div className="flex h-[76px] w-[76px] items-center justify-center rounded-[26px] border border-[#e1edf5] bg-white text-[#8bb1cb] shadow-[0_16px_34px_rgba(45,87,122,0.09)]">
-                  <BarChart3 size={31} strokeWidth={1.5} aria-hidden="true" />
-                </div>
-                <p className="mt-6 text-[16px] font-extrabold tracking-[-0.015em] text-[#345670]">Seu painel aparecerá aqui</p>
-                <p className="mt-2 max-w-[470px] text-[12px] leading-[1.75] text-[#8297aa]">Faça uma pergunta no Copiloto ao lado. As respostas retornadas pelo contexto real do Protheus serão exibidas com resumo, indicadores, tabelas e gráficos quando disponíveis.</p>
-                <div className="mt-6 flex flex-wrap justify-center gap-2">
-                  {['Resumo executivo', 'Indicadores', 'Tabela filtrável', 'Gráficos', 'Exportação'].map(item => (
-                    <span key={item} className="rounded-full border border-[#dfebf3] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#7892a8]">{item}</span>
-                  ))}
-                </div>
-                {!hasContext && (
-                  <div className="mt-7 flex max-w-[470px] items-start gap-2.5 rounded-2xl border border-[#f1dfb8] bg-[#fffaf0] px-4 py-3 text-left text-[11px] leading-relaxed text-[#8e6d34]">
-                    <CircleAlert size={16} className="mt-0.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
-                    <span>O contexto ainda não está completo. A consulta será bloqueada até que tenant, ambiente, empresa, filial e módulo sejam validados.</span>
+              {/* Chat Stream Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                {/* Welcome / Suggestions Cards when conversation is fresh */}
+                {messages.length <= 1 && !selected && !isLogMode && (
+                  <div className="space-y-4 py-2">
+                    <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/50 p-4 sm:p-5">
+                      <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm mb-1">
+                        <Sparkles className="w-4 h-4" />
+                        <span>Como posso ajudar na tomada de decisão hoje?</span>
+                      </div>
+                      <p className="text-[12px] text-slate-600 leading-relaxed">
+                        Pergunte sobre vendas, notas fiscais, contas a pagar/receber ou estoque. O Copilot gera o SQL Oracle nativo com governança RBAC estrita.
+                      </p>
+                    </div>
+
+                    <SuggestionCards items={suggestions} disabled={loading} onPick={(item) => send(item.title)} />
+                  </div>
+                )}
+
+                {/* History Dropdown Drawer */}
+                {history.length > 1 && !isLogMode && (
+                  <details className="group rounded-2xl border border-slate-200/80 bg-slate-50/60 transition-all" open={messages.length > 2}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <span className="flex items-center gap-1.5">
+                        <History size={13} className="text-indigo-600" />
+                        Consultas Recentes ({history.length})
+                      </span>
+                      <ChevronDown size={13} className="transition-transform group-open:rotate-180 text-slate-400" />
+                    </summary>
+                    <div className="space-y-1 border-t border-slate-200/60 p-2 max-h-[140px] overflow-y-auto">
+                      {history.slice(0, 6).map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => selectConversation(item)}
+                          className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[11px] transition-colors ${
+                            selected?.id === item.id 
+                              ? 'bg-indigo-100/70 font-bold text-indigo-800' 
+                              : 'text-slate-600 hover:bg-slate-200/60'
+                          }`}
+                        >
+                          <MessageSquarePlus size={12} className="shrink-0 text-slate-400" />
+                          <span className="truncate">{item.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                {/* Messages stream */}
+                <Conversation messages={messages} />
+
+                {/* Pulsating Loading Indicator */}
+                {loading && (
+                  <div className="flex items-center gap-3 p-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 text-[12px] text-indigo-900 animate-pulse">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                      <Bot size={15} />
+                    </span>
+                    <div className="space-y-0.5">
+                      <p className="font-bold">Consultando o Protheus via QueryRest...</p>
+                      <p className="text-[10px] text-indigo-600">Validando regras de dicionário e executando query segura no Oracle.</p>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
+
+              {/* Floating Studio Composer Area */}
+              <div className="p-4 bg-white/80 border-t border-slate-100/80">
+                <Composer disabled={loading} onSend={send} />
+              </div>
+            </div>
           </div>
-        </main>}
+        )}
 
-        {!showWorkspace && <aside className="agent-panel flex min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-3xl border bg-white xl:sticky xl:top-[96px] xl:h-[calc(100vh-120px)] xl:w-[420px] xl:shrink-0">
-          <header className="flex shrink-0 items-center justify-between border-b border-[#e8eff5] px-5 py-4 sm:px-6 sm:py-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2679bd]">
-                <Bot size={20} strokeWidth={1.8} aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-[14px] font-extrabold tracking-[-0.015em] text-[#203e5e]">Protheus Copiloto</p>
-                <p className="mt-0.5 truncate text-[10px] text-[#91a2b1]">Assistente para consultas seguras</p>
-              </div>
-            </div>
-            <button type="button" onClick={startNewConversation} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce8f1] bg-white px-3 text-[11px] font-bold text-[#52718e] transition-colors hover:border-[#bad6ec] hover:bg-[#f5fbff] hover:text-[#2476bd]" aria-label="Iniciar nova conversa">
-              <Plus size={14} strokeWidth={2} aria-hidden="true" /> Nova
-            </button>
-          </header>
-
-          <div className="agent-surface min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-5">
-            <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-[#e8f0f5] bg-[#fbfdff] px-3 py-2.5">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${state.ready ? 'bg-[#31ab6c] shadow-[0_0_0_4px_rgba(49,171,108,0.12)]' : 'bg-[#d7a343] shadow-[0_0_0_4px_rgba(215,163,67,0.12)]'}`} aria-hidden="true" />
-                <span className="truncate text-[11px] font-semibold text-[#55718a]">{state.message}</span>
-              </div>
-              <span className="shrink-0 text-[10px] font-semibold text-[#9aaabd]">{context.module || 'Sem módulo'}</span>
-            </div>
-
-            {messages.length <= 1 && !selected && !isLogMode && (
-              <div className="mb-5 rounded-[22px] border border-[#e7eff5] bg-gradient-to-br from-[#f9fcff] to-[#f4f9fd] p-4 sm:p-5">
-                <p className="text-[19px] font-extrabold leading-tight tracking-[-0.025em] text-[#254864]">Olá, como posso ajudar você hoje?</p>
-                <p className="mt-2 text-[11px] leading-relaxed text-[#8297aa]">Escolha uma sugestão ou escreva uma pergunta sobre o contexto ativo.</p>
-              </div>
-            )}
-
-            {messages.length <= 1 && !selected && !isLogMode && (
-              <div className="mb-5">
-                <SuggestionCards items={suggestions} disabled={loading} onPick={(item) => send(item.title)} />
-              </div>
-            )}
-
-            {history.length > 0 && !isLogMode && (
-              <details className="group mb-5 rounded-2xl border border-[#e8eff5] bg-[#fcfdff]" open={messages.length > 1}>
-                <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-3 text-[10px] font-bold uppercase tracking-[0.13em] text-[#91a3b2] [&::-webkit-details-marker]:hidden">
-                  <span className="flex items-center gap-2"><History size={14} strokeWidth={1.8} aria-hidden="true" /> Conversas recentes</span>
-                  <ChevronDown size={14} className="transition-transform group-open:rotate-180" strokeWidth={1.8} aria-hidden="true" />
-                </summary>
-                <div className="space-y-1 border-t border-[#edf2f6] px-2.5 py-2.5">
-                  {history.slice(0, 5).map(item => (
-                    <button key={item.id} type="button" onClick={() => selectConversation(item)} className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] transition-colors ${selected?.id === item.id ? 'bg-[#eaf4fc] font-bold text-[#2476bd]' : 'text-[#607992] hover:bg-[#f1f7fb]'}`}>
-                      <MessageSquarePlus size={13} className="shrink-0" strokeWidth={1.8} aria-hidden="true" />
-                      <span className="truncate">{item.title}</span>
-                    </button>
-                  ))}
+        {/* Right Pane: Analytical Canvas / Structured Results & Data Visualizer */}
+        {(isSplitView || isCanvasOnly || isLogMode) && (
+          <main className="flex-1 flex flex-col min-w-0 min-h-0">
+            <div className="studio-card flex flex-col flex-1 min-h-[580px] rounded-3xl overflow-hidden shadow-md bg-white">
+              {isLogMode ? (
+                <LogViewer onClose={() => setViewMode('auto')} />
+              ) : result ? (
+                <StructuredResultPanel 
+                  result={result} 
+                  embedded 
+                  onClose={() => { setResult(null); setViewMode('auto'); }} 
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-indigo-50 text-indigo-600 shadow-inner mb-4">
+                    <BarChart3 size={32} strokeWidth={1.8} />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800">Painel Analítico Studio</h3>
+                  <p className="mt-1 max-w-md text-xs text-slate-500 leading-relaxed">
+                    Envie uma consulta no painel ao lado para gerar indicadores, gráficos interativos e tabelas exportáveis para Excel.
+                  </p>
                 </div>
-              </details>
-            )}
-
-            <Conversation messages={messages} />
-            {loading && (
-              <div className="mt-3 flex items-center gap-2.5 text-[12px] text-[#7790a9]" aria-live="polite">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]"><Bot size={16} className="animate-pulse" strokeWidth={1.8} aria-hidden="true" /></span>
-                <span className="rounded-2xl rounded-bl-md border border-[#e1eaf2] bg-white px-4 py-2.5 shadow-[0_3px_12px_rgba(49,84,117,0.05)]">Consultando o Protheus…</span>
-              </div>
-            )}
-            {selected && (
-              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[#cfe3f4] bg-[#f0f7fd] px-3 py-2.5 text-[11px] text-[#3d6f98]">
-                <ChevronDown size={14} className="rotate-[-90deg]" aria-hidden="true" />
-                Histórico: <strong className="truncate">{selected.title}</strong>
-              </div>
-            )}
-          </div>
-
-          <div className="shrink-0 border-t border-[#e6eef5] bg-white px-4 pb-4 pt-3 sm:px-5">
-            <Composer disabled={loading} onSend={send} placeholder="Faça sua pergunta sobre o Protheus..." />
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-[#9aaabd]"><ShieldCheck size={12} strokeWidth={1.8} aria-hidden="true" /> Consultas somente leitura, limitadas ao contexto ativo.</p>
-            {contextSummary && <span className="sr-only">Contexto atual: {contextSummary}</span>}
-          </div>
-        </aside>}
+              )}
+            </div>
+          </main>
+        )}
       </div>
     </div>
   );

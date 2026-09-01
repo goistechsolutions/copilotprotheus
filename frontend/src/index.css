@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #284862;
-  background: #f4f8fb;
+  font-family: "Google Sans", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1e293b;
+  background: #f8fafc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: #c8d8e5 transparent;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 html,
@@ -20,10 +21,14 @@ body,
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  padding: 0;
 }
 
 body {
-  background: radial-gradient(circle at 12% 0%, rgba(220, 239, 252, 0.7), transparent 30rem), #f4f8fb;
+  background: radial-gradient(circle at 10% 0%, rgba(224, 238, 255, 0.7), transparent 35rem),
+              radial-gradient(circle at 90% 10%, rgba(243, 232, 255, 0.6), transparent 35rem),
+              #f8fafc;
+  background-attachment: fixed;
 }
 
 button,
@@ -37,18 +42,18 @@ a:focus-visible,
 textarea:focus-visible,
 input:focus-visible,
 summary:focus-visible {
-  outline: 3px solid rgba(42, 132, 194, 0.28);
+  outline: 2px solid rgba(79, 70, 229, 0.4);
   outline-offset: 2px;
 }
 
 ::selection {
-  color: #123e61;
-  background: #cbe7f8;
+  color: #1e1b4b;
+  background: #ddd6fe;
 }
 
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 *::-webkit-scrollbar-track {
@@ -56,36 +61,76 @@ summary:focus-visible {
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: #c8d8e5;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: #cbd5e1;
   background-clip: padding-box;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@keyframes gemini-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.04);
   }
 }
 
-@layer components {
-  .agent-panel {
-    border-color: #dce8f1;
-    box-shadow: 0 18px 48px rgba(51, 86, 117, 0.075);
-    transition: box-shadow 180ms ease, border-color 180ms ease;
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
   }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
 
-  .agent-panel:hover {
-    border-color: #cbdfea;
-    box-shadow: 0 22px 58px rgba(51, 86, 117, 0.1);
-  }
+.gemini-gradient {
+  background: linear-gradient(135deg, #1a73e8 0%, #6366f1 40%, #a855f7 80%, #ec4899 100%);
+}
 
-  .agent-surface {
-    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(248, 252, 255, 0.95));
-  }
+.gemini-gradient-text {
+  background: linear-gradient(135deg, #1a73e8 0%, #6366f1 50%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gemini-badge {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  color: #6366f1;
+}
+
+.studio-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.studio-card:hover {
+  border-color: rgba(199, 210, 254, 0.9);
+  box-shadow: 0 10px 25px -3px rgba(99, 102, 241, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04);
+}
+
+.studio-composer {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(99, 102, 241, 0.05);
+}
+
+.studio-composer:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 16px 36px -4px rgba(99, 102, 241, 0.16), 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
