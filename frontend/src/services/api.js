@@ -1,4 +1,18 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+export function getApiBaseUrl() {
+  if (import.meta.env.VITE_API_BASE) {
+    return import.meta.env.VITE_API_BASE;
+  }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // No ambiente de produção (Cloudflare Pages / Domínio da Empresa), a API roda na Hetzner em copilot-api
+    if (host.includes('elitecorp.tec.br') || host.includes('pages.dev')) {
+      return 'https://copilot-api.elitecorp.tec.br/api';
+    }
+  }
+  return '/api';
+}
+
+export const API_BASE = getApiBaseUrl();
 
 export class ApiRequestError extends Error {
   constructor(message, payload = {}, status = null) {
@@ -51,14 +65,16 @@ async function fetchWithRetry(url, options = {}, retries = 2) {
 }
 
 export async function askAgent(payload) {
-  return fetchWithRetry(`${API_BASE}/agent/ask/v2`, {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/agent/ask/v2`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export async function uploadAgentFile(formData) {
-  const response = await fetch(`${API_BASE}/agent/ask/v2/upload`, {
+  const base = getApiBaseUrl();
+  const response = await fetch(`${base}/agent/ask/v2/upload`, {
     method: 'POST',
     credentials: 'include',
     body: formData,
@@ -75,13 +91,15 @@ export async function uploadAgentFile(formData) {
 }
 
 export async function getAgentTaskStatus(taskId) {
-  return fetchWithRetry(`${API_BASE}/agent/ask/v2/status/${taskId}`, {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/agent/ask/v2/status/${taskId}`, {
     method: 'GET',
   });
 }
 
 export async function exportStructuredReport(payload) {
-  return fetchWithRetry(`${API_BASE}/report/export-structured`, {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/report/export-structured`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
