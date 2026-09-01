@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  BarChart3,
   Bell,
-  Bot,
-  Building2,
   CheckCircle2,
-  ChevronDown,
-  FileText,
+  Database,
+  Download,
   Layers,
   LayoutDashboard,
-  MapPin,
   MessageSquare,
   Moon,
   Search,
+  Settings,
   Sparkles,
   Sun,
   User,
@@ -73,7 +72,7 @@ function readContextFromUrl() {
     tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
     company: params.get('company_id') || params.get('company') || '01',
     branch: params.get('branch') || '0101',
-    user: params.get('user') || 'admin',
+    user: params.get('user') || 'João Silva',
     profile: params.get('profile') || 'Gerente Financeiro',
     session_id: params.get('session_id') || '',
     environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
@@ -86,9 +85,8 @@ export default function AgentWorkspace() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [mobileActiveTab, setMobileActiveTab] = useState('chat'); // 'dashboard' | 'chat'
   const [globalSearch, setGlobalSearch] = useState('');
+  const [activeNav, setActiveNav] = useState('chat-hub');
 
   const isIframe = typeof window !== 'undefined' && window.parent && window.parent !== window;
 
@@ -191,9 +189,6 @@ export default function AgentWorkspace() {
 
     setMessages((current) => [...current, { role: 'user', text }]);
     setLoading(true);
-    if (window.innerWidth < 1024) {
-      setMobileDrawerOpen(false);
-    }
 
     try {
       const payload = {
@@ -242,206 +237,257 @@ export default function AgentWorkspace() {
   };
 
   const showWorkspace = Boolean(result);
+  const userName = context.user ? context.user.split(' ')[0] : 'Executivo';
 
   return (
-    <div className="min-h-screen w-full bg-[#EEF3F8] dark:bg-[#0F172A] flex flex-col font-sans text-[#162D52] dark:text-[#F8FAFC] antialiased transition-colors duration-200">
-      {/* 1. HEADER GLOBAL (Exibido no modo Standalone, oculto quando dentro de iframe Protheus compacto) */}
+    <div className="min-h-screen w-full bg-[#F5FAFF] dark:bg-[#0F172A] flex font-sans text-[#171C20] dark:text-[#F8FAFC] antialiased transition-colors duration-200">
+      {/* 1. FIXED LEFT NAVIGATION SIDEBAR (Stitch Model) - Oculto quando dentro de iframe Protheus */}
       {!isIframe && (
-        <header className="h-[80px] shrink-0 border-b border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-[#1E293B]/95 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between gap-4 sticky top-0 z-40 transition-colors">
-          {/* Left: Brand & Organization Context */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0F66FF] text-white shadow-md shadow-[#0F66FF]/20">
-                <Sparkles size={20} strokeWidth={2.2} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[17px] font-black tracking-tight text-[#162D52] dark:text-white">
-                    Protheus <span className="text-[#0F66FF] dark:text-[#3882FF]">Copiloto</span>
-                  </span>
-                  <span className="hidden md:inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[10px] font-bold text-[#0F66FF] dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50">
-                    Executivo
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold hidden sm:block">
-                  Inteligência Corporativa • Read Only
-                </p>
-              </div>
+        <aside className="fixed left-0 top-0 h-full w-20 lg:w-64 bg-white dark:bg-[#1E293B] z-50 flex flex-col border-r border-[#E2E8F0] dark:border-slate-800 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          {/* Logo Header */}
+          <div className="p-6 mb-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#004FCE] text-white flex items-center justify-center shadow-md shadow-[#004FCE]/20 shrink-0">
+              <Sparkles size={20} strokeWidth={2.2} />
             </div>
-
-            <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-4">
-              <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 text-[12px] font-semibold text-[#162D52] dark:text-slate-300">
-                <Building2 size={14} className="text-[#0F66FF]" />
-                <span>Grupo Empresarial Alpha</span>
-                <ChevronDown size={13} className="text-slate-400" />
-              </div>
-              <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 text-[12px] font-semibold text-[#162D52] dark:text-slate-300">
-                <MapPin size={14} className="text-[#0F66FF]" />
-                <span>Filial {context.branch || 'São Paulo'}</span>
-                <ChevronDown size={13} className="text-slate-400" />
-              </div>
+            <div className="hidden lg:block">
+              <span className="font-bold text-[18px] text-[#004FCE] dark:text-[#60A5FA] tracking-tight leading-none block">
+                Copiloto
+              </span>
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mt-0.5">
+                TOTVS Protheus
+              </span>
             </div>
           </div>
 
-          {/* Center / Right: Global Search & User Profile */}
-          <div className="flex items-center gap-3">
-            {/* Campo de Pesquisa */}
-            <div className="relative hidden sm:block">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={globalSearch}
-                onChange={e => setGlobalSearch(e.target.value)}
-                placeholder="Buscar no sistema..."
-                className="h-9 w-[180px] md:w-[240px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 text-[12px] text-[#162D52] dark:text-white outline-none focus:border-[#0F66FF] focus:bg-white dark:focus:bg-slate-900 transition-all"
-              />
-            </div>
-
-            {/* Theme Switcher Toggle */}
+          {/* Nav Items */}
+          <nav className="flex-1 px-3 space-y-1.5">
             <button
               type="button"
-              onClick={() => setIsDarkMode(prev => !prev)}
-              title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#0F66FF] transition-colors"
+              onClick={() => setActiveNav('chat-hub')}
+              className={`w-full flex items-center px-4 py-3 rounded-xl transition-all cursor-pointer ${
+                activeNav === 'chat-hub'
+                  ? 'bg-[#0F66FF] text-white font-medium shadow-xs'
+                  : 'text-[#475569] dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-[#171C20] dark:hover:text-white'
+              }`}
             >
-              {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
+              <MessageSquare size={19} className="mr-3 shrink-0" />
+              <span className="hidden lg:block text-[14px]">Conversas</span>
             </button>
 
-            {/* Notificações */}
             <button
               type="button"
-              className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#0F66FF] transition-colors"
+              onClick={() => setActiveNav('analises')}
+              className={`w-full flex items-center px-4 py-3 rounded-xl transition-all cursor-pointer ${
+                activeNav === 'analises'
+                  ? 'bg-[#0F66FF] text-white font-medium shadow-xs'
+                  : 'text-[#475569] dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-[#171C20] dark:hover:text-white'
+              }`}
             >
-              <Bell size={17} />
-              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-[#0F66FF]" />
+              <BarChart3 size={19} className="mr-3 shrink-0" />
+              <span className="hidden lg:block text-[14px]">Análises</span>
             </button>
 
-            {/* Perfil */}
-            <div className="flex items-center gap-2.5 border-l border-slate-200 dark:border-slate-700 pl-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F66FF] text-white font-bold text-xs shadow-xs">
-                {context.user ? context.user.slice(0, 2).toUpperCase() : 'JS'}
-              </div>
-              <div className="hidden xl:block text-left">
-                <p className="text-[12px] font-bold text-[#162D52] dark:text-white leading-tight">
-                  {context.user || 'João Silva'}
-                </p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                  {context.profile || 'Gerente Financeiro'}
-                </p>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setActiveNav('erp-insights')}
+              className={`w-full flex items-center px-4 py-3 rounded-xl transition-all cursor-pointer ${
+                activeNav === 'erp-insights'
+                  ? 'bg-[#0F66FF] text-white font-medium shadow-xs'
+                  : 'text-[#475569] dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-[#171C20] dark:hover:text-white'
+              }`}
+            >
+              <Database size={19} className="mr-3 shrink-0" />
+              <span className="hidden lg:block text-[14px]">ERP Insights</span>
+            </button>
+          </nav>
+
+          {/* Bottom Settings */}
+          <div className="px-3 py-4 border-t border-[#E2E8F0] dark:border-slate-800">
+            <button
+              type="button"
+              className="w-full flex items-center px-4 py-3 rounded-xl text-[#475569] dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-[#171C20] dark:hover:text-white transition-all cursor-pointer"
+            >
+              <Settings size={19} className="mr-3 shrink-0" />
+              <span className="hidden lg:block text-[14px]">Ajustes</span>
+            </button>
           </div>
-        </header>
+        </aside>
       )}
 
-      {/* 2. MAIN WORKSPACE (Desktop XL: 72%/28%, Desktop: 70%/30%, Notebook: 65%/35%) */}
-      <div className={`flex-1 w-full mx-auto p-3 sm:p-5 lg:p-6 flex gap-5 items-stretch min-h-0 ${
-        isIframe && !showWorkspace ? 'max-w-[500px] justify-center' : 'max-w-[1920px]'
-      }`}>
-        {/* Left Side: WORKSPACE EXECUTIVO (Abre quando há resultado ou em modo standalone) */}
-        {(!isIframe || showWorkspace) && (
-          <main className={`
-            flex-1 w-full lg:w-[65%] xl:w-[70%] 2xl:w-[72%] min-w-0 flex flex-col
-            ${showWorkspace ? 'flex' : (isIframe ? 'hidden' : 'flex')}
-          `}>
-            {result ? (
-              <StructuredResultPanel
-                result={result}
-                context={context}
-                onClose={() => setResult(null)}
-              />
-            ) : (
-              /* TELA INICIAL STANDALONE (Sem consulta) */
-              <div className="exec-panel flex-1 flex flex-col p-6 sm:p-8 overflow-y-auto">
-                <div className="max-w-3xl mb-8">
-                  <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#0F66FF] dark:text-[#3882FF] block mb-1">
-                    INTELIGÊNCIA EXECUTIVA • ERP PROTHEUS
-                  </span>
-                  <h1 className="text-[28px] sm:text-[34px] lg:text-[40px] font-black text-[#162D52] dark:text-white tracking-tight leading-tight">
-                    Olá, como posso ajudar hoje?
-                  </h1>
-                  <p className="text-[14px] sm:text-[15px] text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-                    Consulte indicadores, relatórios e análises do seu Protheus utilizando linguagem natural.
+      {/* 2. MAIN CONTAINER */}
+      <div className={`flex-1 flex flex-col min-h-screen ${!isIframe ? 'pl-20 lg:pl-64' : 'pl-0'}`}>
+        {/* TOPBAR (Stitch Model) - Oculto quando dentro de iframe Protheus */}
+        {!isIframe && (
+          <header className="h-16 bg-white/80 dark:bg-[#1E293B]/80 backdrop-blur-xl border-b border-[#E2E8F0] dark:border-slate-800 sticky top-0 z-40 flex items-center justify-between px-6 sm:px-8 transition-colors">
+            {/* Left: Operational Status */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#22C55E] animate-pulse" />
+                <span className="text-[13px] font-semibold text-[#475569] dark:text-slate-400">
+                  Sistema Operacional
+                </span>
+              </div>
+              <div className="hidden md:flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-3 text-[11px] font-semibold text-slate-500">
+                <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                  Filial {context.branch || '0101'}
+                </span>
+                <span className="bg-blue-50 dark:bg-blue-950/60 text-[#004FCE] dark:text-[#60A5FA] px-2 py-0.5 rounded">
+                  {context.module || 'SIGAFAT'}
+                </span>
+              </div>
+            </div>
+
+            {/* Right: Search, Theme Toggle, Profile */}
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center bg-slate-100 dark:bg-slate-900 px-3 py-1.5 rounded-full border border-[#E2E8F0] dark:border-slate-700">
+                <Search size={16} className="text-slate-400 mr-2" />
+                <input
+                  type="text"
+                  value={globalSearch}
+                  onChange={e => setGlobalSearch(e.target.value)}
+                  placeholder="Pesquisar no ERP..."
+                  className="bg-transparent border-none outline-none text-[13px] text-[#171C20] dark:text-white w-48 placeholder-slate-400"
+                />
+              </div>
+
+              {/* Theme Toggle */}
+              <button
+                type="button"
+                onClick={() => setIsDarkMode(prev => !prev)}
+                title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+              >
+                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+
+              {/* Notifications */}
+              <button
+                type="button"
+                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+              >
+                <Bell size={18} />
+              </button>
+
+              {/* User Avatar */}
+              <div className="flex items-center gap-2.5 border-l border-slate-200 dark:border-slate-700 pl-3">
+                <div className="w-8 h-8 rounded-full bg-[#004FCE] text-white flex items-center justify-center text-[12px] font-bold shadow-xs">
+                  {context.user ? context.user.slice(0, 2).toUpperCase() : 'JS'}
+                </div>
+                <div className="hidden xl:block text-left">
+                  <p className="text-[12px] font-bold text-[#171C20] dark:text-white leading-tight">
+                    {context.user || 'João Silva'}
                   </p>
-                </div>
-
-                {/* SUGESTÕES INICIAIS (Grid de 8 Cards Executivos) */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[14px] font-bold text-[#162D52] dark:text-white flex items-center gap-2">
-                      <Sparkles size={16} className="text-[#0F66FF]" />
-                      <span>Análises Corporativas Recomendadas</span>
-                    </h3>
-                    <span className="text-[11px] font-semibold text-slate-400">Clique para consultar</span>
-                  </div>
-
-                  <SuggestionCards disabled={loading} onPick={send} />
-                </div>
-              </div>
-            )}
-          </main>
-        )}
-
-        {/* Right Side: COPILOTO IA */}
-        <aside className={`
-          exec-panel flex flex-col p-4 sm:p-6 w-full shrink-0 min-h-[560px]
-          ${isIframe && !showWorkspace ? 'w-full max-w-[480px]' : 'lg:w-[35%] xl:w-[30%] 2xl:w-[28%]'}
-        `}>
-          {/* Header Copiloto */}
-          <header className="flex items-center justify-between pb-3.5 border-b border-slate-200 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#0F66FF]">
-                <Sparkles size={18} strokeWidth={2.2} />
-              </div>
-              <div>
-                <h2 className="text-[16px] font-bold text-[#162D52] dark:text-white leading-tight">
-                  Protheus Copiloto
-                </h2>
-                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#22C55E] font-semibold">
-                  <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
-                  <span>Conectado ao Protheus</span>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {context.profile || 'Gerente Financeiro'}
+                  </p>
                 </div>
               </div>
             </div>
           </header>
+        )}
 
-          {/* Conversa Stream */}
-          <div className="flex-1 overflow-y-auto py-4 space-y-3">
-            {messages.length === 0 && (
-              <div className="space-y-4">
-                <div>
-                  <h1 className="text-[20px] sm:text-[24px] font-black text-[#162D52] dark:text-white tracking-tight leading-tight">
-                    Olá, como posso ajudar hoje?
-                  </h1>
-                  <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-1">
-                    Consulte indicadores e análises com linguagem natural.
-                  </p>
+        {/* 3. CENTER CONTENT AREA */}
+        <main className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8 min-h-0">
+          {/* ESTADO INICIAL (Sem resultado e Standalone) -> Hero Central + 4 Bento Sugestões + Floating Prompt */}
+          {!showWorkspace && !isIframe && (
+            <div className="flex-1 flex flex-col items-center justify-center max-w-4xl w-full mx-auto my-auto px-2">
+              {/* Hero Greeting */}
+              <div className="flex flex-col items-center justify-center max-w-3xl w-full text-center mb-8">
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-[#004FCE] text-white flex items-center justify-center shadow-md shadow-[#004FCE]/25">
+                    <Sparkles size={22} strokeWidth={2.2} />
+                  </div>
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#22C55E] animate-pulse" />
+                </div>
+                <h1 className="text-[32px] sm:text-[40px] font-bold text-[#171C20] dark:text-white tracking-tight leading-tight">
+                  Olá, {userName}.
+                  <br />
+                  <span className="text-[20px] sm:text-[24px] font-semibold text-[#475569] dark:text-slate-400">
+                    Como posso ajudar com os dados do Protheus hoje?
+                  </span>
+                </h1>
+              </div>
+
+              {/* 4 Bento Sugestões */}
+              <div className="w-full mb-8">
+                <SuggestionCards disabled={loading} onPick={send} />
+              </div>
+
+              {/* Floating Bottom Prompt Composer */}
+              <div className="w-full">
+                <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre clientes, pedidos, financeiro, faturamento..." />
+              </div>
+            </div>
+          )}
+
+          {/* ESTADO RESULTADO (Ou Modo Iframe) -> Grid 70/30 Split Stitch */}
+          {(showWorkspace || isIframe) && (
+            <div className="flex-1 flex flex-col lg:flex-row gap-6 items-stretch min-h-0">
+              {/* Left Panel: ANALYTICAL DASHBOARD (70%) */}
+              {showWorkspace && (
+                <section className="flex-1 lg:w-[70%] min-w-0 flex flex-col">
+                  <StructuredResultPanel
+                    result={result}
+                    context={context}
+                    onClose={() => setResult(null)}
+                  />
+                </section>
+              )}
+
+              {/* Right Panel: COPILOT CHAT CONTEXT (30% / 100% no Iframe inicial) */}
+              <aside className={`
+                stitch-card flex flex-col p-4 sm:p-5 shrink-0 overflow-hidden
+                ${showWorkspace ? 'w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20' : 'w-full max-w-xl mx-auto min-h-[580px]'}
+              `}>
+                {/* Copilot Header */}
+                <div className="p-3.5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40 rounded-xl mb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-[#004FCE] text-white flex items-center justify-center shrink-0">
+                      <Sparkles size={16} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h2 className="text-[14px] font-bold text-[#171C20] dark:text-white leading-tight">
+                          Copiloto Protheus
+                        </h2>
+                        <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        {context.module ? `Módulo: ${context.module}` : 'Oracle Read Only'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <p className="text-[12px] font-bold text-[#162D52] dark:text-white mb-2.5">
-                    Sugestões de consulta:
-                  </p>
-                  <SuggestionCards disabled={loading} onPick={send} />
+                {/* Chat History Stream */}
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                  {messages.length === 0 && (
+                    <div className="space-y-4 py-2">
+                      <p className="text-[13px] text-slate-500 dark:text-slate-400">
+                        Pronto para consultar. Escolha uma sugestão ou faça uma pergunta:
+                      </p>
+                      <SuggestionCards disabled={loading} onPick={send} />
+                    </div>
+                  )}
+
+                  <Conversation messages={messages} />
+
+                  {loading && (
+                    <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#004FCE] dark:text-[#60A5FA] font-medium animate-pulse">
+                      <Sparkles size={15} />
+                      <span>Consultando dados no Protheus via Oracle QueryRest...</span>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
 
-            <Conversation messages={messages} />
-
-            {loading && (
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#0F66FF] dark:text-blue-300 font-semibold animate-pulse">
-                <Sparkles size={16} />
-                <span>Consultando o Protheus via QueryRest Oracle...</span>
-              </div>
-            )}
-          </div>
-
-          {/* Prompt Input (Radius 32px, Enviar #0F66FF, Mic, Anexo) */}
-          <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
-            <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." />
-          </div>
-        </aside>
+                {/* Composer at Bottom */}
+                <div className="pt-3 border-t border-[#E2E8F0] dark:border-slate-800 mt-2">
+                  <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." />
+                </div>
+              </aside>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );

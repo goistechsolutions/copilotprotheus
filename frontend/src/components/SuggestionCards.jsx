@@ -1,99 +1,69 @@
 import React from 'react';
 import {
   TrendingUp,
-  DollarSign,
-  FileText,
-  Building2,
-  PieChart,
-  PackageX,
-  AlertTriangle,
-  Award,
-  ArrowRight,
+  BarChart3,
+  Package,
+  Receipt,
+  ArrowUpRight,
 } from 'lucide-react';
 
-export const executiveSuggestions = [
+export const stitchSuggestions = [
   {
-    id: 'fluxo_caixa',
-    icon: DollarSign,
-    color: 'from-blue-600 to-indigo-600',
-    title: 'Fluxo de Caixa',
-    subtitle: 'Previsão de entradas e saídas para os próximos 30 dias',
-    category: 'Financeiro',
-    prompt: 'Qual a previsão consolidada de fluxo de caixa e compromissos para os próximos 30 dias?',
-  },
-  {
-    id: 'faturamento',
+    id: 'prever_recebimentos',
     icon: TrendingUp,
-    color: 'from-emerald-600 to-teal-600',
-    title: 'Faturamento',
-    subtitle: 'Total faturado por filial e clientes no mês',
-    category: 'Vendas',
-    prompt: 'Apresente o faturamento consolidado deste mês detalhado por filial e principais clientes.',
+    iconColor: 'text-[#004FCE] dark:text-[#60A5FA]',
+    bgColor: 'bg-blue-50 dark:bg-blue-950/50',
+    hoverGradient: 'from-[#004FCE]/5',
+    title: 'Prever Recebimentos',
+    subtitle: 'Analise o fluxo de caixa projetado para a próxima semana.',
+    category: 'SUGESTÃO',
+    prompt: 'Qual a previsão consolidada de recebimentos e fluxo de caixa projetado para a próxima semana?',
   },
   {
-    id: 'contas_receber',
-    icon: FileText,
-    color: 'from-cyan-600 to-blue-600',
-    title: 'Contas a Receber',
-    subtitle: 'Títulos em aberto e projeção de liquidação',
-    category: 'Crédito',
-    prompt: 'Liste os títulos a receber em aberto com cliente, valor e data de vencimento.',
+    id: 'analise_vendas',
+    icon: BarChart3,
+    iconColor: 'text-[#A13400] dark:text-[#FB923C]',
+    bgColor: 'bg-orange-50 dark:bg-orange-950/50',
+    hoverGradient: 'from-[#A13400]/5',
+    title: 'Análise de Vendas',
+    subtitle: 'Comparativo de faturamento mensal por filial.',
+    category: 'SUGESTÃO',
+    prompt: 'Apresente o faturamento consolidado deste mês detalhado por filial e principais produtos.',
   },
   {
-    id: 'comparar_filiais',
-    icon: Building2,
-    color: 'from-purple-600 to-indigo-600',
-    title: 'Comparar Filiais',
-    subtitle: 'Performance e curva comparativa entre unidades',
-    category: 'Operacional',
-    prompt: 'Compare o desempenho de faturamento e volume de vendas entre todas as filiais.',
+    id: 'estoque_critico',
+    icon: Package,
+    iconColor: 'text-[#F59E0B] dark:text-[#FBBF24]',
+    bgColor: 'bg-amber-50 dark:bg-amber-950/50',
+    hoverGradient: 'from-[#F59E0B]/5',
+    title: 'Estoque Crítico',
+    subtitle: 'Identificar itens com saldo abaixo do ponto de pedido.',
+    category: 'SUGESTÃO',
+    prompt: 'Quais produtos estão com saldo de estoque crítico ou abaixo do ponto de pedido no SIGAEST?',
   },
   {
-    id: 'margem_lucro',
-    icon: PieChart,
-    color: 'from-amber-500 to-orange-600',
-    title: 'Margem de Lucro',
-    subtitle: 'Margem de contribuição por linha de produto',
-    category: 'Controladoria',
-    prompt: 'Analise a margem de contribuição e lucratividade por grupo e linha de produto.',
-  },
-  {
-    id: 'produtos_parados',
-    icon: PackageX,
-    color: 'from-slate-600 to-slate-800',
-    title: 'Produtos Parados',
-    subtitle: 'Itens sem movimentação no estoque há mais de 90 dias',
-    category: 'Estoque',
-    prompt: 'Quais produtos estão sem movimentação de saída no estoque há mais de 90 dias?',
-  },
-  {
-    id: 'inadimplentes',
-    icon: AlertTriangle,
-    color: 'from-rose-600 to-pink-600',
-    title: 'Clientes Inadimplentes',
-    subtitle: 'Títulos vencidos e análise de risco financeiro',
-    category: 'Risco',
-    prompt: 'Quais clientes possuem títulos vencidos em aberto ordenados pelo maior valor?',
-  },
-  {
-    id: 'ranking_vendedores',
-    icon: Award,
-    color: 'from-violet-600 to-purple-700',
-    title: 'Ranking de Vendedores',
-    subtitle: 'Top performance comercial e comissionamento',
-    category: 'Comercial',
-    prompt: 'Apresente o ranking dos vendedores com maior volume faturado no período.',
+    id: 'titulos_vencidos',
+    icon: Receipt,
+    iconColor: 'text-[#495F82] dark:text-[#94A3B8]',
+    bgColor: 'bg-slate-100 dark:bg-slate-800/60',
+    hoverGradient: 'from-[#495F82]/5',
+    title: 'Títulos Vencidos',
+    subtitle: 'Resumo do contas a receber em atraso no período.',
+    category: 'SUGESTÃO',
+    prompt: 'Liste os títulos a receber vencidos no SIGAFIN ordenados pelo maior valor em aberto.',
   },
 ];
 
 export default function SuggestionCards({ items, disabled, onPick }) {
-  const list = items?.length ? items : executiveSuggestions;
+  const list = items?.length ? items : stitchSuggestions;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 w-full">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
       {list.map((item, index) => {
-        const Icon = item.icon || executiveSuggestions[index % executiveSuggestions.length].icon;
-        const color = item.color || 'from-blue-600 to-indigo-600';
+        const Icon = item.icon || stitchSuggestions[index % stitchSuggestions.length].icon;
+        const iconColor = item.iconColor || 'text-[#004FCE]';
+        const bgColor = item.bgColor || 'bg-blue-50';
+        const hoverGradient = item.hoverGradient || 'from-[#004FCE]/5';
 
         return (
           <button
@@ -101,28 +71,34 @@ export default function SuggestionCards({ items, disabled, onPick }) {
             type="button"
             disabled={disabled}
             onClick={() => onPick(item.prompt || item.title)}
-            className="exec-card p-4 text-left flex flex-col justify-between min-h-[128px] group active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="stitch-card p-5 text-left group flex flex-col justify-between relative overflow-hidden active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
+            {/* Subtle Gradient Hover */}
+            <div className={`absolute inset-0 bg-gradient-to-br ${hoverGradient} via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none`} />
+
             <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${color} text-white shadow-xs transition-transform group-hover:scale-105`}>
-                  <Icon size={18} strokeWidth={2} />
-                </span>
-                {item.category && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                    {item.category}
+              {/* Category & Icon */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center`}>
+                    <Icon size={18} className={iconColor} />
+                  </div>
+                  <span className="text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400 uppercase">
+                    {item.category || 'SUGESTÃO'}
                   </span>
-                )}
+                </div>
+                <ArrowUpRight size={16} className="text-slate-400 dark:text-slate-600 group-hover:text-[#004FCE] dark:group-hover:text-[#60A5FA] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all duration-200" />
               </div>
-              <strong className="block text-[14px] font-bold text-[#162D52] dark:text-white leading-tight group-hover:text-[#0F66FF] dark:group-hover:text-[#3882FF] transition-colors">
+
+              {/* Title */}
+              <h3 className="text-[16px] font-bold text-[#171C20] dark:text-white leading-snug group-hover:text-[#004FCE] dark:group-hover:text-[#60A5FA] transition-colors">
                 {item.title}
-              </strong>
-              <span className="block text-[12px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+              </h3>
+
+              {/* Subtitle */}
+              <p className="text-[13px] text-[#475569] dark:text-slate-400 mt-1 leading-relaxed">
                 {item.subtitle}
-              </span>
-            </div>
-            <div className="pt-2 flex items-center justify-end">
-              <ArrowRight size={14} className="text-slate-300 dark:text-slate-600 group-hover:text-[#0F66FF] dark:group-hover:text-[#3882FF] transition-colors group-hover:translate-x-0.5" />
+              </p>
             </div>
           </button>
         );

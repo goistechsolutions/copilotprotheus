@@ -1,17 +1,46 @@
 @import "tailwindcss";
 
+@theme {
+  --color-primary: #004fce;
+  --color-primary-container: #0f66ff;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #f9f8ff;
+  --color-secondary: #495f82;
+  --color-secondary-container: #bfd5fe;
+  --color-tertiary: #a13400;
+  --color-tertiary-container: #cb4400;
+  --color-background: #f5faff;
+  --color-surface: #ffffff;
+  --color-surface-container-low: #eff4f9;
+  --color-surface-container: #e9eef3;
+  --color-surface-container-high: #e4e9ee;
+  --color-surface-container-highest: #dee3e8;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-surface: #171c20;
+  --color-on-surface-variant: #424655;
+  --color-on-surface-subtext: #475569;
+  --color-on-surface-heading: #0f172a;
+  --color-border-hairline: #e2e8f0;
+  --color-success-emerald: #22c55e;
+  --color-warning-amber: #f59e0b;
+  --color-error-ruby: #ef4444;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-accent-tint: #e0ecff;
+}
+
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: #162D52;
-  background-color: #EEF3F8;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #171c20;
+  background-color: #f5faff;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
 .dark {
-  color: #F8FAFC;
-  background-color: #0F172A;
+  color: #f8fafc;
+  background-color: #0f172a;
 }
 
 * {
@@ -34,14 +63,14 @@ body,
 }
 
 body {
-  background-color: #EEF3F8;
-  color: #162D52;
+  background-color: #f5faff;
+  color: #171c20;
   transition: background-color 200ms ease, color 200ms ease;
 }
 
 .dark body {
-  background-color: #0F172A;
-  color: #F8FAFC;
+  background-color: #0f172a;
+  color: #f8fafc;
 }
 
 button,
@@ -85,59 +114,27 @@ input:focus-visible {
   background: #475569;
 }
 
-/* Executive Cards */
-.exec-panel {
+/* Stitch Elevation & Bento Card Styles */
+.stitch-card {
   background: #ffffff;
-  border-radius: 24px;
-  box-shadow: 0 10px 30px -5px rgba(22, 45, 82, 0.05), 0 0 0 1px rgba(226, 232, 240, 0.8);
-  transition: background-color 200ms ease, border-color 200ms ease;
-}
-
-.dark .exec-panel {
-  background: #1E293B;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(51, 65, 85, 0.8);
-}
-
-.exec-card {
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 20px;
-  box-shadow: 0 4px 16px rgba(22, 45, 82, 0.03);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.dark .exec-card {
-  background: #1E293B;
+.dark .stitch-card {
+  background: #1e293b;
   border-color: #334155;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
-.exec-card:hover {
-  border-color: #93C5FD;
-  box-shadow: 0 8px 24px rgba(15, 102, 255, 0.08);
-  transform: translateY(-1px);
+.stitch-card:hover {
+  border-color: #bfd5fe;
+  box-shadow: 0 6px 20px rgba(15, 102, 255, 0.08);
 }
 
-.dark .exec-card:hover {
-  border-color: #3B82F6;
-  box-shadow: 0 8px 24px rgba(15, 102, 255, 0.15);
-}
-
-.exec-composer {
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 32px;
-  box-shadow: 0 4px 20px rgba(22, 45, 82, 0.05);
-  transition: all 180ms ease;
-}
-
-.dark .exec-composer {
-  background: #1E293B;
-  border-color: #334155;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-}
-
-.exec-composer:focus-within {
-  border-color: #0F66FF;
-  box-shadow: 0 4px 24px rgba(15, 102, 255, 0.15);
+.dark .stitch-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 6px 20px rgba(15, 102, 255, 0.18);
 }

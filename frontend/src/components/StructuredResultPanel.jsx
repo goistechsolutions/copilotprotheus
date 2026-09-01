@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { exportStructuredReport } from '../services/api';
-import { Bar, Line, Doughnut } from 'react-chartjs-2';
+import { Bar, Line } from 'react-chartjs-2';
 import {
   BarElement,
   CategoryScale,
@@ -11,34 +11,28 @@ import {
   LineElement,
   LinearScale,
   PointElement,
-  ArcElement,
   Tooltip,
 } from 'chart.js';
 import {
-  ArrowDownRight,
   ArrowUpRight,
   BarChart3,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
+  DollarSign,
   FileSpreadsheet,
   FileText,
   Filter,
   Info,
   Layers,
-  LayoutList,
   Lightbulb,
-  PieChart,
-  RefreshCw,
   Search,
-  ShieldAlert,
-  ShieldCheck,
   Sparkles,
-  Terminal,
   TrendingDown,
   TrendingUp,
+  AlertTriangle,
+  Wallet,
   X,
   Zap,
 } from 'lucide-react';
@@ -51,7 +45,6 @@ ChartJS.register(
   LineElement,
   LinearScale,
   PointElement,
-  ArcElement,
   Tooltip,
 );
 
@@ -119,573 +112,486 @@ function getSafeRows(result) {
   return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
 }
 
-// 2. Componente de KPI (Altura 120px, Radius 20px, Title, Value, Variation)
-function ExecutiveKpiCard({ title, value, change, isPositive = true, subtitle }) {
-  return (
-    <div className="exec-card h-[120px] rounded-[20px] p-4 sm:p-5 flex flex-col justify-between">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 truncate max-w-[170px]">
-          {title}
-        </span>
-        {change && (
-          <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full ${
-            isPositive 
-              ? 'text-[#22C55E] bg-emerald-50 dark:bg-emerald-950/50' 
-              : 'text-[#EF4444] bg-rose-50 dark:bg-rose-950/50'
-          }`}>
-            {isPositive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-            <span>{change}</span>
-          </span>
-        )}
-      </div>
-      <div>
-        <span className="text-[22px] sm:text-[25px] font-black text-[#162D52] dark:text-white tracking-tight block truncate">
-          {value}
-        </span>
-        {subtitle && (
-          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block truncate mt-0.5">
-            {subtitle}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// 3. Componente de Insights Categorizados (Informativo, Oportunidade, Alerta, Crítico)
-function InsightCard({ category = 'Informativo', title, description, impact }) {
-  const styles = {
-    Informativo: {
-      border: 'border-blue-200 dark:border-blue-800/60',
-      bg: 'bg-blue-50/70 dark:bg-blue-950/40',
-      badge: 'bg-[#0F66FF] text-white',
-      text: 'text-[#162D52] dark:text-blue-100',
-      icon: Info,
-    },
-    Oportunidade: {
-      border: 'border-purple-200 dark:border-purple-800/60',
-      bg: 'bg-purple-50/70 dark:bg-purple-950/40',
-      badge: 'bg-[#8B5CF6] text-white',
-      text: 'text-purple-950 dark:text-purple-100',
-      icon: Zap,
-    },
-    Alerta: {
-      border: 'border-amber-200 dark:border-amber-800/60',
-      bg: 'bg-amber-50/70 dark:bg-amber-950/40',
-      badge: 'bg-[#F59E0B] text-white',
-      text: 'text-amber-950 dark:text-amber-100',
-      icon: Lightbulb,
-    },
-    Crítico: {
-      border: 'border-rose-200 dark:border-rose-800/60',
-      bg: 'bg-rose-50/70 dark:bg-rose-950/40',
-      badge: 'bg-[#EF4444] text-white',
-      text: 'text-rose-950 dark:text-rose-100',
-      icon: ShieldAlert,
-    },
-  };
-
-  const style = styles[category] || styles.Informativo;
-  const Icon = style.icon;
-
-  return (
-    <div className={`rounded-2xl border p-4 transition-all ${style.border} ${style.bg}`}>
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${style.badge}`}>
-            <Icon size={12} />
-            <span>{category}</span>
-          </span>
-          <strong className={`text-[13px] font-bold ${style.text}`}>{title}</strong>
-        </div>
-        {impact && (
-          <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 px-2.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-            Impacto: <strong>{impact}</strong>
-          </span>
-        )}
-      </div>
-      <p className="text-[12px] text-slate-600 dark:text-slate-300 leading-relaxed">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-export default function StructuredResultPanel({ result, onClose, context = {} }) {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'table' | 'sql'
-  const [search, setSearch] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [chartType, setChartType] = useState('bar'); // 'bar' | 'line' | 'doughnut'
-  const pageSize = 10;
+export default function StructuredResultPanel({ result, context, onClose }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [period, setPeriod] = useState('Últimos 6 meses');
 
   const rows = useMemo(() => getSafeRows(result), [result]);
+
   const columns = useMemo(() => {
-    const structuredColumns = result?.structured?.columns;
-    return Array.isArray(structuredColumns) && structuredColumns.length
-      ? structuredColumns
-      : Object.keys(rows[0] || {});
-  }, [result?.structured?.columns, rows]);
-
-  const filteredRows = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return rows;
-    return rows.filter(row =>
-      columns.some(col => displayValue(row[col]).toLowerCase().includes(term))
-    );
-  }, [columns, rows, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [currentPage, filteredRows, pageSize]);
-
-  // Identify numeric columns
-  const numericColumns = useMemo(
-    () => columns.filter(col => rows.some(row => parseNumeric(row[col]) !== null)),
-    [columns, rows]
-  );
-  const activeMetricColumn = numericColumns[0] || '';
-  const activeLabelColumn = columns.find(c => c !== activeMetricColumn) || columns[0] || '';
-
-  // Dynamic KPIs
-  const dynamicKpis = useMemo(() => {
-    if (!rows.length) {
-      return [
-        { title: 'Total Registros', value: '0', change: null, isPositive: true },
-        { title: 'Volume Financeiro', value: 'R$ 0,00', change: null, isPositive: true },
-        { title: 'Ticket Médio', value: 'R$ 0,00', change: null, isPositive: true },
-        { title: 'Status do ERP', value: 'Ativo', change: null, isPositive: true },
-      ];
+    if (Array.isArray(result?.structured?.columns) && result.structured.columns.length > 0) {
+      return result.structured.columns;
     }
+    if (rows.length > 0) {
+      return Object.keys(rows[0]);
+    }
+    return [];
+  }, [result, rows]);
 
-    let totalSum = 0;
-    let maxVal = 0;
-    let countNumeric = 0;
+  // KPIs Dinâmicos calculados a partir dos dados do Protheus
+  const computedKpis = useMemo(() => {
+    if (!rows.length) return null;
 
-    for (const row of rows) {
-      if (activeMetricColumn) {
-        const val = parseNumeric(row[activeMetricColumn]);
-        if (val !== null) {
-          totalSum += val;
-          if (val > maxVal) maxVal = val;
-          countNumeric++;
+    let totalVal = 0;
+    let hasNumeric = false;
+    const numCols = columns.filter(c => {
+      const vals = rows.slice(0, 20).map(r => parseNumeric(r[c]));
+      return vals.filter(v => v !== null).length > 5;
+    });
+
+    if (numCols.length > 0) {
+      const primaryCol = numCols[0];
+      rows.forEach(r => {
+        const n = parseNumeric(r[primaryCol]);
+        if (n !== null) {
+          totalVal += n;
+          hasNumeric = true;
         }
-      }
+      });
     }
 
-    const avgVal = countNumeric > 0 ? totalSum / countNumeric : 0;
+    const totalRecords = rows.length;
+    const avgVal = totalRecords > 0 && hasNumeric ? totalVal / totalRecords : null;
 
-    return [
-      {
-        title: 'Total de Registros',
-        value: rows.length.toLocaleString('pt-BR'),
-        change: '+100%',
-        isPositive: true,
-        subtitle: 'Registros no período',
-      },
-      {
-        title: activeMetricColumn ? `Total ${activeMetricColumn}` : 'Volume Consolidado',
-        value: totalSum > 0 ? formatCurrency(totalSum) : `${rows.length} itens`,
-        change: '+12.4%',
-        isPositive: true,
-        subtitle: 'vs mês anterior',
-      },
-      {
-        title: 'Média por Registro',
-        value: avgVal > 0 ? formatCurrency(avgVal) : '—',
-        change: '+4.8%',
-        isPositive: true,
-        subtitle: 'Ticket médio apurado',
-      },
-      {
-        title: 'Pico Identificado',
-        value: maxVal > 0 ? formatCurrency(maxVal) : '—',
-        change: null,
-        isPositive: true,
-        subtitle: 'Maior valor no período',
-      },
-    ];
-  }, [rows, activeMetricColumn]);
+    return {
+      total: hasNumeric ? totalVal : null,
+      avg: avgVal,
+      count: totalRecords,
+    };
+  }, [rows, columns]);
 
-  // Chart dataset
-  const chartRows = rows.slice(0, 15);
-  const chartData = {
-    labels: chartRows.map((r, i) => displayValue(r[activeLabelColumn] || `Item ${i + 1}`)),
-    datasets: [
-      {
-        label: activeMetricColumn || 'Volume',
-        data: chartRows.map(r => parseNumeric(r[activeMetricColumn]) ?? 1),
-        backgroundColor: chartType === 'bar' 
-          ? 'rgba(15, 102, 255, 0.85)' 
-          : chartType === 'doughnut'
-            ? ['#0F66FF', '#22C55E', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4', '#64748B']
-            : 'rgba(15, 102, 255, 0.15)',
-        borderColor: '#0F66FF',
-        borderWidth: chartType === 'doughnut' ? 0 : 2,
-        borderRadius: chartType === 'bar' ? 8 : 0,
-        fill: chartType === 'line',
-        tension: 0.3,
-      },
-    ],
-  };
+  // Chart Data
+  const chartData = useMemo(() => {
+    if (!rows.length || !columns.length) return null;
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: chartType === 'doughnut', position: 'bottom' },
-      tooltip: { intersect: false, mode: 'index' },
-    },
-    scales: chartType === 'doughnut' ? {} : {
-      x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
-      y: { beginAtZero: true, grid: { color: 'rgba(226, 232, 240, 0.6)' }, ticks: { color: '#64748b', font: { size: 11 } } },
-    },
-  };
+    const labelCol = columns.find(c => /NOME|DESC|FILIAL|PRODUTO|CLIENTE|MES|DATA|EMISSAO/i.test(c)) || columns[0];
+    const numCol = columns.find(c => /VALOR|TOTAL|FATUR|SALDO|PRECO|QUANT/i.test(c)) || columns[1] || columns[0];
 
-  const downloadCsv = () => {
-    if (!columns.length) return;
-    exportFile(`\ufeff${buildCsv(filteredRows, columns)}`, 'protheus-dashboard-executivo.csv', 'text/csv;charset=utf-8');
-  };
+    const slice = rows.slice(0, 8);
+    const labels = slice.map(r => String(r[labelCol] || '—').slice(0, 16));
+    const values = slice.map(r => parseNumeric(r[numCol]) || 0);
 
-  const title = result?.title || result?.titulo || 'Análise Executiva Consolidada';
-  const subtitle = result?.subtitle || result?.description || 'Indicadores corporativos e cruzamento de dados em tempo real';
+    return {
+      labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: numCol || 'Valor',
+          data: values,
+          backgroundColor: '#004FCE',
+          borderRadius: 6,
+          barThickness: 28,
+        },
+      ],
+    };
+  }, [rows, columns]);
 
-  // Dynamic Insights
-  const dynamicInsights = useMemo(() => {
-    if (Array.isArray(result?.insights) && result.insights.length) {
-      return result.insights;
+  // Tabela filtrada e ordenada
+  const filteredRows = useMemo(() => {
+    let resultRows = [...rows];
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      resultRows = resultRows.filter(row =>
+        columns.some(col => String(row[col] ?? '').toLowerCase().includes(term))
+      );
     }
-    return [
-      {
-        category: 'Oportunidade',
-        title: 'Concentração de Volume Positivo',
-        description: 'Os dados indicam que as principais movimentações representam a maior fatia do volume consolidado no período.',
-        impact: 'Otimização Operacional',
-      },
-      {
-        category: 'Informativo',
-        title: 'Dados Auditados e Validados',
-        description: 'Consulta realizada diretamente na base de dados Oracle via QueryRest com regras de integridade e RBAC ativas.',
-        impact: '100% Real',
-      },
-    ];
-  }, [result?.insights]);
-
-  // Dynamic Recommendations
-  const dynamicRecommendations = useMemo(() => {
-    if (Array.isArray(result?.recommendations) && result.recommendations.length) {
-      return result.recommendations;
+    if (sortConfig.key) {
+      resultRows.sort((a, b) => {
+        const valA = a[sortConfig.key];
+        const valB = b[sortConfig.key];
+        const numA = parseNumeric(valA);
+        const numB = parseNumeric(valB);
+        if (numA !== null && numB !== null) {
+          return sortConfig.direction === 'asc' ? numA - numB : numB - numA;
+        }
+        return sortConfig.direction === 'asc'
+          ? String(valA ?? '').localeCompare(String(valB ?? ''))
+          : String(valB ?? '').localeCompare(String(valA ?? ''));
+      });
     }
-    return [
-      'Monitore os vencimentos e prazos para antecipar eventuais desvios de caixa.',
-      'Utilize a exportação para Excel caso necessite de cruzamentos contábeis adicionais.',
-      'Aprofunde a análise solicitando comparativos detalhados por filial no chat.',
-    ];
-  }, [result?.recommendations]);
+    return resultRows;
+  }, [rows, columns, searchTerm, sortConfig]);
+
+  const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page, pageSize]);
+
+  const handleExportCsv = () => {
+    if (!rows.length) return;
+    const csvContent = buildCsv(rows, columns);
+    exportFile(csvContent, `protheus_export_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
+  };
+
+  const handleExportExcel = async () => {
+    if (!rows.length) return;
+    try {
+      const payload = {
+        title: 'Relatório Executivo Protheus',
+        context: context || {},
+        columns,
+        rows,
+      };
+      const blob = await exportStructuredReport('xlsx', payload);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `relatorio_protheus_${Date.now()}.xlsx`;
+      anchor.click();
+    } catch {
+      handleExportCsv();
+    }
+  };
 
   return (
-    <div className="exec-panel flex flex-col h-full overflow-hidden p-5 sm:p-7 relative text-[#162D52] dark:text-white">
-      {/* Top Header Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-700/60">
+    <div className="flex flex-col w-full h-full gap-5 overflow-y-auto pr-1">
+      {/* 1. DASHBOARD HEADER */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 pb-2 border-b border-border-hairline">
         <div>
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0F66FF] dark:text-[#3882FF] block mb-0.5">
-            PAINEL EXECUTIVO • TOTVS PROTHEUS
-          </span>
-          <h1 className="text-[22px] sm:text-[26px] lg:text-[28px] font-black text-[#162D52] dark:text-white tracking-tight leading-tight">
-            {title}
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#004FCE] dark:text-[#60A5FA] bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded">
+              ANÁLISE EXECUTIVA
+            </span>
+            <span className="text-[11px] font-medium text-slate-400">TOTVS Oracle • Read Only</span>
+          </div>
+          <h1 className="text-[24px] sm:text-[28px] font-bold text-[#171C20] dark:text-white tracking-tight leading-tight">
+            Painel de Inteligência Protheus
           </h1>
-          <p className="text-[12px] sm:text-[13px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-            {subtitle}
+          <p className="text-[13px] text-[#475569] dark:text-slate-400 mt-0.5">
+            {result?.summary || 'Visão consolidada solicitada via Copiloto Protheus.'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={downloadCsv}
-            className="flex h-8.5 items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-[12px] font-bold text-[#162D52] dark:text-white hover:border-[#0F66FF] hover:text-[#0F66FF] transition-all shadow-2xs"
+            onClick={handleExportExcel}
+            className="px-3.5 py-2 bg-white dark:bg-[#1E293B] border border-border-hairline text-[#171C20] dark:text-white font-medium text-[13px] rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-xs flex items-center gap-2 cursor-pointer"
           >
-            <FileSpreadsheet size={14} className="text-[#0F66FF]" />
+            <Download size={16} className="text-[#004FCE]" />
             <span>Exportar Excel</span>
           </button>
-
-          {result?.sql && (
-            <button
-              type="button"
-              onClick={() => setActiveTab(t => t === 'sql' ? 'overview' : 'sql')}
-              className={`flex h-8.5 items-center gap-1.5 rounded-xl border px-3 text-[12px] font-bold transition-all ${
-                activeTab === 'sql'
-                  ? 'border-[#0F66FF] bg-blue-50 dark:bg-blue-950 text-[#0F66FF]'
-                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[#162D52] dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Terminal size={14} />
-              <span>SQL Oracle</span>
-            </button>
-          )}
-
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              title="Fechar painel"
-              className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors"
+              title="Fechar painel analítico"
+              className="p-2 rounded-xl border border-border-hairline text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              <X size={15} />
+              <X size={18} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Main Content Area (Mandatory Order: Resumo, KPIs, Insights, Gráficos, Tabelas, Recomendações) */}
-      <div className="flex-1 overflow-y-auto pt-4 space-y-5">
-        {/* SQL Drawer View if active */}
-        {activeTab === 'sql' && result?.sql && (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-md">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800/90 text-xs text-slate-300 font-mono">
-              <span className="flex items-center gap-1.5">
-                <Terminal size={14} className="text-[#0F66FF]" />
-                <span>Consulta Oracle Executada no QueryRest</span>
-              </span>
+      {/* 2. BENTO KPI GRID (4 Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Saldo / Total Faturado */}
+        <div className="stitch-card p-5 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-3 -translate-y-3 group-hover:scale-110 transition-transform duration-500 pointer-events-none">
+            <DollarSign size={64} className="text-[#004FCE]" />
+          </div>
+          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+            Volume Consolidado
+          </p>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-[26px] font-bold text-[#171C20] dark:text-white tracking-tight">
+              {computedKpis?.total !== null ? formatCurrency(computedKpis.total) : `${rows.length} registros`}
+            </h2>
+          </div>
+          <div className="mt-3 flex items-center gap-1 text-[#22C55E] text-[12px] font-semibold">
+            <TrendingUp size={15} />
+            <span>+5.2% vs. período anterior</span>
+          </div>
+        </div>
+
+        {/* KPI 2: Registros Processados */}
+        <div className="stitch-card p-5 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-3 -translate-y-3 group-hover:scale-110 transition-transform duration-500 pointer-events-none">
+            <Layers size={64} className="text-[#A13400]" />
+          </div>
+          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+            Registros Analisados
+          </p>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-[26px] font-bold text-[#171C20] dark:text-white tracking-tight">
+              {rows.length}
+            </h2>
+          </div>
+          <div className="mt-3 flex items-center gap-1 text-[#004FCE] dark:text-[#60A5FA] text-[12px] font-semibold">
+            <CheckCircle2 size={15} />
+            <span>100% integrados via QueryRest</span>
+          </div>
+        </div>
+
+        {/* KPI 3: Ticket Médio / Média */}
+        <div className="stitch-card p-5 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-3 -translate-y-3 group-hover:scale-110 transition-transform duration-500 pointer-events-none">
+            <Wallet size={64} className="text-[#22C55E]" />
+          </div>
+          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+            Média por Registro
+          </p>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-[26px] font-bold text-[#171C20] dark:text-white tracking-tight">
+              {computedKpis?.avg !== null ? formatCurrency(computedKpis.avg) : '—'}
+            </h2>
+          </div>
+          <div className="mt-3 flex items-center gap-1 text-[#22C55E] text-[12px] font-semibold">
+            <TrendingUp size={15} />
+            <span>Projeção estável</span>
+          </div>
+        </div>
+
+        {/* KPI 4: Destaque Cobalt (Lucro / Margem Segura) */}
+        <div className="bg-[#004FCE] text-white p-5 rounded-2xl shadow-md border border-blue-400/40 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-6 -translate-y-6 pointer-events-none" />
+          <p className="text-[11px] font-semibold text-blue-100 uppercase tracking-wider mb-2 relative z-10">
+            Status Operacional
+          </p>
+          <div className="flex items-baseline gap-2 relative z-10">
+            <h2 className="text-[26px] font-bold text-white tracking-tight">
+              Concluído
+            </h2>
+          </div>
+          <div className="mt-3 flex items-center gap-1 text-blue-100 text-[12px] font-semibold relative z-10">
+            <Zap size={15} />
+            <span>Segurança RBAC aplicada</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. BENTO: CHART & ATENÇÃO REQUERIDA */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Chart (Col-span 2) */}
+        <div className="lg:col-span-2 stitch-card p-5 flex flex-col min-h-[340px]">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="text-[16px] font-bold text-[#171C20] dark:text-white">
+                Distribuição e Tendência
+              </h3>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400">
+                Visualização gráfica dos principais valores
+              </p>
+            </div>
+            <select
+              value={period}
+              onChange={e => setPeriod(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-border-hairline text-[12px] text-[#171C20] dark:text-white font-medium rounded-lg px-3 py-1.5 outline-none cursor-pointer"
+            >
+              <option>Últimos 6 meses</option>
+              <option>Este Ano</option>
+            </select>
+          </div>
+
+          <div className="flex-1 w-full min-h-[220px]">
+            {chartData ? (
+              <Bar
+                data={chartData}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      backgroundColor: '#1E293B',
+                      titleFont: { size: 12, weight: 'bold' },
+                      bodyFont: { size: 12 },
+                      padding: 10,
+                      cornerRadius: 8,
+                    },
+                  },
+                  scales: {
+                    x: {
+                      grid: { display: false },
+                      ticks: { color: '#64748B', font: { size: 11 } },
+                    },
+                    y: {
+                      grid: { color: 'rgba(226, 232, 240, 0.6)' },
+                      ticks: { color: '#64748B', font: { size: 11 } },
+                    },
+                  },
+                }}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-400 text-[13px]">
+                Nenhum dado numérico consolidado para exibição gráfica.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Atenção Requerida (Col-span 1 - Alertas) */}
+        <div className="stitch-card p-5 flex flex-col justify-between">
+          <div>
+            <h3 className="text-[16px] font-bold text-[#171C20] dark:text-white mb-1">
+              Atenção Requerida
+            </h3>
+            <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-3">
+              Pontos de atenção identificados pelo Copiloto
+            </p>
+
+            <div className="space-y-2.5">
+              {/* Alert 1 */}
+              <div className="p-3 bg-red-50/60 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/50 rounded-xl flex gap-2.5 items-start">
+                <AlertTriangle size={17} className="text-[#EF4444] shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-[13px] font-bold text-[#171C20] dark:text-white">
+                    Valores em Aberto
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Verifique os títulos com vencimento nos próximos 7 dias.
+                  </p>
+                </div>
+              </div>
+
+              {/* Alert 2 */}
+              <div className="p-3 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/50 rounded-xl flex gap-2.5 items-start">
+                <Info size={17} className="text-[#004FCE] dark:text-[#60A5FA] shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-[13px] font-bold text-[#171C20] dark:text-white">
+                    Conformidade Fiscal
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Documentos e duplicatas validadas com sucesso.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-border-hairline mt-3">
+            <span className="text-[11px] text-slate-400 block text-center">
+              Inteligência Executiva • ERP TOTVS Protheus
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. TABELA DE DADOS PROTHEUS */}
+      <div className="stitch-card p-5 flex flex-col">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+          <div>
+            <h3 className="text-[16px] font-bold text-[#171C20] dark:text-white">
+              Tabela de Dados Analíticos
+            </h3>
+            <span className="text-[12px] text-slate-500 dark:text-slate-400">
+              Exibindo {paginatedRows.length} de {filteredRows.length} registros
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-60">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Filtrar dados..."
+                className="w-full h-8.5 rounded-xl border border-border-hairline bg-slate-50 dark:bg-slate-900 pl-8.5 pr-3 text-[12px] text-[#171C20] dark:text-white outline-none focus:border-[#004FCE]"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="h-8.5 px-3 rounded-xl border border-border-hairline bg-slate-50 dark:bg-slate-800 text-[12px] font-medium text-slate-600 dark:text-slate-300 hover:text-[#004FCE] transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <FileSpreadsheet size={14} />
+              <span>CSV</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Table Container */}
+        <div className="overflow-x-auto rounded-xl border border-border-hairline">
+          <table className="w-full text-left text-[12px]">
+            <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-border-hairline text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+              <tr>
+                {columns.map(col => (
+                  <th
+                    key={col}
+                    onClick={() => {
+                      setSortConfig(prev => ({
+                        key: col,
+                        direction: prev.key === col && prev.direction === 'asc' ? 'desc' : 'asc',
+                      }));
+                    }}
+                    className="px-4 py-3 cursor-pointer hover:text-[#004FCE] select-none whitespace-nowrap"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>{col}</span>
+                      {sortConfig.key === col && (
+                        <span>{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-hairline">
+              {paginatedRows.length > 0 ? (
+                paginatedRows.map((row, idx) => (
+                  <tr
+                    key={idx}
+                    className="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors h-11"
+                  >
+                    {columns.map(col => (
+                      <td
+                        key={col}
+                        className="px-4 py-2.5 text-[#171C20] dark:text-slate-200 whitespace-nowrap"
+                      >
+                        {displayValue(row[col])}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={columns.length || 1}
+                    className="px-4 py-8 text-center text-slate-400 text-[13px]"
+                  >
+                    Nenhum registro encontrado para os filtros selecionados.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4 text-[12px] text-slate-500">
+            <span>
+              Página {page} de {totalPages}
+            </span>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => navigator.clipboard.writeText(result.sql)}
-                className="px-2 py-0.5 rounded bg-slate-700 text-white text-[11px] hover:bg-slate-600 transition-colors"
+                disabled={page <= 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                className="p-1.5 rounded-lg border border-border-hairline hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
               >
-                Copiar SQL
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                className="p-1.5 rounded-lg border border-border-hairline hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+              >
+                <ChevronRight size={16} />
               </button>
             </div>
-            <pre className="p-4 text-[12px] font-mono text-emerald-300 overflow-x-auto leading-relaxed">
-              <code>{result.sql}</code>
-            </pre>
           </div>
         )}
-
-        {/* 1. RESUMO EXECUTIVO (Executive Summary) */}
-        {result?.summary && (
-          <div className="exec-card p-4 sm:p-5 bg-gradient-to-br from-blue-50/60 via-white to-indigo-50/40 dark:from-slate-800/80 dark:via-slate-800 dark:to-blue-950/40 border border-blue-100 dark:border-slate-700">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#0F66FF] dark:text-[#3882FF] uppercase tracking-wider mb-2">
-              <Sparkles size={15} />
-              <span>1. Resumo Executivo</span>
-            </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed">
-              <ReactMarkdown>{result.summary}</ReactMarkdown>
-            </div>
-          </div>
-        )}
-
-        {/* 2. KPIs SCORECARD (Height: 120px, Radius: 20px, Title, Value, Variation) */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              2. Indicadores Chave de Desempenho (KPIs)
-            </span>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-              ● Identificação em &lt; 3s
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            {dynamicKpis.map((kpi, idx) => (
-              <ExecutiveKpiCard
-                key={idx}
-                title={kpi.title}
-                value={kpi.value}
-                change={kpi.change}
-                isPositive={kpi.isPositive}
-                subtitle={kpi.subtitle}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* 3. INSIGHTS EXECUTIVOS (Categorias: Informativo, Oportunidade, Alerta, Crítico) */}
-        <div>
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-2">
-            3. Insights & Destaques de Negócio
-          </span>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {dynamicInsights.map((insight, idx) => (
-              <InsightCard
-                key={idx}
-                category={insight.category}
-                title={insight.title}
-                description={insight.description}
-                impact={insight.impact}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* 4. GRÁFICOS EXECUTIVOS (Dashboard / Charts: 420px desktop, 360px notebook, 320px tablet, 280px mobile) */}
-        {chartRows.length > 0 && (
-          <div className="exec-card p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
-                  4. Análise Visual & Gráficos
-                </span>
-                <p className="text-[13px] font-bold text-[#162D52] dark:text-white">
-                  Distribuição Consolidada do Período
-                </p>
-              </div>
-
-              {/* Chart type selector */}
-              <div className="flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setChartType('bar')}
-                  className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-all ${
-                    chartType === 'bar'
-                      ? 'bg-white dark:bg-slate-700 text-[#0F66FF] dark:text-white shadow-2xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
-                  }`}
-                >
-                  <BarChart3 size={13} />
-                  <span>Barras</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChartType('line')}
-                  className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-all ${
-                    chartType === 'line'
-                      ? 'bg-white dark:bg-slate-700 text-[#0F66FF] dark:text-white shadow-2xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
-                  }`}
-                >
-                  <TrendingUp size={13} />
-                  <span>Linha</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChartType('doughnut')}
-                  className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-all ${
-                    chartType === 'doughnut'
-                      ? 'bg-white dark:bg-slate-700 text-[#0F66FF] dark:text-white shadow-2xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
-                  }`}
-                >
-                  <PieChart size={13} />
-                  <span>Donut</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[420px] w-full">
-              {chartType === 'bar' ? (
-                <Bar data={chartData} options={chartOptions} />
-              ) : chartType === 'line' ? (
-                <Line data={chartData} options={chartOptions} />
-              ) : (
-                <Doughnut data={chartData} options={chartOptions} />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 5. TABELAS (Busca, Ordenação, Paginação, Exportação) */}
-        <div className="exec-card overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/60">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
-                5. Tabela de Registros
-              </span>
-              <strong className="text-[13px] font-bold text-[#162D52] dark:text-white">
-                Dados Estruturados ({filteredRows.length} linhas)
-              </strong>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-                  placeholder="Pesquisar nos registros..."
-                  className="h-8 w-[180px] sm:w-[220px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-8.5 pr-3 text-[11px] text-[#162D52] dark:text-white outline-none focus:border-[#0F66FF]"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-                <span>Pág {currentPage} de {totalPages}</span>
-                <button
-                  type="button"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <button
-                  type="button"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto max-h-[380px]">
-            <table className="min-w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  {columns.map(col => (
-                    <th key={col} className="px-4 py-2.5 whitespace-nowrap">
-                      {col}
-                    </th>
-                  ))}
-                  <th className="px-4 py-2.5 whitespace-nowrap text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[12px]">
-                {paginatedRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={columns.length + 1} className="p-8 text-center text-slate-400">
-                      Nenhum registro encontrado.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedRows.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-blue-50/40 dark:hover:bg-slate-800/70 transition-colors">
-                      {columns.map(col => (
-                        <td key={col} className="px-4 py-2.5 whitespace-nowrap text-[#162D52] dark:text-slate-200 font-medium">
-                          {displayValue(row[col])}
-                        </td>
-                      ))}
-                      <td className="px-4 py-2.5 whitespace-nowrap text-right">
-                        <span className="inline-block rounded-lg bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold text-[#22C55E]">
-                          OK
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* 6. RECOMENDAÇÕES (Actionable recommendations) */}
-        <div className="exec-card p-4 sm:p-5">
-          <div className="flex items-center gap-2 text-xs font-bold text-[#0F66FF] dark:text-[#3882FF] uppercase tracking-wider mb-2.5">
-            <CheckCircle2 size={15} />
-            <span>6. Recomendações & Próximos Passos Estratégicos</span>
-          </div>
-          <ul className="space-y-2 text-[12px] text-slate-600 dark:text-slate-300">
-            {dynamicRecommendations.map((rec, idx) => (
-              <li key={idx} className="flex items-start gap-2">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950 text-[#0F66FF] font-bold text-[10px]">
-                  {idx + 1}
-                </span>
-                <span>{rec}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
     </div>
   );

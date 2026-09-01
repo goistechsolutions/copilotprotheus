@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, Paperclip, Send } from 'lucide-react';
+import { Paperclip, ArrowUp, Mic } from 'lucide-react';
 
 export default function Composer({ disabled, onSend, placeholder }) {
   const [value, setValue] = useState('');
@@ -8,7 +8,7 @@ export default function Composer({ disabled, onSend, placeholder }) {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
     }
   }, [value]);
 
@@ -30,7 +30,18 @@ export default function Composer({ disabled, onSend, placeholder }) {
 
   return (
     <div className="w-full">
-      <div className="copiloto-composer relative p-3 transition-all">
+      <div className="w-full bg-white dark:bg-[#1E293B] rounded-2xl shadow-sm border border-[#E2E8F0] dark:border-slate-800 p-2 flex items-end focus-within:ring-2 focus-within:ring-[#004FCE]/20 focus-within:border-[#004FCE] transition-all">
+        {/* Attachment button */}
+        <button
+          type="button"
+          aria-label="Anexar arquivo"
+          title="Anexar arquivo"
+          className="p-2.5 text-[#475569] dark:text-slate-400 hover:text-[#004FCE] dark:hover:text-[#60A5FA] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mr-1 cursor-pointer shrink-0"
+        >
+          <Paperclip size={18} />
+        </button>
+
+        {/* Textarea */}
         <textarea
           ref={textareaRef}
           id="composer-input"
@@ -40,42 +51,31 @@ export default function Composer({ disabled, onSend, placeholder }) {
           value={value}
           onChange={event => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'Faça sua pergunta sobre o Protheus...'}
-          aria-label="Pergunta para o Copiloto Executivo"
-          className="w-full resize-none bg-transparent px-2 pt-1 pb-10 text-[13px] leading-relaxed text-[#1a334e] outline-none placeholder:text-[#94a3b6] disabled:cursor-not-allowed disabled:opacity-50 font-normal"
-          style={{ minHeight: '44px', maxHeight: '120px' }}
+          placeholder={placeholder || 'Pergunte sobre clientes, pedidos, financeiro, faturamento...'}
+          aria-label="Pergunta para o Copiloto Protheus"
+          className="flex-1 bg-transparent border-none outline-none resize-none text-[14px] text-[#171C20] dark:text-white py-2 min-h-[44px] max-h-[160px] placeholder-[#475569]/70 dark:placeholder-slate-500 overflow-y-auto leading-relaxed"
         />
 
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-label="Entrada de voz"
-              title="Entrada de voz"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8899aa] hover:bg-[#EEF3F8] hover:text-[#0F66FF] transition-colors"
-            >
-              <Mic size={17} strokeWidth={1.8} />
-            </button>
-            <button
-              type="button"
-              aria-label="Anexar arquivo"
-              title="Anexar arquivo"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8899aa] hover:bg-[#EEF3F8] hover:text-[#0F66FF] transition-colors"
-            >
-              <Paperclip size={17} strokeWidth={1.8} />
-            </button>
-          </div>
+        {/* Voice button */}
+        <button
+          type="button"
+          aria-label="Entrada por voz"
+          title="Entrada por voz"
+          className="p-2.5 text-[#475569] dark:text-slate-400 hover:text-[#004FCE] dark:hover:text-[#60A5FA] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mx-1 cursor-pointer shrink-0"
+        >
+          <Mic size={18} />
+        </button>
 
-          <button
-            type="button"
-            aria-label="Enviar pergunta"
-            disabled={disabled || !value.trim()}
-            onClick={submit}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F66FF] text-white shadow-md shadow-[#0F66FF]/25 hover:bg-[#0b54d6] active:scale-95 transition-all disabled:cursor-not-allowed disabled:bg-[#d8e2ec] disabled:text-[#94a3b6] disabled:shadow-none"
-          >
-            <Send size={15} strokeWidth={2.2} className="translate-x-[-0.5px] translate-y-[-0.5px]" />
-          </button>
-        </div>
+        {/* Send button (Stitch Arrow Upward style) */}
+        <button
+          type="button"
+          aria-label="Enviar pergunta"
+          disabled={disabled || !value.trim()}
+          onClick={submit}
+          className="w-10 h-10 bg-[#004FCE] hover:bg-[#003EA6] active:scale-95 text-white rounded-xl flex items-center justify-center transition-all ml-1 shadow-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+        >
+          <ArrowUp size={18} strokeWidth={2.4} />
+        </button>
       </div>
     </div>
   );
