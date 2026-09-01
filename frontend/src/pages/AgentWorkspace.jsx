@@ -64,7 +64,7 @@ function readContextFromUrl() {
     tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
     company: params.get('company_id') || params.get('company') || '01',
     branch: params.get('branch') || '0101',
-    user: params.get('user') || 'João Silva',
+    user: params.get('user') || 'admin',
     profile: params.get('profile') || 'Gerente Financeiro',
     session_id: params.get('session_id') || '',
     environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
@@ -74,7 +74,6 @@ function readContextFromUrl() {
 
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [conversationId, setConversationId] = useState(() => {
     const initialContext = readContextFromUrl();
     return initialContext.session_id || makeConversationId();
@@ -153,14 +152,18 @@ export default function AgentWorkspace() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // Notifica o Protheus WebApp pai sobre o estado do resultado para expandir/recolher o iframe
+  useEffect(() => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'cprot-result-state', open: Boolean(result) }, '*');
+    }
+  }, [result]);
+
   const send = async (text) => {
     if (!text?.trim()) return;
 
     setMessages((current) => [...current, { role: 'user', text }]);
     setLoading(true);
-    if (window.innerWidth < 1024) {
-      setMobileDrawerOpen(false);
-    }
 
     try {
       const payload = {
@@ -208,24 +211,28 @@ export default function AgentWorkspace() {
     setLoading(false);
   };
 
-  return (
-    <div className="min-h-screen w-full bg-[#EEF3F8] p-3 sm:p-5 lg:p-6 flex flex-col items-center justify-center antialiased">
-      {/* Main Responsive Grid Layout */}
-      <div className="w-full max-w-[1840px] flex-1 flex flex-col lg:flex-row gap-5 items-stretch min-h-[calc(100vh-48px)]">
-        {/* Left Side: Painel Executivo (70% on 1440px+, 65% on 1024px-1439px, Protagonist on Tablet/Mobile) */}
-        <main className="flex-1 w-full lg:w-[65%] 2xl:w-[70%] min-w-0 flex flex-col min-h-[620px]">
-          <StructuredResultPanel
-            result={result}
-            context={context}
-            onClose={result ? () => setResult(null) : undefined}
-          />
-        </main>
+  const showWorkspace = Boolean(result);
 
-        {/* Right Side: Protheus Copiloto (30% on 1440px+, 35% on 1024px-1439px, Drawer on Tablet/Mobile) */}
+  return (
+    <div className="min-h-screen w-full bg-[#EEF3F8] p-3 sm:p-5 lg:p-6 flex items-center justify-center antialiased">
+      <div className={`w-full flex gap-5 items-stretch justify-center transition-all duration-300 ${
+        showWorkspace ? 'max-w-[1840px] flex-col lg:flex-row' : 'max-w-[460px]'
+      }`}>
+        {/* Left Side: Painel Executivo (Abre SOMENTE quando result existe) */}
+        {showWorkspace && (
+          <main className="flex-1 w-full lg:w-[65%] 2xl:w-[70%] min-w-0 flex flex-col min-h-[620px]">
+            <StructuredResultPanel
+              result={result}
+              context={context}
+              onClose={() => setResult(null)}
+            />
+          </main>
+        )}
+
+        {/* Right Side: Protheus Copiloto (Apresentado sozinho inicialmente; e ao lado quando há resultado) */}
         <aside className={`
           copiloto-panel flex flex-col p-5 sm:p-6 relative overflow-hidden bg-white
-          w-full lg:w-[35%] 2xl:w-[30%] shrink-0 min-h-[580px] lg:h-auto
-          ${mobileDrawerOpen ? 'fixed inset-4 z-50 shadow-2xl border border-slate-200' : 'hidden lg:flex'}
+          ${showWorkspace ? 'w-full lg:w-[35%] 2xl:w-[30%] shrink-0 min-h-[580px]' : 'w-full'}
         `}>
           {/* Header */}
           <header className="flex items-center justify-between pb-3.5 border-b border-[#edf2f7]">
@@ -243,17 +250,6 @@ export default function AgentWorkspace() {
                 </div>
               </div>
             </div>
-
-            {/* Mobile close drawer */}
-            {mobileDrawerOpen && (
-              <button
-                type="button"
-                onClick={() => setMobileDrawerOpen(false)}
-                className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
-              >
-                <X size={18} />
-              </button>
-            )}
           </header>
 
           {/* Body */}
@@ -261,7 +257,7 @@ export default function AgentWorkspace() {
             {/* Executive Greeting (Sizes: 40px desktop, 32px notebook, 28px tablet, 24px mobile) */}
             {messages.length === 0 && (
               <div className="pt-2 pb-1">
-                <h1 className="text-[24px] sm:text-[28px] lg:text-[32px] 2xl:text-[40px] font-black text-[#102a45] tracking-tight leading-tight">
+                <h1 className="text-[22px] sm:text-[26px] lg:text-[30px] font-black text-[#102a45] tracking-tight leading-tight">
                   Olá, como posso ajudar hoje?
                 </h1>
               </div>
@@ -269,7 +265,10 @@ export default function AgentWorkspace() {
 
             {/* Suggestions Grid */}
             {messages.length === 0 && (
-              <SuggestionCards disabled={loading} onPick={send} />
+              <div className="pt-1">
+                <p className="text-[13px] font-bold text-[#102a45] mb-3">Sugestões de consulta</p>
+                <SuggestionCards disabled={loading} onPick={send} />
+              </div>
             )}
 
             {/* Messages Thread */}
@@ -289,18 +288,6 @@ export default function AgentWorkspace() {
             <Composer disabled={loading} onSend={send} />
           </div>
         </aside>
-      </div>
-
-      {/* Floating Action Button for Tablet/Mobile: "✦ Abrir Copiloto" */}
-      <div className="lg:hidden fixed bottom-5 right-5 z-40">
-        <button
-          type="button"
-          onClick={() => setMobileDrawerOpen(true)}
-          className="flex items-center gap-2 rounded-full bg-[#0F66FF] px-5 py-3 text-white font-bold text-sm shadow-xl shadow-[#0F66FF]/30 active:scale-95 transition-all"
-        >
-          <Sparkles size={16} />
-          <span>✦ Perguntar ao Copiloto</span>
-        </button>
       </div>
     </div>
   );
