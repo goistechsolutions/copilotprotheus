@@ -18,7 +18,6 @@ import {
   Zap,
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
-import { normalizeAgentError } from '../utils/agentError';
 import Composer from '../components/Composer';
 import Conversation from '../components/Conversation';
 import StructuredResultPanel from '../components/StructuredResultPanel';
@@ -84,7 +83,11 @@ function readContextFromUrl() {
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    try {
+      const stored = window.localStorage.getItem('copilot.theme');
+      if (stored) return stored === 'dark';
+    } catch {}
+    return false; // Default: Light theme Stitch
   });
   const [globalSearch, setGlobalSearch] = useState('');
   const [activeNav, setActiveNav] = useState('chat-hub');
@@ -114,12 +117,14 @@ export default function AgentWorkspace() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Sync Dark Mode with document element
+  // Sync Dark Mode with document element & storage
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
+      try { window.localStorage.setItem('copilot.theme', 'dark'); } catch {}
     } else {
       document.documentElement.classList.remove('dark');
+      try { window.localStorage.setItem('copilot.theme', 'light'); } catch {}
     }
   }, [isDarkMode]);
 
@@ -212,18 +217,13 @@ export default function AgentWorkspace() {
         ? await waitForAgentTask(accepted.task_id)
         : accepted;
 
-      const normalizedError = ['execution_failed', 'error'].includes(res.status)
-        ? normalizeAgentError(res, { correlation_id: res.correlation_id })
-        : null;
-      const resultWithError = normalizedError
-        ? { ...res, error_info: normalizedError }
-        : res;
-      setResult(resultWithError);
+      setResult(res);
 
       let replyMessage = 'Análise executiva concluída com sucesso no Protheus.';
-      if (normalizedError) {
-        const statusLabel = normalizedError.status ? ` (HTTP ${normalizedError.status})` : '';
-        replyMessage = `${normalizedError.sourceLabel}${statusLabel}: ${normalizedError.message}`;
+      if (res.status === 'execution_failed') {
+        replyMessage = `Erro na consulta Oracle: ${res.execution_error || 'Falha na execução.'}`;
+      } else if (res.status === 'error') {
+        replyMessage = `Consulta bloqueada: ${res.error || res.summary || res.message || 'Contexto não autorizado.'}`;
       } else if (res.summary) replyMessage = res.summary;
       else if (res.message) replyMessage = res.message;
       else if (res.answer) replyMessage = res.answer;
@@ -233,13 +233,9 @@ export default function AgentWorkspace() {
         { role: 'assistant', text: replyMessage },
       ]);
     } catch (error) {
-      const normalizedError = normalizeAgentError(error.payload || error, {
-        http_status: error.status,
-        correlation_id: error.correlation_id,
-      });
       setMessages((current) => [
         ...current,
-        { role: 'assistant', text: `${normalizedError.sourceLabel}${normalizedError.status ? ` (HTTP ${normalizedError.status})` : ''}: ${normalizedError.message}` },
+        { role: 'assistant', text: `**Erro:** ${String(error.message || error)}` },
       ]);
     }
 
@@ -250,7 +246,9 @@ export default function AgentWorkspace() {
   const userName = context.user ? context.user.split(' ')[0] : 'Executivo';
 
   return (
-    <div className="min-h-screen w-full bg-[#F5FAFF] dark:bg-[#0F172A] flex font-sans text-[#171C20] dark:text-[#F8FAFC] antialiased transition-colors duration-200">
+    <div className={`min-h-screen w-full bg-[#F5FAFF] dark:bg-[#0F172A] flex font-sans text-[#171C20] dark:text-[#F8FAFC] antialiased transition-colors duration-200 ${
+      isIframe ? 'p-0' : ''
+    }`}>
       {/* 1. FIXED LEFT NAVIGATION SIDEBAR (Stitch Model) - Oculto quando dentro de iframe Protheus */}
       {!isIframe && (
         <aside className="fixed left-0 top-0 h-full w-20 lg:w-64 bg-white dark:bg-[#1E293B] z-50 flex flex-col border-r border-[#E2E8F0] dark:border-slate-800 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
@@ -325,7 +323,7 @@ export default function AgentWorkspace() {
       )}
 
       {/* 2. MAIN CONTAINER */}
-      <div className={`flex-1 flex flex-col min-h-screen ${!isIframe ? 'pl-20 lg:pl-64' : 'pl-0'}`}>
+      <div className={`flex-1 flex flex-col min-h-screen ${!isIframe ? 'pl-20 lg:pl-64' : 'pl-0 w-full'}`}>
         {/* TOPBAR (Stitch Model) - Oculto quando dentro de iframe Protheus */}
         {!isIframe && (
           <header className="h-16 bg-white/80 dark:bg-[#1E293B]/80 backdrop-blur-xl border-b border-[#E2E8F0] dark:border-slate-800 sticky top-0 z-40 flex items-center justify-between px-6 sm:px-8 transition-colors">
@@ -397,7 +395,9 @@ export default function AgentWorkspace() {
         )}
 
         {/* 3. CENTER CONTENT AREA */}
-        <main className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8 min-h-0">
+        <main className={`flex-1 flex flex-col min-h-0 ${
+          isIframe ? 'p-3 h-screen' : 'p-4 sm:p-6 lg:p-8'
+        }`}>
           {/* ESTADO INICIAL (Sem resultado e Standalone) -> Hero Central + 4 Bento Sugestões + Floating Prompt */}
           {!showWorkspace && !isIframe && (
             <div className="flex-1 flex flex-col items-center justify-center max-w-4xl w-full mx-auto my-auto px-2">
@@ -432,7 +432,7 @@ export default function AgentWorkspace() {
 
           {/* ESTADO RESULTADO (Ou Modo Iframe) -> Grid 70/30 Split Stitch */}
           {(showWorkspace || isIframe) && (
-            <div className="flex-1 flex flex-col lg:flex-row gap-6 items-stretch min-h-0">
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 items-stretch min-h-0 h-full">
               {/* Left Panel: ANALYTICAL DASHBOARD (70%) */}
               {showWorkspace && (
                 <section className="flex-1 lg:w-[70%] min-w-0 flex flex-col">
@@ -444,36 +444,50 @@ export default function AgentWorkspace() {
                 </section>
               )}
 
-              {/* Right Panel: COPILOT CHAT CONTEXT (30% / 100% no Iframe inicial) */}
+              {/* Right Panel: COPILOT CHAT CONTEXT (30% no Split / 100% no Iframe inicial) */}
               <aside className={`
-                stitch-card flex flex-col p-4 sm:p-5 shrink-0 overflow-hidden
-                ${showWorkspace ? 'w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20' : 'w-full max-w-xl mx-auto min-h-[580px]'}
+                flex flex-col shrink-0 overflow-hidden
+                ${isIframe && !showWorkspace
+                  ? 'w-full h-full p-2 bg-white dark:bg-[#1E293B] rounded-xl'
+                  : 'stitch-card p-4 sm:p-5 w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20'}
               `}>
                 {/* Copilot Header */}
-                <div className="p-3.5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40 rounded-xl mb-3">
+                <div className="p-3 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 rounded-xl mb-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-[#004FCE] text-white flex items-center justify-center shrink-0">
-                      <Sparkles size={16} />
+                    <div className="w-7.5 h-7.5 rounded-lg bg-[#004FCE] text-white flex items-center justify-center shrink-0">
+                      <Sparkles size={15} />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <h2 className="text-[14px] font-bold text-[#171C20] dark:text-white leading-tight">
+                        <h2 className="text-[13px] font-bold text-[#171C20] dark:text-white leading-tight">
                           Copiloto Protheus
                         </h2>
                         <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
                       </div>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-[10px] text-slate-400">
                         {context.module ? `Módulo: ${context.module}` : 'Oracle Read Only'}
                       </p>
                     </div>
                   </div>
+
+                  {/* Theme Switcher no modo Iframe */}
+                  {isIframe && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDarkMode(prev => !prev)}
+                      title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+                      className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                    >
+                      {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+                    </button>
+                  )}
                 </div>
 
                 {/* Chat History Stream */}
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">
                   {messages.length === 0 && (
                     <div className="space-y-4 py-2">
-                      <p className="text-[13px] text-slate-500 dark:text-slate-400">
+                      <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">
                         Pronto para consultar. Escolha uma sugestão ou faça uma pergunta:
                       </p>
                       <SuggestionCards disabled={loading} onPick={send} />
@@ -483,7 +497,7 @@ export default function AgentWorkspace() {
                   <Conversation messages={messages} />
 
                   {loading && (
-                    <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#004FCE] dark:text-[#60A5FA] font-medium animate-pulse">
+                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#004FCE] dark:text-[#60A5FA] font-medium animate-pulse">
                       <Sparkles size={15} />
                       <span>Consultando dados no Protheus via Oracle QueryRest...</span>
                     </div>
@@ -491,7 +505,7 @@ export default function AgentWorkspace() {
                 </div>
 
                 {/* Composer at Bottom */}
-                <div className="pt-3 border-t border-[#E2E8F0] dark:border-slate-800 mt-2">
+                <div className="pt-2.5 border-t border-[#E2E8F0] dark:border-slate-800 mt-2">
                   <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." />
                 </div>
               </aside>
