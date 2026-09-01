@@ -283,6 +283,29 @@ export default function StructuredResultPanel({ result, context, onClose }) {
         </div>
       </div>
 
+      {/* ERROR / BLOCKED BANNER */}
+      {(result?.status === 'execution_failed' || result?.status === 'error') && (
+        <div className="p-5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-2xl flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-[#EF4444] shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-[15px] font-bold text-[#171C20] dark:text-white">
+                {result.status === 'execution_failed' ? 'Falha na Execução da Consulta Oracle' : 'Consulta Bloqueada'}
+              </h3>
+              <p className="text-[13px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                {result.execution_error || result.error || result.message || result.summary}
+              </p>
+            </div>
+          </div>
+          {result.sql && (
+            <div className="mt-2 p-3 bg-slate-900 rounded-xl border border-slate-700 text-[12px] font-mono text-emerald-300 overflow-x-auto">
+              <span className="text-[10px] uppercase text-slate-400 block mb-1">SQL Gerado:</span>
+              <code>{result.sql}</code>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 2. BENTO KPI GRID (4 Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Saldo / Total Faturado */}
