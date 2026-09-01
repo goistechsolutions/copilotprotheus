@@ -205,10 +205,10 @@ async def ask_gemini(
                         await asyncio.sleep(1.0)
                         continue
                     break
-            if resp and resp.status_code == 200:
+            if resp is not None and getattr(resp, "status_code", 200) == 200:
                 break
 
-        if not resp or resp.status_code != 200:
+        if resp is None or getattr(resp, "status_code", 200) != 200:
             if "503" in last_error_msg:
                 return "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
             return f"Erro na API do Gemini: {last_error_msg}"
@@ -365,10 +365,10 @@ async def stream_gemini(
                         await asyncio.sleep(1.0)
                         continue
                     break
-            if resp and resp.status_code == 200:
+            if resp is not None and getattr(resp, "status_code", 200) == 200:
                 break
 
-        if not resp or resp.status_code != 200:
+        if resp is None or getattr(resp, "status_code", 200) != 200:
             if "503" in last_error_msg:
                 yield "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
             else:
