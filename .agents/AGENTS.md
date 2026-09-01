@@ -1,31 +1,72 @@
-# Agent Context — Copilot Protheus (Cloud Architecture)
+# Diretrizes e Regras de Comportamento do Agente — Copilot Protheus
 
-Você é o copiloto de engenharia de software da plataforma Copilot Protheus. 
-Este projeto é estritamente baseado em arquitetura em nuvem (Hetzner + Cloudflare + TOTVS Protheus REST).
+> [!IMPORTANT]
+> Estas regras devem ser seguidas rigorosamente em todas as interações com o usuário e nas execuções de tarefas no workspace.
 
-## 1. Topologia e Ambientes de Nuvem
-- **Frontend do Chat:** React/Vite hospedado no Cloudflare Pages (`https://copilot.elitecorp.tec.br`).
-- **Painel Administrativo:** React/Vite + Nginx servido via Cloudflare Tunnel em `https://copilot-api.elitecorp.tec.br/admin` (porta interna 5174).
-- **Backend API:** FastAPI/Uvicorn em contêiner Docker na VPS Hetzner em `https://copilot-api.elitecorp.tec.br/api` (porta interna 8000).
-- **Middleware Proxy:** Node.js/Express na rede interna Docker (porta 3001).
-- **Banco de Governança e Vetores:** PostgreSQL 16 com `pgvector` em contêiner Docker (porta interna 5432, mapeada internamente para 5435 na VPS).
-- **Storage de Conhecimento (RAG):** Cloudflare R2.
-- **Túnel de Rede:** Contêiner `copilot-protheus-cloudflared` (zero portas de aplicação abertas no firewall público da VPS).
-- **Raiz Operacional de Deploy na VPS:** `/root/copilotprotheus`.
+---
 
-## 2. Princípios Obrigatórios de Desenvolvimento
-1. **Zero Alucinação de Dados:** Nunca simular, estimar ou preencher valores de ERP. Se o Protheus não responder, a permissão for negada ou o retorno for vazio, relate a indisponibilidade ou bloqueio com clareza.
-2. **Isolamento Multi-Tenant Estrito:** Todas as operações exigem `tenant_code` + `environment_code` explícitos. Proibido fallback para "default" ou "None".
-3. **Autenticação OAuth2 / Bearer:** Chamadas operacionais ao `QueryRest` devem conter o header `Authorization: Bearer <access_token>`. Proibido Basic Auth em consultas operacionais.
-4. **Catálogo Global Desacoplado:** `public.protheus_modules_master` é global e indexado por `mod_code = USR_MODULO` (sigla `USR_CODMOD` para UI). Não contém URLs, usuários, senhas ou tokens.
-5. **Conexões por Tenant/Ambiente:** Centralizadas em `public.protheus_rest_connections` sob a chave única `(tenant_code, environment_code)`.
-6. **SQL Oracle e Protheus:**
-   - Todo SELECT em tabelas Protheus deve conter `D_E_L_E_T_ <> '*'`.
-   - Limites com `ROWNUM <= n` ou `FETCH FIRST n ROWS ONLY` (nunca `TOP` ou `LIMIT`).
-   - Datas em formato `VARCHAR2(8)` (`YYYYMMDD`).
-7. **Segurança de Segredos:** Tokens, senhas e headers Authorization nunca devem ser logados, retornados em payloads de API ou exibidos no frontend.
+## 1. Priorização de Consultas SQL e Análise de Dados
+- Sempre que o usuário solicitar relatórios, listagens, consultas, consolidações ou análises de dados, o agente **deve priorizar a execução de consultas SQL nativas** no banco do Protheus através do endpoint de execução genérica `/QueryRest`.
+- O agente deve analisar os dados obtidos e estruturar a resposta no formato de tabelas markdown limpas e organizadas, facilitando a exportação direta para o Microsoft Excel (copiar e colar).
 
-## 3. Padrões de Contratos de API
-- O payload de atualização de tenant deve isolar a conexão REST em um bloco aninhado `connection: ProtheusConnectionUpdate` com `extra='forbid'`.
-- A senha administrativa do painel Copilot nunca deve ser enviada no mesmo contexto ou usada como senha REST do Protheus.
-- Erros de integração externa devem preservar status HTTP semânticos (400, 401, 403, 502, 504), nunca mascarando falhas externas como 500 genérico.
+---
+
+## 2. Proibição de Alucinação / Valores Inventados
+- **Nunca inventar ou gerar dados falsos** nas respostas de relatórios ou consultas empresariais.
+- Se a API REST do Protheus estiver inacessível, se a query retornar vazia, ou se não for possível acessar os dados reais da empresa, o agente **deve reportar isso explicitamente na resposta**, explicando o motivo (ex: erro de conexão, tabela vazia, ambiente offline) em vez de simular dados fictícios.
+
+---
+
+## 3. Diretrizes de Banco de Dados (Oracle - TOTVS Cloud)
+- Nunca utilizar a sintaxe `SELECT TOP N`.
+- Em consultas limitadas ou paginadas, utilizar sempre a sintaxe do Oracle:
+  - Para limites simples: `WHERE ROWNUM <= N`
+  - Para paginação: `OFFSET O ROWS FETCH NEXT L ROWS ONLY`
+
+---
+
+## 4. Estrutura de Retorno
+- Apresentar os dados de forma tabular clara utilizando formatação Markdown.
+- Evitar poluição visual nas tabelas para que a conversão automática para planilhas seja perfeita.
+
+---
+
+## 5. Estrutura de Consultas no Protheus (Referências)
+- Ao consultar notas fiscais faturadas, faça JOIN entre **SF2** (Cabeçalho da Nota de Saída) e **SD2** (Itens da Nota de Saída) via `F2_FILIAL = D2_FILIAL`, `F2_DOC = D2_DOC` e `F2_SERIE = D2_SERIE`.
+- Para obter tipos de saídas financeiras, faça JOIN com a tabela **SF4** (Tipos de Saídas - TES) via `D2_TES = F4_CODIGO`.
+- **Filtros obrigatórios em todas as tabelas Protheus:** Sempre filtre exclusões lógicas com `D_E_L_E_T_ <> '*'`.
+- Filtros úteis para Notas Normais: `F2_TIPO = 'N'` (desconsidera devoluções e complementos).
+- Filtros úteis para geração financeira: `F4_DUPLIC = 'S'` (somente nota que gerou duplicata).
+- Ao consultar notas de entrada, faça JOIN entre **SF1** (Cabeçalho da Nota de Entrada) e **SD1** (Itens da Nota de Entrada) via `F1_FILIAL = D1_FILIAL`, `F1_DOC = D1_DOC`, `F1_SERIE = D1_SERIE`, `F1_FORNECE = D1_FORNECE` e `F1_LOJA = D1_LOJA`.
+- Para notas de entrada, o cruzamento com **SF4** (TES) é feito via `D1_TES = F4_CODIGO`.
+- Filtros úteis para Notas de Entrada Normais: `F1_TIPO = 'N'`.
+
+---
+
+## 6. Desenvolvimento em AdvPL
+- Em AdvPL, as variáveis `Local` devem **obrigatoriamente** ser declaradas no início da função/método. Não declare variáveis locais dentro de blocos lógicos (`If`, `While`, `For`) ou após comandos de execução.
+
+---
+
+## 7. Diretrizes de Desenvolvimento de APIs REST TOTVS (Guia de Implementação)
+- **Não misturar modelos de recebimento**: Ao criar um método `POST`, `PUT` ou `PATCH` que espera receber um payload JSON no corpo (body) da requisição, **não utilize** a cláusula `WSRECEIVE` na assinatura do método. A cláusula `WSRECEIVE` força o Framework Rest a aguardar os parâmetros via *Query String* (URL) ou *Form-UrlEncoded*, e pode invalidar ou esvaziar a leitura de `::GetContent()`. Use `WSRECEIVE` apenas em `GET` e `DELETE`.
+- **Documentação e Swagger**: Sempre inclua as cláusulas `DESCRIPTION` e, em especial, `WSSYNTAX "/rota"` tanto na definição da classe `WSRESTFUL` quanto nos métodos `WSMETHOD`. Isso é obrigatório para que a API seja documentada corretamente no Swagger e para que o AppServer crie a rota HTTP sem ambiguidades.
+- **Tratamento de Erros HTTP**: Utilize sempre o padrão nativo `SetRestFault(nStatusCode, cMensagem)` para devolver erros formatados corretamente pelo framework REST (que vai gerar a estrutura `{"errorCode": ..., "errorMessage": ...}`). Para devolver sucesso com JSON, utilize `::SetResponse(cJsonData)`.
+
+---
+
+## 8. Infraestrutura e Deploy (Ambiente Cloud)
+- **Proibido Implementação Local**: O projeto é um servidor multiempresa centralizado em Cloud. **Nunca** assuma, proponha ou realize implementações focadas em servidores locais de teste (`localhost`). 
+- A infraestrutura alvo para os deploys é a **Hetzner** (Backend/APIs e serviços Docker) e a **Cloudflare** (Frontend/Deploy automático e roteamento/túneis).
+
+---
+
+## 9. Repositório Alvo — Regra Crítica de Desenvolvimento
+
+> [!CAUTION]
+> **SEMPRE** realizar todas as alterações de código nos arquivos do repositório local do projeto:
+> `C:\projeto\copilotprotheus\`
+
+- Este diretório está vinculado ao repositório oficial no GitHub: **[goistechsolutions/copilotprotheus](https://github.com/goistechsolutions/copilotprotheus)** — branch `main`
+- Após **cada alteração de arquivo**, obrigatoriamente executar `git commit` seguido de `git push origin main`.
+- **Nunca** editar arquivos fora deste diretório. **Nunca** deixar alterações sem commit e push.

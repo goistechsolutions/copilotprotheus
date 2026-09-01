@@ -137,61 +137,16 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
         raise HTTPException(status_code=status_code, detail=str(e)) from e
     except Exception as e:
         logger.error(f"[SQL Generator] Falha ao acionar provedor LLM ({settings.llm_backend}): {e}")
-        # Tenta fallback para Ollama se o backend principal era Gemini
-        if settings.llm_backend == "gemini" and settings.ollama_url:
-            try:
-                logger.warning("[SQL Generator] Tentando fallback para Ollama após exceção no Gemini...")
-                from app.services.ollama_client import ask_llm
-                raw_response = await ask_llm(
-                    question=user_query,
-                    protheus_data=None,
-                    intent="sql_generation",
-                    context={
-                        "tenant_system_prompt": system_instruction,
-                        "tenant_id": tenant_id,
-                        "environment_code": environment_code,
-                    },
-                    history=history or [],
-                    image=image,
-                )
-            except Exception as ollama_err:
-                logger.error(f"[SQL Generator] Fallback para Ollama falhou: {ollama_err}")
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"O serviço do provedor de IA ({settings.llm_backend}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
-                ) from e
-        else:
-            raise HTTPException(
-                status_code=503,
-                detail=f"O serviço do provedor de IA ({settings.llm_backend}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
-            ) from e
+        raise HTTPException(
+            status_code=503,
+            detail=f"O serviço do provedor de IA ({settings.llm_backend}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
+        ) from e
 
     if not raw_response or not isinstance(raw_response, str):
         raise HTTPException(status_code=500, detail="Provedor LLM retornou uma resposta vazia na geração de SQL.")
 
     if raw_response.startswith("Erro na API do Gemini:") or raw_response.startswith("Erro de conexão com a API do Gemini:") or raw_response.startswith("A inteligência artificial do Google"):
-        # Tenta fallback para Ollama se disponível
-        if settings.ollama_url:
-            try:
-                logger.warning("[SQL Generator] Gemini retornou erro. Acionando fallback automático para Ollama...")
-                from app.services.ollama_client import ask_llm
-                raw_response = await ask_llm(
-                    question=user_query,
-                    protheus_data=None,
-                    intent="sql_generation",
-                    context={
-                        "tenant_system_prompt": system_instruction,
-                        "tenant_id": tenant_id,
-                        "environment_code": environment_code,
-                    },
-                    history=history or [],
-                    image=image,
-                )
-            except Exception as ollama_err:
-                logger.error(f"[SQL Generator] Fallback para Ollama falhou: {ollama_err}")
-                raise HTTPException(status_code=502, detail=raw_response)
-        else:
-            raise HTTPException(status_code=502, detail=raw_response)
+        raise HTTPException(status_code=502, detail=raw_response)
 
     # Sanitiza blocos de markdown ou comentários ao redor da query
     clean_sql = re.sub(r'```(?:sql)?|```', '', raw_response, flags=re.IGNORECASE).strip()

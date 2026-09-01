@@ -143,7 +143,7 @@ Static Function TIDevChild()
 
 	If ! IsUsrAdmin()
 		__lAdmin := .f.
-		FWAlertWarning("Opção disponivel para administrador!")
+		FWAlertWarning("Opï¿½ï¿½o disponivel para administrador!")
 		//Return
 	ElseIf UsrRetName(__cUserId)  == "ATENDCONSULTA"
 		__lAdmin := .f.
@@ -169,7 +169,7 @@ Return
 
 
 Static Function Tela(oDlg)
-	Local aFolder  := {'Query','Tabelas', 'RPO', 'Linha de Comando','Html', 'Arquivos',"Monitor","Serviço","Erro"}
+	Local aFolder  := {'Query','Tabelas', 'RPO', 'Linha de Comando','Html', 'Arquivos',"Monitor","Serviï¿½o","Erro"}
 	Local oFol
 
 	Local aFolQry  := {"Query #1", "Query #2", "Query #3", "Query #4", "Query #5"}
@@ -211,7 +211,7 @@ Static Function Tela(oDlg)
 		FolderDic(oFolDic:aDialogs[nSF], nSF)
 	Next
 
-	FolderRpo(oFol:aDialogs[3])        //--Folder Inspeção de Funções/Comandos
+	FolderRpo(oFol:aDialogs[3])        //--Folder Inspeï¿½ï¿½o de Funï¿½ï¿½es/Comandos
 	FolderCmd(oFol:aDialogs[4])        //--Folder Comandos
 	FolderHtm(oFol:aDialogs[5])	       //--Folder Html
 	FolderExp(oFol:aDialogs[6])        //--Folder File Explorer
@@ -308,7 +308,7 @@ Static Function SelEmp(cEmp, cFil, oWnd, lLogin)
 
 	oModal  := FWDialogModal():New()
 	oModal:SetEscClose(.f.)
-	oModal:setTitle("TIDEV - Seleção de empresa")
+	oModal:setTitle("TIDEV - Seleï¿½ï¿½o de empresa")
 	oModal:setSize(100, 200)
 	oModal:createDialog()
 	oModal:AddButton("OK"      , {|| lOk := .T. , oModal:DeActivate()}     , "OK",,.T.,.F.,.T.,)
@@ -331,7 +331,7 @@ Static Function SelEmp(cEmp, cFil, oWnd, lLogin)
 
 		Processa({||lRet := RpcSetEnv(cEmp, cFil,,,,,) }, "Aguarde...", "Montando Ambiente. Empresa [" + cEmp + "] Filial [" + cFil +"]."  )
 		If !lRet
-			FWAlertWarning("Não foi possível montar o ambiente selecionado. " )
+			FWAlertWarning("Nï¿½o foi possï¿½vel montar o ambiente selecionado. " )
 			Return .F.
 		Else
 			If lLogin .and.  ! IsLogin()
@@ -373,7 +373,7 @@ Static Function Login(cEmp, cFil, oWnd)
 
 	oModal  := FWDialogModal():New()
 	oModal:SetEscClose(.f.)
-	oModal:setTitle("TIDEV - Autenticação")
+	oModal:setTitle("TIDEV - Autenticaï¿½ï¿½o")
 	oModal:setSize(100, 140)
 	oModal:createDialog()
 	oModal:AddButton("OK", {|| lOk := VldLogin(cUserName, cSenha, @cUserID),  IF(lOk, oModal:DeActivate(), NIL)}     , "OK",,.T.,.F.,.T.,)
@@ -411,8 +411,8 @@ Static Function VldLogin(cUser, cSenha, cUserID)
 	Elseif nRetPsw == 2  //senha invalida
 		FWAlertWarning("Senha e/ou usuario invalidos!")
 		lRet:= .f.
-	Elseif nRetPsw == 1 .or. cUser == "ATENDCONSULTA"  // usuario não admin
-		FWAlertWarning('O usuário não é admin!')
+	Elseif nRetPsw == 1 .or. cUser == "ATENDCONSULTA"  // usuario nï¿½o admin
+		FWAlertWarning('O usuï¿½rio nï¿½o ï¿½ admin!')
 		lRet        := .F.
 	Endif
 
@@ -440,7 +440,7 @@ Static Function InitEmp(oTMsgItem)
 	Local cFilNew := ""
 
 
-	If ! FWAlertYesNo("Confirma a mudança de Empresa e/ou Filial?")
+	If ! FWAlertYesNo("Confirma a mudanï¿½a de Empresa e/ou Filial?")
 		Return
 	EndIf
 
@@ -559,9 +559,9 @@ Static Function FolderQry(oDlg, np)
 	oBPS2  := THButton():New(002, 052, "Abrir"      , oPSLB, {|| FileLoad(@cMemoL)                }, 40, 10, oFontB, "Abrir arquivo sql")
 	oBPS3  := THButton():New(002, 092, "Salvar"     , oPSLB, {|| FileSave(cMemoL)                 }, 40, 10, oFontB, "Salvar arquivo sql")
 	oBPS4  := THButton():New(002, 132, "ChangeQuery", oPSLB, {|| cMemoL := ChangeQuery(cMemoL)    }, 60, 10, oFontB, "Aplicar Change Query")
-	oBPS5  := THButton():New(002, 192, "SqlToAdvpl" , oPSLB, {|| cMemoR := Sql2Advpl(cMemoL, oPSR), cMemoR2 := Sql2Embed(cMemoL, oPSR)}, 60, 10, oFontB, "Gerar código Advpl")
+	oBPS5  := THButton():New(002, 192, "SqlToAdvpl" , oPSLB, {|| cMemoR := Sql2Advpl(cMemoL, oPSR), cMemoR2 := Sql2Embed(cMemoL, oPSR)}, 60, 10, oFontB, "Gerar cï¿½digo Advpl")
 	oBPS6  := THButton():New(002, 252, "Format"     , oPSLB, {|| cMemoL := FormatSql(cMemoL)      }, 40, 10, oFontB, "Formatar Query")
-	oBPS7  := THButton():New(002, 292, "Histórico"  , oPSLB, {|| MenuQuery(@cMemoL, oBPS7, np)    }, 50, 10, oFontB, "Lista com o histórico")
+	oBPS7  := THButton():New(002, 292, "Histï¿½rico"  , oPSLB, {|| MenuQuery(@cMemoL, oBPS7, np)    }, 50, 10, oFontB, "Lista com o histï¿½rico")
 	oBPS8  := THButton():New(002, 332, "Limpar"     , oPSLB, {|| cMemoL := ""                     }, 50, 10, oFontB, "Limpa memo da query")
 
 	oMemoL := tMultiget():new(,, bSETGET(cMemoL), oPSL)
@@ -576,7 +576,7 @@ Static Function FolderQry(oDlg, np)
 	oPSRB:SetCoors(TRect():New(0, 0, 30, __nWidth))
 	oPSRB:Align :=CONTROL_ALIGN_TOP
 
-	oBPS9  := THButton():New(002, 002, "AdvplToSql"      , oPSRB, {|| cMemoL := Advpl2Sql(@cMemoR)     }, 60, 10, oFontB, "Gera código Sql")
+	oBPS9  := THButton():New(002, 002, "AdvplToSql"      , oPSRB, {|| cMemoL := Advpl2Sql(@cMemoR)     }, 60, 10, oFontB, "Gera cï¿½digo Sql")
 	oBPS10 := THButton():New(002, 062, "Embedded"        , oPSRB, {|| cMemoR2:= ToEmbedded(@cMemoR)    }, 80, 10, oFontB, "Converte Advpl (cQuery) para o formato Embedded")
 	oBPS11 := THButton():New(002, 142, "cQuery"          , oPSRB, {|| cMemoR := TocQuery(@cMemoR2)      }, 80, 10, oFontB, "Converte Embedded para o formato Advpl (cQuery)")
 
@@ -993,8 +993,8 @@ Static Function MenuQuery(cCMD, oOwner, np)
 	LeHst(__aHstQry[np], cSufix)
 
 	oMenu := tMenu():new(0, 0, 0, 0, .T., , oOwner)
-	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusão?")            , (GrvHst(__aHstQry[np], cSufix, cCMD, .F., .T. ), .t. ), .t.) }, , , , , , , , , .T.))
-	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histórico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histórico?"), (GrvHst(__aHstQry[np], cSufix, ""  , .T., .F. ), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o?")            , (GrvHst(__aHstQry[np], cSufix, cCMD, .F., .T. ), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histï¿½rico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histï¿½rico?"), (GrvHst(__aHstQry[np], cSufix, ""  , .T., .F. ), .t. ), .t.) }, , , , , , , , , .T.))
 
 	For nX := Len(__aHstQry[np]) To 1 Step -1
 		cAux := cValToChar(nX)+ ". " + Left( Alltrim (__aHstQry[np, nX]), 120)
@@ -1214,12 +1214,12 @@ Static Function PQryRun(cQuery, oPSR, np, oMsg)
 			FWAlertWarning("Acesso somente de leitura!")
 			Return
 		EndIf
-		If ! FWAlertNoYes('Confirma a execução do ' + cComando + ' no banco?','Atenção')
+		If ! FWAlertNoYes('Confirma a execuï¿½ï¿½o do ' + cComando + ' no banco?','Atenï¿½ï¿½o')
 			Return
 		EndIf
 
 		If "TIDEVLOG" $ cQuery
-			FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG!")
+			FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG!")
 			Return
 		EndIf
 
@@ -1265,7 +1265,7 @@ Static Function PQryRun(cQuery, oPSR, np, oMsg)
 			nSec2 := Seconds()
 
 			If nSec2 >= nSec1
-				cMsgT :=  "Tempo de Execução: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
+				cMsgT :=  "Tempo de Execuï¿½ï¿½o: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
 			EndIf
 			oMsg:SetText(cMsgT +  " | Query Executada! | Quantidade de comandos processados: " + AllTrim(Str(len(aComando))))
 			FWAlertSuccess("Query executada!")
@@ -1277,12 +1277,12 @@ Static Function PQryRun(cQuery, oPSR, np, oMsg)
 
 			nSec1 := Seconds()
 			dbUseArea(.T.,'TOPCONN', TCGenQry(,, cQuery), cAliasTst, .F., .T.)
-			//DBUseArea(.T., "TOPCONN", TCGenQry2(NIL,NIL, cQuery, {} ), cAliasTst , .F., .T. ) // NÃO MUDOU NADA A PERFORMACE
+			//DBUseArea(.T., "TOPCONN", TCGenQry2(NIL,NIL, cQuery, {} ), cAliasTst , .F., .T. ) // Nï¿½O MUDOU NADA A PERFORMACE
 			nSec2 := Seconds()
 
 
 			If nSec2 >= nSec1
-				cMsgT :=  "Tempo de Execução: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
+				cMsgT :=  "Tempo de Execuï¿½ï¿½o: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
 			EndIf
 			oMsg:SetText(cMsgT)
 
@@ -1372,7 +1372,7 @@ Static Function PQryRun(cQuery, oPSR, np, oMsg)
 			AutoGrLog(cErro)
 			MostraLog()
 			__cErroA :=""
-			oMsg:SetText("Erro de execução da query!!!")
+			oMsg:SetText("Erro de execuï¿½ï¿½o da query!!!")
 		EndIf
 		RestArea(aArea)
 		Return
@@ -1538,7 +1538,7 @@ Static Function ExportCSV(np, oMsg)
 		cFile += ".csv"
 	EndIf
 	If File(cFile)
-		If ! FWAlertYesNo("Confirma a substituição do arquivo?")
+		If ! FWAlertYesNo("Confirma a substituiï¿½ï¿½o do arquivo?")
 			Return .F.
 		EndIf
 		FErase(cFile)
@@ -1555,13 +1555,13 @@ Static Function ExportCSV(np, oMsg)
 	nSec2 := Seconds()
 
 	If nSec2 >= nSec1
-		cMsgT :=  "Tempo de Execução: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
+		cMsgT :=  "Tempo de Execuï¿½ï¿½o: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
 	EndIf
 
 	If lAbortPrint
-		cMsg := "Geração interrompida, planilha csv com conteudo parcial!"
+		cMsg := "Geraï¿½ï¿½o interrompida, planilha csv com conteudo parcial!"
 	Else
-		cMsg := "Geração concluida!"
+		cMsg := "Geraï¿½ï¿½o concluida!"
 	EndIf
 	FWAlertSuccess(cMsg)
 	oMsg:SetText(cMsgT + " |Arquivo: " + cFile + " |" + cMsg )
@@ -1668,7 +1668,7 @@ Static Function ExportXml(np, oMsg)
 		cFile += ".xml"
 	EndIf
 	If File(cFile)
-		If ! FWAlertYesNo("Confirma a substituição do arquivo?")
+		If ! FWAlertYesNo("Confirma a substituiï¿½ï¿½o do arquivo?")
 			Return .F.
 		EndIf
 		FErase(cFile)
@@ -1689,14 +1689,14 @@ Static Function ExportXml(np, oMsg)
 	oExcel := FreeObj(oExcel)
 
 	If lAbortPrint
-		cMsg := "Geração interrompida, planilha xml com conteudo parcial!"
+		cMsg := "Geraï¿½ï¿½o interrompida, planilha xml com conteudo parcial!"
 	Else
-		cMsg := "Geração concluida!"
+		cMsg := "Geraï¿½ï¿½o concluida!"
 	EndIf
 
 	nSec2 := Seconds()
 	If nSec2 >= nSec1
-		cMsgT :=  "Tempo de Execução: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
+		cMsgT :=  "Tempo de Execuï¿½ï¿½o: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
 	EndIf
 	FWAlertSuccess(cMsg)
 	oMsg:SetText(cMsgT + " |Arquivo: " + cFile + " |" + cMsg )
@@ -1755,7 +1755,7 @@ Static Function CabXml(oExcel)
 			nAlign 	:= 1
 			nFormat	:= 1
 		EndIf
-		//< cWorkSheet >, < cTable >, < cColumn >, < nAlign > //1-Left,2-Center,3-Right, < nFormat > //1-General,2-Number,3-Monetário,4-DateTime, < lTotal >
+		//< cWorkSheet >, < cTable >, < cColumn >, < nAlign > //1-Left,2-Center,3-Right, < nFormat > //1-General,2-Number,3-Monetï¿½rio,4-DateTime, < lTotal >
 		oExcel:AddColumn(cPlan, cTit, aFields[nX, 1], nAlign, nFormat, lTotal)
 	Next
 
@@ -1843,7 +1843,7 @@ Static Function ExportExcel(np, oMsg)
 		cFile += ".xls"
 	EndIf
 	If File(cFile)
-		If ! FWAlertYesNo("Confirma a substituição do arquivo?")
+		If ! FWAlertYesNo("Confirma a substituiï¿½ï¿½o do arquivo?")
 			Return .F.
 		EndIf
 		FErase(cFile)
@@ -1858,9 +1858,9 @@ Static Function ExportExcel(np, oMsg)
 	Processa({|| cErro := GeraExcel(cAliasTst, cFile) },,, .T.)
 
 	If lAbortPrint
-		cMsg := "Geração interrompida, planilha Excel com conteudo parcial!"
+		cMsg := "Geraï¿½ï¿½o interrompida, planilha Excel com conteudo parcial!"
 	Else
-		cMsg := "Geração Excel concluida!"
+		cMsg := "Geraï¿½ï¿½o Excel concluida!"
 	EndIf
 	If ! Empty(cErro)
 		cMsg := cErro
@@ -1868,7 +1868,7 @@ Static Function ExportExcel(np, oMsg)
 
 	nSec2 := Seconds()
 	If nSec2 >= nSec1
-		cMsgT :=  "Tempo de Execução: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
+		cMsgT :=  "Tempo de Execuï¿½ï¿½o: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
 	EndIf
 	FWAlertSuccess(cMsg)
 	oMsg:SetText(cMsgT + " |Arquivo: " + cFile + " |" + cMsg )
@@ -1918,7 +1918,7 @@ Static Function GeraExcel(cAlias, cArqXLS)
 		Ferase(cFile)
 	EndIf
 	If FRename(cDirXls + cNomTmp,  cDirXls + cNomXlS) = -1
-		cErro := "Não foi possivel renomear o arquivo " + cDirXls + cNomTmp
+		cErro := "Nï¿½o foi possivel renomear o arquivo " + cDirXls + cNomTmp
 	EndIf
 
 Return cErro
@@ -1941,7 +1941,7 @@ Static Function CountQuery(cQuery, oMsg)
 	EndIf
 
 	If empty(cFilAnt) .or. empty(cEmpAnt)
-		FWAlertInfo("Ambiente Não Inicializado")
+		FWAlertInfo("Ambiente Nï¿½o Inicializado")
 		Return
 	EndIf
 
@@ -1960,7 +1960,7 @@ Static Function CountQuery(cQuery, oMsg)
 
 		nSec2 := Seconds()
 		If nSec2 >= nSec1
-			cMsgT :=  "Tempo de Execução: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
+			cMsgT :=  "Tempo de Execuï¿½ï¿½o: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
 		EndIf
 
 		If (cAliasCount)->(! Eof())
@@ -1981,7 +1981,7 @@ Static Function CountQuery(cQuery, oMsg)
 		AutoGrLog(cErro)
 		MostraLog()
 		__cErroA :=""
-		oMsg:SetText("Erro de execução query!!!")
+		oMsg:SetText("Erro de execuï¿½ï¿½o query!!!")
 	Else
 		oMsg:SetText(cMsgT + " |Quantidade de linhas: " + Alltrim(Transform(nQtde,"@E 999,999,999")))
 	EndIf
@@ -2030,7 +2030,7 @@ Static Function FolderDic(oDlg, np)
 
 
 	THButton():New(020, 005, "Fechar"      , oP1, {|| CloseTab(@cAliasDic, np, oIndice) }, 20, 10, oFontB, "Fecha tabela")
-	THButton():New(020, 070, "Pesquisa"    , oP1, {|| }, 30, 10, oFontB, "Para empresa compartilhada, não informar a filial!!!")
+	THButton():New(020, 070, "Pesquisa"    , oP1, {|| }, 30, 10, oFontB, "Para empresa compartilhada, nï¿½o informar a filial!!!")
 	@ 020, 105 GET cPesquisa   of oP1 SIZE 235, 09 PIXEL VALID Posiciona(cAliasDic, cPesquisa, np )  PICTURE "@!"  when oIndice:nat > 1
 
 	@ 005, 350 CHECKBOX oDeleOn   VAR __lDeleOn	   PROMPT "Dele ON"	 SIZE 040,010 OF oP1 PIXEL font oFontB  VALID  DelOn(np) ;oDeleOn:bChange := {|| DelOn(np) }
@@ -2042,7 +2042,7 @@ Static Function FolderDic(oDlg, np)
 	THButton():New(005, 430, "Filter"     , oP1, {|| FilterTab(cAliasDic, np)  }, 40, 10, oFontB, "Aplica filtro da tabela")
 	THButton():New(020, 430, "Replace"    , oP1, {|| ReplaceTab(cAliasDic, np) }, 40, 10, oFontB, "Altera registros da tabela")
 
-	THButton():New(005, 470, "Locate"     , oP1, {|| LocateTab(cAliasDic, np)  }, 40, 10, oFontB, "Localiza registro conforme expressão")
+	THButton():New(005, 470, "Locate"     , oP1, {|| LocateTab(cAliasDic, np)  }, 40, 10, oFontB, "Localiza registro conforme expressï¿½o")
 	THButton():New(020, 470, "Goto"       , oP1, {|| GotoTab(cAliasDic, np)    }, 40, 10, oFontB, "Posiciona no recno")
 
 	THButton():New(005, 510, "Delete"     , oP1, {|| DeleteTab(cAliasDic, np, .T.)  }, 40, 10, oFontB, "Deleta registros da tabela")
@@ -2184,7 +2184,7 @@ Static Function DicBrowse(cAliasDic, oP2, np, oIndice, oMsg, oMsg2, lBut, lReorg
 			EndIf
 
 			If ! MsFile(cNomTab,, "TOPCONN")
-				FWAlertWarning("Arquivo " + cNomTab + " não existe no banco!")
+				FWAlertWarning("Arquivo " + cNomTab + " nï¿½o existe no banco!")
 				RestArea(aArea)
 				Return .F.
 			EndIf
@@ -2204,7 +2204,7 @@ Static Function DicBrowse(cAliasDic, oP2, np, oIndice, oMsg, oMsg2, lBut, lReorg
 		EndIf
 
 		If Select(cAliasTst) == 0
-			FWAlertWarning("Não foi possivel abrir a tabela!!!")
+			FWAlertWarning("Nï¿½o foi possivel abrir a tabela!!!")
 			Return .F.
 		EndIf
 
@@ -2352,7 +2352,7 @@ Static Function Posiciona(cAlias, cPesquisa, np)
 	EndIf
 
 	If ! (cAliasTst)->(DBSeek(Rtrim(cPesquisa)))
-		FWAlertWarning("Não encontrado!!!")
+		FWAlertWarning("Nï¿½o encontrado!!!")
 		RestArea(aAreaTMP)
 		RestArea(aArea)
 	EndIf
@@ -2462,7 +2462,7 @@ Static Function TIEnchoice(cAlias, cTitulo, lReadOnly, lCopia)
 	Else
 
 		If Upper(cTabela) == "TIDEVLOG"
-			FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+			FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 			Return
 		EndIf
 		If ! lCopia
@@ -2508,10 +2508,10 @@ Static Function TIEnchoice(cAlias, cTitulo, lReadOnly, lCopia)
 			(cAlias)->(RecLock(cAlias, .T.))
 			cLog += "Novo registro " + CValToChar((cAlias)->(Recno())) + CRLF
 		Else
-			If ! FWAlertYesNo("Confirma a atualização do registro " + Alltrim(Str((cAlias)->(RecNo())))+ "?")
+			If ! FWAlertYesNo("Confirma a atualizaï¿½ï¿½o do registro " + Alltrim(Str((cAlias)->(RecNo())))+ "?")
 				Return .F.
 			EndIf
-			cLog += "Alteração do registro " + CValToChar((cAlias)->(Recno())) + CRLF
+			cLog += "Alteraï¿½ï¿½o do registro " + CValToChar((cAlias)->(Recno())) + CRLF
 			(cAlias)->(RecLock(cAlias, .F.))
 		EndIf
 		For nx:= 1 to (cAlias)->(FCount())
@@ -2680,11 +2680,11 @@ Static Function TelaExpr(cAliasTst, cExpre)
 	Next
 
 	cCampos := aCampos[1]
-	aOperS  := {"Igual a","Diferente de","Menor que","Menor que ou igual a", "Maior que","Maior que ou igual a","Contem a expressão", "Não contem","Está incluido em", "Não está incluido em" }
+	aOperS  := {"Igual a","Diferente de","Menor que","Menor que ou igual a", "Maior que","Maior que ou igual a","Contem a expressï¿½o", "Nï¿½o contem","Estï¿½ incluido em", "Nï¿½o estï¿½ incluido em" }
 
 	oModal  := FWDialogModal():New()
 	oModal:SetEscClose(.T.)
-	oModal:setTitle("Expressão para filtro")
+	oModal:setTitle("Expressï¿½o para filtro")
 	oModal:setSize(140, 280)
 	oModal:createDialog()
 	oModal:addCloseButton({|| If((cAliasTst)->(ExpreOk(cExpre)), (lOk:= .T., oModal:DeActivate()), .F.),  }, "OK")
@@ -2698,7 +2698,7 @@ Static Function TelaExpr(cAliasTst, cExpre)
 
 	@ 005, 005 SAY "Campos"      of oPS SIZE 050, 10 PIXEL FONT oFontB
 	@ 005, 065 SAY "Operadores"  of oPS SIZE 050, 10 PIXEL FONT oFontB
-	@ 005, 130 SAY "Expressão do campo"   of oPS SIZE 070, 10 PIXEL FONT oFontB
+	@ 005, 130 SAY "Expressï¿½o do campo"   of oPS SIZE 070, 10 PIXEL FONT oFontB
 
 	@ 015, 005 MSCOMBOBOX oCampos  VAR cCampos  ITEMS aCampos   SIZE 50,09 PIXEL OF oPS VALID AtuExpCmp(cCampos, oOperS, oExpCmp, aStruct)
 	@ 015, 065 MSCOMBOBOX oOperS   VAR cOperS   ITEMS aOperS    SIZE 60,09 PIXEL OF oPS VALID AtuExpCmp(cCampos, oOperS, oExpCmp, aStruct)
@@ -2706,9 +2706,9 @@ Static Function TelaExpr(cAliasTst, cExpre)
 
 	AtuExpCmp(cCampos, oOperS, oExpCmp, aStruct)
 
-	oBAdic:= THButton():New(016, 220, "Adiciona"        ,oPS, {|| AdicExpr(cCampos, oOperS, oExpCmp, aStruct, @cExpre) }, 35, 10, oFontB, "Adiciona na expressão final")
-	oBLimp:= THButton():New(026, 005, "Limpa Expressão" ,oPS, {|| cExpre:= ""              }, 55, 10, oFontB, "Limpa a expressão final")
-	oBH   := THButton():New(026, 060, "Histórico"       ,oPS, {|| MenuFil(@cExpre, oBH)    }, 45, 10, oFontB, "Lista com o histórico")
+	oBAdic:= THButton():New(016, 220, "Adiciona"        ,oPS, {|| AdicExpr(cCampos, oOperS, oExpCmp, aStruct, @cExpre) }, 35, 10, oFontB, "Adiciona na expressï¿½o final")
+	oBLimp:= THButton():New(026, 005, "Limpa Expressï¿½o" ,oPS, {|| cExpre:= ""              }, 55, 10, oFontB, "Limpa a expressï¿½o final")
+	oBH   := THButton():New(026, 060, "Histï¿½rico"       ,oPS, {|| MenuFil(@cExpre, oBH)    }, 45, 10, oFontB, "Lista com o histï¿½rico")
 	oBE   := THButton():New(026, 220, "e"               ,oPS, {|| AdicOperad(@cExpre, "e") }, 10, 10, oFontB, "Inclui o operador .and. ")
 	oBOu  := THButton():New(026, 232, "ou"              ,oPS, {|| AdicOperad(@cExpre, "ou")}, 10, 10, oFontB, "Inclui o operador .or. ")
 	oBPI  := THButton():New(026, 244, "("               ,oPS, {|| AdicParen(@cExpre, "(")  }, 10, 10, oFontB, "Abre parenteses")
@@ -2800,9 +2800,9 @@ Static Function AdicExpr(cCampo, oOperS, oExpCmp, aStruct, cExpre)
 	cTipo := aStruct[np, 2]
 
 	If cTipo == "C"
-		If cOper == ".."     // "Conten a expressão"
+		If cOper == ".."     // "Conten a expressï¿½o"
 			cExpAtu := "'" + Alltrim(uExpCmp) + "' $ Alltrim("+cCampo+")"
-		ElseIf cOper == "!." //"Não contem"
+		ElseIf cOper == "!." //"Nï¿½o contem"
 			cExpAtu := "! '" + Alltrim(uExpCmp) + "' $ Alltrim("+cCampo+")"
 		ElseIf cOper == "!x"
 			cExpAtu := "! Alltrim(" + cCampo + ") $ '" + Alltrim(uExpCmp) + "'"
@@ -2813,13 +2813,13 @@ Static Function AdicExpr(cCampo, oOperS, oExpCmp, aStruct, cExpre)
 		EndIf
 	ElseIf cTipo == "D"
 		If oOperS:nAt > 6
-			FWAlertWarning("Operador não permitido!")
+			FWAlertWarning("Operador nï¿½o permitido!")
 			Return
 		EndIf
 		cExpAtu := "DtoS(" + cCampo + ") " + cOper + " '" + DtoS(uExpCmp) + "'"
 	ElseIf cTipo == "N"
 		If oOperS:nAt > 6
-			FWAlertWarning("Operador não permitido!")
+			FWAlertWarning("Operador nï¿½o permitido!")
 			Return
 		EndIf
 		cExpAtu := cCampo + " " + cOper + " " + cValToChar(uExpCmp)
@@ -2941,7 +2941,7 @@ Static Function TelaPar(cAliasTst, cTitulo)
 	Local oExpW
 	Local cExpW     := ""
 	Local oOpcoes
-	Local aOpcoes   := {"Todos","Restantes", "Próximos"}
+	Local aOpcoes   := {"Todos","Restantes", "Prï¿½ximos"}
 	Local copcoes   := "Todos"
 	Local oSayProx
 	Local oProximo
@@ -3020,8 +3020,8 @@ Static Function TelaPar(cAliasTst, cTitulo)
 	oPFS:= TPanelCss():New(,,, oPF)
 	oPFS:SetCoors(TRect():New(0, 0, 30, 500))
 	oPFS:Align :=CONTROL_ALIGN_TOP
-	@ 005, 005 SAY "Expressão clausula [FOR]"      of oPFS SIZE 100, 10 PIXEL FONT oFontB
-	THButton():New(004, 95, "..."        , oPFS, {|| cExpF := TelaExpr(cAliasTst, cExpF ) }, 10, 10, oFontB, "Monta expressão para clausula FOR")
+	@ 005, 005 SAY "Expressï¿½o clausula [FOR]"      of oPFS SIZE 100, 10 PIXEL FONT oFontB
+	THButton():New(004, 95, "..."        , oPFS, {|| cExpF := TelaExpr(cAliasTst, cExpF ) }, 10, 10, oFontB, "Monta expressï¿½o para clausula FOR")
 
 	oExpF := tMultiget():new(,, bSETGET(cExpF), oPF)
 	oExpF:Align := CONTROL_ALIGN_ALLCLIENT
@@ -3035,8 +3035,8 @@ Static Function TelaPar(cAliasTst, cTitulo)
 		oPWS:= TPanelCss():New(,,, oPW)
 		oPWS:SetCoors(TRect():New(0, 0, 30, 500))
 		oPWS:Align :=CONTROL_ALIGN_TOP
-		@ 005, 004 SAY "Expressão clausula [WHILE]"      of oPWS SIZE 100, 10 PIXEL FONT oFontB
-		THButton():New(004, 95, "..."        , oPWS, {|| cExpW := TelaExpr(cAliasTst, cExpW ) }, 10, 10, oFontB, "Monta expressão para clausula WHILE")
+		@ 005, 004 SAY "Expressï¿½o clausula [WHILE]"      of oPWS SIZE 100, 10 PIXEL FONT oFontB
+		THButton():New(004, 95, "..."        , oPWS, {|| cExpW := TelaExpr(cAliasTst, cExpW ) }, 10, 10, oFontB, "Monta expressï¿½o para clausula WHILE")
 
 		oExpW := tMultiget():new(,, bSETGET(cExpW), oPW)
 		oExpW:Align := CONTROL_ALIGN_ALLCLIENT
@@ -3044,10 +3044,10 @@ Static Function TelaPar(cAliasTst, cTitulo)
 		oPO:= TPanelCss():New(,,, oDlg)
 		oPO:SetCoors(TRect():New(0, 0, 75, 500))
 		oPO:Align :=CONTROL_ALIGN_ALLCLIENT
-		@ 005, 004 SAY "Opções "  of oPO SIZE 050, 10 PIXEL FONT oFontB
-		@ 005, 065 SAY oSayProx  PROMPT "Próximos"  of oPO SIZE 030, 10 PIXEL FONT oFontB
+		@ 005, 004 SAY "Opï¿½ï¿½es "  of oPO SIZE 050, 10 PIXEL FONT oFontB
+		@ 005, 065 SAY oSayProx  PROMPT "Prï¿½ximos"  of oPO SIZE 030, 10 PIXEL FONT oFontB
 
-		@ 015, 005 MSCOMBOBOX oOpcoes   VAR cOpcoes ITEMS aOpcoes   SIZE 50,09 PIXEL OF oPO  VALID If( cOpcoes == "Próximos" , (oSayProx:Show(),oProximo:Show()) , (oSayProx:Hide(),oProximo:Hide()))
+		@ 015, 005 MSCOMBOBOX oOpcoes   VAR cOpcoes ITEMS aOpcoes   SIZE 50,09 PIXEL OF oPO  VALID If( cOpcoes == "Prï¿½ximos" , (oSayProx:Show(),oProximo:Show()) , (oSayProx:Hide(),oProximo:Hide()))
 		@ 015, 065 Get        oProximo  VAR nProximo  of oPO SIZE 20, 09 PIXEL PICT "9999999"
 
 		oSayProx:Hide()
@@ -3074,7 +3074,7 @@ Static Function TelaPar(cAliasTst, cTitulo)
 		cExpW := NIL
 	EndIf
 
-	If ! cOpcoes == "Próximos"
+	If ! cOpcoes == "Prï¿½ximos"
 		nProximo := NIL
 
 		If cOpcoes == "Restantes"
@@ -3104,35 +3104,35 @@ Static Function SelArquivo(cFormato, cArquivo, cModo, oModal)
 	If Empty(cFile)
 		Return .F.
 	Endif
-	If cModo == "E"  //exportação
+	If cModo == "E"  //exportaï¿½ï¿½o
 		If ! Upper(Right(cFile, 4)) == "." + cExt
 			cFile += "." + cExt
 		EndIf
 		If File(cFile)
-			If ! FWAlertYesNo("Confirma a substituição do arquivo?")
+			If ! FWAlertYesNo("Confirma a substituiï¿½ï¿½o do arquivo?")
 				Return .F.
 			EndIf
 			FErase(cFile)
 		EndIF
 	Else
 		If ! File(cFile)
-			FWAlertWarning("arquivo não encontrado!")
+			FWAlertWarning("arquivo nï¿½o encontrado!")
 		EndIf
 		If Subs(cfile, 2, 2) == ":\"
 			nPos := Rat("\", cFile)
 			cNomArq := Subs(cFile, nPos + 1)
 
 			If File("system\tidev\" + cNomArq)
-				lUsaAnt := FWAlertYesNo("Esse arquivo já existe em 'system\tidev\', deseja reutilizar o arquivo?")
+				lUsaAnt := FWAlertYesNo("Esse arquivo jï¿½ existe em 'system\tidev\', deseja reutilizar o arquivo?")
 				If ! lUsaAnt
-					FWAlertWarning("Será feito uma copia temporaria no servido em 'system\tidev\' para processamento!")
+					FWAlertWarning("Serï¿½ feito uma copia temporaria no servido em 'system\tidev\' para processamento!")
 					If FErase("system\tidev\" + cNomArq) == -1
-						FWAlertWarning("o arquivo em 'system\tidev' não pode ser substituido!")
+						FWAlertWarning("o arquivo em 'system\tidev' nï¿½o pode ser substituido!")
 						Return .f.
 					EndIf
 				EndIf
 			Else
-				FWAlertWarning("Será feito uma copia temporaria no servido em 'system\tidev\' para processamento!")
+				FWAlertWarning("Serï¿½ feito uma copia temporaria no servido em 'system\tidev\' para processamento!")
 			EndIf
 			If ! lUsaAnt
 				Processa({|| lSucesso := CPYT2S(cFile, "system\tidev\", .T.) }, "Copiando arquivo para \system\tidev..")
@@ -3184,7 +3184,7 @@ Static Function ReplaceTab(cAliasDic, np)
 
 	cTabela:= RetFileName((cAliasTst)->(DBInfo(10)))
 	If Upper(cTabela) == "TIDEVLOG"
-		FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+		FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 		Return
 	EndIf
 
@@ -3193,7 +3193,7 @@ Static Function ReplaceTab(cAliasDic, np)
 		Return
 	EndIf
 
-	If ! FWAlertYesNo("Confirma a alteração dos registros?")
+	If ! FWAlertYesNo("Confirma a alteraï¿½ï¿½o dos registros?")
 		Return
 	EndIf
 
@@ -3209,7 +3209,7 @@ Static Function ReplaceTab(cAliasDic, np)
 
 	(cAliasTst)->(TelaDbEval(cComando, cFor, cWhile, nProxReg, lRest, "Alterando registos"))
 
-	cLog += "Alteração em bloco de campo" + CRLF
+	cLog += "Alteraï¿½ï¿½o em bloco de campo" + CRLF
 	cLog += "Tabela: " + cTabela + CRLF
 	clog += "Filtro: " + (cAliasTst)->(dbFilter()) + CRLF
 	clog += "Indice: " + (cAliasTst)->(IndexKey()) + CRLF + CRLF
@@ -3357,7 +3357,7 @@ Static Function DeleteTab(cAliasDic, np, lDelete)
 
 	cTabela:= RetFileName((cAliasTst)->(DBInfo(10)))
 	If Upper(cTabela) == "TIDEVLOG"
-		FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+		FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 		Return
 	EndIf
 
@@ -3367,11 +3367,11 @@ Static Function DeleteTab(cAliasDic, np, lDelete)
 	EndIf
 
 	If lDelete
-		If ! FWAlertYesNo("Confirma a deleção dos registros?")
+		If ! FWAlertYesNo("Confirma a deleï¿½ï¿½o dos registros?")
 			Return
 		EndIf
 	Else
-		If ! FWAlertYesNo("Confirma a recuperação dos registros deletados?")
+		If ! FWAlertYesNo("Confirma a recuperaï¿½ï¿½o dos registros deletados?")
 			Return
 		EndIf
 	EndIf
@@ -3381,11 +3381,11 @@ Static Function DeleteTab(cAliasDic, np, lDelete)
 	lRest    := aRet[6]
 
 	If lDelete
-		cLog += "Execução em bloco DELETE "+ CRLF
+		cLog += "Execuï¿½ï¿½o em bloco DELETE "+ CRLF
 		cComando := "DbrLock(), DbDelete(), DbUnlock(), DbCommitall() "
 		(cAliasTst)->(TelaDbEval(cComando, cFor, cWhile, nProxReg, lRest, "Deletando registos"))
 	Else
-		cLog += "Execução em bloco RECALL "+ CRLF
+		cLog += "Execuï¿½ï¿½o em bloco RECALL "+ CRLF
 		cComando := "DbrLock(), DbRecall(), DbUnlock(), DbCommitall() "
 		(cAliasTst)->(TelaDbEval(cComando, cFor, cWhile, nProxReg, lRest, "Recuperando registos deletados"))
 	EndIf
@@ -3442,7 +3442,7 @@ Static Function TelaDbEval(cComando, cFor, cWhile, nProxReg, lRest, cTitulo, lMs
 
 	cMsg += "Total de linhas processadas: " + AllTrim(Str(nQtdRec))
 	If lAbortPrint
-		cMsg += CRLF + CRLF + " Execução parcial, processamento interrompido!"
+		cMsg += CRLF + CRLF + " Execuï¿½ï¿½o parcial, processamento interrompido!"
 	EndIf
 	If lMsgFim
 		FWAlertSuccess(cMsg)
@@ -3549,7 +3549,7 @@ Static Function ExportTab(cAliasDic, np)
 		Return
 	EndIf
 
-	If ! FWAlertYesNo("Confirma a exportação dos registros?")
+	If ! FWAlertYesNo("Confirma a exportaï¿½ï¿½o dos registros?")
 		Return
 	EndIf
 
@@ -3648,7 +3648,7 @@ Static Function ExportTab(cAliasDic, np)
 				Ferase(cArqTmp)
 			EndIf
 			If FRename(cDirRmt + cNomTmp,  cDirRmt + cNomArq) = -1
-				FWAlertWarning("Não foi possivel renomear o arquivo " + cDirRmt + cNomTmp )
+				FWAlertWarning("Nï¿½o foi possivel renomear o arquivo " + cDirRmt + cNomTmp )
 			Else
 				FWAlertSuccess("Export concluido em " + cArquivo)
 				If cFormato != "DTC"
@@ -3657,7 +3657,7 @@ Static Function ExportTab(cAliasDic, np)
 			EndIf
 		Else // se o destino for no server
 			If FRename(cArqTmp,  cArquivo) = -1
-				FWAlertWarning("Não foi possivel renomear o arquivo " + cDirRmt + cNomTmp )
+				FWAlertWarning("Nï¿½o foi possivel renomear o arquivo " + cDirRmt + cNomTmp )
 			Else
 				FWAlertSuccess("Export concluido em " + cArquivo)
 			EndIf
@@ -3705,11 +3705,11 @@ Static Function ImportTab(cAliasDic, np)
 	cTabela:= RetFileName((cAliasTst)->(DBInfo(10)))
 	nRecAntes := (cAliasTst)->(RecCount())
 	If Upper(cTabela) == "TIDEVLOG"
-		FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+		FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 		Return
 	EndIf
 
-	If ! FWAlertYesNo("Confirma a importação dos registros?")
+	If ! FWAlertYesNo("Confirma a importaï¿½ï¿½o dos registros?")
 		Return
 	EndIf
 
@@ -3831,13 +3831,13 @@ Return {cFormato, cArquivo}
 Static Function VldArq(cArquivo)
 	cArquivo := Alltrim(cArquivo)
 	If Empty(cArquivo)
-		FWAlertWarning("Arquivo não informado!")
+		FWAlertWarning("Arquivo nï¿½o informado!")
 		cArquivo  := Space(200)
 		Return .F.
 	EndIf
 
 	If ! MsFile(cArquivo,, "TOPCONN")
-		FWAlertWarning("Arquivo " + cArquivo + " não existe no banco!")
+		FWAlertWarning("Arquivo " + cArquivo + " nï¿½o existe no banco!")
 		cArquivo  := Space(200)
 		Return .F.
 	EndIf
@@ -3897,7 +3897,7 @@ Static Function PrcImpTab(cAliasTst, cAliasTmp )
 
 	cMsg += "Total de linhas processadas: " + AllTrim(Str(nQtdRec))
 	If lAbortPrint
-		cMsg += CRLF + CRLF + " Execução parcial, processamento interrompido!"
+		cMsg += CRLF + CRLF + " Execuï¿½ï¿½o parcial, processamento interrompido!"
 	EndIf
 	FWAlertSuccess(cMsg)
 
@@ -3923,7 +3923,7 @@ Static Function PrcImpCSV(cArquivo, cAliasTst)
 
 	oFile:= TIFileReader():New(cArquivo)
 	If ! oFile:Open()
-		FWAlertWarning("Não foi possivel abrir o arquivo " + cArquivo)
+		FWAlertWarning("Nï¿½o foi possivel abrir o arquivo " + cArquivo)
 		Return
 	EndIf
 
@@ -3992,7 +3992,7 @@ Static Function PrcImpCSV(cArquivo, cAliasTst)
 
 	cMsg += "Total de linhas processadas: " + AllTrim(Str(nQtdRec))
 	If lAbortPrint
-		cMsg += CRLF + CRLF + " Execução parcial, processamento interrompido!"
+		cMsg += CRLF + CRLF + " Execuï¿½ï¿½o parcial, processamento interrompido!"
 	EndIf
 	FWAlertSuccess(cMsg)
 
@@ -4058,7 +4058,7 @@ Static Function PrcImpXLS(cAliasTst, oDBF)
 
 	cMsg += "Total de linhas processadas: " + AllTrim(Str(nQtdRec))
 	If lAbortPrint
-		cMsg += CRLF + CRLF + " Execução parcial, processamento interrompido!"
+		cMsg += CRLF + CRLF + " Execuï¿½ï¿½o parcial, processamento interrompido!"
 	EndIf
 	FWAlertSuccess(cMsg)
 
@@ -4141,7 +4141,7 @@ Static Function DelRecno(nP, lConfirm)
 
 	cTabela:= RetFileName((cAliasTst)->(DBInfo(10)))
 	If Upper(cTabela) == "TIDEVLOG"
-		FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+		FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 		Return
 	EndIf
 
@@ -4187,7 +4187,7 @@ Return
 Static Function AddRecno(nP)
 	Local cAliasTst := __aDicTst[np]
 	Local cTabela   := ""
-	Local cLog      := "Inclusão de registro recno: "
+	Local cLog      := "Inclusï¿½o de registro recno: "
 
 
 	If __lReadOnly
@@ -4197,7 +4197,7 @@ Static Function AddRecno(nP)
 
 	cTabela:= RetFileName((cAliasTst)->(DBInfo(10)))
 	If Upper(cTabela) == "TIDEVLOG"
-		FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+		FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 		Return
 	EndIf
 
@@ -4235,7 +4235,7 @@ Static Function AltReg(oBrowse, cAliasTst, lQuery, np)
 	Local nClrFore
 	Local nPos      := 0
 	Local cTabela   := ""
-	Local cLog      := "Alteração de registro "
+	Local cLog      := "Alteraï¿½ï¿½o de registro "
 	Local cAntes    := ""
 	Local cDepois   := ""
 	Default lQuery := .F.
@@ -4316,7 +4316,7 @@ Static Function AltReg(oBrowse, cAliasTst, lQuery, np)
 		cTabela:= RetFileName((cAliasTst)->(DBInfo(10)))
 		If ( nLastKey <> 0 )
 			If Upper(cTabela) == "TIDEVLOG"
-				FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+				FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 				oBrowse:Refresh()
 				Return
 			EndIf
@@ -4361,7 +4361,7 @@ Static Function Estrutura(cAliasDic, np)
 	Local nx
 
 	If Empty(cAliasDic)
-		FWAlertWarning("Alias não informado!!!")
+		FWAlertWarning("Alias nï¿½o informado!!!")
 		Return
 	EndIf
 
@@ -4455,7 +4455,7 @@ Static Function ReorgColu(cAliasDic, oP2ant, np, oIndice, oMsg, oMsg2 )
 	Local oFontB := TFont():New('Consolas',, 16,, .T.,,,,, .F., .F.)
 
 	If Empty(cAliasDic)
-		FWAlertWarning("Alias não informado!!!")
+		FWAlertWarning("Alias nï¿½o informado!!!")
 		Return
 	EndIf
 
@@ -4473,7 +4473,7 @@ Static Function ReorgColu(cAliasDic, oP2ant, np, oIndice, oMsg, oMsg2 )
 
 	oModal  := FWDialogModal():New()
 	oModal:SetEscClose(.T.)
-	oModal:setTitle("Reorganizar colunas (visão) " + Alltrim(cAliasDic) + " com " + Alltrim(Str(Len(aStruct))) + " campos")
+	oModal:setTitle("Reorganizar colunas (visï¿½o) " + Alltrim(cAliasDic) + " com " + Alltrim(Str(Len(aStruct))) + " campos")
 	oModal:setSize(260, 280)
 	oModal:createDialog()
 	oModal:addCloseButton({|| NewOk(oLbx2, cAliasDic, oP2ant, np, oIndice, oMsg, oMsg2), oModal:DeActivate() }, "OK")
@@ -4494,14 +4494,14 @@ Static Function ReorgColu(cAliasDic, oP2ant, np, oIndice, oMsg, oMsg2 )
 	@ 025, 092 SAY "Busca"    of oP1 SIZE 030, 10 PIXEL font oFontB
 	@ 023, 122 GET cPesquisa  of oP1 SIZE 060, 09 PIXEL PICT "@!" VALID BuscaEstru(oLbx1, cPesquisa)  font oFontB
 
-	oBH   := THButton():New(023, 182, "Histórico"       ,oP1, {|| MenuCmp(oLbx1, oLbx2, oBH, cAliasDic)    }, 42, 10, oFontB, "Lista com o histórico")
+	oBH   := THButton():New(023, 182, "Histï¿½rico"       ,oP1, {|| MenuCmp(oLbx1, oLbx2, oBH, cAliasDic)    }, 42, 10, oFontB, "Lista com o histï¿½rico")
 
 
 	oP2:= TPanelCss():New(,,, oDlg)
 	oP2:SetCoors(TRect():New(0, 0, 38, 100))
 	oP2:Align :=CONTROL_ALIGN_ALLCLIENT
 
-	@ 000, 000 LISTBOX oLbx1 FIELDS HEADER "Visão original" SIZE 123,200 PIXEL OF oP2
+	@ 000, 000 LISTBOX oLbx1 FIELDS HEADER "Visï¿½o original" SIZE 123,200 PIXEL OF oP2
 	oLbx1:Align :=CONTROL_ALIGN_LEFT
 	oLbx1:SetArray( aStruct )
 	oLbx1:bLDblClick := {|| InsNew(oLbx1, oLbx2) }
@@ -4520,7 +4520,7 @@ Static Function ReorgColu(cAliasDic, oP2ant, np, oIndice, oMsg, oMsg2 )
 	@ 120, 10 BITMAP oBmp01 NAME "SDUDRPTBL" SIZE 015, 015 OF oP3 PIXEL NOBORDER ON CLICK DelAllNew(oLbx2)
 
 
-	@ 002, 002 LISTBOX oLbx2 FIELDS HEADER "Visão nova" SIZE 080,200 PIXEL OF oP2
+	@ 002, 002 LISTBOX oLbx2 FIELDS HEADER "Visï¿½o nova" SIZE 080,200 PIXEL OF oP2
 	oLbx2:Align :=CONTROL_ALIGN_ALLCLIENT
 	oLbx2:SetArray( aNewStru )
 	oLbx2:bLine := {|| Retbline(oLbx2, aNewStru ) }
@@ -4546,8 +4546,8 @@ Static Function MenuCmp(oLbx1, oLbx2, oOwner, cAliasDic)
 	oMenu := tMenu():new(0, 0, 0, 0, .T., , oOwner)
 
 
-	//oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusão?")            , (GrvHst(__aHstCmp, "campo" + Alltrim(cAliasDic), cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
-	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histórico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histórico?"), (GrvHst(__aHstCmp, "campo" + Alltrim(cAliasDic), ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
+	//oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o?")            , (GrvHst(__aHstCmp, "campo" + Alltrim(cAliasDic), cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histï¿½rico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histï¿½rico?"), (GrvHst(__aHstCmp, "campo" + Alltrim(cAliasDic), ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
 
 	For nX := Len(__aHstCmp) To 1 Step -1
 		cAux := cValToChar(nX)+ ". " + Left( Alltrim (__aHstCmp[nX]), 120)
@@ -4867,13 +4867,13 @@ Static Function CompSX(cAliasDic, np)
 	SX3->(dbSetOrder(2))
 	aEstru := (cAliasTst)->(dbStruct())
 
-	cResult += " *** Comparação de estrutura do banco com SX3 ***" + CRLF
+	cResult += " *** Comparaï¿½ï¿½o de estrutura do banco com SX3 ***" + CRLF
 
 	For nx:=1 to len(aEstru)
 		cResult += "Campo: " + aEstru[nx,1]
 		cAux := ""
 		If ! SX3->(DbSeek(aEstru[nx, 1]))
-			cResult +=  CRLF + "    Não cadastrado SX3 com Tipo [" + aEstru[nx, 2] + "] Tamanho ["+ Str(aEstru[nx, 3]) +"] Decimal ["+ Str(aEstru[nx, 4]) +"] " + CRLF
+			cResult +=  CRLF + "    Nï¿½o cadastrado SX3 com Tipo [" + aEstru[nx, 2] + "] Tamanho ["+ Str(aEstru[nx, 3]) +"] Decimal ["+ Str(aEstru[nx, 4]) +"] " + CRLF
 			Loop
 		EndIf
 		If ! SX3->(FieldGet(FieldPos("X3_TIPO"))) == aEstru[nx, 2]
@@ -4892,7 +4892,7 @@ Static Function CompSX(cAliasDic, np)
 		EndIf
 	Next
 
-	cResult += "*** Verificando campos não criados no DB ***" + CRLF
+	cResult += "*** Verificando campos nï¿½o criados no DB ***" + CRLF
 	cAux := ""
 	SX3->(dbSetOrder(1))
 	SX3->(DbSeek(cAliasDic))
@@ -4923,9 +4923,9 @@ Static Function CompSX(cAliasDic, np)
 	EndDo
 
 	If Empty(cAux)
-		cResult += "  OK - Todos os campos do SX3 estão criados no DB." + CRLF
+		cResult += "  OK - Todos os campos do SX3 estï¿½o criados no DB." + CRLF
 	Else
-		cResult += "Relação de inexistencia:" + CRLF
+		cResult += "Relaï¿½ï¿½o de inexistencia:" + CRLF
 		cResult += cAux + CRLF
 	EndIf
 	cResult += CRLF + CRLF + CRLF
@@ -4968,7 +4968,7 @@ Static Function SincSX3(cAliasDic,  np)
 		cAliasDic := Left(cAliasDic, 3)
 		SX2->(DbSetOrder(1))
 		If ! SX2->(DbSeek(cAliasDic))
-			FWAlertWarning("Tabela não encontrada no SX2")
+			FWAlertWarning("Tabela nï¿½o encontrada no SX2")
 			RestArea(aAreaSx2)
 			RestArea(aArea)
 			Return
@@ -4976,7 +4976,7 @@ Static Function SincSX3(cAliasDic,  np)
 	Else
 		SX2->(DbSetOrder(2))
 		If ! SX2->(DbSeek(Alltrim(cAliasDic)))
-			FWAlertWarning("Tabela não encontrada no SX2")
+			FWAlertWarning("Tabela nï¿½o encontrada no SX2")
 			RestArea(aAreaSx2)
 			RestArea(aArea)
 			Return
@@ -5029,7 +5029,7 @@ User Function TIDEVX31(cEmp, cFil, cAlias)
 	If __GetX31Error()
 		cMsg :=__GetX31Trace()
 	Else
-		cMsg:= "Atualização do alias ["+cAlias+"] realizada com sucesso! "
+		cMsg:= "Atualizaï¿½ï¿½o do alias ["+cAlias+"] realizada com sucesso! "
 	EndIf
 
 Return cMsg
@@ -5065,7 +5065,7 @@ Static Function DropInd(cAliasDic, np)
 		cAliasDic := Left(cAliasDic, 3)
 		SX2->(DbSetOrder(1))
 		If ! SX2->(DbSeek(cAliasDic))
-			FWAlertWarning("Tabela não encontrada no SX2")
+			FWAlertWarning("Tabela nï¿½o encontrada no SX2")
 			RestArea(aAreaSx2)
 			RestArea(aArea)
 			Return
@@ -5073,7 +5073,7 @@ Static Function DropInd(cAliasDic, np)
 	Else
 		SX2->(DbSetOrder(2))
 		If ! SX2->(DbSeek(Alltrim(cAliasDic)))
-			FWAlertWarning("Tabela não encontrada no SX2")
+			FWAlertWarning("Tabela nï¿½o encontrada no SX2")
 			RestArea(aAreaSx2)
 			RestArea(aArea)
 			Return
@@ -5082,7 +5082,7 @@ Static Function DropInd(cAliasDic, np)
 	EndIf
 	RestArea(aAreaSx2)
 	RestArea(aArea)
-	If ! FWAlertYesNo("Confirma a exclusão de todos os indices da tabela  " + cAliasDic + "?")
+	If ! FWAlertYesNo("Confirma a exclusï¿½o de todos os indices da tabela  " + cAliasDic + "?")
 		return
 	EndIf
 
@@ -5100,7 +5100,7 @@ Static Function DropInd(cAliasDic, np)
 	cFile := Alltrim(SX2->(FieldGet(FieldPos("X2_ARQUIVO"))))
 
 	If ! MsFile(cFile,,"TOPCONN")
-		Return "Arquivo não existe!"
+		Return "Arquivo nï¿½o existe!"
 	EndIf
 
 	While nOrd <= 36
@@ -5158,7 +5158,7 @@ Static Function ExecRotQry(np, cMemoL)
 		Return
 	EndIf
 
-	If ! FWAlertYesNo("Confirma a execução bloco:" + cComando + " em cada registro?")
+	If ! FWAlertYesNo("Confirma a execuï¿½ï¿½o bloco:" + cComando + " em cada registro?")
 		Return
 	EndIf
 
@@ -5169,7 +5169,7 @@ Static Function ExecRotQry(np, cMemoL)
 
 	(cAliasTst)->(TelaDbEval(cComando, cFor, cWhile, nProxReg, lRest, "Processando registos..", .F., cInicio, cTermino))
 
-	cLog += "Execução macro em Query" + CRLF
+	cLog += "Execuï¿½ï¿½o macro em Query" + CRLF
 	clog += "Query:"+ CRLF
 	clog += cMemoL + CRLF + CRLF
 
@@ -5199,7 +5199,7 @@ Static Function ExecRot(cAliasDic, np)
 	Local cLog     := ""
 
 	If Empty(cAliasDic)
-		FWAlertWarning("Alias não informado!!!")
+		FWAlertWarning("Alias nï¿½o informado!!!")
 		Return
 	EndIf
 
@@ -5218,11 +5218,11 @@ Static Function ExecRot(cAliasDic, np)
 
 	cTabela:= RetFileName((cAliasTst)->(DBInfo(10)))
 	If Upper(cTabela) == "TIDEVLOG"
-		FWAlertWarning("Não é permitido manipular a tabela TIDEVLOG")
+		FWAlertWarning("Nï¿½o ï¿½ permitido manipular a tabela TIDEVLOG")
 		Return
 	EndIf
 
-	If ! FWAlertYesNo("Confirma a execução bloco: " + cComando + " em cada registro?")
+	If ! FWAlertYesNo("Confirma a execuï¿½ï¿½o bloco: " + cComando + " em cada registro?")
 		Return
 	EndIf
 
@@ -5234,7 +5234,7 @@ Static Function ExecRot(cAliasDic, np)
 
 	(cAliasTst)->(TelaDbEval(cComando, cFor, cWhile, nProxReg, lRest, "Processando registos..", .F., cInicio, cTermino))
 
-	cLog += "Execução macro em bloco" + CRLF
+	cLog += "Execuï¿½ï¿½o macro em bloco" + CRLF
 	cLog += "Tabela: " + cTabela + CRLF
 	clog += "Filtro: " + (cAliasTst)->(dbFilter()) + CRLF + CRLF
 	cLog += "Bloco macro INICIO" + CRLF
@@ -5278,7 +5278,7 @@ Static Function PegaCMD(cAlias)
 
 	oModal  := FWDialogModal():New()
 	oModal:SetEscClose(.T.)
-	oModal:setTitle("Execução Macro - alias: " + cAlias)
+	oModal:setTitle("Execuï¿½ï¿½o Macro - alias: " + cAlias)
 	oModal:setSize(220, 290)
 	oModal:createDialog()
 	oModal:addCloseButton({||  lOk:= .T., oModal:DeActivate()}, "OK")
@@ -5293,7 +5293,7 @@ Static Function PegaCMD(cAlias)
 	oP1S:SetCoors(TRect():New(0, 0, 30, 500))
 	oP1S:Align :=CONTROL_ALIGN_TOP
 	@ 005, 005 SAY "Codigo MACRO Inicio"      of oP1S SIZE 100, 10 PIXEL FONT oFontB
-	oBut1 := THButton():New(002, 140,"Histórico"        ,oP1S  , {|| MenuMacro(@cExp1, oBut1, 1)                          }, 45, 10, oFontB, "Lista com o historico")
+	oBut1 := THButton():New(002, 140,"Histï¿½rico"        ,oP1S  , {|| MenuMacro(@cExp1, oBut1, 1)                          }, 45, 10, oFontB, "Lista com o historico")
 	oExp1 := tMultiget():new(,, bSETGET(cExp1), oP1)
 	oExp1:Align := CONTROL_ALIGN_ALLCLIENT
 
@@ -5304,7 +5304,7 @@ Static Function PegaCMD(cAlias)
 	oP2S:SetCoors(TRect():New(0, 0, 30, 500))
 	oP2S:Align :=CONTROL_ALIGN_TOP
 	@ 005, 005 SAY "Codigo MACRO por linha"      of oP2S SIZE 100, 10 PIXEL FONT oFontB
-	oBut2 := THButton():New(002, 140,"Histórico"        ,oP2S  , {|| MenuMacro(@cExp2, oBut2, 2)                          }, 45, 10, oFontB, "Lista com o historico")
+	oBut2 := THButton():New(002, 140,"Histï¿½rico"        ,oP2S  , {|| MenuMacro(@cExp2, oBut2, 2)                          }, 45, 10, oFontB, "Lista com o historico")
 	oExp2 := tMultiget():new(,, bSETGET(cExp2), oP2)
 	oExp2:Align := CONTROL_ALIGN_ALLCLIENT
 
@@ -5316,7 +5316,7 @@ Static Function PegaCMD(cAlias)
 	oP3S:SetCoors(TRect():New(0, 0, 30, 500))
 	oP3S:Align :=CONTROL_ALIGN_TOP
 	@ 005, 004 SAY "Codigo MACRO Termino"      of oP3S SIZE 100, 10 PIXEL FONT oFontB
-	oBut3 := THButton():New(002, 140,"Histórico"        ,oP3S  , {|| MenuMacro(@cExp3, oBut3, 3)                          }, 45, 10, oFontB, "Lista com o historico")
+	oBut3 := THButton():New(002, 140,"Histï¿½rico"        ,oP3S  , {|| MenuMacro(@cExp3, oBut3, 3)                          }, 45, 10, oFontB, "Lista com o historico")
 	oExp3 := tMultiget():new(,, bSETGET(cExp3), oP3)
 	oExp3:Align := CONTROL_ALIGN_ALLCLIENT
 
@@ -5376,7 +5376,7 @@ Return cRet
 
 /*
 #################################################################################################################################
-Aba de Inspeção de fontes
+Aba de Inspeï¿½ï¿½o de fontes
 #################################################################################################################################
 */
 
@@ -5390,7 +5390,7 @@ Static Function FolderRPO(oDlg)
 	Local oPR
 
 	Local oTipo
-	Local aTipo := {"Fonte", "Função/Classe"}
+	Local aTipo := {"Fonte", "Funï¿½ï¿½o/Classe"}
 	Local cTipo := "Fonte"
 	Local cChave := Space(100)
 
@@ -5440,7 +5440,7 @@ Static Function FolderRPO(oDlg)
 	oLbx:addColumn( TCColumn():new( "Fonte"         , { || oLbx:aArray[oLbx:nAt, 1] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new( "Data"          , { || oLbx:aArray[oLbx:nAt, 2] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new( "Hora"          , { || oLbx:aArray[oLbx:nAt, 3] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new( "Função/Classe" , { || oLbx:aArray[oLbx:nAt, 4] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new( "Funï¿½ï¿½o/Classe" , { || oLbx:aArray[oLbx:nAt, 4] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new( "Linha"         , { || oLbx:aArray[oLbx:nAt, 5] },,,, "RIGHT", 040, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new( "Tipo"          , { || oLbx:aArray[oLbx:nAt, 6] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
 
@@ -5538,7 +5538,7 @@ Static Function PesqRpo(cTipo, cChave, aLista, oLbx, cMemo2)
 	EndIf
 
 	If Empty(aLista)
-		FWAlertWarning("Não encontrado!")
+		FWAlertWarning("Nï¿½o encontrado!")
 		aLista := {{"","","","","","",""}}
 	EndIf
 
@@ -5876,7 +5876,7 @@ Static Function BuscaPar(aLista, nAt, cMemo2, oMemo2)
 
 		If !empty(__aClass[nx, 3])
 			cRetPar += CRLF
-			cRetPar += 'Variáveis: '+CRLF
+			cRetPar += 'Variï¿½veis: '+CRLF
 			for nY:= 1 to Len(__aClass[nx, 3])
 				cRetPar += "   "+__aClass[nx, 3, nY, 1]+CRLF
 			next
@@ -5884,12 +5884,12 @@ Static Function BuscaPar(aLista, nAt, cMemo2, oMemo2)
 
 		If !empty(__aClass[nx, 4])
 			cRetPar += CRLF
-			cRetPar += 'Métodos: '+ CRLF
+			cRetPar += 'Mï¿½todos: '+ CRLF
 			for nY := 1 to Len(__aClass[nx, 4])
 				cRetPar += "   " + __aClass[nx, 4, nY, 1] + CRLF
 
 				If !empty(__aClass[nx, 4, nY, 2])
-					cRetPar += "    " + "Parâmetros:" + CRLF
+					cRetPar += "    " + "Parï¿½metros:" + CRLF
 
 					For nZ := 1 to len(__aClass[nx, 4, nY, 2]) step 2
 						cPar := SubStr(__aClass[nx, 4, nY, 2], nZ, 2)
@@ -6004,7 +6004,7 @@ Return
 
 /*
 #################################################################################################################################
-Aba de execução de linha de comando
+Aba de execuï¿½ï¿½o de linha de comando
 #################################################################################################################################
 */
 
@@ -6036,7 +6036,7 @@ Static Function FolderCmd(oDlg)
 	oP1:Align :=CONTROL_ALIGN_TOP
 
 	oBut  := THButton():New(002, 002,"Executar"         ,oDlg  , {|| ExecMacro(cMemo1, @cMemo2, oMsg,  lCheck, oMemo2)}, 45, 10, oFontB, "Executa as linhas com macro")
-	oBut2 := THButton():New(002, 050,"Histórico"        ,oDlg  , {|| MenuCmd(@cMemo1, oBut2)                          }, 45, 10, oFontB, "Lista com o historico")
+	oBut2 := THButton():New(002, 050,"Histï¿½rico"        ,oDlg  , {|| MenuCmd(@cMemo1, oBut2)                          }, 45, 10, oFontB, "Lista com o historico")
 	oBut3 := THButton():New(002, 102,"Base Conhecimento",oDlg  , {|| MenuBase(@cMemo1, oBut3)                         }, 60, 10, oFontB, "Base de conhecimento")
 	oBut4 := THButton():New(002, 170,"Limpar"           , oDlg , {|| cMemo1 := ""                                     }, 50, 10, oFontB, "Limpa memo de comandos")
 	@ 002, 252 CHECKBOX oCheck VAR lCheck	 PROMPT "Trata Erro"	 SIZE 055,010 OF oP1 PIXEL font oFontB
@@ -6170,7 +6170,7 @@ Static Function ExecMacro(cMemo1, cMemo2, oMsg, lCheck, oMemo2)
 		__cErroA:= ""
 	Else
 		If nSec2 >= nSec1
-			cMsgT := "Tempo de Execução: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
+			cMsgT := "Tempo de Execuï¿½ï¿½o: " + APSec2Time(nSec2 - nSec1) + " (" + Alltrim(Str(nSec2 - nSec1)) + " segs.)"
 			oMsg:SetText(cMsgT)
 		EndIf
 	EndIf
@@ -6193,8 +6193,8 @@ Static Function MenuCmd(cCMD, oOwner)
 
 	oMenu := tMenu():new(0, 0, 0, 0, .T., , oOwner)
 
-	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusão?")            , (GrvHst(__aHstCmd, "cmd", cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
-	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histórico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histórico?"), (GrvHst(__aHstCmd, "cmd", ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o?")            , (GrvHst(__aHstCmd, "cmd", cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histï¿½rico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histï¿½rico?"), (GrvHst(__aHstCmd, "cmd", ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
 
 	For nX := Len(__aHstCmd) To 1 Step -1
 		cAux := cValToChar(nX)+ ". " + Left( Alltrim (__aHstCmd[nX]), 120)
@@ -6219,8 +6219,8 @@ Static Function MenuBase(cCMD, oOwner)
 	oMenu := tMenu():new(0, 0, 0, 0, .T., , oOwner)
 	oMenu:Add(tMenuItem():new(oMenu, "Adicionar"     , , , , {|| GrvHst(__aHstBase, "base", cCMD)}, , , , , , , , , .T.))
 
-	oMenu:Add(tMenuItem():new(oMenu, "Excluir"       , , , , {|| If(FWAlertYesNo("Confirma a exclusão?")            , (GrvHst(__aHstBase, "base", cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
-	oMenu:Add(tMenuItem():new(oMenu, "Excluir todos" , , , , {|| If(FWAlertYesNo("Confirma a exclusão de toda base"), (GrvHst(__aHstBase, "base", ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Excluir"       , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o?")            , (GrvHst(__aHstBase, "base", cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Excluir todos" , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o de toda base"), (GrvHst(__aHstBase, "base", ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
 
 	For nX := 1 to  Len(__aHstBase)
 		cAux := Alltrim(MemoLine(__aHstBase[nx], 254, 1))
@@ -6250,8 +6250,8 @@ Static Function MenuMacro(cCMD, oOwner, nModo)
 
 	oMenu := tMenu():new(0, 0, 0, 0, .T., , oOwner)
 
-	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusão?")            , (GrvHst(__aHstMacro[nModo], cSufix, cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
-	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histórico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histórico?"), (GrvHst(__aHstMacro[nModo], cSufix, ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o?")            , (GrvHst(__aHstMacro[nModo], cSufix, cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histï¿½rico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histï¿½rico?"), (GrvHst(__aHstMacro[nModo], cSufix, ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
 
 	For nX := Len(__aHstMacro[nModo]) To 1 Step -1
 		cAux := cValToChar(nX)+ ". " + Left( Alltrim (__aHstMacro[nModo, nX]), 120)
@@ -6266,7 +6266,7 @@ Return
 
 /*
 #################################################################################################################################
-Aba de execução de Script HTML
+Aba de execuï¿½ï¿½o de Script HTML
 #################################################################################################################################
 */
 Static Function FolderHtm(oDlg)
@@ -6290,7 +6290,7 @@ Static Function FolderHtm(oDlg)
 	oP1:Align :=CONTROL_ALIGN_TOP
 
 	oBut  := THButton():New(002, 002,"Executar" ,oDlg,{|| ExecHtml(cMemo1, oEdit ) }, 45, 10, oFontB, "Interpreta as linhas codigos Html")
-	oBut2 := THButton():New(002, 050,"Histórico",oDlg,{|| MenuHtm(@cMemo1, oBut2)  }, 45, 10, oFontB, "Lista com o histórico")
+	oBut2 := THButton():New(002, 050,"Histï¿½rico",oDlg,{|| MenuHtm(@cMemo1, oBut2)  }, 45, 10, oFontB, "Lista com o histï¿½rico")
 
 	oP2:= TPanelCss():New(,,, oDlg)
 	oP2:SetCoors(TRect():New(0, 0, __nHeight * 0.4, __nWidth))
@@ -6336,8 +6336,8 @@ Static Function MenuHtm(cCMD, oOwner)
 
 	oMenu := tMenu():new(0, 0, 0, 0, .T., , oOwner)
 
-	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusão?")            , (GrvHst(__aHstHtm, "htm", cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
-	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histórico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histórico?"), (GrvHst(__aHstHtm, "htm", ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o?")            , (GrvHst(__aHstHtm, "htm", cCMD, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histï¿½rico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histï¿½rico?"), (GrvHst(__aHstHtm, "htm", ""  , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
 
 	For nX := Len(__aHstHtm) To 1 Step -1
 		cAux := cValToChar(nX)+ ". " + Left( Alltrim (__aHstHtm[nX]), 120)
@@ -6359,8 +6359,8 @@ Static Function MenuFil(cFiltro, oOwner)
 
 	oMenu := tMenu():new(0, 0, 0, 0, .T., , oOwner)
 
-	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusão?")            , (GrvHst(__aHstFil, "filtro", cFiltro, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
-	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histórico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histórico?"), (GrvHst(__aHstFil, "filtro", ""     , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Excluir"         , , , , {|| If(FWAlertYesNo("Confirma a exclusï¿½o?")            , (GrvHst(__aHstFil, "filtro", cFiltro, .F., .T.), .t. ), .t.) }, , , , , , , , , .T.))
+	oMenu:Add(tMenuItem():new(oMenu, "Limpar Histï¿½rico", , , , {|| If(FWAlertYesNo("Confirma a limpeza do histï¿½rico?"), (GrvHst(__aHstFil, "filtro", ""     , .T., .F.), .t. ), .t.) }, , , , , , , , , .T.))
 
 	For nX := Len(__aHstFil) To 1 Step -1
 		cAux := cValToChar(nX)+ ". " + Left( Alltrim (__aHstFil[nX]), 120)
@@ -6373,7 +6373,7 @@ Static Function MenuFil(cFiltro, oOwner)
 Return
 /*
 #################################################################################################################################
-Aba de execução de Script HTML
+Aba de execuï¿½ï¿½o de Script HTML
 #################################################################################################################################
 */
 
@@ -6490,7 +6490,7 @@ Static Function FolderExp(oDlg)
 	oPBL:Align :=CONTROL_ALIGN_LEFT
 
 	@ 03, 02 BITMAP oBmp01 NAME "BMPDEL"    SIZE 015, 015 OF oPBL PIXEL NOBORDER ON CLICK MsgRun("Apagando Arquivo...","Aguarde.",{|| FApaga(cPath01, oList01) , LeDirect(oList01, oGet1, @cPath01) })
-	@ 03, 17 BITMAP oBmp01 NAME "SDUDRPTBL" SIZE 015, 015 OF oPBL PIXEL NOBORDER ON CLICK Processa({|| FApaga(cPath01, oList01, .T.), LeDirect(oList01, oGet1, @cPath01) }, "Exclusão de arquivos", "Excluindo", .T.)
+	@ 03, 17 BITMAP oBmp01 NAME "SDUDRPTBL" SIZE 015, 015 OF oPBL PIXEL NOBORDER ON CLICK Processa({|| FApaga(cPath01, oList01, .T.), LeDirect(oList01, oGet1, @cPath01) }, "Exclusï¿½o de arquivos", "Excluindo", .T.)
 
 	oPBM:= TPanelCss():New(,,, oPB)
 	oPBM:SetCoors(TRect():New(0, 0, 60, 60))
@@ -6503,7 +6503,7 @@ Static Function FolderExp(oDlg)
 
 	If __lAdmin
 		@ 03, 02 BITMAP oBmp01 NAME "BMPDEL"    SIZE 015,015 OF oPBR PIXEL NOBORDER ON CLICK MsgRun("Apagando Arquivo...", "Aguarde.", {|| FApaga(cPath02, oList02), LeDirect(oList02, oGet2, @cPath02)})
-		@ 03, 17 BITMAP oBmp01 NAME "SDUDRPTBL" SIZE 015,015 OF oPBR PIXEL NOBORDER ON CLICK Processa({|| FApaga(cPath02, oList02, .T.), LeDirect(oList02, oGet2, @cPath02)}, "Exclusão de arquivos", "Excluindo", .T.)
+		@ 03, 17 BITMAP oBmp01 NAME "SDUDRPTBL" SIZE 015,015 OF oPBR PIXEL NOBORDER ON CLICK Processa({|| FApaga(cPath02, oList02, .T.), LeDirect(oList02, oGet2, @cPath02)}, "Exclusï¿½o de arquivos", "Excluindo", .T.)
 	EndIf
 
 
@@ -6614,7 +6614,7 @@ Static Function FCopia(cPathOri,cPathDes,oObjList,lMultCpy)
 			EndIf
 		EndIf
 	Else
-		FWAlertWarning("Não copia pastas.")
+		FWAlertWarning("Nï¿½o copia pastas.")
 	EndIf
 Return
 
@@ -6658,7 +6658,7 @@ Static Function FApaga(cPathOri, oObjList, lEraseMult)
 			FErase(AllTrim(cPathOri) + cEraseFile)
 		EndIf
 	Else
-		FWAlertWarning("Não apaga pastas.")
+		FWAlertWarning("Nï¿½o apaga pastas.")
 	EndIf
 
 Return
@@ -6725,18 +6725,18 @@ Static Function FolderMon(oFolder, oDlg)
 	oLbx:align := CONTROL_ALIGN_ALLCLIENT
 	oLbx:SetArray( aLista )
 
-	oLbx:addColumn( TCColumn():new("Usuário"                  , { || oLbx:aArray[oLbx:nAt,  1] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new("Máquina local"            , { || oLbx:aArray[oLbx:nAt,  2] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Usuï¿½rio"                  , { || oLbx:aArray[oLbx:nAt,  1] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Mï¿½quina local"            , { || oLbx:aArray[oLbx:nAt,  2] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Thread"                   , { || oLbx:aArray[oLbx:nAt,  3] },,,, "RIGHT", 040, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Balance"                  , { || oLbx:aArray[oLbx:nAt,  4] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new("Função"                   , { || oLbx:aArray[oLbx:nAt,  5] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Funï¿½ï¿½o"                   , { || oLbx:aArray[oLbx:nAt,  5] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Ambiente"                 , { || oLbx:aArray[oLbx:nAt,  6] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Data e hora"              , { || oLbx:aArray[oLbx:nAt,  7] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Atividade"                , { || oLbx:aArray[oLbx:nAt,  8] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new("Instruções"               , { || oLbx:aArray[oLbx:nAt,  9] },,,, "RIGHT", 040, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new("Instruções em Seg."       , { || oLbx:aArray[oLbx:nAt, 10] },,,, "RIGHT", 060, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new("Observações"              , { || oLbx:aArray[oLbx:nAt, 11] },,,, "LEFT" , 250, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new("Memória (bytes)"          , { || oLbx:aArray[oLbx:nAt, 12] },,,, "RIGHT", 060, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Instruï¿½ï¿½es"               , { || oLbx:aArray[oLbx:nAt,  9] },,,, "RIGHT", 040, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Instruï¿½ï¿½es em Seg."       , { || oLbx:aArray[oLbx:nAt, 10] },,,, "RIGHT", 060, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Observaï¿½ï¿½es"              , { || oLbx:aArray[oLbx:nAt, 11] },,,, "LEFT" , 250, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Memï¿½ria (bytes)"          , { || oLbx:aArray[oLbx:nAt, 12] },,,, "RIGHT", 060, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("SID"                      , { || oLbx:aArray[oLbx:nAt, 13] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Identificador"            , { || oLbx:aArray[oLbx:nAt, 14] },,,, "RIGHT", 080, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Tipo"                     , { || oLbx:aArray[oLbx:nAt, 15] },,,, "LEFT" , 040, .F., .F.,,,, .F. ) )
@@ -6811,7 +6811,7 @@ Static Function DelThread(aLista, nAt, cEnvServer, cServerIP, nPortaTcp)
 	EndIf
 
 	If Alltrim(cEnvServer) == GetEnvserver() .and.  cServerIP  == PegaIP() .and.  nPortaTcp == GetServerPort() .and. nThreadId == ThreadId()
-		FWAlertError("Essa é a sua thread e não pode ser finalizada!")
+		FWAlertError("Essa ï¿½ a sua thread e nï¿½o pode ser finalizada!")
 		Return
 	EndIf
 
@@ -6847,7 +6847,7 @@ Static Function PegaIP()
 		EndIf
 	Next
 	If Empty(cIP)
-		cIP := GetServerIP(.F.)  // retorna o ip da conexão
+		cIP := GetServerIP(.F.)  // retorna o ip da conexï¿½o
 	EndIf
 	If Empty(cIP)
 		cIP := "172.0.0.1"  // Localhost
@@ -6926,7 +6926,7 @@ Return
 
 /*
 #################################################################################################################################
-Aba serviços
+Aba serviï¿½os
 #################################################################################################################################
 */
 
@@ -6942,7 +6942,7 @@ Static Function FolderServ(oFolder)
 	oPS :SetCoors(TRect():New( 0,0, 30, 30))
 	oPS :Align := CONTROL_ALIGN_TOP
 
-	oBut  := THButton():New(002, 002, 'Atualizar' , oPS, {|| Processa({|| LeServico(oLbx)  }, "Carregando servicos", "Aguarde....", .T.)   }, 45, 10, oFontB, "Atualiza a listas de serviços")
+	oBut  := THButton():New(002, 002, 'Atualizar' , oPS, {|| Processa({|| LeServico(oLbx)  }, "Carregando servicos", "Aguarde....", .T.)   }, 45, 10, oFontB, "Atualiza a listas de serviï¿½os")
 
 
 	oPnlSrv := TPanelCss():New(,,,oFolder)
@@ -6955,7 +6955,7 @@ Static Function FolderServ(oFolder)
 
 	oLbx:addColumn( TCColumn():new("Nome"        , { || oLbx:aArray[oLbx:nAt,  1] },,,, "LEFT" , 100, .F., .F.,,,, .F. ) )
 	oLbx:addColumn( TCColumn():new("Status"      , { || oLbx:aArray[oLbx:nAt,  2] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
-	oLbx:addColumn( TCColumn():new("Descrição"   , { || oLbx:aArray[oLbx:nAt,  3] },,,, "LEFT" , 500, .F., .F.,,,, .F. ) )
+	oLbx:addColumn( TCColumn():new("Descriï¿½ï¿½o"   , { || oLbx:aArray[oLbx:nAt,  3] },,,, "LEFT" , 500, .F., .F.,,,, .F. ) )
 
 
 	oLbx:bLDblClick := { || MudaServ(oLbx, oLbx:nAt)}
@@ -6988,7 +6988,7 @@ Static Function LeServico(oLbx)
 			exit
 		EndIf
 		If Alltrim(aCol[2]) == "Running"
-			aCol[2] := "Em Execução"
+			aCol[2] := "Em Execuï¿½ï¿½o"
 		Else
 			aCol[2] := ""
 		End
@@ -7010,15 +7010,15 @@ Static Function MudaServ(oLbx, nAt)
 	Local cCodigo := Alltrim(aLinha[1])
 
 	If Empty(cStatus)
-		If FWAlertYesNo("Deseja ativar o serviço [" + cCodigo  + "]?")
+		If FWAlertYesNo("Deseja ativar o serviï¿½o [" + cCodigo  + "]?")
 
-			Processa({|| StartServ(cCodigo), LeServico(oLbx)  }, "Ativando o serviço [" + cCodigo  + "]"  , "Aguarde....", .T.)
+			Processa({|| StartServ(cCodigo), LeServico(oLbx)  }, "Ativando o serviï¿½o [" + cCodigo  + "]"  , "Aguarde....", .T.)
 
 		EndIf
 	Else
-		If FWAlertYesNo("Confirma a parada do serviço [" + cCodigo  + "]?")
+		If FWAlertYesNo("Confirma a parada do serviï¿½o [" + cCodigo  + "]?")
 
-			Processa({|| StopServ(cCodigo), LeServico(oLbx)  }, "Parando o serviço [" + cCodigo  + "]"  , "Aguarde....", .T.)
+			Processa({|| StopServ(cCodigo), LeServico(oLbx)  }, "Parando o serviï¿½o [" + cCodigo  + "]"  , "Aguarde....", .T.)
 
 		EndIf
 	EndIf
@@ -7147,7 +7147,7 @@ Static Function FolderErro(oFolder)
 
 	oLbxPiVar := MsBrGetDBase():New(00, 00, nR, nB * 0.25,,,, oFDet:aDialogs[1] ,,,,,,,,,,,, .F., "", .T.,, .F.,,,)
 	oLbxPiVar:SetArray( aPilhaVar )
-	oLbxPiVar:addColumn( TCColumn():new("Identificação"  , { || oLbxPiVar:aArray[oLbxPiVar:nAt,  1] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
+	oLbxPiVar:addColumn( TCColumn():new("Identificaï¿½ï¿½o"  , { || oLbxPiVar:aArray[oLbxPiVar:nAt,  1] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxPiVar:addColumn( TCColumn():new("Variavel"       , { || oLbxPiVar:aArray[oLbxPiVar:nAt,  2] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxPiVar:addColumn( TCColumn():new("Tipo"           , { || oLbxPiVar:aArray[oLbxPiVar:nAt,  3] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxPiVar:addColumn( TCColumn():new("Conteudo"       , { || oLbxPiVar:aArray[oLbxPiVar:nAt,  4] },,,, "LEFT" , 400, .F., .F.,,,, .F. ) )
@@ -7157,7 +7157,7 @@ Static Function FolderErro(oFolder)
 
 	oLbxVar := MsBrGetDBase():New(00, 00, nR, nB * 0.25,,,, oFDet:aDialogs[2] ,,,,,,,,,,,, .F., "", .T.,, .F.,,,)
 	oLbxVar:SetArray( aVar )
-	oLbxVar:addColumn( TCColumn():new("Identificação"  , { || oLbxVar:aArray[oLbxVar:nAt,  1] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
+	oLbxVar:addColumn( TCColumn():new("Identificaï¿½ï¿½o"  , { || oLbxVar:aArray[oLbxVar:nAt,  1] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxVar:addColumn( TCColumn():new("Variavel"       , { || oLbxVar:aArray[oLbxVar:nAt,  2] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxVar:addColumn( TCColumn():new("Tipo"           , { || oLbxVar:aArray[oLbxVar:nAt,  3] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxVar:addColumn( TCColumn():new("Conteudo"       , { || oLbxVar:aArray[oLbxVar:nAt,  4] },,,, "LEFT" , 400, .F., .F.,,,, .F. ) )
@@ -7188,7 +7188,7 @@ Static Function FolderErro(oFolder)
 
 	oLbxCmp := MsBrGetDBase():New(00, 00, nR, nB * 0.125,,,, oFDet:aDialogs[3] ,,,,,,,,,,,, .F., "", .T.,, .F.,,,)
 	oLbxCmp:SetArray( aCmp )
-	oLbxCmp:addColumn( TCColumn():new("Identificação"  , { || oLbxCmp:aArray[oLbxCmp:nAt,  1] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
+	oLbxCmp:addColumn( TCColumn():new("Identificaï¿½ï¿½o"  , { || oLbxCmp:aArray[oLbxCmp:nAt,  1] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxCmp:addColumn( TCColumn():new("Variavel"       , { || oLbxCmp:aArray[oLbxCmp:nAt,  2] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxCmp:addColumn( TCColumn():new("Tipo"           , { || oLbxCmp:aArray[oLbxCmp:nAt,  3] },,,, "LEFT" , 060, .F., .F.,,,, .F. ) )
 	oLbxCmp:addColumn( TCColumn():new("Conteudo"       , { || oLbxCmp:aArray[oLbxCmp:nAt,  4] },,,, "LEFT" , 400, .F., .F.,,,, .F. ) )
@@ -7468,7 +7468,7 @@ Method Last() Class TILstErro
 		If ! Empty(np)
 			Exit
 		Else
-			If nBloco > nTBytes  // não achou o Thread Error e não tem mais nada para ler
+			If nBloco > nTBytes  // nï¿½o achou o Thread Error e nï¿½o tem mais nada para ler
 				Return
 			EndIf
 			nBloco += 4000
@@ -8053,12 +8053,12 @@ Static Function LeHst(aHist, cTipo)
 	EndIf
 
 	If Empty(aHist) .and. cTipo == "base"
-		aadd(aHist, "//Programação - Threads monitor" + CRLF + "GetUserInfoArray()")
-		aadd(aHist, "//Programação - Dados de fontes no rpo" + CRLF + "cProg:= 'TIDEV.PRW', Alert(VarInfo('Info',GetAPOInfo(cProg),,.F.))")
-		aadd(aHist, "//Programação - Conversão de base Encode64 / Decode64" + CRLF + "cTexto:= 'TESTE COM ENCODE64'" + CRLF + "cRetorno := Encode64(cTexto)" + CRLF+ "Decode64(cRetorno)" )
+		aadd(aHist, "//Programaï¿½ï¿½o - Threads monitor" + CRLF + "GetUserInfoArray()")
+		aadd(aHist, "//Programaï¿½ï¿½o - Dados de fontes no rpo" + CRLF + "cProg:= 'TIDEV.PRW', Alert(VarInfo('Info',GetAPOInfo(cProg),,.F.))")
+		aadd(aHist, "//Programaï¿½ï¿½o - Conversï¿½o de base Encode64 / Decode64" + CRLF + "cTexto:= 'TESTE COM ENCODE64'" + CRLF + "cRetorno := Encode64(cTexto)" + CRLF+ "Decode64(cRetorno)" )
 
 
-		aadd(aHist, "// Contrato - Pendencias de atualização " + CRLF + "U_GCVA105M()")
+		aadd(aHist, "// Contrato - Pendencias de atualizaï¿½ï¿½o " + CRLF + "U_GCVA105M()")
 
 		aadd(aHist, "//Proposta - Copia "                 + CRLF + "cProposta:='AADFMY'" + CRLF + "cRevProp:='01'" + CRLF + "nCopias:=1" + CRLF + "U_GCVA116C(cProposta, cRevProp, nCopias)")
 		aadd(aHist, "//Proposta - Reseta para 2 momento " + CRLF + "U_GCIIA06V()")
@@ -8171,10 +8171,10 @@ Static function LeArquivo(cFile)
     Local oFile
     oFile := FWFileReader():New(cFile)
     if (oFile:Open())
-       while (oFile:hasLine())
-          Conout(oFile:GetLine())
-       end
-       oFile:Close()
+    ï¿½ï¿½ï¿½while (oFile:hasLine())
+    ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Conout(oFile:GetLine())
+    ï¿½ï¿½ï¿½end
+    ï¿½ï¿½ï¿½oFile:Close()
     endif
 
 Return
@@ -8381,7 +8381,7 @@ Static Function TmpOpen(cArq,cAlias)
 			If IsStruDif(aStruct, aStruDB)
 				DbCloseArea()
 				If ! TcAlter(cArquivo, aStruDB, aStruct)
-					//Final("Não foi possivel atualizar " + cArquivo)
+					//Final("Nï¿½o foi possivel atualizar " + cArquivo)
 				EndIf
 				MsOpenDbf(.T.,cDriver, cArquivo, cAlias,.T.,.F.,.F.,.F.)
 			EndIf
@@ -8536,14 +8536,14 @@ Return lDif
 //https://tdn.engpro.totvs.com.br/display/public/framework/FWBulk
 
 /*
-FWAlertError: Mostra uma mensagem com um círculo vermelho e um x no meio
-FWAlertExitPage: Mostra uma pergunta com 3 opções (Continuar editando, Salvar, Sair da Página)
-FWAlertHelp: Mostra uma mensagem de help e solução
-FWAlertInfo: Mensagem informativa com um círculo azul e um i no meio
-FWAlertNoYes: Mensagem que tem 2 opções (Não e Sim)
-FWAlertSuccess: Mostra uma mensagem com um círculo verde e um ícone de check
-FWAlertWarning: Mostra uma mensagem com um triângulo amarelo e uma exclamação no meio
-FWAlertYesNo: Mensagem que tem 2 opções (Sim e Não)
+FWAlertError: Mostra uma mensagem com um cï¿½rculo vermelho e um x no meio
+FWAlertExitPage: Mostra uma pergunta com 3 opï¿½ï¿½es (Continuar editando, Salvar, Sair da Pï¿½gina)
+FWAlertHelp: Mostra uma mensagem de help e soluï¿½ï¿½o
+FWAlertInfo: Mensagem informativa com um cï¿½rculo azul e um i no meio
+FWAlertNoYes: Mensagem que tem 2 opï¿½ï¿½es (Nï¿½o e Sim)
+FWAlertSuccess: Mostra uma mensagem com um cï¿½rculo verde e um ï¿½cone de check
+FWAlertWarning: Mostra uma mensagem com um triï¿½ngulo amarelo e uma exclamaï¿½ï¿½o no meio
+FWAlertYesNo: Mensagem que tem 2 opï¿½ï¿½es (Sim e Nï¿½o)
 aCoors := FWGetDialogSize( oMainWnd )
 FWLoadSM0()  // Carrega a empresas
 FWGetSx5()

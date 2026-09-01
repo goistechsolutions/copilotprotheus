@@ -75,20 +75,19 @@ def _sanitize_protheus_json(raw: str) -> str:
 
 
 def _extract_remote_error(response: httpx.Response) -> str:
-    """Extrai mensagem diagnóstica do AppServer/QueryRest."""
+    """Extrai apenas a mensagem diagnóstica do AppServer, sem devolver o body bruto."""
     try:
         payload = response.json()
-        if isinstance(payload, dict):
-            for key in ("errorMessage", "message", "detail", "error", "errorCode", "descricao"):
-                value = payload.get(key)
-                if value:
-                    return " ".join(str(value).split())[:500]
-    except Exception:
-        pass
+    except ValueError:
+        return ""
 
-    text = response.text.strip()
-    if text:
-        return " ".join(text.split())[:500]
+    if not isinstance(payload, dict):
+        return ""
+
+    for key in ("errorMessage", "message", "detail", "error", "errorCode"):
+        value = payload.get(key)
+        if value:
+            return " ".join(str(value).split())[:500]
     return ""
 
 
@@ -239,18 +238,18 @@ class ProtheusQueryRestClient:
             )
 
         if response.status_code >= 400:
-            remote_error = _extract_remote_error(response)
             logger.error(
-                "QueryRest falhou tenant=%s ambiente=%s status=%s content_type=%s remote_error=%s",
+                "QueryRest falhou tenant=%s ambiente=%s status=%s content_type=%s body_length=%s",
                 self.tenant_code,
                 self.environment_code,
                 response.status_code,
                 response.headers.get("content-type", "unknown").split(";", 1)[0].strip(),
-                remote_error or "N/A",
+                len(response.content),
             )
+            remote_error = _extract_remote_error(response)
             detail = f"Falha na execução do QueryRest Protheus (HTTP {response.status_code})."
             if remote_error:
-                detail = f"{detail} Detalhes do Protheus: {remote_error}"
+                detail = f"{detail} Mensagem do AppServer: {remote_error}"
             raise ProtheusQueryRestError(detail, response.status_code)
 
         return _parse_queryrest_json(response)
@@ -287,15 +286,12 @@ class ProtheusQueryRestClient:
         }
         logger.info("queryrest_auth_context %s", safe_auth_debug)
 
-        # Envia cQuery e query para compatibilidade total com todas as versões de rotas AdvPL
+        # O contrato REST Protheus documentado usa exclusivamente cQuery.
+        # Não enviar o alias query evita que o AppServer interprete o body como
+        # um payload diferente do contrato do endpoint QueryRest.
         request_payload: dict[str, Any] = dict(payload or {})
+        request_payload.pop("query", None)
         request_payload["cQuery"] = query
-        request_payload["query"] = query
-
-        params = {
-            "cQuery": query,
-            "query": query,
-        }
 
         async with httpx.AsyncClient(
             timeout=REQUEST_TIMEOUT_SECONDS,
@@ -306,12 +302,11 @@ class ProtheusQueryRestClient:
                 return await client.get(
                     url,
                     headers=headers,
-                    params=params,
+                    params={"cQuery": query, "query": query},
                 )
 
             return await client.post(
                 url,
                 headers=headers,
-                params=params,
                 json=request_payload,
             )

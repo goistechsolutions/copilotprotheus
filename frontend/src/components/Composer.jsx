@@ -1,24 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
-import { Mic, Paperclip, Send } from 'lucide-react';
+import { useState } from 'react';
+import { Mic, Paperclip, SendHorizontal } from 'lucide-react';
 
 export default function Composer({ disabled, onSend, placeholder }) {
   const [value, setValue] = useState('');
-  const textareaRef = useRef(null);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
-    }
-  }, [value]);
 
   const submit = () => {
     if (!value.trim() || disabled) return;
     onSend(value.trim());
     setValue('');
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
   };
 
   const handleKeyDown = (event) => {
@@ -30,53 +19,54 @@ export default function Composer({ disabled, onSend, placeholder }) {
 
   return (
     <div className="w-full">
-      <div className="copiloto-composer relative p-3 transition-all">
+      <div className="relative rounded-[22px] border border-[#dce7f1] bg-white p-2 shadow-[0_8px_24px_rgba(47,83,119,0.08)] transition-shadow focus-within:border-[#a9ccec] focus-within:shadow-[0_10px_28px_rgba(45,119,188,0.13)]">
         <textarea
-          ref={textareaRef}
           id="composer-input"
           name="composer-input"
-          rows={1}
+          rows={2}
           disabled={disabled}
           value={value}
           onChange={event => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'Faça sua pergunta sobre o Protheus...'}
-          aria-label="Pergunta para o Copiloto Executivo"
-          className="w-full resize-none bg-transparent px-2 pt-1 pb-10 text-[13px] leading-relaxed text-[#1a334e] outline-none placeholder:text-[#94a3b6] disabled:cursor-not-allowed disabled:opacity-50 font-normal"
-          style={{ minHeight: '44px', maxHeight: '120px' }}
+          placeholder={placeholder}
+          aria-label="Pergunta para o Copilot Protheus"
+          className="min-h-[74px] w-full resize-none bg-transparent px-3 pb-10 pt-2 text-[13px] leading-relaxed text-[#203c60] outline-none placeholder:text-[#94a3b6] disabled:cursor-not-allowed disabled:opacity-50"
         />
 
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-label="Entrada de voz"
-              title="Entrada de voz"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8899aa] hover:bg-[#EEF3F8] hover:text-[#0F66FF] transition-colors"
-            >
-              <Mic size={17} strokeWidth={1.8} />
-            </button>
-            <button
-              type="button"
-              aria-label="Anexar arquivo"
-              title="Anexar arquivo"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8899aa] hover:bg-[#EEF3F8] hover:text-[#0F66FF] transition-colors"
-            >
-              <Paperclip size={17} strokeWidth={1.8} />
-            </button>
-          </div>
-
+        <div className="absolute bottom-2.5 left-3 flex items-center gap-1">
           <button
             type="button"
-            aria-label="Enviar pergunta"
-            disabled={disabled || !value.trim()}
-            onClick={submit}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F66FF] text-white shadow-md shadow-[#0F66FF]/25 hover:bg-[#0b54d6] active:scale-95 transition-all disabled:cursor-not-allowed disabled:bg-[#d8e2ec] disabled:text-[#94a3b6] disabled:shadow-none"
+            aria-label="Usar entrada de voz"
+            title="Entrada de voz"
+            disabled
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#8295aa] transition-colors hover:bg-[#f1f6fb] hover:text-[#356f9f] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Send size={15} strokeWidth={2.2} className="translate-x-[-0.5px] translate-y-[-0.5px]" />
+            <Mic size={17} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="Anexar arquivo"
+            title="Anexar arquivo"
+            disabled
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#8295aa] transition-colors hover:bg-[#f1f6fb] hover:text-[#356f9f] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Paperclip size={17} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </div>
+
+        <button
+          type="button"
+          aria-label="Enviar pergunta"
+          disabled={disabled || !value.trim()}
+          onClick={submit}
+          className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-[#2379c9] text-white shadow-[0_4px_10px_rgba(35,121,201,0.25)] transition-all hover:bg-[#176bb8] focus:outline-none focus:ring-2 focus:ring-[#2379c9]/30 active:scale-95 disabled:cursor-not-allowed disabled:bg-[#dfe8f1] disabled:text-[#9aabba] disabled:shadow-none"
+        >
+          <SendHorizontal size={17} strokeWidth={2} aria-hidden="true" />
+        </button>
       </div>
+      <p className="mt-2 text-center text-[10px] text-[#9aaabd]">
+        A IA pode cometer erros. Verifique as informações antes de tomar decisões.
+      </p>
     </div>
   );
 }

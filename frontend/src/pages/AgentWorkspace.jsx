@@ -1,28 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  BarChart3,
   Bell,
   Bot,
   Building2,
-  CheckCircle2,
+  CalendarDays,
+  Check,
   ChevronDown,
+  CircleAlert,
   FileText,
-  Layers,
-  LayoutDashboard,
+  History,
   MapPin,
-  MessageSquare,
-  Moon,
+  MessageSquarePlus,
+  Plus,
   Search,
+  ShieldCheck,
   Sparkles,
-  Sun,
-  User,
-  X,
-  Zap,
+  UserRound,
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
 import Composer from '../components/Composer';
 import Conversation from '../components/Conversation';
+import LogViewer from '../components/LogViewer';
 import StructuredResultPanel from '../components/StructuredResultPanel';
 import SuggestionCards from '../components/SuggestionCards';
+
+const suggestions = [
+  { title: 'Faturamento do mês', subtitle: 'Consolidar dados por filial' },
+  { title: 'Títulos vencendo na semana', subtitle: 'Consultar contas a pagar' },
+  { title: 'Top 5 produtos', subtitle: 'Identificar itens mais vendidos' },
+  { title: 'Clientes com risco', subtitle: 'Analisar inadimplência' },
+];
 
 function makeConversationId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -41,7 +49,9 @@ function safeStorageRead(key, fallback) {
 function safeStorageWrite(key, value) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
+  } catch {
+    // O histórico persistido no servidor continua sendo a fonte de memória.
+  }
 }
 
 function conversationKey(context) {
@@ -70,26 +80,43 @@ async function waitForAgentTask(taskId, timeoutMs = 120000) {
 function readContextFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
-    tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
-    company: params.get('company_id') || params.get('company') || '01',
-    branch: params.get('branch') || '0101',
-    user: params.get('user') || 'João Silva',
-    profile: params.get('profile') || 'Gerente Financeiro',
+    tenant_id: params.get('tenant_id') || params.get('tenant') || '',
+    company: params.get('company') || '',
+    branch: params.get('branch') || '',
+    user: params.get('user') || '',
+    profile: params.get('profile') || 'Negócio',
     session_id: params.get('session_id') || '',
-    environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
-    module: params.get('module') || 'SIGAFAT',
+    environment: params.get('environment_code') || params.get('environment') || '',
+    module: params.get('module') || '',
   };
+}
+
+function StatusPill({ ready }) {
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold ${ready ? 'border-[#ccebd9] bg-[#f0fbf4] text-[#268052]' : 'border-[#f3dfb4] bg-[#fffaf0] text-[#9b7127]'}`}>
+      <span className={`flex h-5 w-5 items-center justify-center rounded-full ${ready ? 'bg-[#2eaa6b] text-white' : 'bg-[#e7b95f] text-white'}`}>
+        {ready ? <Check size={12} strokeWidth={2.5} aria-hidden="true" /> : <CircleAlert size={12} strokeWidth={2.2} aria-hidden="true" />}
+      </span>
+      {ready ? 'Contexto conectado' : 'Contexto incompleto'}
+    </div>
+  );
+}
+
+function ContextChip({ icon: Icon, label, value }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
+      <Icon size={14} className="shrink-0 text-[#6d99bc]" strokeWidth={1.8} aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#99aabd]">{label}</p>
+        <p className="truncate text-[11px] font-semibold text-[#405d78]">{value || 'Não informado'}</p>
+      </div>
+    </div>
+  );
 }
 
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [mobileActiveTab, setMobileActiveTab] = useState('dashboard'); // 'dashboard' | 'chat'
-  const [globalSearch, setGlobalSearch] = useState('');
-
+  const [isLogMode, setIsLogMode] = useState(false);
   const [conversationId, setConversationId] = useState(() => {
     const initialContext = readContextFromUrl();
     return initialContext.session_id || makeConversationId();
@@ -97,36 +124,50 @@ export default function AgentWorkspace() {
 
   const context = useMemo(
     () => ({
-      tenant_id: externalContext.tenant_id || 'rodol_prod',
-      company: externalContext.company || '01',
-      branch: externalContext.branch || '0101',
-      user: externalContext.user || 'João Silva',
-      profile: externalContext.profile || 'Gerente Financeiro',
+      tenant_id: externalContext.tenant_id || '',
+      company: externalContext.company || '',
+      branch: externalContext.branch || '',
+      user: externalContext.user || '',
+      profile: externalContext.profile || 'Negócio',
       session_id: externalContext.session_id || '',
-      environment: externalContext.environment || 'c8te0u_prod',
-      module: externalContext.module || 'SIGAFAT',
+      environment: externalContext.environment || '',
+      module: externalContext.module || '',
     }),
     [externalContext]
   );
 
-  const [messages, setMessages] = useState([]);
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const requiredContextValues = [
+    context.tenant_id,
+    context.environment,
+    context.company,
+    context.branch,
+    context.module,
+  ];
+  const hasContext = requiredContextValues.every(value => String(value || '').trim().length > 0);
 
-  // Sync Dark Mode with document element
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
+  const [state, setState] = useState({
+    ready: hasContext,
+    message: hasContext
+      ? 'Contexto do Protheus identificado.'
+      : 'Copilot disponível sem contexto validado do Protheus.',
+  });
+
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      text: hasContext
+        ? 'Pronto. Posso ajudar com consultas, análises e relatórios.'
+        : 'Pronto. Posso ajudar, mas preciso de um contexto validado do Protheus para consultar dados reais.',
+    },
+  ]);
 
   const historyStorageKey = useMemo(() => `copilot.conversations:${conversationKey(context)}`, [context]);
+  const [history, setHistory] = useState([]);
 
   useEffect(() => {
     const storedHistory = safeStorageRead(historyStorageKey, []);
     const conversations = Array.isArray(storedHistory) ? storedHistory : [];
+    setHistory(conversations);
     try {
       const active = window.localStorage.getItem(`${historyStorageKey}:active`);
       const activeId = active || conversationId;
@@ -135,9 +176,16 @@ export default function AgentWorkspace() {
       const activeConversation = conversations.find(item => item.id === activeId);
       if (activeConversation?.messages?.length) {
         setMessages(activeConversation.messages);
+        setSelected(activeConversation);
+      } else {
+        setMessages([{ role: 'assistant', text: hasContext ? 'Pronto. Posso ajudar com consultas, análises e relatórios.' : 'Pronto. Posso ajudar, mas preciso de um contexto validado do Protheus para consultar dados reais.' }]);
+        setSelected(null);
+        setResult(null);
       }
-    } catch {}
-  }, [historyStorageKey, conversationId]);
+    } catch {
+      // O backend continuará usando o conversation_id da sessão atual.
+    }
+  }, [historyStorageKey, conversationId, hasContext]);
 
   useEffect(() => {
     const textMessages = messages
@@ -145,14 +193,20 @@ export default function AgentWorkspace() {
       .map(item => ({ role: item.role, text: item.text.trim().slice(0, 4000) }));
     if (!textMessages.some(item => item.role === 'user')) return;
 
-    const storedHistory = safeStorageRead(historyStorageKey, []);
-    const title = textMessages.find(item => item.role === 'user')?.text.slice(0, 52) || 'Nova consulta';
-    const next = [
-      { id: conversationId, title, date: 'Agora', messages: textMessages },
-      ...storedHistory.filter(item => item.id !== conversationId),
-    ].slice(0, 20);
-    safeStorageWrite(historyStorageKey, next);
+    setHistory((items) => {
+      const title = textMessages.find(item => item.role === 'user')?.text.slice(0, 52) || 'Nova conversa';
+      const next = [
+        { id: conversationId, title, date: 'Agora', messages: textMessages },
+        ...items.filter(item => item.id !== conversationId),
+      ].slice(0, 20);
+      safeStorageWrite(historyStorageKey, next);
+      return next;
+    });
   }, [messages, conversationId, historyStorageKey]);
+
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     const handleMessage = (event) => {
@@ -166,7 +220,7 @@ export default function AgentWorkspace() {
         company: incoming.company_code || incoming.company || prev.company,
         branch: incoming.branch || prev.branch,
         user: incoming.user || prev.user,
-        profile: incoming.profile || prev.profile || 'Gerente Financeiro',
+        profile: incoming.profile || prev.profile || 'Negócio',
         session_id: incoming.session_id || prev.session_id,
         environment: incoming.environment_code || incoming.environment || prev.environment,
         module: incoming.module || prev.module,
@@ -177,25 +231,68 @@ export default function AgentWorkspace() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  useEffect(() => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'cprot-result-state', open: Boolean(result) }, '*');
+    }
+  }, [result]);
+
+  useEffect(() => {
+    const readyMessage = hasContext
+      ? 'Contexto do Protheus identificado.'
+      : 'Copilot disponível sem contexto validado do Protheus.';
+
+    setState({
+      ready: hasContext,
+      message: readyMessage,
+    });
+  }, [hasContext]);
+
   const send = async (text) => {
     if (!text?.trim()) return;
 
-    setMessages((current) => [...current, { role: 'user', text }]);
-    setLoading(true);
-    if (window.innerWidth < 1024) {
-      setMobileDrawerOpen(false);
-      setMobileActiveTab('dashboard');
+    if (text.trim() === '/log') {
+      setIsLogMode(true);
+      return;
     }
+
+    const missingContext = [
+      ['tenant_id', context.tenant_id],
+      ['environment_code', context.environment],
+      ['company_code', context.company],
+      ['branch', context.branch],
+      ['module', context.module],
+    ].filter(([, value]) => !value?.trim()).map(([name]) => name);
+
+    if (missingContext.length > 0) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          role: 'assistant',
+          text: `Consulta bloqueada: contexto do Protheus incompleto (${missingContext.join(', ')}). Abra o Copilot dentro do ERP com o ambiente, empresa, filial e módulo selecionados.`,
+        },
+      ]);
+      return;
+    }
+
+    setMessages((currentMessages) => [...currentMessages, { role: 'user', text }]);
+    setHistory((items) => {
+      const next = [
+        { id: conversationId, title: text.trim().slice(0, 52), date: 'Agora' },
+        ...items.filter(item => item.id !== conversationId),
+      ].slice(0, 20);
+      safeStorageWrite(historyStorageKey, next);
+      return next;
+    });
+    setLoading(true);
 
     try {
       const payload = {
         ...context,
-        tenant_id: context.tenant_id || 'rodol_prod',
-        environment_code: context.environment || 'c8te0u_prod',
-        company_code: context.company || '01',
-        empresa: context.company || '01',
-        filial: context.branch || '0101',
-        module: context.module || 'SIGAFAT',
+        environment_code: context.environment,
+        company_code: context.company,
+        empresa: context.company,
+        filial: context.branch,
         request_id: `REQ-${Date.now()}`,
         conversation_id: conversationId,
         session_id: conversationId,
@@ -210,264 +307,250 @@ export default function AgentWorkspace() {
 
       setResult(res);
 
-      let replyMessage = 'Análise executiva concluída com sucesso no Protheus.';
+      let replyMessage = 'Consulta concluída.';
       if (res.status === 'execution_failed') {
-        replyMessage = `Erro na consulta Oracle: ${res.execution_error || 'Falha na execução.'}`;
+        replyMessage = `Consulta não executada no Protheus: ${res.execution_error || 'o ERP retornou uma falha.'}`;
       } else if (res.status === 'error') {
-        replyMessage = `Consulta bloqueada: ${res.error || res.summary || res.message || 'Contexto não autorizado.'}`;
+        const detail = res.error || res.summary || res.message || 'o contexto não foi validado.';
+        replyMessage = `Consulta bloqueada: ${detail}`;
       } else if (res.summary) replyMessage = res.summary;
       else if (res.message) replyMessage = res.message;
       else if (res.answer) replyMessage = res.answer;
 
-      setMessages((current) => [
-        ...current,
+      setMessages((currentMessages) => [
+        ...currentMessages,
         { role: 'assistant', text: replyMessage },
       ]);
     } catch (error) {
-      setMessages((current) => [
-        ...current,
-        { role: 'assistant', text: `**Erro:** ${String(error.message || error)}` },
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        { role: 'assistant', text: `Erro: ${String(error.message || error)}` },
       ]);
     }
 
     setLoading(false);
   };
 
+  const selectConversation = (item) => {
+    if (!item?.id) return;
+    setConversationId(item.id);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, item.id);
+    } catch {
+      // O histórico do backend segue disponível mesmo sem localStorage.
+    }
+    if (Array.isArray(item.messages) && item.messages.length) {
+      setMessages(item.messages);
+    } else {
+      setMessages([{ role: 'assistant', text: 'Conversa selecionada. Envie uma nova pergunta para continuar.' }]);
+    }
+    setResult(null);
+    setSelected(item);
+    setIsLogMode(false);
+  };
+
+  const startNewConversation = () => {
+    const nextConversationId = makeConversationId();
+    setConversationId(nextConversationId);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, nextConversationId);
+    } catch {
+      // Sem persistência local, o id ainda permanece válido nesta sessão.
+    }
+    setMessages([{ role: 'assistant', text: hasContext ? 'Nova conversa iniciada. Como posso ajudar?' : 'Nova conversa iniciada. Valide o contexto do Protheus antes de consultar dados reais.' }]);
+    setResult(null);
+    setSelected(null);
+    setIsLogMode(false);
+  };
+
+  const contextSummary = [context.tenant_id, context.environment, context.company, context.branch, context.module].filter(Boolean).join(' · ');
+  const showWorkspace = Boolean(result || isLogMode);
+
   return (
-    <div className="min-h-screen w-full bg-[#EEF3F8] dark:bg-[#0F172A] flex flex-col font-sans text-[#162D52] dark:text-[#F8FAFC] antialiased transition-colors duration-200">
-      {/* 1. HEADER GLOBAL (Altura: 80px, Layout Horizontal Minimalista) */}
-      <header className="h-[80px] shrink-0 border-b border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-[#1E293B]/95 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between gap-4 sticky top-0 z-40 transition-colors">
-        {/* Left: Brand & Organization Context */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0F66FF] text-white shadow-md shadow-[#0F66FF]/20">
-              <Sparkles size={20} strokeWidth={2.2} />
+    <div className="flex min-h-screen w-full flex-col bg-[#f4f8fb] font-sans text-[#1d3c5d]">
+      <header className="sticky top-0 z-30 shrink-0 border-b border-[#dfe8f0] bg-white/90 shadow-[0_1px_10px_rgba(44,78,108,0.04)] backdrop-blur-xl">
+        <div className="mx-auto flex min-h-[72px] w-full max-w-[1680px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex shrink-0 items-center gap-2.5 pr-1 sm:pr-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#edf6fd] text-[#206aa7]">
+              <Sparkles size={19} strokeWidth={1.8} aria-hidden="true" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[17px] font-black tracking-tight text-[#162D52] dark:text-white">
-                  Protheus <span className="text-[#0F66FF] dark:text-[#3882FF]">Copiloto</span>
-                </span>
-                <span className="hidden md:inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[10px] font-bold text-[#0F66FF] dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50">
-                  Executivo
-                </span>
+            <span className="text-[20px] font-extrabold tracking-[-0.04em] text-[#16466e]">Protheus</span>
+          </div>
+
+          <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
+            <div className="flex min-w-0 max-w-[230px] items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
+              <Building2 size={15} className="shrink-0 text-[#7198b6]" strokeWidth={1.8} aria-hidden="true" />
+              <span className="truncate text-[11px] font-semibold text-[#4c6881]">{context.tenant_id || 'Tenant não informado'}</span>
+              <ChevronDown size={13} className="shrink-0 text-[#99aabd]" aria-hidden="true" />
+            </div>
+            <div className="flex min-w-0 max-w-[210px] items-center gap-2 rounded-xl border border-[#e5edf4] bg-[#fbfdff] px-3 py-2">
+              <MapPin size={15} className="shrink-0 text-[#7198b6]" strokeWidth={1.8} aria-hidden="true" />
+              <span className="truncate text-[11px] font-semibold text-[#4c6881]">{context.branch || 'Filial não informada'}</span>
+              <ChevronDown size={13} className="shrink-0 text-[#99aabd]" aria-hidden="true" />
+            </div>
+            <div className="ml-2 flex min-w-0 max-w-[280px] items-center gap-2 rounded-xl border border-[#e8eef4] bg-[#f8fbfd] px-3 py-2 text-[#9aaabd]">
+              <Search size={15} strokeWidth={1.8} aria-hidden="true" />
+              <span className="truncate text-[11px]">Buscar no sistema...</span>
+            </div>
+          </div>
+
+          <div className="ml-auto flex items-center gap-3">
+            <StatusPill ready={state.ready} />
+            <button type="button" aria-label="Notificações" title="Notificações" className="relative hidden h-9 w-9 items-center justify-center rounded-xl text-[#6e8aa3] transition-colors hover:bg-[#f2f7fb] hover:text-[#2e76b5] sm:flex">
+              <Bell size={17} strokeWidth={1.8} aria-hidden="true" />
+              <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e56f55]" aria-hidden="true" />
+            </button>
+            <div className="hidden items-center gap-2 border-l border-[#e7eef4] pl-3 sm:flex">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eaf3fa] text-[#3979aa]">
+                <UserRound size={17} strokeWidth={1.8} aria-hidden="true" />
               </div>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold hidden sm:block">
-                Inteligência Corporativa • Read Only
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-4">
-            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 text-[12px] font-semibold text-[#162D52] dark:text-slate-300">
-              <Building2 size={14} className="text-[#0F66FF]" />
-              <span>Grupo Empresarial Alpha</span>
-              <ChevronDown size={13} className="text-slate-400" />
-            </div>
-            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 text-[12px] font-semibold text-[#162D52] dark:text-slate-300">
-              <MapPin size={14} className="text-[#0F66FF]" />
-              <span>Filial {context.branch || 'São Paulo'}</span>
-              <ChevronDown size={13} className="text-slate-400" />
-            </div>
-          </div>
-        </div>
-
-        {/* Center / Right: Global Search & User Profile */}
-        <div className="flex items-center gap-3">
-          {/* Campo de Pesquisa */}
-          <div className="relative hidden sm:block">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={globalSearch}
-              onChange={e => setGlobalSearch(e.target.value)}
-              placeholder="Buscar no sistema..."
-              className="h-9 w-[180px] md:w-[240px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 text-[12px] text-[#162D52] dark:text-white outline-none focus:border-[#0F66FF] focus:bg-white dark:focus:bg-slate-900 transition-all"
-            />
-          </div>
-
-          {/* Theme Switcher Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsDarkMode(prev => !prev)}
-            title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#0F66FF] transition-colors"
-          >
-            {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
-
-          {/* Notificações */}
-          <button
-            type="button"
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#0F66FF] transition-colors"
-          >
-            <Bell size={17} />
-            <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-[#0F66FF]" />
-          </button>
-
-          {/* Perfil */}
-          <div className="flex items-center gap-2.5 border-l border-slate-200 dark:border-slate-700 pl-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F66FF] text-white font-bold text-xs shadow-xs">
-              {context.user ? context.user.slice(0, 2).toUpperCase() : 'JS'}
-            </div>
-            <div className="hidden xl:block text-left">
-              <p className="text-[12px] font-bold text-[#162D52] dark:text-white leading-tight">
-                {context.user || 'João Silva'}
-              </p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                {context.profile || 'Gerente Financeiro'}
-              </p>
+              <div className="hidden min-w-0 lg:block">
+                <p className="max-w-[130px] truncate text-[11px] font-bold text-[#2b4863]">{context.user || 'Usuário atual'}</p>
+                <p className="text-[10px] text-[#92a3b2]">{context.profile}</p>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Mobile Mode Switcher (Dashboard vs Conversa) */}
-      <div className="lg:hidden flex items-center justify-center border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 gap-2">
-        <button
-          type="button"
-          onClick={() => setMobileActiveTab('dashboard')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all ${
-            mobileActiveTab === 'dashboard'
-              ? 'bg-[#0F66FF] text-white'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <LayoutDashboard size={15} />
-          <span>Painel Executivo</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileActiveTab('chat')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all ${
-            mobileActiveTab === 'chat'
-              ? 'bg-[#0F66FF] text-white'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <MessageSquare size={15} />
-          <span>Copiloto IA</span>
-        </button>
-      </div>
-
-      {/* 2. MAIN WORKSPACE (Desktop XL: 72%/28%, Desktop: 70%/30%, Notebook: 65%/35%) */}
-      <div className="flex-1 max-w-[1920px] w-full mx-auto p-4 sm:p-6 lg:p-7 flex gap-6 items-stretch min-h-0">
-        {/* Left Side: WORKSPACE EXECUTIVO (70% - 72%) */}
-        <main className={`
-          flex-1 w-full lg:w-[65%] xl:w-[70%] 2xl:w-[72%] min-w-0 flex flex-col
-          ${mobileActiveTab === 'dashboard' ? 'flex' : 'hidden lg:flex'}
-        `}>
-          {result ? (
-            <StructuredResultPanel
-              result={result}
-              context={context}
-              onClose={() => setResult(null)}
-            />
-          ) : (
-            /* TELA INICIAL (Sem consulta) */
-            <div className="exec-panel flex-1 flex flex-col p-6 sm:p-8 overflow-y-auto">
-              <div className="max-w-3xl mb-8">
-                <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#0F66FF] dark:text-[#3882FF] block mb-1">
-                  INTELIGÊNCIA EXECUTIVA • ERP PROTHEUS
-                </span>
-                <h1 className="text-[28px] sm:text-[34px] lg:text-[40px] font-black text-[#162D52] dark:text-white tracking-tight leading-tight">
-                  Olá, como posso ajudar hoje?
-                </h1>
-                <p className="text-[14px] sm:text-[15px] text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-                  Consulte indicadores, relatórios e análises do seu Protheus utilizando linguagem natural.
-                </p>
+      <div className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-5 p-3 sm:p-5 lg:p-6 ${showWorkspace ? 'max-w-[1680px]' : 'max-w-[760px]'}`}>
+        {showWorkspace && <main className="agent-panel flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border bg-white xl:h-[calc(100vh-120px)]">
+          <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#e8eff5] px-5 py-4 sm:px-7 sm:py-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2374b5]">
+                <BarChart3 size={20} strokeWidth={1.8} aria-hidden="true" />
               </div>
-
-              {/* SUGESTÕES INICIAIS (Grid de 8 Cards Executivos) */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[14px] font-bold text-[#162D52] dark:text-white flex items-center gap-2">
-                    <Sparkles size={16} className="text-[#0F66FF]" />
-                    <span>Análises Corporativas Recomendadas</span>
-                  </h3>
-                  <span className="text-[11px] font-semibold text-slate-400">Clique para consultar</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="truncate text-[17px] font-extrabold tracking-[-0.025em] text-[#1d3c5d]">Workspace analítico</h1>
+                  <span className="hidden rounded-full bg-[#f0f8f3] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.13em] text-[#37805d] sm:inline-flex">Somente leitura</span>
                 </div>
-
-                <SuggestionCards disabled={loading} onPick={send} />
+                <p className="mt-1 max-w-[680px] truncate text-[11px] text-[#899cac]">Resultados reais do Protheus organizados para análise e decisão</p>
               </div>
             </div>
-          )}
-        </main>
-
-        {/* Right Side: COPILOTO IA (30% - 28%, Largura 420px no Desktop) */}
-        <aside className={`
-          exec-panel flex flex-col p-5 sm:p-6 w-full lg:w-[35%] xl:w-[30%] 2xl:w-[28%] shrink-0 min-h-[600px]
-          ${mobileActiveTab === 'chat' ? 'flex' : 'hidden lg:flex'}
-          ${mobileDrawerOpen ? 'fixed inset-4 z-50 shadow-2xl flex' : ''}
-        `}>
-          {/* Header Copiloto */}
-          <header className="flex items-center justify-between pb-3.5 border-b border-slate-200 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#0F66FF]">
-                <Sparkles size={18} strokeWidth={2.2} />
-              </div>
-              <div>
-                <h2 className="text-[16px] font-bold text-[#162D52] dark:text-white leading-tight">
-                  Protheus Copiloto
-                </h2>
-                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#22C55E] font-semibold">
-                  <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
-                  <span>Conectado ao Protheus</span>
-                </div>
-              </div>
-            </div>
-
-            {mobileDrawerOpen && (
-              <button
-                type="button"
-                onClick={() => setMobileDrawerOpen(false)}
-                className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setIsLogMode(true)} className="hidden h-9 items-center gap-1.5 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8] sm:flex">
+                <ShieldCheck size={14} strokeWidth={1.8} aria-hidden="true" /> Diagnóstico
               </button>
-            )}
+              {showWorkspace && (
+                <button type="button" onClick={() => { setResult(null); setIsLogMode(false); }} className="h-9 rounded-xl border border-[#e1eaf2] bg-white px-3 text-[11px] font-semibold text-[#66829b] transition-colors hover:border-[#bfd8eb] hover:bg-[#f7fbfe] hover:text-[#2876b8]">
+                  Voltar ao chat
+                </button>
+              )}
+            </div>
           </header>
 
-          {/* Conversa Stream */}
-          <div className="flex-1 overflow-y-auto py-4 space-y-3">
-            {messages.length === 0 && (
-              <div className="rounded-2xl border border-blue-100 dark:border-slate-700 bg-blue-50/50 dark:bg-slate-800/50 p-4 text-[12px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                <p className="font-bold text-[#0F66FF] dark:text-blue-300 mb-1">
-                  Assistente Executivo Pronto
-                </p>
-                <p>
-                  Faça perguntas sobre vendas, financeiro, compras ou estoque. Toda consulta gera dashboards e relatórios no painel ao lado.
-                </p>
+          <div className="flex shrink-0 flex-wrap gap-2 border-b border-[#eef3f7] bg-[#fcfdff] px-5 py-3 sm:px-7">
+            <ContextChip icon={CalendarDays} label="Ambiente" value={context.environment} />
+            <ContextChip icon={Building2} label="Empresa" value={context.company} />
+            <ContextChip icon={MapPin} label="Filial" value={context.branch} />
+            <ContextChip icon={FileText} label="Módulo" value={context.module} />
+          </div>
+
+          <div className="agent-surface min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#fbfdff]">
+            {isLogMode ? (
+              <LogViewer onClose={() => setIsLogMode(false)} />
+            ) : result ? (
+              <StructuredResultPanel result={result} embedded onClose={() => setResult(null)} />
+            ) : (
+              <div className="flex min-h-full flex-col items-center justify-center px-6 py-16 text-center">
+                <div className="flex h-[76px] w-[76px] items-center justify-center rounded-[26px] border border-[#e1edf5] bg-white text-[#8bb1cb] shadow-[0_16px_34px_rgba(45,87,122,0.09)]">
+                  <BarChart3 size={31} strokeWidth={1.5} aria-hidden="true" />
+                </div>
+                <p className="mt-6 text-[16px] font-extrabold tracking-[-0.015em] text-[#345670]">Seu painel aparecerá aqui</p>
+                <p className="mt-2 max-w-[470px] text-[12px] leading-[1.75] text-[#8297aa]">Faça uma pergunta no Copiloto ao lado. As respostas retornadas pelo contexto real do Protheus serão exibidas com resumo, indicadores, tabelas e gráficos quando disponíveis.</p>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {['Resumo executivo', 'Indicadores', 'Tabela filtrável', 'Gráficos', 'Exportação'].map(item => (
+                    <span key={item} className="rounded-full border border-[#dfebf3] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#7892a8]">{item}</span>
+                  ))}
+                </div>
+                {!hasContext && (
+                  <div className="mt-7 flex max-w-[470px] items-start gap-2.5 rounded-2xl border border-[#f1dfb8] bg-[#fffaf0] px-4 py-3 text-left text-[11px] leading-relaxed text-[#8e6d34]">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+                    <span>O contexto ainda não está completo. A consulta será bloqueada até que tenant, ambiente, empresa, filial e módulo sejam validados.</span>
+                  </div>
+                )}
               </div>
+            )}
+          </div>
+        </main>}
+
+        {!showWorkspace && <aside className="agent-panel flex min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-3xl border bg-white xl:sticky xl:top-[96px] xl:h-[calc(100vh-120px)] xl:w-[420px] xl:shrink-0">
+          <header className="flex shrink-0 items-center justify-between border-b border-[#e8eff5] px-5 py-4 sm:px-6 sm:py-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#edf6fd] text-[#2679bd]">
+                <Bot size={20} strokeWidth={1.8} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-extrabold tracking-[-0.015em] text-[#203e5e]">Protheus Copiloto</p>
+                <p className="mt-0.5 truncate text-[10px] text-[#91a2b1]">Assistente para consultas seguras</p>
+              </div>
+            </div>
+            <button type="button" onClick={startNewConversation} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce8f1] bg-white px-3 text-[11px] font-bold text-[#52718e] transition-colors hover:border-[#bad6ec] hover:bg-[#f5fbff] hover:text-[#2476bd]" aria-label="Iniciar nova conversa">
+              <Plus size={14} strokeWidth={2} aria-hidden="true" /> Nova
+            </button>
+          </header>
+
+          <div className="agent-surface min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-5">
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-[#e8f0f5] bg-[#fbfdff] px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${state.ready ? 'bg-[#31ab6c] shadow-[0_0_0_4px_rgba(49,171,108,0.12)]' : 'bg-[#d7a343] shadow-[0_0_0_4px_rgba(215,163,67,0.12)]'}`} aria-hidden="true" />
+                <span className="truncate text-[11px] font-semibold text-[#55718a]">{state.message}</span>
+              </div>
+              <span className="shrink-0 text-[10px] font-semibold text-[#9aaabd]">{context.module || 'Sem módulo'}</span>
+            </div>
+
+            {messages.length <= 1 && !selected && !isLogMode && (
+              <div className="mb-5 rounded-[22px] border border-[#e7eff5] bg-gradient-to-br from-[#f9fcff] to-[#f4f9fd] p-4 sm:p-5">
+                <p className="text-[19px] font-extrabold leading-tight tracking-[-0.025em] text-[#254864]">Olá, como posso ajudar você hoje?</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-[#8297aa]">Escolha uma sugestão ou escreva uma pergunta sobre o contexto ativo.</p>
+              </div>
+            )}
+
+            {messages.length <= 1 && !selected && !isLogMode && (
+              <div className="mb-5">
+                <SuggestionCards items={suggestions} disabled={loading} onPick={(item) => send(item.title)} />
+              </div>
+            )}
+
+            {history.length > 0 && !isLogMode && (
+              <details className="group mb-5 rounded-2xl border border-[#e8eff5] bg-[#fcfdff]" open={messages.length > 1}>
+                <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-3 text-[10px] font-bold uppercase tracking-[0.13em] text-[#91a3b2] [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><History size={14} strokeWidth={1.8} aria-hidden="true" /> Conversas recentes</span>
+                  <ChevronDown size={14} className="transition-transform group-open:rotate-180" strokeWidth={1.8} aria-hidden="true" />
+                </summary>
+                <div className="space-y-1 border-t border-[#edf2f6] px-2.5 py-2.5">
+                  {history.slice(0, 5).map(item => (
+                    <button key={item.id} type="button" onClick={() => selectConversation(item)} className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] transition-colors ${selected?.id === item.id ? 'bg-[#eaf4fc] font-bold text-[#2476bd]' : 'text-[#607992] hover:bg-[#f1f7fb]'}`}>
+                      <MessageSquarePlus size={13} className="shrink-0" strokeWidth={1.8} aria-hidden="true" />
+                      <span className="truncate">{item.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </details>
             )}
 
             <Conversation messages={messages} />
-
             {loading && (
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#0F66FF] dark:text-blue-300 font-semibold animate-pulse">
-                <Sparkles size={16} />
-                <span>Consultando o Protheus via QueryRest Oracle...</span>
+              <div className="mt-3 flex items-center gap-2.5 text-[12px] text-[#7790a9]" aria-live="polite">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d7e8f6] bg-[#edf6fd] text-[#2b78bc]"><Bot size={16} className="animate-pulse" strokeWidth={1.8} aria-hidden="true" /></span>
+                <span className="rounded-2xl rounded-bl-md border border-[#e1eaf2] bg-white px-4 py-2.5 shadow-[0_3px_12px_rgba(49,84,117,0.05)]">Consultando o Protheus…</span>
+              </div>
+            )}
+            {selected && (
+              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[#cfe3f4] bg-[#f0f7fd] px-3 py-2.5 text-[11px] text-[#3d6f98]">
+                <ChevronDown size={14} className="rotate-[-90deg]" aria-hidden="true" />
+                Histórico: <strong className="truncate">{selected.title}</strong>
               </div>
             )}
           </div>
 
-          {/* Prompt Input (Radius 32px, Enviar #0F66FF, Mic, Anexo) */}
-          <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
-            <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." />
+          <div className="shrink-0 border-t border-[#e6eef5] bg-white px-4 pb-4 pt-3 sm:px-5">
+            <Composer disabled={loading} onSend={send} placeholder="Faça sua pergunta sobre o Protheus..." />
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-[#9aaabd]"><ShieldCheck size={12} strokeWidth={1.8} aria-hidden="true" /> Consultas somente leitura, limitadas ao contexto ativo.</p>
+            {contextSummary && <span className="sr-only">Contexto atual: {contextSummary}</span>}
           </div>
-        </aside>
-      </div>
-
-      {/* Floating Action Button for Tablet (✦ Abrir Copiloto) */}
-      <div className="hidden sm:block lg:hidden fixed bottom-6 right-6 z-30">
-        <button
-          type="button"
-          onClick={() => setMobileDrawerOpen(true)}
-          className="flex items-center gap-2 rounded-full bg-[#0F66FF] px-6 py-3.5 text-white font-bold text-sm shadow-xl shadow-[#0F66FF]/30 active:scale-95 transition-all"
-        >
-          <Sparkles size={16} />
-          <span>✦ Abrir Copiloto</span>
-        </button>
+        </aside>}
       </div>
     </div>
   );

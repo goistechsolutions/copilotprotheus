@@ -7,8 +7,8 @@ Return
 
 WSRESTFUL QueryRest DESCRIPTION "Generic Query Execution API"
   WSDATA cQuery AS STRING
-  WSMETHOD GET DESCRIPTION "Execute a SELECT query via URL parameter and return results as JSON" WSSYNTAX "/QueryRest"
-  WSMETHOD POST DESCRIPTION "Execute a SELECT query via POST body and return results as JSON" WSSYNTAX "/QueryRest"
+  WSMETHOD GET DESCRIPTION "Execute a SELECT query via URL parameter and return results as JSON"
+  WSMETHOD POST DESCRIPTION "Execute a SELECT query via POST body and return results as JSON"
 END WSRESTFUL
 
 WSMETHOD GET WSRECEIVE cQuery WSSERVICE QueryRest
@@ -20,10 +20,6 @@ WSMETHOD GET WSRECEIVE cQuery WSSERVICE QueryRest
   Local aArea     := GetArea()
   Local oErr
   Local lRet      := .T.
-  Local oRow
-  Local cFieldName := ""
-  Local cFieldType := ""
-  Local xValue
 
   ::SetContentType("application/json")
 
@@ -52,11 +48,11 @@ WSMETHOD GET WSRECEIVE cQuery WSSERVICE QueryRest
     aStruct := (cAlias)->(dbStruct())
     
     Do While !(cAlias)->(EoF())
-      oRow := JsonObject():New()
+      Local oRow := JsonObject():New()
       For nX := 1 To Len(aStruct)
-        cFieldName := aStruct[nX, 1]
-        cFieldType := aStruct[nX, 2]
-        xValue := (cAlias)->&(cFieldName)
+        Local cFieldName := aStruct[nX, 1]
+        Local cFieldType := aStruct[nX, 2]
+        Local xValue := (cAlias)->&(cFieldName)
         
         If cFieldType == "C"
           oRow[cFieldName] := AllTrim(xValue)
@@ -81,7 +77,7 @@ WSMETHOD GET WSRECEIVE cQuery WSSERVICE QueryRest
   RestArea(aArea)
 Return(lRet)
 
-WSMETHOD POST WSSERVICE QueryRest
+WSMETHOD POST WSRECEIVE cQuery WSSERVICE QueryRest
   Local aRet      := {}
   Local aStruct   := {}
   Local cAlias    := GetNextAlias()
@@ -92,25 +88,16 @@ WSMETHOD POST WSSERVICE QueryRest
   Local aArea     := GetArea()
   Local oErr
   Local lRet      := .T.
-  Local cBody     := ""
-  Local oRow
-  Local cFieldName := ""
-  Local cFieldType := ""
-  Local xValue
 
   ::SetContentType("application/json")
 
   // Parse do corpo JSON
-  cBody := Self:GetContent()
+  Local cBody := Self:GetContent()
   If !Empty(cBody)
     oJsonObject := JsonObject():New()
     cErro := oJsonObject:fromJson(cBody)
-    If Empty(cErro)
-      If oJsonObject:hasProperty("query")
-        cCleanQry := oJsonObject:GetJSProperty("query")
-      ElseIf oJsonObject:hasProperty("cQuery")
-        cCleanQry := oJsonObject:GetJSProperty("cQuery")
-      EndIf
+    If Empty(cErro) .And. oJsonObject:hasProperty("query")
+      cCleanQry := oJsonObject:GetJSProperty("query")
     EndIf
   EndIf
 
@@ -143,11 +130,11 @@ WSMETHOD POST WSSERVICE QueryRest
     aStruct := (cAlias)->(dbStruct())
     
     Do While !(cAlias)->(EoF())
-      oRow := JsonObject():New()
+      Local oRow := JsonObject():New()
       For nX := 1 To Len(aStruct)
-        cFieldName := aStruct[nX, 1]
-        cFieldType := aStruct[nX, 2]
-        xValue := (cAlias)->&(cFieldName)
+        Local cFieldName := aStruct[nX, 1]
+        Local cFieldType := aStruct[nX, 2]
+        Local xValue := (cAlias)->&(cFieldName)
         
         If cFieldType == "C"
           oRow[cFieldName] := AllTrim(xValue)

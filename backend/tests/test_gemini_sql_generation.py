@@ -12,9 +12,8 @@ from app.services.protheus_service import ProtheusServiceError
 
 
 class FakeResponse:
-    def __init__(self, payload, status_code=200):
+    def __init__(self, payload):
         self.payload = payload
-        self.status_code = status_code
 
     def raise_for_status(self):
         return None

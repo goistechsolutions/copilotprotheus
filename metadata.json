@@ -1,0 +1,6 @@
+{
+  "name": "Copilot Protheus",
+  "description": "PROTHEUS COPILOTO EXECUTIVO — Inteligência Executiva de Negócios e Governança com IA conectada ao ERP TOTVS Protheus",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

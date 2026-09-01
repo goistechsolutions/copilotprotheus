@@ -1,27 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: #162D52;
-  background-color: #EEF3F8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #284862;
+  background: #f4f8fb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
-
-.dark {
-  color: #F8FAFC;
-  background-color: #0F172A;
 }
 
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
-}
-
-.dark * {
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: #c8d8e5 transparent;
 }
 
 html,
@@ -30,38 +20,35 @@ body,
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  padding: 0;
 }
 
 body {
-  background-color: #EEF3F8;
-  color: #162D52;
-  transition: background-color 200ms ease, color 200ms ease;
-}
-
-.dark body {
-  background-color: #0F172A;
-  color: #F8FAFC;
+  background: radial-gradient(circle at 12% 0%, rgba(220, 239, 252, 0.7), transparent 30rem), #f4f8fb;
 }
 
 button,
 textarea,
-input,
-select {
+input {
   font: inherit;
 }
 
 button:focus-visible,
 a:focus-visible,
 textarea:focus-visible,
-input:focus-visible {
-  outline: 2px solid rgba(15, 102, 255, 0.4);
+input:focus-visible,
+summary:focus-visible {
+  outline: 3px solid rgba(42, 132, 194, 0.28);
   outline-offset: 2px;
 }
 
+::selection {
+  color: #123e61;
+  background: #cbe7f8;
+}
+
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-track {
@@ -69,75 +56,36 @@ input:focus-visible {
 }
 
 *::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: #cbd5e1;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #c8d8e5;
+  background-clip: padding-box;
 }
 
-.dark *::-webkit-scrollbar-thumb {
-  background: #334155;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
-*::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
+@layer components {
+  .agent-panel {
+    border-color: #dce8f1;
+    box-shadow: 0 18px 48px rgba(51, 86, 117, 0.075);
+    transition: box-shadow 180ms ease, border-color 180ms ease;
+  }
 
-.dark *::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
+  .agent-panel:hover {
+    border-color: #cbdfea;
+    box-shadow: 0 22px 58px rgba(51, 86, 117, 0.1);
+  }
 
-/* Executive Cards */
-.exec-panel {
-  background: #ffffff;
-  border-radius: 24px;
-  box-shadow: 0 10px 30px -5px rgba(22, 45, 82, 0.05), 0 0 0 1px rgba(226, 232, 240, 0.8);
-  transition: background-color 200ms ease, border-color 200ms ease;
-}
-
-.dark .exec-panel {
-  background: #1E293B;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(51, 65, 85, 0.8);
-}
-
-.exec-card {
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 20px;
-  box-shadow: 0 4px 16px rgba(22, 45, 82, 0.03);
-  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.dark .exec-card {
-  background: #1E293B;
-  border-color: #334155;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-}
-
-.exec-card:hover {
-  border-color: #93C5FD;
-  box-shadow: 0 8px 24px rgba(15, 102, 255, 0.08);
-  transform: translateY(-1px);
-}
-
-.dark .exec-card:hover {
-  border-color: #3B82F6;
-  box-shadow: 0 8px 24px rgba(15, 102, 255, 0.15);
-}
-
-.exec-composer {
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 32px;
-  box-shadow: 0 4px 20px rgba(22, 45, 82, 0.05);
-  transition: all 180ms ease;
-}
-
-.dark .exec-composer {
-  background: #1E293B;
-  border-color: #334155;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-}
-
-.exec-composer:focus-within {
-  border-color: #0F66FF;
-  box-shadow: 0 4px 24px rgba(15, 102, 255, 0.15);
+  .agent-surface {
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(248, 252, 255, 0.95));
+  }
 }
