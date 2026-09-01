@@ -1064,6 +1064,7 @@ async def queryrest_proxy(
 
 
 @router.post("/ask/v2")
+@router.post("/ask/v2/")
 async def ask_v2(payload: dict) -> Dict[str, Any]:
     # Checagem rapida de tenant antes de disparar task
     tenant_id = payload.get("tenant_id")
@@ -1142,6 +1143,7 @@ async def ask_v2_upload(
 
 
 @router.get("/ask/v2/status/{task_id}")
+@router.get("/ask/v2/status/{task_id}/")
 async def ask_v2_status(task_id: str):
 
     if task_id not in AGENT_TASKS:
