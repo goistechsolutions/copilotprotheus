@@ -82,7 +82,7 @@ function readContextFromUrl() {
   };
 }
 
-export default function AgentWorkspace() {
+export default function AgentWorkspace({ onNavigateToDashboard }) {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
   const [isDarkMode, setIsDarkMode] = useState(() => {
     try {
@@ -319,6 +319,17 @@ export default function AgentWorkspace() {
               <Database size={19} className="mr-3 shrink-0" />
               <span className="hidden lg:block text-[14px]">ERP Insights</span>
             </button>
+
+            {onNavigateToDashboard && (
+              <button
+                type="button"
+                onClick={onNavigateToDashboard}
+                className="w-full flex items-center px-4 py-3 rounded-xl text-[#004FCE] dark:text-[#60A5FA] bg-[#E0ECFF] dark:bg-blue-950/40 hover:bg-[#d0e2ff] transition-all cursor-pointer font-medium"
+              >
+                <LayoutDashboard size={19} className="mr-3 shrink-0" />
+                <span className="hidden lg:block text-[14px]">Painel Executivo</span>
+              </button>
+            )}
           </nav>
 
           {/* Bottom Settings */}
@@ -369,6 +380,17 @@ export default function AgentWorkspace() {
                   className="bg-transparent border-none outline-none text-[13px] text-[#171C20] dark:text-white w-48 placeholder-slate-400"
                 />
               </div>
+
+              {onNavigateToDashboard && (
+                <button
+                  type="button"
+                  onClick={onNavigateToDashboard}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#eff4f9] dark:bg-slate-800 hover:bg-[#e0ecff] text-[#004FCE] dark:text-[#60A5FA] text-xs font-semibold border border-[#e2e8f0] dark:border-slate-700 transition-colors cursor-pointer"
+                >
+                  <LayoutDashboard size={15} />
+                  <span>Painel Executivo</span>
+                </button>
+              )}
 
               {/* Theme Toggle */}
               <button
