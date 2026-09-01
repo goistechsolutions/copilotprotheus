@@ -1,108 +1,162 @@
 * {
   box-sizing: border-box;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
 }
 
 body {
-  background: #0f172a;
-  color: #e2e8f0;
-  width: 320px;
+  background: #ffffff;
+  color: #171c20;
+  width: 340px;
   padding: 16px;
+  -webkit-font-smoothing: antialiased;
 }
 
-.popup-container h1 {
-  font-size: 16px;
-  font-weight: 700;
-  color: #f8fafc;
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 2px;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sparkle {
+  color: #004fce;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.brand h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #171c20;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+.status-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
 .subtitle {
-  font-size: 12px;
-  color: #94a3b8;
+  font-size: 11px;
+  color: #64748b;
   margin-bottom: 14px;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .btn {
   display: block;
   width: 100%;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   border: none;
-  margin-bottom: 8px;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   text-align: center;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: #004fce;
   color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 79, 206, 0.25);
 }
 
 .btn-primary:hover {
-  opacity: 0.92;
+  background: #003ea6;
 }
 
 .btn-secondary {
-  background: #1e293b;
-  color: #94a3b8;
-  border: 1px solid #334155;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
 }
 
 .btn-secondary:hover {
-  background: #334155;
-  color: #f1f5f9;
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.btn-save {
+  background: #004fce;
+  color: #ffffff;
+  margin-top: 12px;
+  padding: 9px 12px;
+}
+
+.btn-save:hover {
+  background: #003ea6;
 }
 
 .shortcut {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 10px;
+  color: #94a3b8;
   text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 hr {
   border: 0;
-  border-top: 1px solid #1e293b;
-  margin: 12px 0;
+  border-top: 1px solid #f1f5f9;
+  margin: 10px 0;
+}
+
+.form-group {
+  margin-bottom: 8px;
 }
 
 label {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
-  margin-bottom: 4px;
-  margin-top: 8px;
+  color: #475569;
+  margin-bottom: 3px;
 }
 
 input {
   width: 100%;
   padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid #334155;
-  background: #1e293b;
-  color: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #171c20;
   font-size: 12px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.15s ease;
 }
 
 input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 1px #3b82f6;
-}
-
-.hint {
-  font-size: 10px;
-  color: #64748b;
-  margin: 10px 0 12px 0;
-  line-height: 1.3;
+  background: #ffffff;
+  border-color: #004fce;
+  box-shadow: 0 0 0 2px rgba(0, 79, 206, 0.15);
 }
 
 .status {
@@ -110,25 +164,29 @@ input:focus {
   text-align: center;
   margin-top: 8px;
   min-height: 16px;
+  font-weight: 500;
 }
 
 .status.success {
-  color: #4ade80;
+  color: #16a34a;
 }
 
 .status.error {
-  color: #f87171;
+  color: #dc2626;
 }
 
-#openOptionsLink {
-  display: block;
-  font-size: 11px;
-  color: #38bdf8;
+.footer-links {
   text-align: center;
   margin-top: 10px;
-  text-decoration: none;
 }
 
-#openOptionsLink:hover {
+.footer-links a {
+  font-size: 11px;
+  color: #004fce;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.footer-links a:hover {
   text-decoration: underline;
 }

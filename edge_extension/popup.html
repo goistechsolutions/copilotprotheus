@@ -7,41 +7,64 @@
 </head>
 <body>
   <div class="popup-container">
-    <h1>✦ Copilot Protheus</h1>
-    <p class="subtitle">Assistente integrado ao WebApp da TOTVS</p>
+    <div class="header">
+      <div class="brand">
+        <span class="sparkle">✦</span>
+        <h1>Copilot Protheus</h1>
+      </div>
+      <div class="status-badge">
+        <span class="dot"></span>
+        <span>Ativo</span>
+      </div>
+    </div>
+    <p class="subtitle">Assistente Inteligente integrado ao WebApp TOTVS</p>
 
-    <button id="openProtheusBtn" class="btn btn-primary">Abrir no Protheus</button>
-    <button id="toggleWidgetBtn" class="btn btn-secondary">Mostrar / Ocultar Widget</button>
+    <div class="quick-actions">
+      <button id="openProtheusBtn" class="btn btn-primary">Abrir no Protheus</button>
+      <button id="toggleWidgetBtn" class="btn btn-secondary">Alternar Widget</button>
+    </div>
 
     <p class="shortcut">Atalho: Ctrl+Shift+P</p>
 
     <hr>
 
-    <label for="tenantId">Tenant ID (obrigatório):</label>
-    <input type="text" id="tenantId" placeholder="rodol_prod" autocomplete="off">
+    <div class="form-group">
+      <label for="tenantId">Tenant ID</label>
+      <input type="text" id="tenantId" placeholder="rodol_prod" autocomplete="off">
+    </div>
 
-    <label for="environmentCode">Environment code (obrigatório):</label>
-    <input type="text" id="environmentCode" placeholder="c8te0u_prod" autocomplete="off">
+    <div class="form-group">
+      <label for="environmentCode">Ambiente Protheus</label>
+      <input type="text" id="environmentCode" placeholder="c8te0u_prod" autocomplete="off">
+    </div>
 
-    <label for="username">Usuário Protheus:</label>
-    <input type="text" id="username" placeholder="ex: admin" autocomplete="username">
+    <div class="form-group">
+      <label for="username">Usuário</label>
+      <input type="text" id="username" placeholder="admin" autocomplete="username">
+    </div>
 
-    <label for="password">Senha Protheus:</label>
-    <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    <div class="form-group">
+      <label for="password">Senha</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
 
-    <label for="widgetUrl">URL do Widget:</label>
-    <input type="url" id="widgetUrl" placeholder="https://copilot.elitecorp.tec.br/" autocomplete="url">
+    <div class="form-group">
+      <label for="widgetUrl">URL do Frontend / Widget</label>
+      <input type="url" id="widgetUrl" placeholder="https://copilot.elitecorp.tec.br/" autocomplete="url">
+    </div>
 
-    <label for="launchUrl">URL de Lançamento do Protheus:</label>
-    <input type="url" id="launchUrl" placeholder="https://host.protheus.cloudtotvs.com.br/webapp/index.html" autocomplete="url">
+    <div class="form-group">
+      <label for="launchUrl">URL TOTVS Cloud WebApp</label>
+      <input type="url" id="launchUrl" placeholder="https://rodollta195384.protheus.cloudtotvs.com.br:10703/webapp/index.html" autocomplete="url">
+    </div>
 
-    <p class="hint">Configurações de contexto e conexão integradas com o Copilot Protheus.</p>
-
-    <button id="saveConfigBtn" class="btn btn-primary">Salvar Configurações</button>
+    <button id="saveConfigBtn" class="btn btn-save">Salvar Configurações</button>
 
     <p id="statusMessage" class="status" aria-live="polite"></p>
 
-    <a href="#" id="openOptionsLink">Configurações avançadas</a>
+    <div class="footer-links">
+      <a href="#" id="openOptionsLink">Opções Avançadas</a>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>

@@ -4,15 +4,13 @@
   let isSessionReady = false;
   let pollInterval = null;
   let observer = null;
-  let observerTimeout = null;
   let currentConfig = null;
   let iframeLoaded = false;
   let cachedBodyText = { text: "", timestamp: 0 };
 
-  // 1. Otimizar a leitura do DOM
+  // 1. Leitura com cache do DOM
   function getBodyText() {
     const now = Date.now();
-    // Cache de 200ms para evitar reflows multiplos na mesma avaliacao
     if (now - cachedBodyText.timestamp < 200) {
       return cachedBodyText.text;
     }
@@ -27,14 +25,16 @@
 
   function detectActiveSession() {
     const text = getBodyText();
-
     if (!text) return false;
 
-    // Sinais definitivos de que o usuário JÁ está logado (ignora se a tela de login ainda estiver no DOM invisível)
+    // Sinais definitivos de usuário logado
     const strongSignals = [
-      /SIGA[A-Z]{3,}/i.test(text), // Ex: SIGAFAT, SIGACOM
+      /SIGA[A-Z]{3,}/i.test(text),
       /Trocar m.dulo/i.test(text),
       /Faturamento/i.test(text),
+      /Financeiro/i.test(text),
+      /Compras/i.test(text),
+      /Estoque/i.test(text),
       /TOTVS News/i.test(text),
       /Favoritos/i.test(text) && /Consultas/i.test(text)
     ];
@@ -83,42 +83,7 @@
     "comercio exterior": "SIGAEEC",
     "comércio exterior": "SIGAEEC",
     "call center": "SIGATMK",
-    "televendas": "SIGATMK",
     "crm": "SIGACRM",
-    "loja": "SIGALOJA",
-    "front loja": "SIGAFRT",
-    "automação de ponto": "SIGAPON",
-    "automacao de ponto": "SIGAPON",
-    "ponto eletronico": "SIGAPON",
-    "ponto eletrônico": "SIGAPON",
-    "medicina e seguranca": "SIGAMDT",
-    "medicina e segurança": "SIGAMDT",
-    "recrutamento e selecao": "SIGARSP",
-    "recrutamento e seleção": "SIGARSP",
-    "avaliacao de desempenho": "SIGAADV",
-    "avaliação de desempenho": "SIGAADV",
-    "cargos e salarios": "SIGACSA",
-    "cargos e salários": "SIGACSA",
-    "gestao de servicos": "SIGATEC",
-    "gestão de serviços": "SIGATEC",
-    "serviços": "SIGATEC",
-    "servicos": "SIGATEC",
-    "inspecao de processos": "SIGAQIP",
-    "inspeção de processos": "SIGAQIP",
-    "auditoria": "SIGAQAD",
-    "documentos": "SIGAQDO",
-    "nao conformidades": "SIGAQNC",
-    "não conformidades": "SIGAQNC",
-    "controle de frete": "SIGAGFE",
-    "gfe": "SIGAGFE",
-    "contratos": "SIGAGCT",
-    "gestao de contratos": "SIGAGCT",
-    "gestão de contratos": "SIGAGCT",
-    "orcamentos": "SIGAORC",
-    "orçamentos": "SIGAORC",
-    "wms": "SIGAWMS",
-    "planejamento e controle de producao": "SIGAPCP",
-    "planejamento e controle de produção": "SIGAPCP",
     "faturamento e vendas": "SIGAFAT"
   };
 
@@ -187,36 +152,12 @@
       if (sigaMatch) {
         context.module = sigaMatch[0].toUpperCase();
       } else {
-        // 2. Busca por elementos próximos a "Trocar módulo" no menu PO-UI
-        const allElements = document.querySelectorAll("h1, h2, h3, span, div, p, a");
-        let foundName = "";
-        for (const el of allElements) {
-          if (/Trocar m.dulo/i.test(el.textContent) && el.children.length === 0) {
-            const parent = el.closest(".po-menu-header, .sidebar-header, nav, aside") || el.parentElement;
-            if (parent) {
-              const textLines = (parent.innerText || "").split("\n").map(l => l.trim()).filter(Boolean);
-              const nameLine = textLines.find(l => !/Trocar m.dulo|TOTVS|Favoritos|Pesquisar/i.test(l) && l.length > 2);
-              if (nameLine) {
-                foundName = nameLine.toLowerCase();
-                break;
-              }
-            }
+        for (const key of Object.keys(PROTHEUS_MODULE_MAP)) {
+          const regex = new RegExp(`\\b${key}\\b`, "i");
+          if (regex.test(bodyText)) {
+            context.module = PROTHEUS_MODULE_MAP[key];
+            break;
           }
-        }
-
-        // 3. Procura pelos nomes conhecidos de módulos no bodyText
-        if (!foundName) {
-          for (const key of Object.keys(PROTHEUS_MODULE_MAP)) {
-            const regex = new RegExp(`\\b${key}\\b`, "i");
-            if (regex.test(bodyText)) {
-              foundName = key;
-              break;
-            }
-          }
-        }
-
-        if (foundName) {
-          context.module = PROTHEUS_MODULE_MAP[foundName] || foundName.toUpperCase();
         }
       }
 
@@ -228,11 +169,7 @@
     return context;
   }
 
-  function hasMinimumContext(context) {
-    return !!(context.company || context.branch || context.user || context.module);
-  }
-
-  // 2. Usar Shadow DOM para isolamento visual
+  // 2. Isolamento via Shadow DOM
   const host = document.createElement("div");
   host.id = "copilot-protheus-host";
   document.body.appendChild(host);
@@ -254,16 +191,22 @@
   panel.id = "copilot-panel";
   panel.innerHTML = `
     <div id="copilot-panel-header">
-      <span>Copilot Protheus</span>
+      <div id="copilot-header-brand">
+        <span id="copilot-header-dot"></span>
+        <span>Copilot Protheus</span>
+      </div>
       <button id="copilot-close" type="button" aria-label="Fechar">✕</button>
     </div>
     <div id="copilot-body">
-      <div id="copilot-waiting">Aguardando efetuar login no Protheus...</div>
+      <div id="copilot-waiting">
+        <span>Aguardando efetuar login no Protheus...</span>
+      </div>
       <iframe id="copilot-iframe" src="" title="Copilot Protheus" style="display:none;"></iframe>
     </div>
   `;
   shadow.appendChild(panel);
 
+  // Escuta mensagens do iframe (ex: redimensionamento quando há resultado)
   window.addEventListener("message", (event) => {
     const iframe = shadow.querySelector("#copilot-iframe");
     if (!iframe || event.source !== iframe.contentWindow) return;
@@ -275,12 +218,13 @@
 
   function updateWaitingMessage(message) {
     const waiting = shadow.querySelector("#copilot-waiting");
-    if (waiting) waiting.textContent = message;
+    if (waiting) waiting.innerHTML = `<span>${message}</span>`;
   }
 
   function buildIframeUrl(config, context) {
-    const url = new URL(config.widgetUrl);
-    url.searchParams.set("tenant_id", config.tenantId || "");
+    const baseUrl = config.widgetUrl || "https://copilot.elitecorp.tec.br/";
+    const url = new URL(baseUrl);
+    url.searchParams.set("tenant_id", config.tenantId || "rodol_prod");
     if (config.environmentCode) url.searchParams.set("environment_code", config.environmentCode);
     if (context.company) url.searchParams.set("company", context.company);
     if (context.branch) url.searchParams.set("branch", context.branch);
@@ -297,156 +241,107 @@
     if (!iframe?.contentWindow || !currentConfig?.widgetUrl) return;
 
     const payload = {
-      tenant_id: currentConfig.tenantId || "",
+      tenant_id: currentConfig.tenantId || "rodol_prod",
       environment_code: currentConfig.environmentCode || "",
-      company_code: context.company || "",
-      company_id: context.company_id || "",
-      branch: context.branch || "",
-      user: context.user || currentConfig.username || "",
-      module: context.module || "",
-      profile: context.profile || "",
+      company: context.company || "01",
+      branch: context.branch || "0101",
+      user: context.user || currentConfig.username || "admin",
+      module: context.module || "SIGAFAT",
       session_id: context.session_id || ""
     };
 
-    try {
-      const targetOrigin = new URL(currentConfig.widgetUrl).origin;
-      iframe.contentWindow.postMessage(
-        { type: "cprot-context-update", payload },
-        targetOrigin
-      );
-    } catch (err) {
-      console.warn("Copilot Protheus: falha ao enviar contexto via postMessage.", err);
-    }
+    iframe.contentWindow.postMessage(
+      { type: "PROTHEUS_CONTEXT", payload },
+      "*"
+    );
   }
 
-  function activateWidget(config) {
+  function loadIframe(config) {
     const iframe = shadow.querySelector("#copilot-iframe");
     const waiting = shadow.querySelector("#copilot-waiting");
     const context = extractProtheusContext();
 
-    const nextUrl = buildIframeUrl(config, context);
-
-    if (iframe.dataset.src !== nextUrl) {
-      iframe.dataset.src = nextUrl;
-      iframe.src = nextUrl;
-      iframeLoaded = false;
-    }
-
-    iframe.style.display = "block";
-    waiting.style.display = "none";
-
     if (!iframeLoaded) {
-      iframe.addEventListener(
-        "load",
-        () => {
-          iframeLoaded = true;
-          sendContextToIframe(context);
-        },
-        { once: true }
-      );
+      iframe.src = buildIframeUrl(config, context);
+      iframe.onload = () => {
+        iframeLoaded = true;
+        if (waiting) waiting.style.display = "none";
+        iframe.style.display = "block";
+        sendContextToIframe(context);
+      };
     } else {
       sendContextToIframe(context);
     }
-
-    isSessionReady = true;
   }
 
-  function deactivateWidget() {
-    isSessionReady = false;
-    updateWaitingMessage("Aguardando efetuar login no Protheus...");
-    const iframe = shadow.querySelector("#copilot-iframe");
-    const waiting = shadow.querySelector("#copilot-waiting");
-    if (iframe) iframe.style.display = "none";
-    if (waiting) waiting.style.display = "block";
-    
-    // 3. Reiniciar polling ao deslogar
-    if (!pollInterval && currentConfig) {
-      startSessionPolling(currentConfig);
-    }
-  }
-
-  function evaluateSession(config) {
-    if (!config?.widgetUrl) return;
-
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
-    }
-    activateWidget(config);
-  }
-
-  function startSessionPolling(config) {
-    if (pollInterval) return;
-
-    pollInterval = setInterval(() => {
-      evaluateSession(config);
-    }, 1500);
-  }
-
-  function startObserver(config) {
-    if (observer) return;
-
-    observer = new MutationObserver(() => {
-      if (observerTimeout) clearTimeout(observerTimeout);
-      observerTimeout = setTimeout(() => {
-        evaluateSession(config);
-      }, 300);
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  function applyConfig(config) {
+  function initSessionChecker(config) {
     currentConfig = config;
-    if (!config?.widgetUrl) {
-      updateWaitingMessage("Widget nao configurado.");
-      return;
-    }
 
-    evaluateSession(config);
-    startSessionPolling(config);
-    startObserver(config);
-  }
+    function check() {
+      const active = detectActiveSession();
 
-  chrome.runtime.sendMessage({ type: "GET_CONFIG" }, (config) => {
-    if (chrome.runtime.lastError) {
-      console.warn("Copilot Protheus: falha ao obter configuracao.", chrome.runtime.lastError.message);
-      updateWaitingMessage("Falha ao carregar configuracao da extensao.");
-      return;
-    }
-    applyConfig(config);
-  });
-
-  fab.addEventListener("click", () => {
-    panel.style.display = "flex";
-    fab.style.display = "none";
-
-    if (currentConfig) {
-      evaluateSession(currentConfig);
-    }
-  });
-
-  shadow.querySelector("#copilot-close").addEventListener("click", () => {
-    panel.style.display = "none";
-    fab.style.display = "flex";
-  });
-
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "TOGGLE_WIDGET") {
-      const isOpen = panel.style.display === "flex";
-      panel.style.display = isOpen ? "none" : "flex";
-      fab.style.display = isOpen ? "flex" : "none";
-
-      if (!isOpen && currentConfig) {
-        evaluateSession(currentConfig);
+      if (active && !isSessionReady) {
+        isSessionReady = true;
+        loadIframe(config);
+      } else if (!active && isSessionReady) {
+        isSessionReady = false;
+        iframeLoaded = false;
+        const iframe = shadow.querySelector("#copilot-iframe");
+        const waiting = shadow.querySelector("#copilot-waiting");
+        if (iframe) {
+          iframe.style.display = "none";
+          iframe.src = "";
+        }
+        if (waiting) {
+          waiting.style.display = "flex";
+          updateWaitingMessage("Aguardando efetuar login no Protheus...");
+        }
+      } else if (active && isSessionReady) {
+        const ctx = extractProtheusContext();
+        sendContextToIframe(ctx);
       }
     }
 
-    if (message.type === "RELOAD_WIDGET") {
-      applyConfig(message.config);
+    check();
+    pollInterval = setInterval(check, 3000);
+
+    observer = new MutationObserver(() => {
+      check();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // Alternar painel
+  function togglePanel() {
+    const isVisible = panel.style.display === "flex";
+    panel.style.display = isVisible ? "none" : "flex";
+    if (!isVisible && isSessionReady && currentConfig) {
+      const ctx = extractProtheusContext();
+      sendContextToIframe(ctx);
+    }
+  }
+
+  fab.addEventListener("click", togglePanel);
+  shadow.querySelector("#copilot-close").addEventListener("click", togglePanel);
+
+  // Escuta comandos e atalhos da extensão
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === "toggle-widget") {
+      togglePanel();
     }
   });
+
+  // Carrega configurações salvas do storage
+  chrome.storage.sync.get(
+    ["tenantId", "environmentCode", "username", "widgetUrl"],
+    (result) => {
+      const config = {
+        tenantId: result.tenantId || "rodol_prod",
+        environmentCode: result.environmentCode || "c8te0u_prod",
+        username: result.username || "admin",
+        widgetUrl: result.widgetUrl || "https://copilot.elitecorp.tec.br/"
+      };
+      initSessionChecker(config);
+    }
+  );
 })();

@@ -1,72 +1,160 @@
-* { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+* {
+  box-sizing: border-box;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+}
 
 body {
-  background: #0f1420;
-  color: #e6e8ec;
+  background: #f5faff;
+  color: #171c20;
   margin: 0;
-  padding: 32px;
+  padding: 40px 20px;
+  -webkit-font-smoothing: antialiased;
 }
 
 .container {
-  max-width: 480px;
+  max-width: 520px;
   margin: 0 auto;
 }
 
-h1 { font-size: 22px; margin-bottom: 4px; }
-.subtitle { color: #9aa3b2; margin-bottom: 24px; font-size: 14px; }
+.header {
+  margin-bottom: 24px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.sparkle {
+  color: #004fce;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #171c20;
+}
+
+.subtitle {
+  color: #475569;
+  font-size: 13px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.form-group {
+  margin-bottom: 14px;
+}
 
 label {
   display: block;
-  font-size: 13px;
-  color: #b8bfcc;
-  margin-top: 16px;
-  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 5px;
 }
 
 input {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #2a3142;
-  background: #1a2030;
-  color: #fff;
-  font-size: 14px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #171c20;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.15s ease;
 }
 
-.password-wrapper { position: relative; }
-.password-wrapper input { padding-right: 40px; }
+input:focus {
+  background: #ffffff;
+  border-color: #004fce;
+  box-shadow: 0 0 0 2px rgba(0, 79, 206, 0.15);
+}
+
+.password-wrapper {
+  position: relative;
+}
+
+.password-wrapper input {
+  padding-right: 40px;
+}
+
 #togglePassword {
   position: absolute;
-  right: 8px;
-  top: 6px;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
+  color: #64748b;
 }
 
 .actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
-button[type="submit"], #testConnection {
-  flex: 1;
-  padding: 12px;
-  border-radius: 8px;
+.btn {
+  padding: 10px 16px;
+  border-radius: 10px;
   border: none;
   cursor: pointer;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
+  transition: all 0.15s ease;
+  text-align: center;
 }
 
-#testConnection { background: #2d3548; color: #e6e8ec; }
-button[type="submit"] {
-  background: linear-gradient(90deg, #4c5fd5, #7b3fe4);
-  color: #fff;
+.btn-primary {
+  background: #004fce;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 79, 206, 0.25);
 }
 
-.status { margin-top: 16px; font-size: 13px; text-align: center; }
-.status.success { color: #4ade80; }
-.status.error { color: #f87171; }
+.btn-primary:hover {
+  background: #003ea6;
+}
+
+.btn-secondary {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-secondary:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.status {
+  margin-top: 14px;
+  font-size: 12px;
+  text-align: center;
+  min-height: 18px;
+  font-weight: 500;
+}
+
+.status.success {
+  color: #16a34a;
+}
+
+.status.error {
+  color: #dc2626;
+}
