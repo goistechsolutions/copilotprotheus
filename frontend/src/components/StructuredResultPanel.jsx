@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { exportStructuredReport } from '../services/api';
+import { normalizeAgentError } from '../utils/agentError';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import {
   BarElement,
@@ -247,6 +248,10 @@ export default function StructuredResultPanel({ result, onClose, context = {} })
   );
   const activeMetricColumn = numericColumns[0] || '';
   const activeLabelColumn = columns.find(c => c !== activeMetricColumn) || columns[0] || '';
+  const isError = result?.status === 'execution_failed' || result?.status === 'error' || result?.error;
+  const normalizedError = isError
+    ? (result?.error_info || normalizeAgentError(result, { correlation_id: result?.correlation_id }))
+    : null;
 
   // Dynamic KPIs
   const dynamicKpis = useMemo(() => {
@@ -440,6 +445,21 @@ export default function StructuredResultPanel({ result, onClose, context = {} })
 
       {/* Main Content Area (Mandatory Order: Resumo, KPIs, Insights, Gráficos, Tabelas, Recomendações) */}
       <div className="flex-1 overflow-y-auto pt-4 space-y-5">
+        {isError && (
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-100">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[13px] font-bold">Falha na operação</p>
+              <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-rose-700 dark:bg-rose-900/50 dark:text-rose-200">
+                {normalizedError?.sourceLabel || 'Origem não identificada'}
+              </span>
+              {normalizedError?.status && <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-semibold text-rose-700 dark:bg-rose-900/50 dark:text-rose-200">HTTP {normalizedError.status}</span>}
+            </div>
+            <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed">{normalizedError?.message || 'O backend retornou um erro sem mensagem detalhada.'}</p>
+            {normalizedError?.code && <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-rose-700 dark:text-rose-200">Código: {normalizedError.code}</p>}
+            {normalizedError?.correlationId && <p className="mt-1 break-all text-[10px] text-rose-700/80 dark:text-rose-200/80">Correlação: {normalizedError.correlationId}</p>}
+            <p className="mt-3 text-[11px] text-rose-700/80 dark:text-rose-200/80">Nenhum dado foi inventado ou preenchido nesta tela.</p>
+          </div>
+        )}
         {/* SQL Drawer View if active */}
         {activeTab === 'sql' && result?.sql && (
           <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-md">

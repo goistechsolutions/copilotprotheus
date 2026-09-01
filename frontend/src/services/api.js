@@ -1,5 +1,27 @@
 export const API_BASE = import.meta.env.VITE_API_BASE || 'https://copilot-api.elitecorp.tec.br/api';
 
+export class ApiRequestError extends Error {
+  constructor(message, payload = {}, status = null) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status || payload.http_status || payload.status_code || null;
+    this.payload = payload;
+    this.correlation_id = payload.correlation_id || null;
+  }
+}
+
+async function readErrorPayload(response) {
+  const raw = await response.text();
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed?.detail && typeof parsed.detail === 'object'
+      ? { ...parsed, ...parsed.detail }
+      : parsed;
+  } catch {
+    return { message: raw || `HTTP ${response.status}` };
+  }
+}
+
 async function fetchWithRetry(url, options = {}, retries = 2) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -13,8 +35,9 @@ async function fetchWithRetry(url, options = {}, retries = 2) {
         },
       });
       if (!response.ok) {
-        const body = await response.text();
-        throw new Error(body || `HTTP ${response.status}`);
+        const payload = await readErrorPayload(response);
+        const message = payload.message || payload.error || payload.detail || `HTTP ${response.status}`;
+        throw new ApiRequestError(String(message), payload, response.status);
       }
       return response.json();
     } catch (err) {
@@ -40,7 +63,14 @@ export async function uploadAgentFile(formData) {
     credentials: 'include',
     body: formData,
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const payload = await readErrorPayload(response);
+    throw new ApiRequestError(
+      String(payload.message || payload.error || payload.detail || `HTTP ${response.status}`),
+      payload,
+      response.status,
+    );
+  }
   return response.json();
 }
 
