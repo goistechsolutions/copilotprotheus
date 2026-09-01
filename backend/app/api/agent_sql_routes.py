@@ -209,8 +209,8 @@ def _is_catalog_field_validation_error(exc: HTTPException) -> bool:
 
 
 _DOMAIN_TABLE_FAMILIES = {
-    "sales": {"SF2", "SD2", "SA1"},
-    "purchases": {"SF1", "SD1", "SA2"},
+    "sales": {"SF2", "SD2", "SC5", "SC6", "SA1", "SE1", "SB1", "SB2", "SF4", "SCJ", "SCK", "DA0", "DA1"},
+    "purchases": {"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2", "SF4", "SC1"},
 }
 
 
@@ -221,11 +221,11 @@ def _infer_query_domain(prompt: str) -> str | None:
     normalized = re.sub(r"\s+", " ", normalized).strip()
     sales_terms = (
         "venda", "vendas", "vendido", "faturamento", "faturado", "faturada", "faturadas",
-        "pedido de venda", "notas fiscais de saida", "nota de saida", "notas de saida",
+        "pedido", "pedidos", "pedido de venda", "pedidos de venda", "notas fiscais de saida", "nota de saida", "notas de saida", "cliente", "clientes",
     )
     purchase_terms = (
-        "compra", "compras", "comprado", "entrada", "entradas", "fornecedor",
-        "nota de entrada", "notas de entrada", "recebimento",
+        "compra", "compras", "comprado", "entrada", "entradas", "fornecedor", "fornecedores",
+        "nota de entrada", "notas de entrada", "recebimento", "pedido de compra",
     )
     has_sales = any(term in normalized for term in sales_terms)
     has_purchases = any(term in normalized for term in purchase_terms)
@@ -246,7 +246,7 @@ def _table_families_from_context(context: list[dict[str, Any]]) -> set[str]:
             table.get("physical_name"),
         ):
             compact = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
-            for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1"}:
+            for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1", "SC5", "SC6", "SE1", "SE2", "SB1", "SB2"}:
                 if compact.startswith(family):
                     families.add(family)
     return families
@@ -256,30 +256,13 @@ def _table_families_from_sql(sql: str) -> set[str]:
     families = set()
     for match in re.finditer(r"\b(?:FROM|JOIN)\s+([A-Z][A-Z0-9_$#]*)", str(sql or "").upper()):
         compact = re.sub(r"[^A-Z0-9]", "", match.group(1))
-        for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1"}:
+        for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1", "SC5", "SC6", "SE1", "SE2", "SB1", "SB2"}:
             if compact.startswith(family):
                 families.add(family)
     return families
 
 
 def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> str | None:
-    domain = _infer_query_domain(prompt)
-    if not domain:
-        return None
-    families = _table_families_from_context(context)
-    required = _DOMAIN_TABLE_FAMILIES[domain]
-    if families.isdisjoint(required):
-        if domain == "sales":
-            return (
-                "A pergunta é de vendas/faturamento, mas o módulo e o snapshot ativos "
-                "não contêm SF2/SD2/SA1. Selecione um módulo de vendas autorizado e "
-                "sincronize o dicionário antes de consultar."
-            )
-        return (
-            "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos não "
-            "contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e "
-            "sincronize o dicionário antes de consultar."
-        )
     return None
 
 
@@ -289,21 +272,17 @@ def _validate_query_domain(prompt: str, sql: str) -> None:
         return
     families = _table_families_from_sql(sql)
     if domain == "sales":
-        if families.intersection({"SF1", "SD1", "SA2"}):
+        if families.intersection({"SF1", "SD1", "SA2"}) and not families.intersection({"SF2", "SD2", "SC5", "SC6", "SA1", "SE1", "SB1", "SB2"}):
             raise HTTPException(
                 status_code=422,
                 detail="Consulta de vendas gerou tabela de entrada/fornecedor (SF1, SD1 ou SA2); SQL bloqueado.",
             )
-        if not families.intersection(_DOMAIN_TABLE_FAMILIES["sales"]):
+    elif domain == "purchases":
+        if families.intersection({"SF2", "SD2", "SA1"}) and not families.intersection({"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2"}):
             raise HTTPException(
                 status_code=422,
-                detail="A consulta de vendas não referencia SF2, SD2 ou SA1 no SQL gerado.",
+                detail="Consulta de compras/entrada gerou tabela de saída/cliente; SQL bloqueado.",
             )
-    elif families.intersection({"SF2", "SD2", "SA1"}):
-        raise HTTPException(
-            status_code=422,
-            detail="Consulta de compras/entrada gerou tabela de saída/cliente; SQL bloqueado.",
-        )
 
 
 def _load_conversation_history(

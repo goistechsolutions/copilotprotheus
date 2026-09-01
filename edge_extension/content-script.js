@@ -116,6 +116,112 @@
 
   const shadow = host.attachShadow({ mode: "open" });
 
+  // Injeção de estilos diretos garantidos
+  const style = document.createElement("style");
+  style.textContent = `
+    #copilot-fab {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: #004fce;
+      box-shadow: 0 8px 24px rgba(0, 79, 206, 0.35);
+      cursor: pointer;
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 20px;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    #copilot-fab:hover {
+      transform: translateY(-2px) scale(1.04);
+      background: #003ea6;
+    }
+    #copilot-panel {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: min(460px, calc(100vw - 32px));
+      height: min(760px, calc(100vh - 48px));
+      max-width: 460px;
+      max-height: 760px;
+      background: #ffffff !important;
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 20px 48px -8px rgba(15, 23, 42, 0.2);
+      z-index: 999999;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #copilot-panel.results-open {
+      width: min(1560px, calc(100vw - 48px));
+      height: min(920px, calc(100vh - 48px));
+      max-width: 1560px;
+      max-height: 920px;
+    }
+    #copilot-panel-header {
+      background: #ffffff !important;
+      color: #171c20 !important;
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      border-bottom: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+    #copilot-header-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #copilot-header-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      display: inline-block;
+    }
+    #copilot-close {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      border-radius: 8px;
+    }
+    #copilot-close:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    #copilot-body {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+      background: #ffffff !important;
+    }
+    #copilot-iframe {
+      border: none;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #ffffff !important;
+    }
+  `;
+  shadow.appendChild(style);
+
   const cssUrl = chrome.runtime.getURL("widget.css");
   const link = document.createElement("link");
   link.rel = "stylesheet";
