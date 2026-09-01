@@ -1,13 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Bell,
   Bot,
+  Building2,
   CheckCircle2,
   ChevronDown,
+  FileText,
   Layers,
+  LayoutDashboard,
+  MapPin,
   MessageSquare,
+  Moon,
+  Search,
   Sparkles,
+  Sun,
   User,
   X,
+  Zap,
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
 import Composer from '../components/Composer';
@@ -64,7 +73,7 @@ function readContextFromUrl() {
     tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
     company: params.get('company_id') || params.get('company') || '01',
     branch: params.get('branch') || '0101',
-    user: params.get('user') || 'admin',
+    user: params.get('user') || 'João Silva',
     profile: params.get('profile') || 'Gerente Financeiro',
     session_id: params.get('session_id') || '',
     environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
@@ -74,6 +83,13 @@ function readContextFromUrl() {
 
 export default function AgentWorkspace() {
   const [externalContext, setExternalContext] = useState(readContextFromUrl());
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState('dashboard'); // 'dashboard' | 'chat'
+  const [globalSearch, setGlobalSearch] = useState('');
+
   const [conversationId, setConversationId] = useState(() => {
     const initialContext = readContextFromUrl();
     return initialContext.session_id || makeConversationId();
@@ -96,6 +112,15 @@ export default function AgentWorkspace() {
   const [messages, setMessages] = useState([]);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Sync Dark Mode with document element
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   const historyStorageKey = useMemo(() => `copilot.conversations:${conversationKey(context)}`, [context]);
 
@@ -152,18 +177,15 @@ export default function AgentWorkspace() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // Notifica o Protheus WebApp pai sobre o estado do resultado para expandir/recolher o iframe
-  useEffect(() => {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'cprot-result-state', open: Boolean(result) }, '*');
-    }
-  }, [result]);
-
   const send = async (text) => {
     if (!text?.trim()) return;
 
     setMessages((current) => [...current, { role: 'user', text }]);
     setLoading(true);
+    if (window.innerWidth < 1024) {
+      setMobileDrawerOpen(false);
+      setMobileActiveTab('dashboard');
+    }
 
     try {
       const payload = {
@@ -188,7 +210,7 @@ export default function AgentWorkspace() {
 
       setResult(res);
 
-      let replyMessage = 'Consulta realizada com sucesso no Protheus.';
+      let replyMessage = 'Análise executiva concluída com sucesso no Protheus.';
       if (res.status === 'execution_failed') {
         replyMessage = `Erro na consulta Oracle: ${res.execution_error || 'Falha na execução.'}`;
       } else if (res.status === 'error') {
@@ -211,83 +233,241 @@ export default function AgentWorkspace() {
     setLoading(false);
   };
 
-  const showWorkspace = Boolean(result);
-
   return (
-    <div className="min-h-screen w-full bg-[#EEF3F8] p-3 sm:p-5 lg:p-6 flex items-center justify-center antialiased">
-      <div className={`w-full flex gap-5 items-stretch justify-center transition-all duration-300 ${
-        showWorkspace ? 'max-w-[1840px] flex-col lg:flex-row' : 'max-w-[460px]'
-      }`}>
-        {/* Left Side: Painel Executivo (Abre SOMENTE quando result existe) */}
-        {showWorkspace && (
-          <main className="flex-1 w-full lg:w-[65%] 2xl:w-[70%] min-w-0 flex flex-col min-h-[620px]">
+    <div className="min-h-screen w-full bg-[#EEF3F8] dark:bg-[#0F172A] flex flex-col font-sans text-[#162D52] dark:text-[#F8FAFC] antialiased transition-colors duration-200">
+      {/* 1. HEADER GLOBAL (Altura: 80px, Layout Horizontal Minimalista) */}
+      <header className="h-[80px] shrink-0 border-b border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-[#1E293B]/95 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between gap-4 sticky top-0 z-40 transition-colors">
+        {/* Left: Brand & Organization Context */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0F66FF] text-white shadow-md shadow-[#0F66FF]/20">
+              <Sparkles size={20} strokeWidth={2.2} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[17px] font-black tracking-tight text-[#162D52] dark:text-white">
+                  Protheus <span className="text-[#0F66FF] dark:text-[#3882FF]">Copiloto</span>
+                </span>
+                <span className="hidden md:inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[10px] font-bold text-[#0F66FF] dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50">
+                  Executivo
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold hidden sm:block">
+                Inteligência Corporativa • Read Only
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-4">
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 text-[12px] font-semibold text-[#162D52] dark:text-slate-300">
+              <Building2 size={14} className="text-[#0F66FF]" />
+              <span>Grupo Empresarial Alpha</span>
+              <ChevronDown size={13} className="text-slate-400" />
+            </div>
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 text-[12px] font-semibold text-[#162D52] dark:text-slate-300">
+              <MapPin size={14} className="text-[#0F66FF]" />
+              <span>Filial {context.branch || 'São Paulo'}</span>
+              <ChevronDown size={13} className="text-slate-400" />
+            </div>
+          </div>
+        </div>
+
+        {/* Center / Right: Global Search & User Profile */}
+        <div className="flex items-center gap-3">
+          {/* Campo de Pesquisa */}
+          <div className="relative hidden sm:block">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={globalSearch}
+              onChange={e => setGlobalSearch(e.target.value)}
+              placeholder="Buscar no sistema..."
+              className="h-9 w-[180px] md:w-[240px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 text-[12px] text-[#162D52] dark:text-white outline-none focus:border-[#0F66FF] focus:bg-white dark:focus:bg-slate-900 transition-all"
+            />
+          </div>
+
+          {/* Theme Switcher Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsDarkMode(prev => !prev)}
+            title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#0F66FF] transition-colors"
+          >
+            {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+
+          {/* Notificações */}
+          <button
+            type="button"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#0F66FF] transition-colors"
+          >
+            <Bell size={17} />
+            <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-[#0F66FF]" />
+          </button>
+
+          {/* Perfil */}
+          <div className="flex items-center gap-2.5 border-l border-slate-200 dark:border-slate-700 pl-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F66FF] text-white font-bold text-xs shadow-xs">
+              {context.user ? context.user.slice(0, 2).toUpperCase() : 'JS'}
+            </div>
+            <div className="hidden xl:block text-left">
+              <p className="text-[12px] font-bold text-[#162D52] dark:text-white leading-tight">
+                {context.user || 'João Silva'}
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                {context.profile || 'Gerente Financeiro'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile Mode Switcher (Dashboard vs Conversa) */}
+      <div className="lg:hidden flex items-center justify-center border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 gap-2">
+        <button
+          type="button"
+          onClick={() => setMobileActiveTab('dashboard')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all ${
+            mobileActiveTab === 'dashboard'
+              ? 'bg-[#0F66FF] text-white'
+              : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          <LayoutDashboard size={15} />
+          <span>Painel Executivo</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileActiveTab('chat')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all ${
+            mobileActiveTab === 'chat'
+              ? 'bg-[#0F66FF] text-white'
+              : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          <MessageSquare size={15} />
+          <span>Copiloto IA</span>
+        </button>
+      </div>
+
+      {/* 2. MAIN WORKSPACE (Desktop XL: 72%/28%, Desktop: 70%/30%, Notebook: 65%/35%) */}
+      <div className="flex-1 max-w-[1920px] w-full mx-auto p-4 sm:p-6 lg:p-7 flex gap-6 items-stretch min-h-0">
+        {/* Left Side: WORKSPACE EXECUTIVO (70% - 72%) */}
+        <main className={`
+          flex-1 w-full lg:w-[65%] xl:w-[70%] 2xl:w-[72%] min-w-0 flex flex-col
+          ${mobileActiveTab === 'dashboard' ? 'flex' : 'hidden lg:flex'}
+        `}>
+          {result ? (
             <StructuredResultPanel
               result={result}
               context={context}
               onClose={() => setResult(null)}
             />
-          </main>
-        )}
+          ) : (
+            /* TELA INICIAL (Sem consulta) */
+            <div className="exec-panel flex-1 flex flex-col p-6 sm:p-8 overflow-y-auto">
+              <div className="max-w-3xl mb-8">
+                <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#0F66FF] dark:text-[#3882FF] block mb-1">
+                  INTELIGÊNCIA EXECUTIVA • ERP PROTHEUS
+                </span>
+                <h1 className="text-[28px] sm:text-[34px] lg:text-[40px] font-black text-[#162D52] dark:text-white tracking-tight leading-tight">
+                  Olá, como posso ajudar hoje?
+                </h1>
+                <p className="text-[14px] sm:text-[15px] text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                  Consulte indicadores, relatórios e análises do seu Protheus utilizando linguagem natural.
+                </p>
+              </div>
 
-        {/* Right Side: Protheus Copiloto (Apresentado sozinho inicialmente; e ao lado quando há resultado) */}
+              {/* SUGESTÕES INICIAIS (Grid de 8 Cards Executivos) */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[14px] font-bold text-[#162D52] dark:text-white flex items-center gap-2">
+                    <Sparkles size={16} className="text-[#0F66FF]" />
+                    <span>Análises Corporativas Recomendadas</span>
+                  </h3>
+                  <span className="text-[11px] font-semibold text-slate-400">Clique para consultar</span>
+                </div>
+
+                <SuggestionCards disabled={loading} onPick={send} />
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Right Side: COPILOTO IA (30% - 28%, Largura 420px no Desktop) */}
         <aside className={`
-          copiloto-panel flex flex-col p-5 sm:p-6 relative overflow-hidden bg-white
-          ${showWorkspace ? 'w-full lg:w-[35%] 2xl:w-[30%] shrink-0 min-h-[580px]' : 'w-full'}
+          exec-panel flex flex-col p-5 sm:p-6 w-full lg:w-[35%] xl:w-[30%] 2xl:w-[28%] shrink-0 min-h-[600px]
+          ${mobileActiveTab === 'chat' ? 'flex' : 'hidden lg:flex'}
+          ${mobileDrawerOpen ? 'fixed inset-4 z-50 shadow-2xl flex' : ''}
         `}>
-          {/* Header */}
-          <header className="flex items-center justify-between pb-3.5 border-b border-[#edf2f7]">
+          {/* Header Copiloto */}
+          <header className="flex items-center justify-between pb-3.5 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-[#EEF3F8] text-[#0F66FF]">
+              <div className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#0F66FF]">
                 <Sparkles size={18} strokeWidth={2.2} />
               </div>
               <div>
-                <h2 className="text-[16px] font-bold text-[#102a45] leading-tight">
+                <h2 className="text-[16px] font-bold text-[#162D52] dark:text-white leading-tight">
                   Protheus Copiloto
                 </h2>
                 <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#22C55E] font-semibold">
                   <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
-                  <span>Conectado</span>
+                  <span>Conectado ao Protheus</span>
                 </div>
               </div>
             </div>
+
+            {mobileDrawerOpen && (
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(false)}
+                className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={18} />
+              </button>
+            )}
           </header>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto py-4 space-y-4">
-            {/* Executive Greeting (Sizes: 40px desktop, 32px notebook, 28px tablet, 24px mobile) */}
+          {/* Conversa Stream */}
+          <div className="flex-1 overflow-y-auto py-4 space-y-3">
             {messages.length === 0 && (
-              <div className="pt-2 pb-1">
-                <h1 className="text-[22px] sm:text-[26px] lg:text-[30px] font-black text-[#102a45] tracking-tight leading-tight">
-                  Olá, como posso ajudar hoje?
-                </h1>
+              <div className="rounded-2xl border border-blue-100 dark:border-slate-700 bg-blue-50/50 dark:bg-slate-800/50 p-4 text-[12px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                <p className="font-bold text-[#0F66FF] dark:text-blue-300 mb-1">
+                  Assistente Executivo Pronto
+                </p>
+                <p>
+                  Faça perguntas sobre vendas, financeiro, compras ou estoque. Toda consulta gera dashboards e relatórios no painel ao lado.
+                </p>
               </div>
             )}
 
-            {/* Suggestions Grid */}
-            {messages.length === 0 && (
-              <div className="pt-1">
-                <p className="text-[13px] font-bold text-[#102a45] mb-3">Sugestões de consulta</p>
-                <SuggestionCards disabled={loading} onPick={send} />
-              </div>
-            )}
-
-            {/* Messages Thread */}
             <Conversation messages={messages} />
 
-            {/* Loading Indicator */}
             {loading && (
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#EEF3F8] text-[12px] text-[#0F66FF] font-semibold">
-                <Sparkles size={16} className="animate-spin" />
+              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#0F66FF] dark:text-blue-300 font-semibold animate-pulse">
+                <Sparkles size={16} />
                 <span>Consultando o Protheus via QueryRest Oracle...</span>
               </div>
             )}
           </div>
 
-          {/* Bottom Composer */}
-          <div className="pt-3 border-t border-[#edf2f7]">
-            <Composer disabled={loading} onSend={send} />
+          {/* Prompt Input (Radius 32px, Enviar #0F66FF, Mic, Anexo) */}
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+            <Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." />
           </div>
         </aside>
+      </div>
+
+      {/* Floating Action Button for Tablet (✦ Abrir Copiloto) */}
+      <div className="hidden sm:block lg:hidden fixed bottom-6 right-6 z-30">
+        <button
+          type="button"
+          onClick={() => setMobileDrawerOpen(true)}
+          className="flex items-center gap-2 rounded-full bg-[#0F66FF] px-6 py-3.5 text-white font-bold text-sm shadow-xl shadow-[#0F66FF]/30 active:scale-95 transition-all"
+        >
+          <Sparkles size={16} />
+          <span>✦ Abrir Copiloto</span>
+        </button>
       </div>
     </div>
   );
