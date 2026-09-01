@@ -130,12 +130,6 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
     }
   }, [isDarkMode]);
 
-  // Notifica o iframe pai (Protheus WebApp) para expandir ou contrair o drawer
-  useEffect(() => {
-    if (isIframe) {
-      window.parent.postMessage({ type: 'cprot-result-state', open: Boolean(result) }, '*');
-    }
-  }, [result, isIframe]);
 
   const historyStorageKey = useMemo(() => `copilot.conversations:${conversationKey(context)}`, [context]);
 
