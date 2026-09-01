@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { exportStructuredReport } from '../services/api';
-import { Bar, Line } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 import {
   BarElement,
   CategoryScale,
@@ -14,24 +14,21 @@ import {
   Tooltip,
 } from 'chart.js';
 import {
-  ArrowUpRight,
+  AlertTriangle,
   BarChart3,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Download,
   DollarSign,
+  Download,
   FileSpreadsheet,
   FileText,
-  Filter,
   Info,
   Layers,
-  Lightbulb,
   Search,
   Sparkles,
   TrendingDown,
   TrendingUp,
-  AlertTriangle,
   Wallet,
   X,
   Zap,
@@ -47,8 +44,6 @@ ChartJS.register(
   PointElement,
   Tooltip,
 );
-
-const MAX_ROWS = 500;
 
 function parseNumeric(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;

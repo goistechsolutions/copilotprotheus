@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
+import { normalizeAgentError } from '../utils/agentError';
 import Composer from '../components/Composer';
 import Conversation from '../components/Conversation';
 import StructuredResultPanel from '../components/StructuredResultPanel';
@@ -211,13 +212,18 @@ export default function AgentWorkspace() {
         ? await waitForAgentTask(accepted.task_id)
         : accepted;
 
-      setResult(res);
+      const normalizedError = ['execution_failed', 'error'].includes(res.status)
+        ? normalizeAgentError(res, { correlation_id: res.correlation_id })
+        : null;
+      const resultWithError = normalizedError
+        ? { ...res, error_info: normalizedError }
+        : res;
+      setResult(resultWithError);
 
       let replyMessage = 'Análise executiva concluída com sucesso no Protheus.';
-      if (res.status === 'execution_failed') {
-        replyMessage = `Erro na consulta Oracle: ${res.execution_error || 'Falha na execução.'}`;
-      } else if (res.status === 'error') {
-        replyMessage = `Consulta bloqueada: ${res.error || res.summary || res.message || 'Contexto não autorizado.'}`;
+      if (normalizedError) {
+        const statusLabel = normalizedError.status ? ` (HTTP ${normalizedError.status})` : '';
+        replyMessage = `${normalizedError.sourceLabel}${statusLabel}: ${normalizedError.message}`;
       } else if (res.summary) replyMessage = res.summary;
       else if (res.message) replyMessage = res.message;
       else if (res.answer) replyMessage = res.answer;
@@ -227,9 +233,13 @@ export default function AgentWorkspace() {
         { role: 'assistant', text: replyMessage },
       ]);
     } catch (error) {
+      const normalizedError = normalizeAgentError(error.payload || error, {
+        http_status: error.status,
+        correlation_id: error.correlation_id,
+      });
       setMessages((current) => [
         ...current,
-        { role: 'assistant', text: `**Erro:** ${String(error.message || error)}` },
+        { role: 'assistant', text: `${normalizedError.sourceLabel}${normalizedError.status ? ` (HTTP ${normalizedError.status})` : ''}: ${normalizedError.message}` },
       ]);
     }
 

@@ -38,6 +38,53 @@ from app.services.protheus_module_catalog import quote_tenant_schema
 logger = logging.getLogger("app.api.agent_sql")
 router = APIRouter(prefix="/agent", tags=["agent-sql"])
 
+
+def _normalized_agent_error(
+    *,
+    message: Any,
+    status_code: int | None,
+    correlation_id: str,
+    default_source: str = "api",
+) -> dict[str, Any]:
+    """Converte falhas internas em um contrato público estável e sanitizado."""
+    text_message = " ".join(str(message or "Falha não especificada.").split())[:500]
+    status = status_code if status_code and 400 <= status_code <= 599 else None
+    normalized = text_message.lower()
+    if default_source == "protheus_queryrest" or any(
+        marker in normalized for marker in ("queryrest", "appserver", "protheus")
+    ):
+        source = "protheus_queryrest"
+        code = "PROTHEUS_QUERYREST_ERROR"
+    elif default_source == "gemini" or any(
+        marker in normalized for marker in ("gemini", "generativelanguage", "provedor de ia")
+    ):
+        source = "gemini"
+        code = "GEMINI_UNAVAILABLE" if status in {429, 500, 502, 503, 504} else "GEMINI_ERROR"
+    elif status in {401, 403}:
+        source = "api"
+        code = "API_AUTHORIZATION_ERROR"
+    else:
+        source = default_source
+        code = "AGENT_ERROR"
+    retryable = status in {408, 429, 500, 502, 503, 504}
+    return {
+        "error_source": source,
+        "http_status": status,
+        "error_code": code,
+        "message": text_message,
+        "correlation_id": correlation_id,
+        "retryable": retryable,
+    }
+
+
+def _normalized_http_exception(exc: HTTPException, correlation_id: str, default_source: str = "api") -> dict[str, Any]:
+    return _normalized_agent_error(
+        message=exc.detail,
+        status_code=exc.status_code,
+        correlation_id=correlation_id,
+        default_source=default_source,
+    )
+
 # Gerenciador em memória para polling de tarefas do agente
 AGENT_TASKS = {}
 
@@ -828,9 +875,21 @@ async def process_agent_task(task_id: str, payload: dict):
                     else:
                         response["summary"] = f"A consulta retornou {len(rows)} registros, mas o formato recebido não é tabular."
                 except HTTPException as http_ex:
+                    error_info = _normalized_http_exception(
+                        http_ex,
+                        correlation_id,
+                        default_source="protheus_queryrest",
+                    )
                     response["status"] = "execution_failed"
-                    response["execution_error"] = http_ex.detail
-                    logger.warning("agent_queryrest_failed task_id=%s status=%s", task_id, http_ex.status_code)
+                    response["execution_error"] = error_info["message"]
+                    response["error"] = error_info["message"]
+                    response.update(error_info)
+                    logger.warning(
+                        "agent_queryrest_failed task_id=%s status=%s error_code=%s",
+                        task_id,
+                        http_ex.status_code,
+                        error_info["error_code"],
+                    )
                 finally:
                     if entitlement.lease_key:
                         entitlement_guard.release_session(db, ctx.tenant_id, entitlement.lease_key)
@@ -856,20 +915,57 @@ async def process_agent_task(task_id: str, payload: dict):
             logger.info("agent_task_completed task_id=%s status=%s elapsed_ms=%s", task_id, response.get("status"), response.get("response_time_ms"))
 
     except HTTPException as e:
-        AGENT_TASKS[task_id] = {"status": "error", "error": e.detail, "correlation_id": correlation_id}
-        logger.warning("agent_task_failed task_id=%s status=%s", task_id, e.status_code)
-    except ProgrammingError as e:
-        db_error = str(e).splitlines()[0][:240]
-        logger.error("agent_task_failed task_id=%s error_type=ProgrammingError db_error=%s", task_id, db_error)
+        error_info = _normalized_http_exception(e, correlation_id)
         AGENT_TASKS[task_id] = {
             "status": "error",
-            "error": "O catálogo ou o schema do banco está incompatível com a versão do backend.",
-            "error_code": "DATABASE_SCHEMA_MISMATCH",
-            "correlation_id": correlation_id,
+            "error": error_info["message"],
+            **error_info,
         }
+        logger.warning(
+            "agent_task_failed task_id=%s status=%s error_source=%s error_code=%s",
+            task_id,
+            e.status_code,
+            error_info["error_source"],
+            error_info["error_code"],
+        )
+    except ProgrammingError as e:
+        db_error = str(e).splitlines()[0][:240]
+        error_info = _normalized_agent_error(
+            message="O catálogo ou o schema do banco está incompatível com a versão do backend.",
+            status_code=500,
+            correlation_id=correlation_id,
+            default_source="database",
+        )
+        AGENT_TASKS[task_id] = {
+            "status": "error",
+            "error": error_info["message"],
+            "error_code": "DATABASE_SCHEMA_MISMATCH",
+            **error_info,
+        }
+        logger.error(
+            "agent_task_failed task_id=%s error_type=ProgrammingError db_error=%s error_source=%s",
+            task_id,
+            db_error,
+            error_info["error_source"],
+        )
     except Exception as e:
-        logger.error("agent_task_failed task_id=%s error_type=%s", task_id, type(e).__name__)
-        AGENT_TASKS[task_id] = {"status": "error", "error": "Falha interna ao processar a tarefa.", "correlation_id": correlation_id}
+        error_info = _normalized_agent_error(
+            message="Falha interna ao processar a tarefa.",
+            status_code=500,
+            correlation_id=correlation_id,
+            default_source="internal",
+        )
+        AGENT_TASKS[task_id] = {
+            "status": "error",
+            "error": error_info["message"],
+            **error_info,
+        }
+        logger.error(
+            "agent_task_failed task_id=%s error_type=%s error_source=%s",
+            task_id,
+            type(e).__name__,
+            error_info["error_source"],
+        )
 
 class QueryRestProxyRequest(BaseModel):
     tenant_id: str = Field(..., min_length=1, max_length=100)
