@@ -263,6 +263,23 @@ def _table_families_from_sql(sql: str) -> set[str]:
 
 
 def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> str | None:
+    domain = _infer_query_domain(prompt)
+    if not domain:
+        return None
+    families = _table_families_from_context(context)
+    required = _DOMAIN_TABLE_FAMILIES[domain]
+    if families.isdisjoint(required):
+        if domain == "sales":
+            return (
+                "A pergunta é de vendas/faturamento, mas o módulo e o snapshot ativos "
+                "não contêm SF2/SD2/SA1. Selecione um módulo de vendas autorizado e "
+                "sincronize o dicionário antes de consultar."
+            )
+        return (
+            "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos não "
+            "contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e "
+            "sincronize o dicionário antes de consultar."
+        )
     return None
 
 
