@@ -1,10 +1,8 @@
 from sqlalchemy.orm import Session
-from app.services.ollama_client import ask_llm
 from app.services.gemini_client import ask_gemini
 from app.services.rag_service import RAGService
 from app.crud.knowledge_crud import KnowledgeCRUD
 from app.core.audit import AuditService
-from app.core.config import settings
 from app.models.knowledge import Tenant
 import os, time, asyncio
 
@@ -78,13 +76,10 @@ class AssistantService:
         # Cloudflare tem hard limit de 100s. Vamos usar 75s para o principal e desistir se passar.
         timeout_sec = 75
         status_audit = "S"
-        is_fallback_needed = False
         answer = ""
-        
         try:
-            llm_func = ask_gemini if settings.llm_backend == "gemini" else ask_llm
             answer = await asyncio.wait_for(
-                llm_func(
+                ask_gemini(
                     question=question,
                     protheus_data=protheus_data if protheus_data else None,
                     intent=intent,
@@ -92,43 +87,14 @@ class AssistantService:
                     history=history,
                     image=payload.image,
                 ),
-                timeout=timeout_sec
+                timeout=timeout_sec,
             )
-            
-            # Identify Gemini errors to trigger fallback
-            if settings.llm_backend == "gemini" and ("Erro 503" in answer or "Erro na API do Gemini" in answer or "Erro de conexão" in answer):
-                is_fallback_needed = True
-                
-        except (asyncio.TimeoutError, Exception) as e:
-            if settings.llm_backend == "gemini":
-                # Se for timeout do Gemini, não fazemos fallback pois o Ollama demoraria e causaria 504 no Cloudflare
-                if isinstance(e, asyncio.TimeoutError):
-                    answer = "A consulta ao banco de dados do Protheus ou a geração da resposta demorou mais que o esperado (Tempo limite). Tente fazer uma pergunta mais específica ou adicionar filtros de data."
-                    status_audit = "T"
-                else:
-                    is_fallback_needed = True
-            else:
-                answer = "A consulta demorou muito e foi cancelada (Tempo limite)." if isinstance(e, asyncio.TimeoutError) else f"Erro ao processar: {str(e)}"
-                status_audit = "T" if isinstance(e, asyncio.TimeoutError) else "E"
-                
-        # AUTOMATIC FALLBACK TO OLLAMA (Gemma)
-        if is_fallback_needed:
-            print("Gemini unavailable or failed. Triggering local Ollama (Gemma 4) fallback...")
-            try:
-                # Fallback tem apenas 15s para garantir que não passe de 100s totais no Cloudflare
-                answer = await asyncio.wait_for(
-                    ask_llm(
-                        question=question,
-                        protheus_data=protheus_data if protheus_data else None,
-                        intent=intent,
-                        context=ctx,
-                        history=history,
-                    ),
-                    timeout=15
-                )
-            except Exception as e:
-                answer = f"Erro no Fallback Local (Ollama): {str(e)}"
-                status_audit = "E"
+        except asyncio.TimeoutError:
+            answer = "O serviço Gemini excedeu o tempo limite. A consulta não foi concluída."
+            status_audit = "T"
+        except Exception:
+            answer = "O serviço Gemini está temporariamente indisponível. A consulta não foi concluída."
+            status_audit = "E"
         
         # Calcular volume de registros retornados do Protheus
         records_returned = 0
@@ -170,7 +136,7 @@ class AssistantService:
         return {
             "answer": answer,
             "intent": intent,
-            "backend": os.getenv("LLM_BACKEND", "ollama"),
+            "backend": "gemini",
             "records_returned": records_returned,
             "response_time_ms": elapsed_ms,
             "status": status_audit
@@ -205,68 +171,26 @@ class AssistantService:
 
         # 5. Generate Answer via stream generator
         full_answer = []
-        is_fallback_needed = False
-        
-        if settings.llm_backend == "gemini":
-            from app.services.gemini_client import stream_gemini
-            try:
-                async for token in stream_gemini(
-                    question=question,
-                    protheus_data=protheus_data if protheus_data else None,
-                    intent=intent,
-                    context=ctx,
-                    history=history,
-                    image=payload.image,
-                ):
-                    if "Erro 503" in token or "Erro na API do Gemini" in token or "Erro de conexão" in token:
-                        is_fallback_needed = True
-                        break
-                    full_answer.append(token)
-                    yield token
-            except Exception:
-                is_fallback_needed = True
-        else:
-            is_fallback_needed = True  # Triggers local branch directly
-
-        # AUTOMATIC FALLBACK TO OLLAMA (Gemma)
-        if is_fallback_needed:
-            # Fallback only works smoothly in stream if it failed at the very beginning
-            if settings.llm_backend == "gemini" and len(full_answer) == 0:
-                print("Gemini unavailable in stream. Triggering local Ollama (Gemma 4) fallback...")
-                from app.services.ollama_client import stream_llm
-                try:
-                    async for token in stream_llm(
-                        question=question,
-                        protheus_data=protheus_data if protheus_data else None,
-                        intent=intent,
-                        context=ctx,
-                        history=history,
-                        image=payload.image,
-                    ):
-                        full_answer.append(token)
-                        yield token
-                except Exception as e:
-                    err_msg = f" Erro no Fallback Local (Ollama): {str(e)}"
-                    full_answer.append(err_msg)
-                    yield err_msg
-            elif settings.llm_backend != "gemini":
-                # Standard Ollama execution (not a fallback)
-                from app.services.ollama_client import stream_llm
-                try:
-                    async for token in stream_llm(
-                        question=question,
-                        protheus_data=protheus_data if protheus_data else None,
-                        intent=intent,
-                        context=ctx,
-                        history=history,
-                        image=payload.image,
-                    ):
-                        full_answer.append(token)
-                        yield token
-                except Exception as e:
-                    err_msg = f" Erro no Ollama: {str(e)}"
-                    full_answer.append(err_msg)
-                    yield err_msg
+        from app.services.gemini_client import stream_gemini
+        try:
+            async for token in stream_gemini(
+                question=question,
+                protheus_data=protheus_data if protheus_data else None,
+                intent=intent,
+                context=ctx,
+                history=history,
+                image=payload.image,
+            ):
+                full_answer.append(token)
+                yield token
+        except asyncio.TimeoutError:
+            error_message = "O serviço Gemini excedeu o tempo limite. A consulta não foi concluída."
+            full_answer.append(error_message)
+            yield error_message
+        except Exception:
+            error_message = "O serviço Gemini está temporariamente indisponível. A consulta não foi concluída."
+            full_answer.append(error_message)
+            yield error_message
 
         # 6. Audit Log após fim da geração
         answer = "".join(full_answer)

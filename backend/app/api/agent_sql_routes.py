@@ -101,7 +101,7 @@ async def real_llm_sql_generator(
     history: list[dict[str, str]] | None = None,
 ) -> str:
     """
-    Aciona o provedor LLM oficial configurado no backend (Gemini 2.5 Flash ou Ollama)
+    Aciona o provedor Gemini configurado no backend (Gemini 2.5 Flash)
     para gerar instruções SQL puras adequadas ao banco de dados Oracle do Protheus na TOTVS Cloud,
     respeitando as regras e exclusões lógicas sem inventar estruturas não permitidas.
     """
@@ -144,50 +144,34 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
         )
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
 
-    backend_mode = (getattr(settings, "llm_backend", "") or os.getenv("LLM_BACKEND", "") or "gemini").lower()
-    has_gemini_key = bool(getattr(settings, "gemini_api_key", None) or os.getenv("GEMINI_API_KEY"))
-    use_gemini = (backend_mode == "gemini" or (has_gemini_key and not os.getenv("OLLAMA_URL")))
+    backend_mode = "gemini"
 
     try:
-        if use_gemini:
-            from app.services.gemini_client import ask_gemini
-            raw_response = await ask_gemini(
-                question=user_query,
-                protheus_data=None,
-                intent="sql_generation",
-                context={
-                    "tenant_system_prompt": system_instruction,
-                    "tenant_id": tenant_id,
-                    "environment_code": environment_code,
-                },
-                history=history or [],
-                image=image,
-                allow_tools=False,
-            )
-        else:
-            from app.services.ollama_client import ask_llm
-            raw_response = await ask_llm(
-                question=user_query,
-                protheus_data=None,
-                intent="sql_generation",
-                context={
-                    "tenant_system_prompt": system_instruction,
-                    "tenant_id": tenant_id,
-                    "environment_code": environment_code,
-                },
-                history=history or [],
-                image=image
-            )
+        from app.services.gemini_client import ask_gemini
+        raw_response = await ask_gemini(
+            question=user_query,
+            protheus_data=None,
+            intent="sql_generation",
+            context={
+                "tenant_system_prompt": system_instruction,
+                "tenant_id": tenant_id,
+                "environment_code": environment_code,
+            },
+            history=history or [],
+            image=image,
+            allow_tools=False,
+        )
     except ProtheusServiceError as e:
         status_code = e.status_code if e.status_code and 400 <= e.status_code <= 599 else 502
         logger.error(
-            "[SQL Generator] Falha de integração Protheus status=%s error_type=%s",
+            "[SQL Generator] Falha durante a geração/integração status=%s error_type=%s provider=%s",
             status_code,
             type(e).__name__,
+            backend_mode,
         )
         raise HTTPException(status_code=status_code, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"[SQL Generator] Falha ao acionar provedor LLM ({backend_mode}): {e}")
+        logger.error("[SQL Generator] Falha ao acionar provedor LLM provider=%s error_type=%s", backend_mode, type(e).__name__)
         raise HTTPException(
             status_code=503,
             detail=f"O serviço do provedor de IA ({backend_mode}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"

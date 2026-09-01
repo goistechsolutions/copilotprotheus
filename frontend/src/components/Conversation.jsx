@@ -66,7 +66,7 @@ export default function Conversation({ messages }) {
                   <div className="flex items-center gap-1.5 font-bold text-[#0F66FF] dark:text-[#3882FF]">
                     <span>Copiloto Executivo</span>
                     <span className="rounded bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.2 text-[9px] font-semibold text-[#0F66FF] dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50">
-                      Gemini 2.0 Flash
+                      Gemini
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">TOTVS Oracle</span>
