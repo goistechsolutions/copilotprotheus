@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Wallet,
@@ -16,24 +16,402 @@ import {
   Send,
   RefreshCw,
   ExternalLink,
-  ArrowRight
+  ArrowRight,
+  ShoppingBag,
+  ShoppingCart,
+  Package,
+  BookOpen,
+  Truck,
+  Tag,
+  PieChart,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Layers,
+  Scale,
+  Award,
+  Activity
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
 
+// Configurações das Áreas Executivas
+const AREAS_CONFIG = {
+  financeiro: {
+    id: 'financeiro',
+    label: 'Financeiro',
+    module: 'SIGAFIN',
+    icon: Wallet,
+    title: 'Visão Geral Financeira',
+    subtitle: 'Painel consolidado de liquidez, duplicatas e conciliação bancária',
+    bannerBadge: 'Inteligência Financeira Ativa',
+    bannerTitle: 'Gestão de Liquidez & Tesouraria Protheus',
+    bannerSubtitle: 'Dados de Contas a Pagar/Receber e Bancos sincronizados via QueryRest',
+    bannerMetricLabel: 'Previsão de Receita',
+    bannerMetricValue: 'R$ 1.840.000',
+    kpis: [
+      {
+        label: 'Saldo Disponível',
+        value: 'R$ 1.240.500',
+        change: '+4.2%',
+        isPositive: true,
+        icon: Wallet,
+        color: '#004fce',
+        bgColor: '#eff4f9'
+      },
+      {
+        label: 'Contas a Pagar (SE2)',
+        value: 'R$ 480.230',
+        change: '+1.5%',
+        isPositive: false,
+        icon: ArrowDownRight,
+        color: '#ef4444',
+        bgColor: '#fef2f2'
+      },
+      {
+        label: 'Contas a Receber (SE1)',
+        value: 'R$ 890.750',
+        change: '+8.7%',
+        isPositive: true,
+        icon: ArrowUpRight,
+        color: '#22c55e',
+        bgColor: '#f0fdf4'
+      },
+      {
+        label: 'Lucro Líquido / EBITDA',
+        value: 'R$ 310.420',
+        change: '+12.4%',
+        isPositive: true,
+        icon: TrendingUp,
+        isHighlight: true
+      }
+    ],
+    chartTitle: 'Fluxo de Caixa Projetado',
+    chartSubtitle: 'Projeção de liquidez para as próximas semanas',
+    compositionTitle: 'Composição de Despesas',
+    compositionSubtitle: 'Maiores centros de custos no período',
+    compositionItems: [
+      { label: 'Folha de Pagamento', percentage: 45, detail: 'R$ 216k', color: '#004fce' },
+      { label: 'Fornecedores / Insumos', percentage: 32, detail: 'R$ 153k', color: '#0f66ff' },
+      { label: 'Tributário e Impostos', percentage: 15, detail: 'R$ 72k', color: '#f59e0b' },
+      { label: 'Infraestrutura / TI', percentage: 8, detail: 'R$ 38k', color: '#64748b' }
+    ],
+    tableTitle: 'Últimas Movimentações Financeiras',
+    tableSubtitle: 'Títulos e duplicatas integradas via SE1 / SE2',
+    tableHeaders: ['Vencimento / Data', 'Descrição / Titular', 'Tipo', 'Valor', 'Status'],
+    tableRows: [
+      { col1: 'Hoje, 09:41', col2: 'Pagamento Fornecedor ABC Logística', col3: 'Contas a Pagar', col4: '- R$ 12.450,00', col4Class: 'text-[#ef4444]', status: 'Liquidado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
+      { col1: 'Ontem, 15:20', col2: 'Recebimento NF-e 4589 - Distribuidora Sul', col3: 'Contas a Receber', col4: '+ R$ 8.900,00', col4Class: 'text-[#22c55e]', status: 'Recebido', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
+      { col1: 'Amanhã, 10:00', col2: 'Impostos Federais - DARF Simples', col3: 'Tributário', col4: '- R$ 45.120,00', col4Class: 'text-[#ef4444]', status: 'Agendado', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' }
+    ],
+    initialCopilotMsg: 'Olá! Notei uma variação de 12% no DDA para o próximo vencimento no Protheus. Deseja que eu analise o detalhamento das duplicatas a pagar?',
+    copilotSuggestions: ['Sim, analisar DDA', 'Duplicatas a pagar', 'Inadimplência de clientes']
+  },
+
+  vendas: {
+    id: 'vendas',
+    label: 'Vendas',
+    module: 'SIGAFAT',
+    icon: TrendingUp,
+    title: 'Performance Comercial & Vendas',
+    subtitle: 'Acompanhamento de faturamento, pedidos de venda (SC5) e clientes',
+    bannerBadge: 'Gestão de Faturamento Protheus',
+    bannerTitle: 'Inteligência de Vendas & Curva ABC de Clientes',
+    bannerSubtitle: 'Cruzamento de notas fiscais (SF2/SD2) e carteira de pedidos',
+    bannerMetricLabel: 'Meta do Mês (81.6%)',
+    bannerMetricValue: 'R$ 2.450.800',
+    kpis: [
+      {
+        label: 'Faturamento Acumulado',
+        value: 'R$ 2.450.800',
+        change: '+14.8%',
+        isPositive: true,
+        icon: TrendingUp,
+        color: '#22c55e',
+        bgColor: '#f0fdf4'
+      },
+      {
+        label: 'Pedidos Emitidos (SC5)',
+        value: '291 pedidos',
+        change: '+8.2%',
+        isPositive: true,
+        icon: ShoppingBag,
+        color: '#004fce',
+        bgColor: '#eff4f9'
+      },
+      {
+        label: 'Ticket Médio por Venda',
+        value: 'R$ 8.420',
+        change: '+3.5%',
+        isPositive: true,
+        icon: Tag,
+        color: '#0f66ff',
+        bgColor: '#f5faff'
+      },
+      {
+        label: 'Margem Bruta Média',
+        value: '34.8%',
+        change: '+1.9%',
+        isPositive: true,
+        icon: PieChart,
+        isHighlight: true
+      }
+    ],
+    chartTitle: 'Evolução de Vendas Diárias vs Meta',
+    chartSubtitle: 'Valores faturados e volume diário de pedidos',
+    compositionTitle: 'Faturamento por Categoria',
+    compositionSubtitle: 'Participação das linhas de produtos',
+    compositionItems: [
+      { label: 'Linha Industrial / Peças', percentage: 48, detail: 'R$ 1.176k', color: '#004fce' },
+      { label: 'Linha Varejo / Consumo', percentage: 28, detail: 'R$ 686k', color: '#0f66ff' },
+      { label: 'Contratos de Serviços', percentage: 16, detail: 'R$ 392k', color: '#22c55e' },
+      { label: 'Acessórios e Outros', percentage: 8, detail: 'R$ 196k', color: '#64748b' }
+    ],
+    tableTitle: 'Últimos Pedidos de Venda',
+    tableSubtitle: 'Pedidos registrados no Protheus (SC5 / SC6)',
+    tableHeaders: ['Número / Emissão', 'Cliente (SA1)', 'Filial', 'Valor Total', 'Status'],
+    tableRows: [
+      { col1: 'PV-008920 (Hoje)', col2: 'Indústrias Metalúrgicas Beta S/A', col3: '0101', col4: 'R$ 48.900,00', col4Class: 'text-[#0f172a]', status: 'Faturado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
+      { col1: 'PV-008919 (Hoje)', col2: 'Comércio e Distribuição Norte Ltda', col3: '0101', col4: 'R$ 19.350,00', col4Class: 'text-[#0f172a]', status: 'Liberado', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' },
+      { col1: 'PV-008918 (Ontem)', col2: 'Transportes e Logística Paulista', col3: '0102', col4: 'R$ 32.100,00', col4Class: 'text-[#0f172a]', status: 'Em Análise', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' }
+    ],
+    initialCopilotMsg: 'Olá! O faturamento acumulado de vendas já atingiu 81.6% da meta mensal. Deseja ver os 10 clientes com maior volume de compras este mês?',
+    copilotSuggestions: ['Top 10 clientes', 'Pedidos de hoje', 'Faturamento por filial']
+  },
+
+  compras: {
+    id: 'compras',
+    label: 'Compras',
+    module: 'SIGACOM',
+    icon: ShoppingCart,
+    title: 'Gestão de Suprimentos & Compras',
+    subtitle: 'Controle de pedidos de compra (SC7), cotações e fornecedores (SA2)',
+    bannerBadge: 'Gestão de Suprimentos Ativa',
+    bannerTitle: 'Otimização de Custos & Compras Estratégicas',
+    bannerSubtitle: 'Monitoramento de lead time e ordens de compra pendentes',
+    bannerMetricLabel: 'Volume Total em Compras',
+    bannerMetricValue: 'R$ 980.400',
+    kpis: [
+      {
+        label: 'Volume de Compras no Mês',
+        value: 'R$ 980.400',
+        change: '-4.1%',
+        isPositive: true,
+        icon: ShoppingCart,
+        color: '#004fce',
+        bgColor: '#eff4f9'
+      },
+      {
+        label: 'Pedidos de Compra Abertos',
+        value: '42 pedidos',
+        change: '-5 pedidos',
+        isPositive: true,
+        icon: Clock,
+        color: '#f59e0b',
+        bgColor: '#fefce8'
+      },
+      {
+        label: 'Lead Time Médio',
+        value: '6.2 dias',
+        change: '-0.8 dias',
+        isPositive: true,
+        icon: Truck,
+        color: '#22c55e',
+        bgColor: '#f0fdf4'
+      },
+      {
+        label: 'Economia em Negociações',
+        value: 'R$ 74.200',
+        change: '+7.5% saving',
+        isPositive: true,
+        icon: ShieldCheck,
+        isHighlight: true
+      }
+    ],
+    chartTitle: 'Histórico de Compras por Categoria',
+    chartSubtitle: 'Valores mensais de aquisição de insumos e matérias-primas',
+    compositionTitle: 'Distribuição por Grupo de Compras',
+    compositionSubtitle: 'Categorias com maior impacto no orçamento',
+    compositionItems: [
+      { label: 'Matérias-Primas', percentage: 52, detail: 'R$ 510k', color: '#004fce' },
+      { label: 'Embalagens e Descartáveis', percentage: 24, detail: 'R$ 235k', color: '#0f66ff' },
+      { label: 'Manutenção / MRO', percentage: 14, detail: 'R$ 137k', color: '#f59e0b' },
+      { label: 'Serviços Terceirizados', percentage: 10, detail: 'R$ 98k', color: '#64748b' }
+    ],
+    tableTitle: 'Pedidos de Compra Pendentes de Entrega',
+    tableSubtitle: 'Ordens de compra ativas no Protheus (SC7)',
+    tableHeaders: ['Ordem / Emissão', 'Fornecedor (SA2)', 'Previsão Entrega', 'Valor Total', 'Status'],
+    tableRows: [
+      { col1: 'PC-004510 (15/10)', col2: 'Siderúrgica Nacional do Brasil', col3: '28/10/2026', col4: 'R$ 115.000,00', col4Class: 'text-[#0f172a]', status: 'Aprovado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
+      { col1: 'PC-004509 (18/10)', col2: 'Embalagens Industriais Master', col3: '30/10/2026', col4: 'R$ 38.400,00', col4Class: 'text-[#0f172a]', status: 'Aguardando', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' },
+      { col1: 'PC-004508 (20/10)', col2: 'Química Industrial Global Ltda', col3: '02/11/2026', col4: 'R$ 64.800,00', col4Class: 'text-[#0f172a]', status: 'Em Trânsito', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' }
+    ],
+    initialCopilotMsg: 'Olá! Há 4 pedidos de compra com prazo de entrega para esta semana no Protheus. Deseja verificar se algum fornecedor está com entrega em atraso?',
+    copilotSuggestions: ['Pedidos com atraso', 'Top fornecedores', 'Cotações pendentes']
+  },
+
+  estoque: {
+    id: 'estoque',
+    label: 'Estoque',
+    module: 'SIGAEST',
+    icon: Package,
+    title: 'Controle Físico & Financeiro de Estoque',
+    subtitle: 'Saldos de almoxarifado (SB2), movimentações (SD3) e itens críticos',
+    bannerBadge: 'Controle de Inventário Ativo',
+    bannerTitle: 'Gestão Inteligente de Saldos & Reposição',
+    bannerSubtitle: 'Monitoramento de giro de estoque, curva ABC e ponto de pedido',
+    bannerMetricLabel: 'Valor Total em Estoque',
+    bannerMetricValue: 'R$ 3.820.000',
+    kpis: [
+      {
+        label: 'Valor Total do Estoque (SB2)',
+        value: 'R$ 3.820.000',
+        change: '-2.3%',
+        isPositive: true,
+        icon: Package,
+        color: '#004fce',
+        bgColor: '#eff4f9'
+      },
+      {
+        label: 'Giro Anual do Estoque',
+        value: '4.8x / ano',
+        change: '+0.4x',
+        isPositive: true,
+        icon: RefreshCw,
+        color: '#22c55e',
+        bgColor: '#f0fdf4'
+      },
+      {
+        label: 'Itens em Ponto de Pedido',
+        value: '18 produtos',
+        change: 'Abaixo do mínimo',
+        isPositive: false,
+        icon: AlertTriangle,
+        color: '#f59e0b',
+        bgColor: '#fefce8'
+      },
+      {
+        label: 'Acuracidade de Inventário',
+        value: '98.6%',
+        change: '+0.8% acurácia',
+        isPositive: true,
+        icon: CheckCircle2,
+        isHighlight: true
+      }
+    ],
+    chartTitle: 'Saldos de Estoque por Armazém (NNR)',
+    chartSubtitle: 'Valores monetários alocados por local físico',
+    compositionTitle: 'Curva ABC de Estoque',
+    compositionSubtitle: 'Distribuição de valor por classe de produto',
+    compositionItems: [
+      { label: 'Classe A (Alto Valor)', percentage: 70, detail: 'R$ 2.674k', color: '#004fce' },
+      { label: 'Classe B (Médio Valor)', percentage: 20, detail: 'R$ 764k', color: '#0f66ff' },
+      { label: 'Classe C (Baixo Valor)', percentage: 10, detail: 'R$ 382k', color: '#64748b' }
+    ],
+    tableTitle: 'Itens Críticos / Ponto de Reposição',
+    tableSubtitle: 'Produtos com saldo próximo ou abaixo do estoque de segurança (SB1)',
+    tableHeaders: ['Código / Descrição', 'Armazém', 'Saldo Atual', 'Ponto Pedido', 'Status'],
+    tableRows: [
+      { col1: 'PROD-00412 - Bobina de Aço 1.5mm', col2: 'Almoxarifado 01', col3: '14 un', col4: '30 un', col4Class: 'text-[#ef4444]', status: 'Crítico', statusClass: 'bg-[#ef4444]/10 text-[#ef4444]' },
+      { col1: 'PROD-00189 - Válvula Hidráulica 3/4', col2: 'Almoxarifado 01', col3: '8 un', col4: '15 un', col4Class: 'text-[#f59e0b]', status: 'Atenção', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' },
+      { col1: 'PROD-00823 - Rolamento Blindado 6204', col2: 'Almoxarifado 02', col3: '22 un', col4: '25 un', col4Class: 'text-[#0f172a]', status: 'Repor', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' }
+    ],
+    initialCopilotMsg: 'Olá! Identifiquei 18 produtos com saldo abaixo do ponto de reposição na filial 0101. Deseja gerar a listagem completa com sugestão de compra?',
+    copilotSuggestions: ['Listar itens críticos', 'Estoque parado > 90 dias', 'Saldo por armazém']
+  },
+
+  contabilidade: {
+    id: 'contabilidade',
+    label: 'Contabilidade',
+    module: 'SIGACTB',
+    icon: BookOpen,
+    title: 'Controladoria & Demonstrações Contábeis',
+    subtitle: 'Balancete, razão contábil (CT2) e apuração de resultados (DRE)',
+    bannerBadge: 'Controladoria & Compliance',
+    bannerTitle: 'Demonstrações Financeiras & DRE Gerencial',
+    bannerSubtitle: 'Estrutura patrimonial, liquidez corrente e conciliação de contas',
+    bannerMetricLabel: 'Patrimônio Líquido',
+    bannerMetricValue: 'R$ 11.300.000',
+    kpis: [
+      {
+        label: 'Ativo Total Consolidado',
+        value: 'R$ 14.500.000',
+        change: '+5.4% no exercício',
+        isPositive: true,
+        icon: BookOpen,
+        color: '#004fce',
+        bgColor: '#eff4f9'
+      },
+      {
+        label: 'Passivo Circulante',
+        value: 'R$ 3.200.000',
+        change: '-2.1% no período',
+        isPositive: true,
+        icon: Scale,
+        color: '#64748b',
+        bgColor: '#f8fafc'
+      },
+      {
+        label: 'Patrimônio Líquido',
+        value: 'R$ 11.300.000',
+        change: '+7.8% no exercício',
+        isPositive: true,
+        icon: Award,
+        color: '#22c55e',
+        bgColor: '#f0fdf4'
+      },
+      {
+        label: 'Índice de Liquidez Corrente',
+        value: '2.42x',
+        change: 'Saudável (> 1.5)',
+        isPositive: true,
+        icon: Activity,
+        isHighlight: true
+      }
+    ],
+    chartTitle: 'DRE Sintético - Resultados Mensais',
+    chartSubtitle: 'Receita Líquida, Custos Operacionais e Lucro antes de Impostos (LAIR)',
+    compositionTitle: 'Estrutura do Balanço Patrimonial',
+    compositionSubtitle: 'Distribuição dos ativos da empresa',
+    compositionItems: [
+      { label: 'Ativo Circulante (Disponível + Recebíveis)', percentage: 62, detail: 'R$ 8.990k', color: '#004fce' },
+      { label: 'Ativo Não Circulante (Imobilizado / Intangível)', percentage: 38, detail: 'R$ 5.510k', color: '#0f66ff' }
+    ],
+    tableTitle: 'Lançamentos Contábeis Recentes',
+    tableSubtitle: 'Lote contábil ativo no Protheus (CT2 / CT1)',
+    tableHeaders: ['Data / Lote', 'Conta Débito / Crédito', 'Histórico do Lançamento', 'Valor', 'Status'],
+    tableRows: [
+      { col1: 'Hoje (Lote 001)', col2: '1.1.1.01 -> 3.1.1.01', col3: 'Recebimento de Duplicata Cliente Beta', col4: 'R$ 48.900,00', col4Class: 'text-[#0f172a]', status: 'Conciliado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
+      { col1: 'Hoje (Lote 001)', col2: '4.1.2.05 -> 1.1.1.01', col3: 'Pagamento Fornecedor ABC Logística', col4: 'R$ 12.450,00', col4Class: 'text-[#0f172a]', status: 'Conciliado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
+      { col1: 'Ontem (Lote 098)', col2: '4.1.3.01 -> 2.1.2.01', col3: 'Provisão de Folha de Pagamento 10/2026', col4: 'R$ 216.000,00', col4Class: 'text-[#0f172a]', status: 'Lançado', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' }
+    ],
+    initialCopilotMsg: 'Olá! O fechamento contábil preliminar deste mês aponta um EBITDA de 22.4% e índice de liquidez de 2.42x. Deseja visualizar o DRE consolidado?',
+    copilotSuggestions: ['DRE consolidado', 'Balancete do mês', 'Lançamentos manuais']
+  }
+};
+
 export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeAreaKey, setActiveAreaKey] = useState('financeiro');
   const [period, setPeriod] = useState('Mês Atual');
   const [chartView, setChartView] = useState('semanal');
   const [copilotQuestion, setCopilotQuestion] = useState('');
-  const [copilotMessages, setCopilotMessages] = useState([
-    {
-      role: 'assistant',
-      text: 'Olá! Notei uma variação de 12% no DDA para o próximo vencimento no Protheus. Deseja que eu analise o detalhamento das duplicatas a pagar?',
-      suggestions: ['Sim, analisar DDA', 'Ver pedidos de hoje', 'Top 5 clientes do mês']
-    }
-  ]);
+  const [copilotMessages, setCopilotMessages] = useState([]);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
 
+  const currentArea = AREAS_CONFIG[activeAreaKey] || AREAS_CONFIG.financeiro;
+
+  // Atualiza as mensagens do Copilot quando troca de área
+  useEffect(() => {
+    setCopilotMessages([
+      {
+        role: 'assistant',
+        text: currentArea.initialCopilotMsg,
+        suggestions: currentArea.copilotSuggestions
+      }
+    ]);
+  }, [activeAreaKey]);
+
+  // Manipulador de envio de pergunta para o Copilot no painel lateral
   const handleSendCopilot = async (customPrompt) => {
     const question = customPrompt || copilotQuestion;
     if (!question.trim() || isCopilotLoading) return;
@@ -50,11 +428,11 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
         environment_code: 'c8te0u_prod',
         empresa: '01',
         filial: '0101',
-        module: 'SIGAFAT',
-        conversation_id: 'dash-' + Date.now()
+        module: currentArea.module,
+        conversation_id: `dash-${activeAreaKey}-${Date.now()}`
       });
 
-      let replyText = 'Consulta processada com sucesso no Protheus.';
+      let replyText = `Consulta de ${currentArea.label} processada com sucesso no Protheus.`;
       if (response?.task_id) {
         const deadline = Date.now() + 60000;
         while (Date.now() < deadline) {
@@ -97,8 +475,9 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
 
   return (
     <div className="flex h-screen w-full bg-[#f5faff] font-['Inter',sans-serif] text-[#171c20] overflow-hidden">
-      {/* 1. Sidebar de Navegação Executiva */}
+      {/* 1. Sidebar de Navegação por Áreas (Financeiro, Vendas, Compras, Estoque, Contabilidade) */}
       <aside className="w-64 bg-white border-r border-[#e2e8f0] flex flex-col flex-shrink-0 z-20">
+        {/* Logo / Brand Header */}
         <div className="p-5 flex items-center justify-between border-b border-[#e2e8f0]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#004fce] flex items-center justify-center text-white font-bold text-lg shadow-md shadow-[#004fce]/20">
@@ -111,50 +490,45 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
           </div>
         </div>
 
+        {/* Menu de Áreas Corporativas */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
-              activeTab === 'dashboard'
-                ? 'bg-[#0f66ff] text-white shadow-sm'
-                : 'text-[#475569] hover:bg-[#eff4f9] hover:text-[#0f172a]'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span>Visão Geral</span>
-          </button>
+          <div className="px-3 pb-2 pt-1">
+            <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Visões por Área</span>
+          </div>
 
-          <button
-            onClick={() => setActiveTab('fluxo')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
-              activeTab === 'fluxo'
-                ? 'bg-[#0f66ff] text-white shadow-sm'
-                : 'text-[#475569] hover:bg-[#eff4f9] hover:text-[#0f172a]'
-            }`}
-          >
-            <Wallet className="w-4 h-4" />
-            <span>Fluxo de Caixa</span>
-          </button>
+          {Object.values(AREAS_CONFIG).map(area => {
+            const Icon = area.icon;
+            const isActive = activeAreaKey === area.id;
+            return (
+              <button
+                key={area.id}
+                onClick={() => setActiveAreaKey(area.id)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-[#0f66ff] text-white shadow-sm'
+                    : 'text-[#475569] hover:bg-[#eff4f9] hover:text-[#0f172a]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{area.label}</span>
+                </div>
+                <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-[#f1f5f9] text-[#64748b]'
+                }`}>
+                  {area.module}
+                </span>
+              </button>
+            );
+          })}
 
-          <button
-            onClick={() => setActiveTab('vendas')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
-              activeTab === 'vendas'
-                ? 'bg-[#0f66ff] text-white shadow-sm'
-                : 'text-[#475569] hover:bg-[#eff4f9] hover:text-[#0f172a]'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span>Análise de Vendas</span>
-          </button>
-
-          <div className="pt-4 pb-1 px-3">
+          <div className="pt-5 pb-1 px-3">
             <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Espaço de Trabalho</span>
           </div>
 
           <button
             onClick={onNavigateToWorkspace}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-[#004fce] bg-[#e0ecff] hover:bg-[#d0e2ff] transition-all border border-[#bfd5fe]"
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-[#004fce] bg-[#e0ecff] hover:bg-[#d0e2ff] transition-all border border-[#bfd5fe] cursor-pointer"
           >
             <div className="flex items-center gap-2.5">
               <Sparkles className="w-4 h-4 text-[#004fce]" />
@@ -164,6 +538,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
           </button>
         </nav>
 
+        {/* Rodapé da Sidebar */}
         <div className="p-4 border-t border-[#e2e8f0] bg-[#f8fafc]">
           <div className="flex items-center gap-2 text-[12px] text-[#475569]">
             <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse"></span>
@@ -175,6 +550,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
 
       {/* 2. Área Central do Dashboard (70%) */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top Header */}
         <header className="h-16 bg-white/90 backdrop-blur-md border-b border-[#e2e8f0] px-6 flex items-center justify-between flex-shrink-0 z-10">
           <div className="flex items-center gap-4">
             <div className="bg-[#eff4f9] px-3 py-1.5 rounded-lg flex items-center gap-2 text-[#475569] text-[13px] font-medium border border-[#e2e8f0]">
@@ -187,7 +563,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <input
                 type="text"
-                placeholder="Pesquisar no Protheus..."
+                placeholder={`Pesquisar em ${currentArea.label}...`}
                 className="w-full pl-9 pr-3 py-1.5 bg-[#f8fafc] border border-[#e2e8f0] rounded-full text-[13px] placeholder-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#004fce]/20 focus:border-[#004fce] transition-all"
               />
             </div>
@@ -196,7 +572,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
           <div className="flex items-center gap-3">
             <button
               onClick={onNavigateToWorkspace}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#eff4f9] hover:bg-[#e2e8f0] text-[#004fce] text-xs font-semibold border border-[#e2e8f0] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#eff4f9] hover:bg-[#e2e8f0] text-[#004fce] text-xs font-semibold border border-[#e2e8f0] transition-colors cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Abrir Copilot Chat</span>
@@ -204,7 +580,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
 
             <div className="text-right hidden sm:block">
               <div className="text-[13px] font-bold text-[#0f172a]">Diretoria Executiva</div>
-              <div className="text-[11px] font-semibold text-[#64748b] uppercase tracking-wider">C-Level / Finanças</div>
+              <div className="text-[11px] font-semibold text-[#64748b] uppercase tracking-wider">C-Level / {currentArea.label}</div>
             </div>
             <div className="w-9 h-9 rounded-full bg-[#004fce] flex items-center justify-center text-white font-bold text-sm shadow-sm">
               <User className="w-4 h-4" />
@@ -212,12 +588,20 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
           </div>
         </header>
 
+        {/* Conteúdo da Área Selecionada */}
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Título da Visão */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-[#0f172a] tracking-tight">Visão Geral Executiva</h1>
-              <p className="text-sm text-[#64748b]">Painel consolidado de inteligência financeira e operacional</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-[#0f172a] tracking-tight">{currentArea.title}</h1>
+                <span className="px-2 py-0.5 rounded-md bg-[#e0ecff] text-[#004fce] text-xs font-mono font-bold">
+                  {currentArea.module}
+                </span>
+              </div>
+              <p className="text-sm text-[#64748b] mt-0.5">{currentArea.subtitle}</p>
             </div>
+
             <div className="flex items-center gap-2.5">
               <button className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-[#e2e8f0] rounded-lg text-[#475569] text-xs font-semibold hover:bg-[#f8fafc] transition-colors shadow-sm">
                 <Calendar className="w-3.5 h-3.5 text-[#004fce]" />
@@ -231,99 +615,83 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
             </div>
           </div>
 
-          {/* Banner Executivo Decorativo */}
+          {/* Banner da Área */}
           <div className="relative w-full h-28 rounded-2xl overflow-hidden bg-gradient-to-r from-[#004fce] via-[#0f66ff] to-[#495f82] p-6 text-white flex items-center justify-between shadow-sm">
             <div className="relative z-10">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-semibold mb-1 backdrop-blur-sm">
                 <Sparkles className="w-3 h-3" />
-                <span>Inteligência Cognitiva Ativa</span>
+                <span>{currentArea.bannerBadge}</span>
               </div>
-              <h2 className="text-xl font-bold">Gestão Estratégica Protheus em Tempo Real</h2>
-              <p className="text-xs text-white/80">Dados atualizados e sincronizados via Oracle REST QueryRest</p>
+              <h2 className="text-xl font-bold">{currentArea.bannerTitle}</h2>
+              <p className="text-xs text-white/80">{currentArea.bannerSubtitle}</p>
             </div>
             <div className="hidden md:flex items-center gap-4 relative z-10">
               <div className="text-right">
-                <div className="text-xs text-white/75">Previsão de Receita</div>
-                <div className="text-xl font-bold">R$ 1.840.000</div>
+                <div className="text-xs text-white/75">{currentArea.bannerMetricLabel}</div>
+                <div className="text-xl font-bold">{currentArea.bannerMetricValue}</div>
               </div>
             </div>
             <div className="absolute right-0 top-0 bottom-0 w-96 bg-white/10 blur-3xl rounded-full transform translate-x-12"></div>
           </div>
 
-          {/* 4 Cards Bento de KPIs Executivos */}
+          {/* 4 Cards Bento de KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden group hover:border-[#004fce]/40 transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Saldo Disponível</span>
-                <div className="w-8 h-8 rounded-lg bg-[#eff4f9] flex items-center justify-center text-[#004fce]">
-                  <Wallet className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-[#0f172a] mb-2">R$ 1.240.500</div>
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] font-semibold">
-                  <ArrowUpRight className="w-3 h-3" /> 4.2%
-                </span>
-                <span className="text-[#94a3b8]">vs mês anterior</span>
-              </div>
-            </div>
+            {currentArea.kpis.map((kpi, index) => {
+              const KpiIcon = kpi.icon;
+              if (kpi.isHighlight) {
+                return (
+                  <div key={index} className="bg-[#004fce] rounded-xl p-5 text-white shadow-md shadow-[#004fce]/20 relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-3 relative z-10">
+                      <span className="text-[11px] font-bold text-white/80 uppercase tracking-wider">{kpi.label}</span>
+                      <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white">
+                        <KpiIcon className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-white mb-2 relative z-10">{kpi.value}</div>
+                    <div className="flex items-center gap-1.5 text-xs relative z-10">
+                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white/20 text-white font-semibold">
+                        <ArrowUpRight className="w-3 h-3" /> {kpi.change}
+                      </span>
+                      <span className="text-white/70">vs mês anterior</span>
+                    </div>
+                  </div>
+                );
+              }
 
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden group hover:border-[#ef4444]/40 transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Contas a Pagar</span>
-                <div className="w-8 h-8 rounded-lg bg-[#fef2f2] flex items-center justify-center text-[#ef4444]">
-                  <ArrowDownRight className="w-4 h-4" />
+              return (
+                <div key={index} className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden group hover:border-[#004fce]/40 transition-all">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">{kpi.label}</span>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: kpi.bgColor, color: kpi.color }}>
+                      <KpiIcon className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-bold text-[#0f172a] mb-2">{kpi.value}</div>
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span
+                      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full font-semibold ${
+                        kpi.isPositive
+                          ? 'bg-[#22c55e]/10 text-[#22c55e]'
+                          : 'bg-[#ef4444]/10 text-[#ef4444]'
+                      }`}
+                    >
+                      {kpi.isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      {kpi.change}
+                    </span>
+                    <span className="text-[#94a3b8]">vs mês anterior</span>
+                  </div>
                 </div>
-              </div>
-              <div className="text-2xl font-bold text-[#0f172a] mb-2">R$ 480.230</div>
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-[#ef4444]/10 text-[#ef4444] font-semibold">
-                  <ArrowUpRight className="w-3 h-3" /> 1.5%
-                </span>
-                <span className="text-[#94a3b8]">vs mês anterior</span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden group hover:border-[#22c55e]/40 transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Contas a Receber</span>
-                <div className="w-8 h-8 rounded-lg bg-[#f0fdf4] flex items-center justify-center text-[#22c55e]">
-                  <ArrowUpRight className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-[#0f172a] mb-2">R$ 890.750</div>
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] font-semibold">
-                  <ArrowUpRight className="w-3 h-3" /> 8.7%
-                </span>
-                <span className="text-[#94a3b8]">vs mês anterior</span>
-              </div>
-            </div>
-
-            <div className="bg-[#004fce] rounded-xl p-5 text-white shadow-md shadow-[#004fce]/20 relative overflow-hidden">
-              <div className="flex items-center justify-between mb-3 relative z-10">
-                <span className="text-[11px] font-bold text-white/80 uppercase tracking-wider">Lucro Líquido</span>
-                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-white mb-2 relative z-10">R$ 310.420</div>
-              <div className="flex items-center gap-1.5 text-xs relative z-10">
-                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white/20 text-white font-semibold">
-                  <ArrowUpRight className="w-3 h-3" /> 12.4%
-                </span>
-                <span className="text-white/70">vs mês anterior</span>
-              </div>
-            </div>
+              );
+            })}
           </div>
 
-          {/* Gráficos e Transações */}
+          {/* Gráfico e Composição */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white rounded-2xl border border-[#e2e8f0] p-6 shadow-sm flex flex-col">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="font-bold text-[#0f172a] text-[16px]">Fluxo de Caixa Projetado</h3>
-                  <p className="text-xs text-[#64748b]">Projeção de liquidez para as próximas semanas</p>
+                  <h3 className="font-bold text-[#0f172a] text-[16px]">{currentArea.chartTitle}</h3>
+                  <p className="text-xs text-[#64748b]">{currentArea.chartSubtitle}</p>
                 </div>
                 <div className="flex bg-[#eff4f9] rounded-lg p-1 border border-[#e2e8f0]">
                   <button
@@ -348,29 +716,29 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
               <div className="flex-1 min-h-[240px] relative flex items-end">
                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
                   <div className="border-b border-[#f1f5f9] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>R$ 1.5M</span>
+                    <span>Meta Alta</span>
                   </div>
                   <div className="border-b border-[#f1f5f9] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>R$ 1.0M</span>
+                    <span>Média Prevista</span>
                   </div>
                   <div className="border-b border-[#f1f5f9] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>R$ 500k</span>
+                    <span>Ponto Mínimo</span>
                   </div>
                   <div className="border-b border-[#e2e8f0] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>R$ 0</span>
+                    <span>Zero</span>
                   </div>
                 </div>
 
                 <svg className="w-full h-full absolute inset-0 pb-6 overflow-visible" preserveAspectRatio="none" viewBox="0 0 800 240">
                   <defs>
-                    <linearGradient id="stitchGrad" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#004fce" stopOpacity="0.25" />
                       <stop offset="100%" stopColor="#004fce" stopOpacity="0.0" />
                     </linearGradient>
                   </defs>
                   <path
                     d="M 0,180 Q 150,210 300,140 T 550,90 T 800,40 L 800,240 L 0,240 Z"
-                    fill="url(#stitchGrad)"
+                    fill="url(#areaGrad)"
                   />
                   <path
                     d="M 0,180 Q 150,210 300,140 T 550,90 T 800,40"
@@ -386,87 +754,59 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
                 </svg>
 
                 <div className="w-full flex justify-between px-2 text-[11px] font-medium text-[#64748b] z-10 pt-2">
-                  <span>01 Nov</span>
-                  <span>08 Nov</span>
-                  <span>15 Nov</span>
-                  <span>22 Nov</span>
-                  <span>29 Nov</span>
+                  <span>Semana 1</span>
+                  <span>Semana 2</span>
+                  <span>Semana 3</span>
+                  <span>Semana 4</span>
+                  <span>Fechamento</span>
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-[#e2e8f0] p-6 shadow-sm flex flex-col justify-between">
               <div>
-                <h3 className="font-bold text-[#0f172a] text-[16px] mb-1">Composição de Despesas</h3>
-                <p className="text-xs text-[#64748b] mb-4">Maiores centros de custos no período</p>
+                <h3 className="font-bold text-[#0f172a] text-[16px] mb-1">{currentArea.compositionTitle}</h3>
+                <p className="text-xs text-[#64748b] mb-4">{currentArea.compositionSubtitle}</p>
 
                 <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold mb-1">
-                      <span className="text-[#475569]">Folha de Pagamento</span>
-                      <span className="text-[#0f172a]">45% (R$ 216k)</span>
+                  {currentArea.compositionItems.map((item, idx) => (
+                    <div key={idx}>
+                      <div className="flex justify-between text-xs font-semibold mb-1">
+                        <span className="text-[#475569]">{item.label}</span>
+                        <span className="text-[#0f172a]">{item.percentage}% ({item.detail})</span>
+                      </div>
+                      <div className="w-full h-2 bg-[#f1f5f9] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${item.percentage}%`, backgroundColor: item.color }}></div>
+                      </div>
                     </div>
-                    <div className="w-full h-2 bg-[#f1f5f9] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#004fce] rounded-full" style={{ width: '45%' }}></div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold mb-1">
-                      <span className="text-[#475569]">Fornecedores / Insumos</span>
-                      <span className="text-[#0f172a]">32% (R$ 153k)</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#f1f5f9] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#0f66ff] rounded-full" style={{ width: '32%' }}></div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold mb-1">
-                      <span className="text-[#475569]">Tributário e Impostos</span>
-                      <span className="text-[#0f172a]">15% (R$ 72k)</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#f1f5f9] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#f59e0b] rounded-full" style={{ width: '15%' }}></div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold mb-1">
-                      <span className="text-[#475569]">Infraestrutura / TI</span>
-                      <span className="text-[#0f172a]">8% (R$ 38k)</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#f1f5f9] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#64748b] rounded-full" style={{ width: '8%' }}></div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
 
               <div className="mt-4 pt-4 border-t border-[#e2e8f0]">
                 <button
-                  onClick={() => handleSendCopilot('Quais são as 5 maiores notas fiscais de entrada deste mês?')}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#eff4f9] hover:bg-[#e2e8f0] text-[#004fce] text-xs font-bold transition-all"
+                  onClick={() => handleSendCopilot(`Faça uma análise executiva da área de ${currentArea.label} no Protheus`)}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#eff4f9] hover:bg-[#e2e8f0] text-[#004fce] text-xs font-bold transition-all cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Analisar Despesas com IA</span>
+                  <span>Analisar {currentArea.label} com IA</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Tabela de Transações Recentes */}
+          {/* Tabela de Dados da Área */}
           <div className="bg-white rounded-2xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-[#e2e8f0] flex items-center justify-between bg-[#f8fafc]">
               <div>
-                <h3 className="font-bold text-[#0f172a] text-[15px]">Últimas Movimentações Financeiras</h3>
-                <p className="text-xs text-[#64748b]">Títulos e duplicatas integradas via SE1 / SE2</p>
+                <h3 className="font-bold text-[#0f172a] text-[15px]">{currentArea.tableTitle}</h3>
+                <p className="text-xs text-[#64748b]">{currentArea.tableSubtitle}</p>
               </div>
               <button
-                onClick={() => handleSendCopilot('Listar todos os títulos a pagar vencendo esta semana')}
-                className="text-xs font-semibold text-[#004fce] hover:underline flex items-center gap-1"
+                onClick={() => handleSendCopilot(`Listar registros detalhados de ${currentArea.label}`)}
+                className="text-xs font-semibold text-[#004fce] hover:underline flex items-center gap-1 cursor-pointer"
               >
-                <span>Ver todos no Copilot</span>
+                <span>Consultar no Copilot</span>
                 <ExternalLink className="w-3 h-3" />
               </button>
             </div>
@@ -475,47 +815,27 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#f8fafc] text-[#64748b] font-bold uppercase tracking-wider border-b border-[#e2e8f0]">
                   <tr>
-                    <th className="px-6 py-3">Data / Vencimento</th>
-                    <th className="px-6 py-3">Descrição / Fornecedor / Cliente</th>
-                    <th className="px-6 py-3">Tipo</th>
-                    <th className="px-6 py-3 text-right">Valor</th>
-                    <th className="px-6 py-3 text-center">Status</th>
+                    {currentArea.tableHeaders.map((header, hIdx) => (
+                      <th key={hIdx} className={`px-6 py-3 ${hIdx === currentArea.tableHeaders.length - 2 ? 'text-right' : hIdx === currentArea.tableHeaders.length - 1 ? 'text-center' : ''}`}>
+                        {header}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e2e8f0]">
-                  <tr className="hover:bg-[#f8fafc] transition-colors">
-                    <td className="px-6 py-3.5 font-medium text-[#64748b]">Hoje, 09:41</td>
-                    <td className="px-6 py-3.5 font-semibold text-[#0f172a]">Pagamento Fornecedor ABC Logística</td>
-                    <td className="px-6 py-3.5 text-[#64748b]">Contas a Pagar</td>
-                    <td className="px-6 py-3.5 text-right font-bold text-[#ef4444]">- R$ 12.450,00</td>
-                    <td className="px-6 py-3.5 text-center">
-                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#22c55e]/10 text-[#22c55e]">
-                        Liquidado
-                      </span>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-[#f8fafc] transition-colors">
-                    <td className="px-6 py-3.5 font-medium text-[#64748b]">Ontem, 15:20</td>
-                    <td className="px-6 py-3.5 font-semibold text-[#0f172a]">Recebimento NF-e 4589 - Distribuidora Sul</td>
-                    <td className="px-6 py-3.5 text-[#64748b]">Contas a Receber</td>
-                    <td className="px-6 py-3.5 text-right font-bold text-[#22c55e]">+ R$ 8.900,00</td>
-                    <td className="px-6 py-3.5 text-center">
-                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#22c55e]/10 text-[#22c55e]">
-                        Recebido
-                      </span>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-[#f8fafc] transition-colors">
-                    <td className="px-6 py-3.5 font-medium text-[#64748b]">Amanhã, 10:00</td>
-                    <td className="px-6 py-3.5 font-semibold text-[#0f172a]">Impostos Federais - DARF Simples</td>
-                    <td className="px-6 py-3.5 text-[#64748b]">Tributário</td>
-                    <td className="px-6 py-3.5 text-right font-bold text-[#ef4444]">- R$ 45.120,00</td>
-                    <td className="px-6 py-3.5 text-center">
-                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#f59e0b]/10 text-[#f59e0b]">
-                        Agendado
-                      </span>
-                    </td>
-                  </tr>
+                  {currentArea.tableRows.map((row, rIdx) => (
+                    <tr key={rIdx} className="hover:bg-[#f8fafc] transition-colors">
+                      <td className="px-6 py-3.5 font-medium text-[#64748b]">{row.col1}</td>
+                      <td className="px-6 py-3.5 font-semibold text-[#0f172a]">{row.col2}</td>
+                      <td className="px-6 py-3.5 text-[#64748b]">{row.col3}</td>
+                      <td className={`px-6 py-3.5 text-right font-bold ${row.col4Class || 'text-[#0f172a]'}`}>{row.col4}</td>
+                      <td className="px-6 py-3.5 text-center">
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${row.statusClass}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -534,7 +854,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
               <div className="font-bold text-[14px] text-[#0f172a]">Copiloto IA</div>
               <div className="flex items-center gap-1.5 text-[11px] text-[#22c55e]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-ping"></span>
-                <span className="font-semibold">Conectado ao Protheus</span>
+                <span className="font-semibold">{currentArea.label} ({currentArea.module})</span>
               </div>
             </div>
           </div>
@@ -542,12 +862,12 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
             onClick={() => setCopilotMessages([
               {
                 role: 'assistant',
-                text: 'Olá! Sou seu parceiro analítico conectado ao Protheus. Em que posso ajudar hoje?',
-                suggestions: ['Resumo do faturamento', 'Duplicatas em aberto', 'Últimos pedidos']
+                text: currentArea.initialCopilotMsg,
+                suggestions: currentArea.copilotSuggestions
               }
             ])}
-            className="p-1.5 text-[#94a3b8] hover:text-[#0f172a] hover:bg-[#f1f5f9] rounded-lg transition-colors"
-            title="Limpar conversa"
+            className="p-1.5 text-[#94a3b8] hover:text-[#0f172a] hover:bg-[#f1f5f9] rounded-lg transition-colors cursor-pointer"
+            title="Reiniciar conversa"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -572,7 +892,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
                     <button
                       key={sIndex}
                       onClick={() => handleSendCopilot(sug)}
-                      className="px-2.5 py-1 rounded-full bg-white border border-[#e2e8f0] text-[11px] font-semibold text-[#004fce] hover:bg-[#e0ecff] transition-all flex items-center gap-1 shadow-sm"
+                      className="px-2.5 py-1 rounded-full bg-white border border-[#e2e8f0] text-[11px] font-semibold text-[#004fce] hover:bg-[#e0ecff] transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                     >
                       <Sparkles className="w-3 h-3 text-[#004fce]" />
                       <span>{sug}</span>
@@ -586,7 +906,7 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
           {isCopilotLoading && (
             <div className="flex items-center gap-2 p-3 bg-white rounded-xl border border-[#e2e8f0] text-xs text-[#64748b] shadow-sm">
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#004fce]" />
-              <span>Consultando Oracle Protheus via QueryRest...</span>
+              <span>Consultando {currentArea.module} via Oracle REST...</span>
             </div>
           )}
         </div>
@@ -608,14 +928,14 @@ export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
                   handleSendCopilot();
                 }
               }}
-              placeholder="Pergunte ao Protheus..."
+              placeholder={`Pergunte ao Protheus sobre ${currentArea.label}...`}
               rows={2}
               className="w-full pl-3 pr-10 py-2.5 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-[13px] placeholder-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#004fce]/20 focus:border-[#004fce] resize-none"
             />
             <button
               type="submit"
               disabled={!copilotQuestion.trim() || isCopilotLoading}
-              className="absolute right-2 bottom-3 p-1.5 bg-[#004fce] text-white rounded-lg hover:bg-[#003ea6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              className="absolute right-2 bottom-3 p-1.5 bg-[#004fce] text-white rounded-lg hover:bg-[#003ea6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
             </button>

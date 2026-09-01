@@ -7,10 +7,10 @@ export default function App() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const pageParam = urlParams.get('page');
+      if (pageParam === 'workspace' || pageParam === 'agent' || pageParam === 'chat') return 'workspace';
       if (pageParam === 'dashboard' || pageParam === 'executivo') return 'dashboard';
-      if (pageParam === 'workspace' || pageParam === 'agent') return 'workspace';
     } catch {}
-    return 'workspace';
+    return 'dashboard';
   });
 
   useEffect(() => {
