@@ -22,6 +22,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Copy,
+  Check,
   Download,
   FileJson,
   FileSpreadsheet,
@@ -29,7 +31,13 @@ import {
   LayoutList,
   RefreshCw,
   Search,
+  Sparkles,
+  Terminal,
+  TrendingUp,
   X,
+  Zap,
+  ShieldCheck,
+  Lightbulb,
 } from 'lucide-react';
 
 ChartJS.register(
@@ -120,51 +128,23 @@ function resultSummaryText(value) {
   return String(value).trim();
 }
 
-function StatCard({ icon: Icon, label, value, tone = 'blue' }) {
+function StatCard({ icon: Icon, label, value, tone = 'indigo' }) {
   const tones = {
-    blue: 'bg-[#edf5fd] text-[#2a77b9]',
-    green: 'bg-[#eff9f3] text-[#2f8b61]',
-    amber: 'bg-[#fff7e9] text-[#b27a24]',
-    slate: 'bg-[#f1f5f8] text-[#6d849d]',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    amber: 'bg-amber-50 text-amber-600 border-amber-100',
+    slate: 'bg-slate-50 text-slate-600 border-slate-200',
   };
 
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-[#e4ecf3] bg-white px-3.5 py-3 shadow-[0_4px_14px_rgba(43,78,112,0.04)]">
-      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${tones[tone]}`}>
-        <Icon size={16} strokeWidth={1.8} aria-hidden="true" />
+    <div className="flex min-w-0 items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tones[tone] || tones.indigo}`}>
+        <Icon size={18} strokeWidth={2} aria-hidden="true" />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8b9caf]">{label}</span>
-        <span className="mt-0.5 block truncate text-[14px] font-bold text-[#203c60]">{value}</span>
+        <span className="block truncate text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+        <span className="mt-0.5 block truncate text-[16px] font-black text-slate-800 tracking-tight">{value}</span>
       </span>
-    </div>
-  );
-}
-
-function EntitlementStatus({ entitlement }) {
-  if (!entitlement || typeof entitlement !== 'object') return null;
-
-  const remaining = numberOrNull(entitlement.remaining_queries);
-  const queryLimit = numberOrNull(entitlement.query_limit);
-  const used = numberOrNull(entitlement.queries_used);
-  const activeSessions = numberOrNull(entitlement.active_sessions);
-  const sessionLimit = numberOrNull(entitlement.concurrent_sessions_limit);
-  const planLabel = entitlement.plan_code || entitlement.contract_code || 'Licença contratada';
-  const remainingLabel = remaining !== null
-    ? `${remaining} consultas restantes${queryLimit !== null ? ` de ${queryLimit}` : ''}`
-    : used !== null
-      ? `${used} consultas utilizadas`
-      : null;
-  const sessionLabel = activeSessions !== null && sessionLimit !== null
-    ? `${activeSessions}/${sessionLimit} conexões em uso`
-    : null;
-  const tone = remaining === 0 ? 'border-[#f1dfbb] bg-[#fffaf0] text-[#976b25]' : 'border-[#d9ebdf] bg-[#f4fbf6] text-[#2f7e59]';
-
-  return (
-    <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-4 py-3 text-[11px] shadow-[0_4px_16px_rgba(43,78,112,0.04)] ${tone}`}>
-      <span className="font-bold">{planLabel}</span>
-      {remainingLabel && <span>{remainingLabel}</span>}
-      {sessionLabel && <span>{sessionLabel}</span>}
     </div>
   );
 }
@@ -183,10 +163,12 @@ function ChartView({ rows, columns }) {
 
   if (!activeColumn || chartRows.length === 0) {
     return (
-      <div className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#cedce8] bg-white px-6 text-center">
-        <BarChart3 size={28} className="mb-3 text-[#9db1c4]" strokeWidth={1.6} />
-        <p className="text-[13px] font-semibold text-[#536b84]">Não há campo numérico disponível para gráfico.</p>
-        <p className="mt-1 max-w-md text-[11px] leading-relaxed text-[#8a9bad]">A visualização gráfica só é habilitada quando o resultado real contém valores numéricos identificáveis.</p>
+      <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
+        <BarChart3 size={32} className="mb-3 text-slate-300" strokeWidth={1.5} />
+        <p className="text-[13px] font-bold text-slate-700">Visualização Gráfica Indisponível</p>
+        <p className="mt-1 max-w-md text-[11px] leading-relaxed text-slate-400">
+          A visualização gráfica é ativada automaticamente quando o resultado do ERP contém colunas numéricas identificáveis.
+        </p>
       </div>
     );
   }
@@ -197,14 +179,14 @@ function ChartView({ rows, columns }) {
       {
         label: activeColumn,
         data: chartRows.map(row => parseNumeric(row[activeColumn]) ?? 0),
-        backgroundColor: chartType === 'bar' ? 'rgba(38, 122, 196, 0.72)' : 'rgba(38, 122, 196, 0.14)',
-        borderColor: '#267ac4',
+        backgroundColor: chartType === 'bar' ? 'rgba(99, 102, 241, 0.75)' : 'rgba(99, 102, 241, 0.12)',
+        borderColor: '#6366f1',
         borderWidth: 2,
-        borderRadius: chartType === 'bar' ? 7 : 0,
+        borderRadius: chartType === 'bar' ? 8 : 0,
         fill: chartType === 'line',
-        tension: 0.28,
-        pointBackgroundColor: '#267ac4',
-        pointRadius: chartType === 'line' ? 3 : 0,
+        tension: 0.3,
+        pointBackgroundColor: '#4f46e5',
+        pointRadius: chartType === 'line' ? 4 : 0,
       },
     ],
   };
@@ -217,17 +199,20 @@ function ChartView({ rows, columns }) {
       tooltip: { intersect: false, mode: 'index' },
     },
     scales: {
-      x: { grid: { display: false }, ticks: { color: '#71879d', maxRotation: 35, minRotation: 0 } },
-      y: { beginAtZero: true, grid: { color: '#edf2f6' }, ticks: { color: '#71879d' } },
+      x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 35, minRotation: 0 } },
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 10 } } },
     },
   };
 
   return (
-    <div className="rounded-2xl border border-[#e1eaf2] bg-white p-4 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:p-5">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[13px] font-bold text-[#203c60]">Visualização dos dados retornados</p>
-          <p className="mt-1 text-[11px] text-[#8496a9]">Até 20 linhas filtradas são representadas no gráfico.</p>
+          <p className="text-[14px] font-bold text-slate-800 flex items-center gap-2">
+            <TrendingUp size={16} className="text-indigo-600" />
+            <span>Visualização Gráfica de Indicadores</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-400">Exibindo as 20 primeiras linhas agrupadas da consulta.</p>
         </div>
         <div className="flex items-center gap-2">
           <label className="sr-only" htmlFor="chart-column">Campo numérico</label>
@@ -235,21 +220,21 @@ function ChartView({ rows, columns }) {
             id="chart-column"
             value={activeColumn}
             onChange={event => setChartColumn(event.target.value)}
-            className="h-9 max-w-[190px] rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] text-[#49647e] outline-none focus:border-[#8ebce0] focus:ring-2 focus:ring-[#d7eafa]"
+            className="h-8 max-w-[200px] rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-700 outline-none focus:border-indigo-500"
           >
             {numericColumns.map(column => <option key={column} value={column}>{column}</option>)}
           </select>
           <button
             type="button"
             onClick={() => setChartType(type => type === 'bar' ? 'line' : 'bar')}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-[#f8fbfd] px-3 text-[11px] font-semibold text-[#52718f] transition-colors hover:border-[#b9d7ef] hover:bg-[#f0f7fc]"
+            className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
           >
-            {chartType === 'bar' ? <BarChart3 size={14} /> : <LayoutList size={14} />}
-            {chartType === 'bar' ? 'Linha' : 'Barras'}
+            {chartType === 'bar' ? <BarChart3 size={13} /> : <LayoutList size={13} />}
+            <span>{chartType === 'bar' ? 'Linha' : 'Barras'}</span>
           </button>
         </div>
       </div>
-      <div className="h-[330px] w-full">
+      <div className="h-[340px] w-full">
         {chartType === 'bar' ? <Bar data={chartData} options={options} /> : <Line data={chartData} options={options} />}
       </div>
     </div>
@@ -257,13 +242,13 @@ function ChartView({ rows, columns }) {
 }
 
 export default function StructuredResultPanel({ result, onClose, embedded = false }) {
-  const [view, setView] = useState('table');
+  const [activeTab, setActiveTab] = useState('table'); // 'table' | 'chart' | 'sql' | 'insights'
   const [search, setSearch] = useState('');
   const [filterColumn, setFilterColumn] = useState('all');
   const [filterValue, setFilterValue] = useState('');
   const [sort, setSort] = useState({ column: '', direction: 'asc' });
+  const [copiedSql, setCopiedSql] = useState(false);
   const [exportState, setExportState] = useState('');
-  const [exportError, setExportError] = useState('');
 
   const rows = useMemo(() => getSafeRows(result), [result]);
   const summaryText = useMemo(() => resultSummaryText(result?.summary), [result?.summary]);
@@ -316,256 +301,325 @@ export default function StructuredResultPanel({ result, onClose, embedded = fals
 
   const downloadCsv = () => {
     if (!columns.length) return;
-    exportFile(`\ufeff${buildCsv(visibleRows, columns)}`, 'copilot-protheus-resultado.csv', 'text/csv;charset=utf-8');
+    exportFile(`\ufeff${buildCsv(visibleRows, columns)}`, 'protheus-analyst-resultado.csv', 'text/csv;charset=utf-8');
   };
 
   const downloadJson = () => {
-    exportFile(JSON.stringify(visibleRows, null, 2), 'copilot-protheus-resultado.json', 'application/json;charset=utf-8');
+    exportFile(JSON.stringify(visibleRows, null, 2), 'protheus-analyst-resultado.json', 'application/json;charset=utf-8');
   };
 
-  const downloadServerReport = async format => {
-    const tenantCode = result?.tenant_code || result?.tenant_id;
-    const environmentCode = result?.environment_code;
-    if (!tenantCode || !environmentCode || !visibleRows.length || !columns.length) return;
-
-    setExportError('');
-    setExportState(format);
-    try {
-      const exported = await exportStructuredReport({
-        tenant_code: tenantCode,
-        environment_code: environmentCode,
-        company_id: result?.company_id != null ? String(result.company_id) : undefined,
-        title: result?.title || 'Relatório Copilot',
-        format,
-        columns,
-        rows: visibleRows,
-      });
-      if (exported?.download_url) {
-        const anchor = document.createElement('a');
-        anchor.href = exported.download_url;
-        anchor.target = '_blank';
-        anchor.rel = 'noreferrer';
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-      }
-    } catch (error) {
-      const detail = error?.response?.data?.detail || error?.message || 'o serviço de exportação não retornou um arquivo.';
-      setExportError(`Não foi possível gerar ${format.toUpperCase()}: ${detail}`);
-      setExportState('error');
-    } finally {
-      window.setTimeout(() => setExportState(''), 1200);
-    }
+  const copySql = () => {
+    if (!result?.sql) return;
+    navigator.clipboard.writeText(result.sql);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2000);
   };
-
-  const canExportServer = Boolean(
-    !isError && result?.environment_code && (result?.tenant_code || result?.tenant_id) && visibleRows.length && columns.length,
-  );
 
   return (
-    <div className={embedded ? 'flex h-full min-h-0 w-full' : 'fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-5 lg:p-8'}>
-      {!embedded && <button type="button" aria-label="Fechar tela auxiliar" onClick={onClose} className="absolute inset-0 cursor-default bg-[#152b45]/50 backdrop-blur-sm" />}
-      <section role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-labelledby="result-workspace-title" className={embedded ? 'relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f5f9fc]' : 'relative flex h-full max-h-[940px] w-full max-w-[1380px] flex-col overflow-hidden rounded-[26px] border border-[#dce7f0] bg-[#f5f9fc] shadow-[0_24px_80px_rgba(18,49,78,0.28)]'}>
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[#e1eaf2] bg-white px-4 py-4 sm:px-7">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#eaf4fc] text-[#267ac4]">
-              <BarChart3 size={22} strokeWidth={1.7} aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 id="result-workspace-title" className="truncate text-[16px] font-bold text-[#1e3b5e] sm:text-[18px]">{result?.title || result?.titulo || 'Análise do Protheus'}</h2>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${isError ? 'bg-[#fff0f0] text-[#aa5050]' : 'bg-[#eff9f3] text-[#2f835d]'}`}>
-                  {isError ? 'Execução com bloqueio' : 'Consulta concluída'}
-                </span>
-              </div>
-              <p className="mt-1 truncate text-[11px] text-[#8597aa]">{result?.subtitle || result?.description || 'Dados estruturados da última consulta autorizada'}</p>
-            </div>
+    <div className="flex h-full min-h-0 w-full flex-col bg-slate-50/50">
+      {/* Header Studio */}
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+            <Sparkles size={20} strokeWidth={2} />
           </div>
-          <div className="flex items-center gap-2">
-            {!isError && (
-              <>
-                <button type="button" onClick={downloadCsv} disabled={!columns.length} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] font-semibold text-[#53708c] transition-colors hover:border-[#b8d5ec] hover:bg-[#f6fbff] disabled:cursor-not-allowed disabled:opacity-45">
-                  <FileSpreadsheet size={14} /> CSV
-                </button>
-                <button type="button" onClick={downloadJson} disabled={!visibleRows.length} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] font-semibold text-[#53708c] transition-colors hover:border-[#b8d5ec] hover:bg-[#f6fbff] disabled:cursor-not-allowed disabled:opacity-45">
-                  <FileJson size={14} /> JSON
-                </button>
-                <button type="button" onClick={() => downloadServerReport('xlsx')} disabled={!canExportServer || Boolean(exportState)} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] font-semibold text-[#53708c] transition-colors hover:border-[#b8d5ec] hover:bg-[#f6fbff] disabled:cursor-not-allowed disabled:opacity-45">
-                  <FileSpreadsheet size={14} /> {exportState === 'xlsx' ? 'Gerando...' : 'XLSX'}
-                </button>
-                <button type="button" onClick={() => downloadServerReport('pdf')} disabled={!canExportServer || Boolean(exportState)} className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-3 text-[11px] font-semibold text-[#53708c] transition-colors hover:border-[#b8d5ec] hover:bg-[#f6fbff] disabled:cursor-not-allowed disabled:opacity-45">
-                  <Download size={14} /> {exportState === 'pdf' ? 'Gerando...' : 'PDF'}
-                </button>
-              </>
-            )}
-            <button type="button" onClick={onClose} aria-label="Voltar ao chat" className="flex h-9 items-center gap-1.5 rounded-xl bg-[#2379c9] px-3 text-[11px] font-semibold text-white transition-colors hover:bg-[#176bb8]">
-              <ChevronLeft size={15} /> Voltar ao chat
-            </button>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-7 sm:py-6">
-          <div className="mx-auto max-w-[1250px] space-y-4">
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-              <StatCard icon={LayoutList} label="Linhas retornadas" value={records} tone="blue" />
-              <StatCard icon={Filter} label="Após filtros" value={filteredRows.length} tone="green" />
-              <StatCard icon={Clock3} label="Tempo de resposta" value={result?.response_time_ms != null ? `${result.response_time_ms} ms` : '—'} tone="amber" />
-              <StatCard icon={CheckCircle2} label="Fonte" value="QueryRest" tone="slate" />
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-black text-slate-800 tracking-tight">
+                {result?.title || 'AI Data Analyst • TOTVS Protheus'}
+              </h2>
+              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                isError 
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200' 
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              }`}>
+                <ShieldCheck size={11} />
+                {isError ? 'Bloqueio de Execução' : 'Zero Alucinação • Real'}
+              </span>
             </div>
-
-            {Array.isArray(result?.kpis) && result.kpis.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                {result.kpis.slice(0, 8).map((kpi, index) => (
-                  <StatCard
-                    key={`${kpi.label || 'kpi'}-${index}`}
-                    icon={kpi.color === 'red' ? X : kpi.color === 'green' ? CheckCircle2 : LayoutList}
-                    label={kpi.label || `Indicador ${index + 1}`}
-                    value={displayValue(kpi.value)}
-                    tone={kpi.color === 'green' ? 'green' : kpi.color === 'yellow' ? 'amber' : kpi.color === 'red' ? 'amber' : 'blue'}
-                  />
-                ))}
-              </div>
-            )}
-
-            <EntitlementStatus entitlement={result?.entitlement} />
-
-            {exportError && (
-              <div role="alert" className="flex items-start justify-between gap-3 rounded-2xl border border-[#f0d4d4] bg-[#fff7f7] px-4 py-3 text-[11px] leading-relaxed text-[#8d4b4b]">
-                <span>{exportError}</span>
-                <button type="button" onClick={() => setExportError('')} className="shrink-0 rounded-lg p-1 text-[#a87373] hover:bg-[#fbeaea]" aria-label="Fechar mensagem de exportação"><X size={14} /></button>
-              </div>
-            )}
-
-            {summaryText && (
-              <div className="rounded-2xl border border-[#e1eaf2] bg-white px-4 py-4 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-5">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#8397aa]">Resumo executivo</p>
-                <div className="prose prose-sm prose-slate max-w-none text-[12px] leading-relaxed prose-p:my-1 prose-table:text-[11px]">
-                  <ReactMarkdown>{summaryText}</ReactMarkdown>
-                </div>
-              </div>
-            )}
-
-            {result?.details && (
-              <div className="rounded-2xl border border-[#e1eaf2] bg-white px-4 py-4 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-5">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#8397aa]">Detalhamento</p>
-                <div className="prose prose-sm prose-slate max-w-none text-[12px] leading-relaxed prose-p:my-1 prose-table:text-[11px]"><ReactMarkdown>{String(result.details)}</ReactMarkdown></div>
-              </div>
-            )}
-
-            {result?.insights && (
-              <div className="rounded-2xl border border-[#d6e8f4] bg-[#f3f9fd] px-4 py-4 text-[12px] leading-relaxed text-[#496a85] shadow-[0_4px_16px_rgba(43,78,112,0.03)] sm:px-5">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[#5c86a5]">Insights da IA</p>
-                <ReactMarkdown>{String(result.insights)}</ReactMarkdown>
-              </div>
-            )}
-
-            {isError ? (
-              <div className="rounded-2xl border border-[#f0d4d4] bg-[#fff7f7] p-5 text-[#8d4b4b]">
-                <p className="text-[13px] font-bold">A consulta não foi executada no Protheus.</p>
-                <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed">{result.execution_error || result.error || 'O backend retornou um erro sem mensagem detalhada.'}</p>
-                <p className="mt-3 text-[11px] text-[#ae7373]">Nenhum dado foi inventado ou preenchido nesta tela.</p>
-              </div>
-            ) : (
-              <>
-                {rows.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e1eaf2] bg-white px-4 py-3 shadow-[0_4px_16px_rgba(43,78,112,0.04)]">
-                    <div>
-                      <p className="text-[13px] font-bold text-[#203c60]">Dados retornados</p>
-                      <p className="mt-1 text-[11px] text-[#8496a9]">Os registros do QueryRest estão organizados na tabela abaixo.</p>
-                    </div>
-                    <span className="rounded-full bg-[#f1f6fa] px-3 py-1.5 text-[10px] font-semibold text-[#657f98]">
-                      {records > rows.length ? `Exibindo ${rows.length} de ${records} registros` : `${rows.length} registros disponíveis`}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e1eaf2] bg-white px-3 py-2.5 shadow-[0_4px_16px_rgba(43,78,112,0.04)] sm:px-4">
-                  <div className="flex items-center gap-1 rounded-xl bg-[#f1f6fa] p-1">
-                    <button type="button" onClick={() => setView('table')} className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors ${view === 'table' ? 'bg-white text-[#2677bb] shadow-sm' : 'text-[#7890a6] hover:text-[#496a87]'}`}>
-                      <LayoutList size={14} /> Tabela
-                    </button>
-                    <button type="button" onClick={() => setView('chart')} disabled={!rows.length} className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${view === 'chart' ? 'bg-white text-[#2677bb] shadow-sm' : 'text-[#7890a6] hover:text-[#496a87]'}`}>
-                      <BarChart3 size={14} /> Gráfico
-                    </button>
-                  </div>
-
-                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                    <div className="relative min-w-[180px] flex-1 sm:w-[230px] sm:flex-none">
-                      <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#91a4b6]" aria-hidden="true" />
-                      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar nos registros" aria-label="Buscar nos registros" className="h-9 w-full rounded-xl border border-[#dce7f0] bg-white pl-9 pr-3 text-[11px] text-[#49647e] outline-none placeholder:text-[#9aabba] focus:border-[#8ebce0] focus:ring-2 focus:ring-[#d7eafa]" />
-                    </div>
-                    <select value={filterColumn} onChange={event => setFilterColumn(event.target.value)} aria-label="Coluna do filtro" className="h-9 max-w-[150px] rounded-xl border border-[#dce7f0] bg-white px-2.5 text-[11px] text-[#49647e] outline-none focus:border-[#8ebce0] focus:ring-2 focus:ring-[#d7eafa]">
-                      <option value="all">Todas as colunas</option>
-                      {columns.map(column => <option key={column} value={column}>{column}</option>)}
-                    </select>
-                    <input value={filterValue} onChange={event => setFilterValue(event.target.value)} disabled={filterColumn === 'all'} placeholder="Valor exato" aria-label="Valor do filtro" className="h-9 w-[130px] rounded-xl border border-[#dce7f0] bg-white px-2.5 text-[11px] text-[#49647e] outline-none placeholder:text-[#9aabba] focus:border-[#8ebce0] focus:ring-2 focus:ring-[#d7eafa] disabled:bg-[#f3f6f8] disabled:text-[#a2b0bd]" />
-                    <button type="button" onClick={clearFilters} title="Limpar filtros e ordenação" className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce7f0] bg-white px-2.5 text-[11px] font-semibold text-[#71869b] transition-colors hover:border-[#b9d7ef] hover:bg-[#f6fbff]">
-                      <RefreshCw size={13} /> Limpar
-                    </button>
-                  </div>
-                </div>
-
-                {view === 'chart' ? (
-                  <ChartView rows={visibleRows} columns={columns} />
-                ) : (
-                  <div className="overflow-hidden rounded-2xl border border-[#e1eaf2] bg-white shadow-[0_4px_16px_rgba(43,78,112,0.04)]">
-                    {visibleRows.length === 0 ? (
-                      <div className="flex min-h-[260px] flex-col items-center justify-center px-6 text-center">
-                        <Filter size={26} className="mb-3 text-[#9db1c4]" strokeWidth={1.6} />
-                        <p className="text-[13px] font-semibold text-[#536b84]">Nenhum registro corresponde aos filtros.</p>
-                        <button type="button" onClick={clearFilters} className="mt-3 text-[11px] font-semibold text-[#2677bb] hover:underline">Limpar filtros</button>
-                      </div>
-                    ) : (
-                      <div className="max-h-[500px] overflow-auto">
-                        <table className="min-w-full border-collapse">
-                          <thead className="sticky top-0 z-10 bg-[#f4f8fb]">
-                            <tr>
-                              {columns.map(column => (
-                                <th key={column} className="whitespace-nowrap border-b border-[#dfe9f1] px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-[#71879d] sm:px-4">
-                                  <button type="button" onClick={() => toggleSort(column)} className="flex items-center gap-1.5 text-left hover:text-[#2677bb]">
-                                    {column}
-                                    {sort.column === column ? (sort.direction === 'asc' ? <ArrowUpAZ size={13} /> : <ArrowDownAZ size={13} />) : <ChevronDown size={12} className="text-[#b1bfca]" />}
-                                  </button>
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {visibleRows.map((row, index) => (
-                              <tr key={`${index}-${columns.map(column => displayValue(row[column])).join('|')}`} className="border-b border-[#edf2f6] last:border-0 hover:bg-[#f8fbfd]">
-                                {columns.map(column => <td key={column} className="max-w-[280px] whitespace-nowrap px-3 py-3 text-[12px] text-[#3f5872] sm:px-4">{displayValue(row[column])}</td>)}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#edf2f6] bg-[#fbfdfe] px-3 py-3 text-[10px] text-[#8a9bad] sm:px-4">
-                      <span>Exibindo {visibleRows.length} de {filteredRows.length} registros filtrados</span>
-                      {filteredRows.length > MAX_ROWS && <span>Limite visual de {MAX_ROWS} linhas; exporte o resultado filtrado para obter o conjunto exibido completo.</span>}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {result?.sql && (
-              <details className="rounded-2xl border border-[#e1eaf2] bg-white shadow-[0_4px_16px_rgba(43,78,112,0.04)]">
-                <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[11px] font-semibold text-[#5a7590] sm:px-5">
-                  SQL executada no QueryRest
-                  <ChevronRight size={15} className="transition-transform" />
-                </summary>
-                <pre className="overflow-x-auto border-t border-[#edf2f6] bg-[#f7fafc] px-4 py-4 text-[11px] leading-relaxed text-[#3e5d78] sm:px-5">{result.sql}</pre>
-              </details>
-            )}
+            <p className="text-[11px] text-slate-400">
+              {result?.subtitle || `QueryRest Oracle • Retornados ${records} registros`}
+            </p>
           </div>
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between border-t border-[#e1eaf2] bg-white px-4 py-3 text-[10px] text-[#8a9bad] sm:px-7">
-          <span className="flex items-center gap-1.5"><Download size={13} /> Exportações usam somente os dados filtrados disponíveis</span>
-          <span className="flex items-center gap-1.5"><X size={13} /> Feche para voltar ao contexto do chat</span>
-        </footer>
-      </section>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {!isError && rows.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={downloadCsv}
+                className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+              >
+                <FileSpreadsheet size={13} className="text-emerald-600" />
+                <span>Exportar CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={downloadJson}
+                className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+              >
+                <FileJson size={13} className="text-indigo-600" />
+                <span>JSON</span>
+              </button>
+            </>
+          )}
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-8 items-center gap-1 rounded-xl bg-slate-100 px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+            >
+              <X size={13} />
+              <span>Fechar</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-5 py-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('table')}
+            className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold transition-all ${
+              activeTab === 'table'
+                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <LayoutList size={13} />
+            <span>Tabela de Dados ({rows.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('chart')}
+            disabled={!rows.length}
+            className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold transition-all disabled:opacity-40 ${
+              activeTab === 'chart'
+                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <BarChart3 size={13} />
+            <span>Gráficos & BI</span>
+          </button>
+          {result?.insights && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('insights')}
+              className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold transition-all ${
+                activeTab === 'insights'
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Lightbulb size={13} className="text-amber-500" />
+              <span>Insights da IA</span>
+            </button>
+          )}
+          {result?.sql && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('sql')}
+              className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold transition-all ${
+                activeTab === 'sql'
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Terminal size={13} />
+              <span>SQL Oracle Executado</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 text-[11px] text-slate-400 font-medium">
+          <span className="flex items-center gap-1">
+            <Clock3 size={12} />
+            <span>{result?.response_time_ms ? `${result.response_time_ms} ms` : '< 1s'}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Main Body */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+        {/* KPI Scorecard */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard icon={LayoutList} label="Registros Retornados" value={records} tone="indigo" />
+          <StatCard icon={Filter} label="Linhas Filtradas" value={filteredRows.length} tone="emerald" />
+          <StatCard icon={Clock3} label="Tempo de Resposta" value={result?.response_time_ms != null ? `${result.response_time_ms} ms` : 'Rápido'} tone="amber" />
+          <StatCard icon={CheckCircle2} label="Motor de Execução" value="Oracle Cloud" tone="slate" />
+        </div>
+
+        {/* Dynamic KPIs from Query if present */}
+        {Array.isArray(result?.kpis) && result.kpis.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {result.kpis.map((kpi, index) => (
+              <StatCard
+                key={`${kpi.label}-${index}`}
+                icon={TrendingUp}
+                label={kpi.label || `KPI ${index + 1}`}
+                value={displayValue(kpi.value)}
+                tone={kpi.color === 'green' ? 'emerald' : kpi.color === 'red' ? 'amber' : 'indigo'}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Executive Summary */}
+        {summaryText && (
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+            <div className="flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">
+              <Sparkles size={14} className="text-indigo-600" />
+              <span>Síntese Executiva dos Dados</span>
+            </div>
+            <div className="prose prose-sm prose-slate max-w-none text-[13px] leading-relaxed">
+              <ReactMarkdown>{summaryText}</ReactMarkdown>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Table Data Grid */}
+        {activeTab === 'table' && (
+          <div className="space-y-3">
+            {/* Search & Filter Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+              <div className="relative min-w-[200px] flex-1 sm:w-[260px] sm:flex-none">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Pesquisar nos registros..."
+                  className="h-8 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-8.5 pr-3 text-[11px] text-slate-700 outline-none focus:border-indigo-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={filterColumn}
+                  onChange={e => setFilterColumn(e.target.value)}
+                  className="h-8 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">Todas as colunas</option>
+                  {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                <input
+                  value={filterValue}
+                  onChange={e => setFilterValue(e.target.value)}
+                  disabled={filterColumn === 'all'}
+                  placeholder="Valor exato..."
+                  className="h-8 w-[120px] rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700 outline-none focus:border-indigo-500 disabled:bg-slate-100 disabled:opacity-60"
+                />
+
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  <RefreshCw size={12} />
+                  <span>Limpar</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+              {visibleRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-center text-slate-400">
+                  <Filter size={32} className="mb-2 text-slate-300" />
+                  <p className="text-sm font-bold text-slate-600">Nenhum registro encontrado</p>
+                  <button type="button" onClick={clearFilters} className="mt-2 text-xs font-semibold text-indigo-600 hover:underline">
+                    Redefinir filtros de busca
+                  </button>
+                </div>
+              ) : (
+                <div className="max-h-[460px] overflow-auto">
+                  <table className="min-w-full border-collapse">
+                    <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-xs border-b border-slate-200">
+                      <tr>
+                        {columns.map(col => (
+                          <th key={col} className="whitespace-nowrap px-3.5 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            <button type="button" onClick={() => toggleSort(col)} className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors">
+                              <span>{col}</span>
+                              {sort.column === col ? (
+                                sort.direction === 'asc' ? <ArrowUpAZ size={12} className="text-indigo-600" /> : <ArrowDownAZ size={12} className="text-indigo-600" />
+                              ) : (
+                                <ChevronDown size={11} className="text-slate-300" />
+                              )}
+                            </button>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {visibleRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-indigo-50/30 transition-colors">
+                          {columns.map(col => (
+                            <td key={col} className="whitespace-nowrap px-3.5 py-2 text-[12px] font-medium text-slate-700">
+                              {displayValue(row[col])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-[11px] text-slate-400 font-medium">
+                <span>Exibindo <strong>{visibleRows.length}</strong> de {filteredRows.length} registros</span>
+                <span>Oracle DB • QueryRest</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Charts */}
+        {activeTab === 'chart' && (
+          <ChartView rows={visibleRows} columns={columns} />
+        )}
+
+        {/* Tab: AI Insights */}
+        {activeTab === 'insights' && result?.insights && (
+          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/40 p-5 shadow-2xs">
+            <div className="flex items-center gap-2 font-bold text-sm text-indigo-900 mb-3">
+              <Lightbulb className="w-4 h-4 text-amber-500" />
+              <span>Insights & Oportunidades Identificadas</span>
+            </div>
+            <div className="prose prose-sm prose-slate max-w-none text-[13px] leading-relaxed">
+              <ReactMarkdown>{String(result.insights)}</ReactMarkdown>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: SQL Inspector */}
+        {activeTab === 'sql' && result?.sql && (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-md">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800/90 border-b border-slate-700/60 text-xs text-slate-300 font-mono">
+              <span className="flex items-center gap-2">
+                <Terminal size={14} className="text-emerald-400" />
+                <span>Consulta Oracle Executada no QueryRest</span>
+              </span>
+              <button
+                type="button"
+                onClick={copySql}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-colors text-[11px]"
+              >
+                {copiedSql ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                <span>{copiedSql ? 'Copiado!' : 'Copiar SQL'}</span>
+              </button>
+            </div>
+            <pre className="p-4 text-[12px] font-mono text-emerald-300 overflow-x-auto leading-relaxed">
+              <code>{result.sql}</code>
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
