@@ -9,6 +9,8 @@ import {
   LayoutDashboard,
   MessageSquare,
   Moon,
+  Plus,
+  RotateCcw,
   Search,
   Settings,
   Sparkles,
@@ -242,6 +244,16 @@ export default function AgentWorkspace() {
     setLoading(false);
   };
 
+  const handleNewConversation = () => {
+    const newId = makeConversationId();
+    setConversationId(newId);
+    setMessages([]);
+    setResult(null);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, newId);
+    } catch {}
+  };
+
   const showWorkspace = Boolean(result);
   const userName = context.user ? context.user.split(' ')[0] : 'Executivo';
 
@@ -470,17 +482,29 @@ export default function AgentWorkspace() {
                     </div>
                   </div>
 
-                  {/* Theme Switcher no modo Iframe */}
-                  {isIframe && (
+                  {/* Ações no modo Iframe (Nova Conversa & Alternador de Tema) */}
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setIsDarkMode(prev => !prev)}
-                      title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-                      className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                      onClick={handleNewConversation}
+                      title="Iniciar nova consulta"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] dark:text-[#60A5FA] hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors cursor-pointer border border-blue-200/60 dark:border-blue-900/60"
                     >
-                      {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+                      <Plus size={13} strokeWidth={2.5} />
+                      <span>Nova Consulta</span>
                     </button>
-                  )}
+
+                    {isIframe && (
+                      <button
+                        type="button"
+                        onClick={() => setIsDarkMode(prev => !prev)}
+                        title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                      >
+                        {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Chat History Stream */}
