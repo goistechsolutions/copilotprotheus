@@ -7,10 +7,9 @@ export default function App() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const pageParam = urlParams.get('page');
-      if (pageParam === 'workspace' || pageParam === 'agent' || pageParam === 'chat') return 'workspace';
       if (pageParam === 'dashboard' || pageParam === 'executivo') return 'dashboard';
     } catch {}
-    return 'dashboard';
+    return 'workspace';
   });
 
   const [selectedArea, setSelectedArea] = useState(() => {
@@ -28,10 +27,16 @@ export default function App() {
       const pageParam = urlParams.get('page');
       const areaParam = urlParams.get('area');
       if (areaParam) setSelectedArea(areaParam);
-      if (pageParam === 'workspace' || pageParam === 'agent' || pageParam === 'chat') {
-        setCurrentPage('workspace');
-      } else {
+      if (pageParam === 'dashboard' || pageParam === 'executivo') {
         setCurrentPage('dashboard');
+        try {
+          window.parent.postMessage({ type: 'cprot-result-state', open: true }, '*');
+        } catch {}
+      } else {
+        setCurrentPage('workspace');
+        try {
+          window.parent.postMessage({ type: 'cprot-result-state', open: false }, '*');
+        } catch {}
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -39,17 +44,16 @@ export default function App() {
   }, []);
 
   const navigateToDashboard = (targetArea) => {
-    if (targetArea) {
-      setSelectedArea(targetArea);
-    }
+    const area = targetArea || 'financeiro';
+    setSelectedArea(area);
     setCurrentPage('dashboard');
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('page', 'dashboard');
-      if (targetArea) {
-        url.searchParams.set('area', targetArea);
-      }
+      url.searchParams.set('area', area);
       window.history.pushState({}, '', url.toString());
+      // Notifica o content-script da extensão para expandir a janela para visualização completa
+      window.parent.postMessage({ type: 'cprot-result-state', open: true }, '*');
     } catch {}
   };
 
@@ -58,7 +62,10 @@ export default function App() {
     try {
       const url = new URL(window.location.href);
       url.searchParams.delete('page');
+      url.searchParams.delete('area');
       window.history.pushState({}, '', url.toString());
+      // Notifica o content-script da extensão para recolher para o tamanho padrão de chat
+      window.parent.postMessage({ type: 'cprot-result-state', open: false }, '*');
     } catch {}
   };
 

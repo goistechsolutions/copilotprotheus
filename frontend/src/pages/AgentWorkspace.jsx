@@ -469,11 +469,11 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
             </div>
           )}
 
-          {/* ESTADO RESULTADO (Ou Modo Iframe) -> Grid 70/30 Split Stitch */}
+          {/* ESTADO RESULTADO (Ou Modo Iframe) -> Grid 70/30 Split Stitch (Apenas Standalone) / Chat Completo (Iframe) */}
           {(showWorkspace || isIframe) && (
-            <div className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 items-stretch min-h-0 h-full">
-              {/* Left Panel: ANALYTICAL DASHBOARD (70%) */}
-              {showWorkspace && (
+            <div className={`flex-1 flex ${!isIframe ? 'flex-col lg:flex-row gap-4 sm:gap-6' : 'flex-col'} items-stretch min-h-0 h-full`}>
+              {/* Left Panel: ANALYTICAL DASHBOARD (Apenas no modo Desktop Standalone) */}
+              {showWorkspace && !isIframe && (
                 <section className="flex-1 lg:w-[70%] min-w-0 flex flex-col">
                   <StructuredResultPanel
                     result={result}
@@ -483,34 +483,31 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                 </section>
               )}
 
-              {/* Right Panel: COPILOT CHAT CONTEXT (30% no Split / 100% no Iframe inicial) */}
+              {/* Right Panel: COPILOT CHAT (100% no Iframe / 30% no Split Standalone) */}
               <aside className={`
                 flex flex-col shrink-0 overflow-hidden
-                ${isIframe && !showWorkspace
-                  ? 'w-full h-full p-2 bg-white dark:bg-[#1E293B] rounded-xl'
+                ${isIframe
+                  ? 'w-full h-full p-2.5 bg-white dark:bg-[#1E293B] rounded-xl'
                   : 'stitch-card p-4 sm:p-5 w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20'}
               `}>
                 {/* Copilot Header */}
-                <div className="p-3 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 rounded-xl mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7.5 h-7.5 rounded-lg bg-[#004FCE] text-white flex items-center justify-center shrink-0">
-                      <Sparkles size={15} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h2 className="text-[13px] font-bold text-[#171C20] dark:text-white leading-tight">
-                          Copiloto Protheus
-                        </h2>
-                        <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
-                      </div>
-                      <p className="text-[10px] text-slate-400">
-                        {context.module ? `Módulo: ${context.module}` : 'Oracle Read Only'}
-                      </p>
-                    </div>
+                <div className="p-2.5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 rounded-xl mb-3">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                      <Database size={10} className="text-[#004FCE]" />
+                      PROTHEUS - {context.branch || '0101'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                      <User size={10} className="text-[#004FCE]" />
+                      {context.user || 'admin'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-[10px] font-semibold text-[#004FCE] dark:text-[#60A5FA] border border-blue-200/60 dark:border-blue-900/60">
+                      {context.module || 'Perfil: Negócio'}
+                    </span>
                   </div>
 
-                  {/* Ações no modo Iframe (Nova Conversa & Alternador de Tema) */}
-                  <div className="flex items-center gap-1.5">
+                  {/* Ações no modo Iframe (Nova Consulta & Alternador de Tema) */}
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={handleNewConversation}
@@ -518,7 +515,7 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                       className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] dark:text-[#60A5FA] hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors cursor-pointer border border-blue-200/60 dark:border-blue-900/60"
                     >
                       <Plus size={13} strokeWidth={2.5} />
-                      <span>Nova Consulta</span>
+                      <span className="hidden sm:inline">Nova Consulta</span>
                     </button>
 
                     {isIframe && (
@@ -526,9 +523,9 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                         type="button"
                         onClick={() => setIsDarkMode(prev => !prev)}
                         title={isDarkMode ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                        className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
                       >
-                        {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+                        {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
                       </button>
                     )}
                   </div>
