@@ -12,19 +12,20 @@ from app.services.ollama_client import _analyze_tool_results, get_system_prompt
 logger = logging.getLogger("app.gemini")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 def get_candidate_gemini_models() -> list[str]:
-    configured = os.getenv("GEMINI_MODEL", "").strip() or getattr(settings, "gemini_model", "") or "gemini-2.0-flash"
-    candidates = [configured, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
-    seen = set()
-    result = []
-    for m in candidates:
-        if m and m not in seen:
-            seen.add(m)
-            result.append(m)
-    return result
+    raw_configured = os.getenv("GEMINI_MODEL", "").strip() or getattr(settings, "gemini_model", "") or "gemini-2.0-flash"
+    
+    # Modelos estáveis e oficiais do Google Gemini
+    valid_official_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+    
+    if raw_configured in valid_official_models:
+        candidates = [raw_configured] + [m for m in valid_official_models if m != raw_configured]
+    else:
+        candidates = valid_official_models
+        
+    return candidates
 
 # Definição das ferramentas no formato da Gemini API
 GEMINI_TOOLS = [
@@ -110,13 +111,11 @@ def _build_gemini_messages(question: str, protheus_data: Optional[dict], intent:
             "role": "user",
             "parts": [{"text": "\n\n".join(context_parts)}]
         })
-        # Gemini requer que a última mensagem seja do usuário. Adicionamos a pergunta logo em seguida
         
     # A última mensagem DEVE ser a do usuário contendo a pergunta
     user_parts = [{"text": question}]
     
     if image:
-        import re
         match = re.match(r"data:([^;]+);base64,(.+)", image)
         if match:
             mime_type = match.group(1)
@@ -176,41 +175,31 @@ async def ask_gemini(
     models_to_try = get_candidate_gemini_models()
     last_error_msg = ""
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=35.0) as client:
         resp = None
         current_successful_model = None
         
         for current_model in models_to_try:
             url = f"{GEMINI_BASE_URL}/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
-            for attempt in range(2):
-                try:
-                    resp = await client.post(url, json=payload)
-                    resp.raise_for_status()
+            try:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
                     current_successful_model = current_model
                     break
-                except httpx.HTTPStatusError as e:
-                    last_error_msg = f"HTTP {e.response.status_code} - {e.response.text}"
-                    if e.response.status_code in (503, 429, 404):
-                        logger.warning(f"Gemini API ({current_model}) status={e.response.status_code}. Tentando fallback...")
-                        if attempt == 0 and e.response.status_code in (503, 429):
-                            await asyncio.sleep(1.0)
-                            continue
-                        break
-                    else:
-                        return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
-                except httpx.RequestError as e:
-                    last_error_msg = str(e)
-                    logger.warning(f"Erro de conexão com Gemini ({current_model}): {e}")
-                    if attempt == 0:
-                        await asyncio.sleep(1.0)
-                        continue
-                    break
-            if resp is not None and getattr(resp, "status_code", 200) == 200:
-                break
+                else:
+                    last_error_msg = f"HTTP {resp.status_code} - {resp.text[:300]}"
+                    logger.warning("Gemini API (%s) status=%s. Tentando próximo modelo...", current_model, resp.status_code)
+                    resp = None
+                    continue
+            except httpx.RequestError as e:
+                last_error_msg = str(e)
+                logger.warning("Erro de conexão com Gemini (%s): %s", current_model, e)
+                resp = None
+                continue
 
         if resp is None or getattr(resp, "status_code", 200) != 200:
             if "503" in last_error_msg:
-                return "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
+                return "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, tente novamente."
             return f"Erro na API do Gemini: {last_error_msg}"
             
         resp_json = resp.json()
@@ -223,15 +212,13 @@ async def ask_gemini(
         tool_calls = [p.get("functionCall") for p in parts if "functionCall" in p]
         
         if tool_calls:
-            # Adicionar a resposta do modelo (com o functionCall) ao histórico do chat
             contents.append(content)
-            
             tool_results = []
             for call in tool_calls:
                 name = call.get("name")
                 args = call.get("args", {})
                 
-                logger.info(f"Gemini solicitou ferramenta: {name} com args {args}")
+                logger.info("Gemini solicitou ferramenta: %s com args %s", name, args)
                 
                 if name == "consultar_protheus":
                     endpoint = args.get("endpoint", "")
@@ -250,8 +237,6 @@ async def ask_gemini(
                     tool_result = json.dumps({"error": f"Ferramenta {name} nao implementada"})
                 
                 tool_results.append(tool_result)
-                
-                # Adicionar a resposta da ferramenta (role "function")
                 contents.append({
                     "role": "function",
                     "parts": [{
@@ -262,32 +247,21 @@ async def ask_gemini(
                     }]
                 })
                 
-            analysis_result = _analyze_tool_results(tool_results)
-            if analysis_result == "success":
-                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
-            elif analysis_result == "error":
-                instruction = "INSTRUCAO: A consulta no Protheus falhou com um ERRO. Retorne um JSON preenchendo o 'executive_summary' informando que ocorreu um erro ao consultar o ERP e tente descrever o erro em linguagem amigavel. NUNCA invente ou simule dados ficticios."
-            else:
-                instruction = "INSTRUCAO: A consulta no Protheus retornou VAZIA (0 registros). Isso significa que nao ha dados para os filtros ou o periodo informado. Retorne um JSON preenchendo o 'executive_summary' informando exatamente que 'Não foram encontrados dados para esta consulta no ERP'. Não diga que 'a consulta retornou apenas a confirmação', diga apenas que não há dados no momento. NUNCA invente ou simule dados ficticios."
-                
-            contents.append({
-                "role": "user",
-                "parts": [{"text": instruction}]
-            })
-            
-            # Segunda chamada para gerar a resposta baseada nos dados
             payload["contents"] = contents
-            url2 = f"{GEMINI_BASE_URL}/models/{current_successful_model or GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-            resp2 = await client.post(url2, json=payload)
-            resp2.raise_for_status()
-            resp2_json = resp2.json()
             
-            final_content = resp2_json.get("candidates", [{}])[0].get("content", {})
-            final_text = "".join([p.get("text", "") for p in final_content.get("parts", [])])
-            return final_text
-            
-        text = "".join([p.get("text", "") for p in parts if "text" in p])
-        return text
+            try:
+                active_model = current_successful_model or "gemini-2.0-flash"
+                follow_up_url = f"{GEMINI_BASE_URL}/models/{active_model}:generateContent?key={GEMINI_API_KEY}"
+                follow_up_resp = await client.post(follow_up_url, json=payload)
+                if follow_up_resp.status_code == 200:
+                    fu_candidate = follow_up_resp.json().get("candidates", [{}])[0]
+                    fu_parts = fu_candidate.get("content", {}).get("parts", [])
+                    return "\n".join([p.get("text", "") for p in fu_parts if "text" in p])
+            except Exception as e:
+                logger.error("Erro na segunda chamada do Gemini com tool results: %s", e)
+                return _analyze_tool_results(tool_results, question)
+
+        return "\n".join([p.get("text", "") for p in parts if "text" in p])
 
 async def stream_gemini(
     question: str,
@@ -298,10 +272,6 @@ async def stream_gemini(
     image: Optional[str] = None,
     allow_tools: bool = True,
 ) -> AsyncGenerator[str, None]:
-    """
-    Versão streaming para a API da Gemini.
-    Caso solicite ferramenta, resolve-a em background e faz stream da resposta final.
-    """
     if not GEMINI_API_KEY:
         yield "**Erro:** A variável `GEMINI_API_KEY` não está configurada no ambiente."
         return
@@ -311,11 +281,9 @@ async def stream_gemini(
     tenant_name = context.get("company", "Empresa") if context else "Empresa"
     tenant_id = context.get("tenant_id", "default") if context else "default"
     
-    # Usar system_prompt personalizado do tenant, se existir
     tenant_system_prompt = context.get("tenant_system_prompt") if context else None
     system_instruction_text = tenant_system_prompt if tenant_system_prompt else get_system_prompt(tenant_name, tenant_id)
     
-    # Usar temperature personalizada do tenant, se existir
     tenant_temperature = context.get("tenant_temperature") if context else None
     generation_config = {}
     if tenant_temperature is not None:
@@ -335,42 +303,31 @@ async def stream_gemini(
     models_to_try = get_candidate_gemini_models()
     last_error_msg = ""
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=35.0) as client:
         resp = None
         current_successful_model = None
 
         for current_model in models_to_try:
             url = f"{GEMINI_BASE_URL}/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
-            for attempt in range(2):
-                try:
-                    resp = await client.post(url, json=payload)
-                    resp.raise_for_status()
+            try:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
                     current_successful_model = current_model
                     break
-                except httpx.HTTPStatusError as e:
-                    last_error_msg = f"HTTP {e.response.status_code} - {e.response.text}"
-                    if e.response.status_code in (503, 429, 404):
-                        logger.warning(f"Gemini (Stream) API ({current_model}) status={e.response.status_code}. Tentando fallback...")
-                        if attempt == 0 and e.response.status_code in (503, 429):
-                            await asyncio.sleep(1.0)
-                            continue
-                        break
-                    else:
-                        yield f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
-                        return
-                except httpx.RequestError as e:
-                    last_error_msg = str(e)
-                    logger.warning(f"Erro de conexão com Gemini (Stream) ({current_model}): {e}")
-                    if attempt == 0:
-                        await asyncio.sleep(1.0)
-                        continue
-                    break
-            if resp is not None and getattr(resp, "status_code", 200) == 200:
-                break
+                else:
+                    last_error_msg = f"HTTP {resp.status_code} - {resp.text[:300]}"
+                    logger.warning("Gemini (Stream) API (%s) status=%s. Tentando próximo modelo...", current_model, resp.status_code)
+                    resp = None
+                    continue
+            except httpx.RequestError as e:
+                last_error_msg = str(e)
+                logger.warning("Erro de conexão com Gemini (Stream) (%s): %s", current_model, e)
+                resp = None
+                continue
 
         if resp is None or getattr(resp, "status_code", 200) != 200:
             if "503" in last_error_msg:
-                yield "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
+                yield "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, tente novamente."
             else:
                 yield f"Erro na API do Gemini: {last_error_msg}"
             return
@@ -391,7 +348,7 @@ async def stream_gemini(
                 name = call.get("name")
                 args = call.get("args", {})
                 
-                logger.info(f"Gemini (Stream) solicitou ferramenta: {name} com args {args}")
+                logger.info("Gemini (Stream) solicitou ferramenta: %s com args %s", name, args)
                 
                 if name == "consultar_protheus":
                     endpoint = args.get("endpoint", "")
@@ -421,69 +378,29 @@ async def stream_gemini(
                     }]
                 })
                 
-            analysis_result = _analyze_tool_results(tool_results)
-            if analysis_result == "success":
-                instruction = "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
-            elif analysis_result == "error":
-                instruction = "INSTRUCAO: A consulta no Protheus falhou com um ERRO. Retorne um JSON preenchendo o 'executive_summary' informando que ocorreu um erro ao consultar o ERP e tente descrever o erro em linguagem amigavel. NUNCA invente ou simule dados ficticios."
-            else:
-                instruction = "INSTRUCAO: A consulta no Protheus retornou VAZIA (0 registros). Isso significa que nao ha dados para os filtros ou o periodo informado. Retorne um JSON preenchendo o 'executive_summary' informando exatamente que 'Não foram encontrados dados para esta consulta no ERP'. Não diga que 'a consulta retornou apenas a confirmação', diga apenas que não há dados no momento. NUNCA invente ou simule dados ficticios."
-                
-            contents.append({
-                "role": "user",
-                "parts": [{"text": instruction}]
-            })
-            
             payload["contents"] = contents
             
-        # Agora sim, fazemos o stream da resposta final
-        stream_url = f"{GEMINI_BASE_URL}/models/{current_successful_model or GEMINI_MODEL}:streamGenerateContent?key={GEMINI_API_KEY}"
-        
-        async with client.stream("POST", stream_url, json=payload) as stream_resp:
-            buffer = ""
-            async for chunk in stream_resp.aiter_text():
-                buffer += chunk
-                while True:
-                    start = buffer.find("{")
-                    if start == -1:
-                        buffer = ""
-                        break
-                    
-                    brace_count = 0
-                    in_string = False
-                    escape = False
-                    end = -1
-                    
-                    for i in range(start, len(buffer)):
-                        char = buffer[i]
-                        if escape:
-                            escape = False
-                            continue
-                        if char == "\\":
-                            escape = True
-                            continue
-                        if char == '"':
-                            in_string = not in_string
-                            continue
-                        if not in_string:
-                            if char == '{':
-                                brace_count += 1
-                            elif char == '}':
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    end = i
-                                    break
-                    
-                    if end != -1:
-                        json_str = buffer[start:end+1]
-                        buffer = buffer[end+1:]
-                        try:
-                            data = json.loads(json_str)
-                            chunk_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                            chunk_text = "".join([p.get("text", "") for p in chunk_parts if "text" in p])
-                            if chunk_text:
-                                yield chunk_text
-                        except Exception as e:
-                            logger.error(f"Erro ao parsear JSON no stream: {e}")
-                    else:
-                        break
+            try:
+                active_model = current_successful_model or "gemini-2.0-flash"
+                stream_url = f"{GEMINI_BASE_URL}/models/{active_model}:streamGenerateContent?key={GEMINI_API_KEY}&alt=sse"
+                async with client.stream("POST", stream_url, json=payload, timeout=60.0) as stream_resp:
+                    async for line in stream_resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str and data_str != "[DONE]":
+                                try:
+                                    chunk_json = json.loads(data_str)
+                                    chunk_candidate = chunk_json.get("candidates", [{}])[0]
+                                    chunk_parts = chunk_candidate.get("content", {}).get("parts", [])
+                                    for p in chunk_parts:
+                                        if "text" in p:
+                                            yield p["text"]
+                                except Exception:
+                                    pass
+            except Exception as e:
+                logger.error("Erro no stream de follow-up do Gemini: %s", e)
+                yield _analyze_tool_results(tool_results, question)
+        else:
+            for p in parts:
+                if "text" in p:
+                    yield p["text"]
