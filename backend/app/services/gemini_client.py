@@ -4,6 +4,7 @@ import json
 import httpx
 import logging
 from typing import Optional, AsyncGenerator
+import asyncio
 from app.core.config import settings
 from app.services.protheus_service import descobrir_apis_protheus, execute_protheus_tool
 from app.services.ollama_client import _analyze_tool_results, get_system_prompt
@@ -11,8 +12,19 @@ from app.services.ollama_client import _analyze_tool_results, get_system_prompt
 logger = logging.getLogger("app.gemini")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+def get_candidate_gemini_models() -> list[str]:
+    configured = os.getenv("GEMINI_MODEL", "").strip() or getattr(settings, "gemini_model", "") or "gemini-2.0-flash"
+    candidates = [configured, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+    seen = set()
+    result = []
+    for m in candidates:
+        if m and m not in seen:
+            seen.add(m)
+            result.append(m)
+    return result
 
 # Definição das ferramentas no formato da Gemini API
 GEMINI_TOOLS = [
@@ -161,18 +173,45 @@ async def ask_gemini(
     if generation_config:
         payload["generationConfig"] = generation_config
 
-    url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    
+    models_to_try = get_candidate_gemini_models()
+    last_error_msg = ""
+
     async with httpx.AsyncClient(timeout=120.0) as client:
-        try:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 503:
+        resp = None
+        current_successful_model = None
+        
+        for current_model in models_to_try:
+            url = f"{GEMINI_BASE_URL}/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
+            for attempt in range(2):
+                try:
+                    resp = await client.post(url, json=payload)
+                    resp.raise_for_status()
+                    current_successful_model = current_model
+                    break
+                except httpx.HTTPStatusError as e:
+                    last_error_msg = f"HTTP {e.response.status_code} - {e.response.text}"
+                    if e.response.status_code in (503, 429, 404):
+                        logger.warning(f"Gemini API ({current_model}) status={e.response.status_code}. Tentando fallback...")
+                        if attempt == 0 and e.response.status_code in (503, 429):
+                            await asyncio.sleep(1.0)
+                            continue
+                        break
+                    else:
+                        return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
+                except httpx.RequestError as e:
+                    last_error_msg = str(e)
+                    logger.warning(f"Erro de conexão com Gemini ({current_model}): {e}")
+                    if attempt == 0:
+                        await asyncio.sleep(1.0)
+                        continue
+                    break
+            if resp and resp.status_code == 200:
+                break
+
+        if not resp or resp.status_code != 200:
+            if "503" in last_error_msg:
                 return "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
-            return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
-        except httpx.RequestError as e:
-            return f"Erro de conexão com a API do Gemini: {str(e)}"
+            return f"Erro na API do Gemini: {last_error_msg}"
             
         resp_json = resp.json()
         
@@ -238,7 +277,8 @@ async def ask_gemini(
             
             # Segunda chamada para gerar a resposta baseada nos dados
             payload["contents"] = contents
-            resp2 = await client.post(url, json=payload)
+            url2 = f"{GEMINI_BASE_URL}/models/{current_successful_model or GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+            resp2 = await client.post(url2, json=payload)
             resp2.raise_for_status()
             resp2_json = resp2.json()
             
@@ -292,20 +332,47 @@ async def stream_gemini(
     if generation_config:
         payload["generationConfig"] = generation_config
 
+    models_to_try = get_candidate_gemini_models()
+    last_error_msg = ""
+
     async with httpx.AsyncClient(timeout=120.0) as client:
-        # Primeiro, fazemos chamada síncrona/não-stream para verificar se chamará ferramentas
-        url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-        try:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 503:
+        resp = None
+        current_successful_model = None
+
+        for current_model in models_to_try:
+            url = f"{GEMINI_BASE_URL}/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
+            for attempt in range(2):
+                try:
+                    resp = await client.post(url, json=payload)
+                    resp.raise_for_status()
+                    current_successful_model = current_model
+                    break
+                except httpx.HTTPStatusError as e:
+                    last_error_msg = f"HTTP {e.response.status_code} - {e.response.text}"
+                    if e.response.status_code in (503, 429, 404):
+                        logger.warning(f"Gemini (Stream) API ({current_model}) status={e.response.status_code}. Tentando fallback...")
+                        if attempt == 0 and e.response.status_code in (503, 429):
+                            await asyncio.sleep(1.0)
+                            continue
+                        break
+                    else:
+                        yield f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
+                        return
+                except httpx.RequestError as e:
+                    last_error_msg = str(e)
+                    logger.warning(f"Erro de conexão com Gemini (Stream) ({current_model}): {e}")
+                    if attempt == 0:
+                        await asyncio.sleep(1.0)
+                        continue
+                    break
+            if resp and resp.status_code == 200:
+                break
+
+        if not resp or resp.status_code != 200:
+            if "503" in last_error_msg:
                 yield "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
             else:
-                yield f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
-            return
-        except httpx.RequestError as e:
-            yield f"Erro de conexão com a API do Gemini: {str(e)}"
+                yield f"Erro na API do Gemini: {last_error_msg}"
             return
             
         resp_json = resp.json()
@@ -370,7 +437,7 @@ async def stream_gemini(
             payload["contents"] = contents
             
         # Agora sim, fazemos o stream da resposta final
-        stream_url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:streamGenerateContent?key={GEMINI_API_KEY}"
+        stream_url = f"{GEMINI_BASE_URL}/models/{current_successful_model or GEMINI_MODEL}:streamGenerateContent?key={GEMINI_API_KEY}"
         
         async with client.stream("POST", stream_url, json=payload) as stream_resp:
             buffer = ""
