@@ -232,7 +232,12 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
 
       setMessages((current) => [
         ...current,
-        { role: 'assistant', text: replyMessage },
+        {
+          role: 'assistant',
+          text: replyMessage,
+          result: res,
+          userPrompt: text,
+        },
       ]);
     } catch (error) {
       setMessages((current) => [
@@ -540,7 +545,11 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                     </div>
                   )}
 
-                  <Conversation messages={messages} />
+                  <Conversation
+                    messages={messages}
+                    context={context}
+                    onNavigateToDashboard={onNavigateToDashboard}
+                  />
 
                   {loading && (
                     <div className="flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#004FCE] dark:text-[#60A5FA] font-medium animate-pulse">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Bot, User, Sparkles, Copy, Check, Terminal } from 'lucide-react';
+import InlineChatDashboard from './InlineChatDashboard';
 
 function CodeBlock({ children, className }) {
   const [copied, setCopied] = useState(false);
@@ -22,7 +23,7 @@ function CodeBlock({ children, className }) {
         <button
           type="button"
           onClick={copy}
-          className="flex items-center gap-1 px-2 py-0.5 rounded text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer"
         >
           {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
           <span>{copied ? 'Copiado' : 'Copiar'}</span>
@@ -35,7 +36,7 @@ function CodeBlock({ children, className }) {
   );
 }
 
-export default function Conversation({ messages }) {
+export default function Conversation({ messages, context, onNavigateToDashboard }) {
   if (!messages?.length) return null;
 
   return (
@@ -55,10 +56,10 @@ export default function Conversation({ messages }) {
             )}
 
             <div
-              className={`max-w-[min(90%,680px)] rounded-2xl px-4 py-3 text-[13px] leading-relaxed transition-all ${
+              className={`max-w-[min(94%,720px)] rounded-2xl px-4 py-3 text-[13px] leading-relaxed transition-all ${
                 isUser
                   ? 'rounded-tr-xs bg-[#0F66FF] text-white shadow-xs'
-                  : 'exec-card rounded-tl-xs text-[#162D52] dark:text-slate-200'
+                  : 'exec-card rounded-tl-xs text-[#162D52] dark:text-slate-200 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
               }`}
             >
               {!isUser && (
@@ -97,6 +98,16 @@ export default function Conversation({ messages }) {
                   {message.text}
                 </ReactMarkdown>
               </div>
+
+              {/* Renderização do Dashboard Inline para Respostas com Dados */}
+              {!isUser && message.result && (
+                <InlineChatDashboard
+                  result={message.result}
+                  userPrompt={message.userPrompt}
+                  context={context}
+                  onNavigateToDashboard={onNavigateToDashboard}
+                />
+              )}
             </div>
 
             {isUser && (

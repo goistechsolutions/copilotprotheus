@@ -390,13 +390,19 @@ const AREAS_CONFIG = {
   }
 };
 
-export default function ExecutiveDashboard({ onNavigateToWorkspace }) {
-  const [activeAreaKey, setActiveAreaKey] = useState('financeiro');
+export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace }) {
+  const [activeAreaKey, setActiveAreaKey] = useState(initialArea || 'financeiro');
   const [period, setPeriod] = useState('Mês Atual');
   const [chartView, setChartView] = useState('semanal');
   const [copilotQuestion, setCopilotQuestion] = useState('');
   const [copilotMessages, setCopilotMessages] = useState([]);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
+
+  useEffect(() => {
+    if (initialArea && AREAS_CONFIG[initialArea]) {
+      setActiveAreaKey(initialArea);
+    }
+  }, [initialArea]);
 
   const currentArea = AREAS_CONFIG[activeAreaKey] || AREAS_CONFIG.financeiro;
 
