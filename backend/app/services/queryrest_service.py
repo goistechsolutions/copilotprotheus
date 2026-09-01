@@ -53,7 +53,6 @@ def _parse_sanitized_json(text: str):
     return json.loads(clean_text)
 
 
-
 async def queryrest_exec_tenant(
     db: Session,
     tenant_id: str,
@@ -90,24 +89,25 @@ async def queryrest_exec_tenant(
         )
     except ProtheusQueryRestError as e:
         logger.error(
-            "[QueryRest Tenant] Falha tenant=%s ambiente=%s status=%s",
+            "[QueryRest Tenant] Falha tenant=%s ambiente=%s status=%s detalhe=%s",
             tenant_id,
             environment_code,
             e.status_code,
+            str(e),
         )
         status_code = e.status_code if e.status_code and e.status_code >= 400 else 502
-        detail = {
+        detail = str(e) if str(e) else {
             401: "Token OAuth2 do Protheus inválido ou expirado.",
             403: "Usuário REST do Protheus sem autorização para QueryRest.",
             404: "Endpoint QueryRest do Protheus não localizado.",
             408: "Timeout na comunicação com o Protheus.",
         }.get(status_code, "Falha na execução do QueryRest do Protheus.")
         raise HTTPException(status_code=status_code, detail=detail)
-    except Exception:
-        logger.error("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s", tenant_id, environment_code)
+    except Exception as exc:
+        logger.error("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s erro=%s", tenant_id, environment_code, str(exc))
         raise HTTPException(
             status_code=502,
-            detail="Erro de conexão com QueryRest do Protheus."
+            detail=f"Erro de conexão com QueryRest do Protheus: {str(exc)}"
         )
 
     if isinstance(result_data, dict):
@@ -126,7 +126,3 @@ async def queryrest_exec_tenant(
 
     logger.warning(f"[QueryRest Tenant] Retorno sem estrutura compatível (items/data): {str(result_data)[:200]}")
     return []
-
-
-# Alias de compatibilidade
-queryrest_exec_async = queryrest_exec_tenant
