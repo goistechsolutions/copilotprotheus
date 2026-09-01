@@ -1,62 +1,21 @@
 (function () {
   if (document.getElementById("copilot-protheus-host")) return;
 
-  let isSessionReady = false;
   let pollInterval = null;
   let observer = null;
   let currentConfig = null;
   let iframeLoaded = false;
   let cachedBodyText = { text: "", timestamp: 0 };
+  let lastSentContextKey = "";
 
-  // 1. Leitura com cache do DOM
   function getBodyText() {
     const now = Date.now();
-    if (now - cachedBodyText.timestamp < 200) {
+    if (now - cachedBodyText.timestamp < 300) {
       return cachedBodyText.text;
     }
     cachedBodyText.text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
     cachedBodyText.timestamp = now;
     return cachedBodyText.text;
-  }
-
-  function hasLoginDialog(text) {
-    return /Programa Inicial/i.test(text) && /Ambiente no servidor/i.test(text);
-  }
-
-  function detectActiveSession() {
-    const text = getBodyText();
-    if (!text) return false;
-
-    // Sinais definitivos de usuário logado
-    const strongSignals = [
-      /SIGA[A-Z]{3,}/i.test(text),
-      /Trocar m.dulo/i.test(text),
-      /Faturamento/i.test(text),
-      /Financeiro/i.test(text),
-      /Compras/i.test(text),
-      /Estoque/i.test(text),
-      /TOTVS News/i.test(text),
-      /Favoritos/i.test(text) && /Consultas/i.test(text)
-    ];
-
-    if (strongSignals.some(Boolean)) {
-      return true;
-    }
-
-    if (hasLoginDialog(text)) return false;
-
-    const signals = [
-      /TOTVS/i.test(text),
-      /Workspace/i.test(text),
-      /Painel/i.test(text),
-      /Menu/i.test(text),
-      /Favoritos/i.test(text),
-      /Administrador/i.test(text),
-      /Usuário/i.test(text),
-      /\/\s*[0-9]{2,}/.test(text)
-    ];
-
-    return signals.filter(Boolean).length >= 2;
   }
 
   const PROTHEUS_MODULE_MAP = {
@@ -89,65 +48,19 @@
 
   function extractProtheusContext() {
     const context = {
+      tenant_id: currentConfig?.tenantId || "rodol_prod",
       company: "01",
       branch: "0101",
       user: currentConfig?.username || "admin",
-      environment: currentConfig?.environmentCode || "",
+      environment_code: currentConfig?.environmentCode || "c8te0u_prod",
       module: "SIGAFAT",
-      session_id: ""
+      session_id: "protheus-" + Date.now()
     };
 
     try {
       const bodyText = getBodyText();
 
-      const envMatch = bodyText.match(/TOTVS[^\n]{0,80}/i);
-      if (envMatch) context.environment = envMatch[0].trim();
-
-      const companyBranchPatterns = [
-        /([\wÀ-ú\s.&-]+)\s*\/\s*([\wÀ-ú\s.-]{2,40})/,
-        /Empresa[:\s]+([^\n]{2,60})/i,
-        /Filial[:\s]+([^\n]{2,60})/i,
-        /\b(\d{2})\s*[\/-]\s*(\d{2,4})\b/
-      ];
-
-      for (const pattern of companyBranchPatterns) {
-        const match = bodyText.match(pattern);
-        if (!match) continue;
-
-        if (match[2]) {
-          context.company = (match[1] || "").trim();
-          context.branch = (match[2] || "").trim();
-          break;
-        }
-
-        if (/Empresa/i.test(String(pattern))) {
-          context.company = (match[1] || "").trim();
-        }
-
-        if (/Filial/i.test(String(pattern))) {
-          context.branch = (match[1] || "").trim();
-        }
-      }
-
-      // Usuário
-      const userPatterns = [
-        /Administrador/i,
-        /Usuário[:\s]+([^\n]{2,40})/i,
-        /User[:\s]+([^\n]{2,40})/i
-      ];
-
-      for (const pattern of userPatterns) {
-        const match = bodyText.match(pattern);
-        if (match) {
-          context.user = (match[1] || match[0] || "").trim();
-          break;
-        }
-      }
-      if (!context.user && currentConfig?.username) {
-        context.user = currentConfig.username;
-      }
-
-      // Módulo: 1. Busca código SIGA direto no DOM
+      // 1. Extração do Módulo Ativo (ex: SIGAFAT, SIGAFIN, SIGACOM, ou nome textual)
       const sigaMatch = bodyText.match(/\bSIGA[A-Z]{3,}\b/i);
       if (sigaMatch) {
         context.module = sigaMatch[0].toUpperCase();
@@ -161,15 +74,42 @@
         }
       }
 
-      context.session_id = "protheus-" + Date.now();
+      // 2. Extração do Ambiente TOTVS Cloud
+      const envMatch = bodyText.match(/c8te0u[_\w]+/i) || bodyText.match(/TOTVS[^\n]{0,60}/i);
+      if (envMatch) {
+        context.environment_code = envMatch[0].trim();
+      }
+
+      // 3. Extração de Empresa / Filial
+      const companyBranchPatterns = [
+        /\b(\d{2})\s*[\/-]\s*(\d{2,4})\b/,
+        /Empresa[:\s]+([^\n]{2,40})/i,
+        /Filial[:\s]+([^\n]{2,40})/i
+      ];
+
+      for (const pattern of companyBranchPatterns) {
+        const match = bodyText.match(pattern);
+        if (!match) continue;
+        if (match[2]) {
+          context.company = (match[1] || "").trim();
+          context.branch = (match[2] || "").trim();
+          break;
+        }
+      }
+
+      // 4. Usuário
+      const userMatch = bodyText.match(/Usuário[:\s]+([^\n]{2,40})/i) || bodyText.match(/User[:\s]+([^\n]{2,40})/i);
+      if (userMatch && userMatch[1]) {
+        context.user = userMatch[1].trim();
+      }
     } catch (err) {
-      console.warn("Copilot Protheus: falha ao extrair contexto do DOM.", err);
+      console.warn("Copilot Protheus: erro na extração de contexto:", err);
     }
 
     return context;
   }
 
-  // 2. Isolamento via Shadow DOM
+  // Criar Shadow DOM para isolamento visual total
   const host = document.createElement("div");
   host.id = "copilot-protheus-host";
   document.body.appendChild(host);
@@ -184,6 +124,7 @@
 
   const fab = document.createElement("div");
   fab.id = "copilot-fab";
+  fab.title = "Copilot Protheus (Ctrl+Shift+P)";
   fab.innerHTML = `<span>✦</span>`;
   shadow.appendChild(fab);
 
@@ -198,15 +139,12 @@
       <button id="copilot-close" type="button" aria-label="Fechar">✕</button>
     </div>
     <div id="copilot-body">
-      <div id="copilot-waiting">
-        <span>Aguardando efetuar login no Protheus...</span>
-      </div>
-      <iframe id="copilot-iframe" src="" title="Copilot Protheus" style="display:none;"></iframe>
+      <iframe id="copilot-iframe" src="" title="Copilot Protheus"></iframe>
     </div>
   `;
   shadow.appendChild(panel);
 
-  // Escuta mensagens do iframe (ex: redimensionamento quando há resultado)
+  // Escuta redimensionamento solicitado pelo Copilot
   window.addEventListener("message", (event) => {
     const iframe = shadow.querySelector("#copilot-iframe");
     if (!iframe || event.source !== iframe.contentWindow) return;
@@ -216,39 +154,36 @@
     }
   });
 
-  function updateWaitingMessage(message) {
-    const waiting = shadow.querySelector("#copilot-waiting");
-    if (waiting) waiting.innerHTML = `<span>${message}</span>`;
-  }
-
   function buildIframeUrl(config, context) {
     const baseUrl = config.widgetUrl || "https://copilot.elitecorp.tec.br/";
     const url = new URL(baseUrl);
-    url.searchParams.set("tenant_id", config.tenantId || "rodol_prod");
-    if (config.environmentCode) url.searchParams.set("environment_code", config.environmentCode);
-    if (context.company) url.searchParams.set("company", context.company);
-    if (context.branch) url.searchParams.set("branch", context.branch);
-    const user = context.user || config.username || "";
-    if (user) url.searchParams.set("user", user);
-    if (context.environment) url.searchParams.set("environment", context.environment);
-    if (context.module) url.searchParams.set("module", context.module);
-    if (context.session_id) url.searchParams.set("session_id", context.session_id);
+    url.searchParams.set("tenant_id", config.tenantId || context.tenant_id || "rodol_prod");
+    url.searchParams.set("environment_code", config.environmentCode || context.environment_code || "c8te0u_prod");
+    url.searchParams.set("company", context.company || "01");
+    url.searchParams.set("branch", context.branch || "0101");
+    url.searchParams.set("user", context.user || config.username || "admin");
+    url.searchParams.set("module", context.module || "SIGAFAT");
+    url.searchParams.set("session_id", context.session_id || "");
     return url.toString();
   }
 
   function sendContextToIframe(context) {
     const iframe = shadow.querySelector("#copilot-iframe");
-    if (!iframe?.contentWindow || !currentConfig?.widgetUrl) return;
+    if (!iframe?.contentWindow) return;
 
     const payload = {
-      tenant_id: currentConfig.tenantId || "rodol_prod",
-      environment_code: currentConfig.environmentCode || "",
+      tenant_id: currentConfig?.tenantId || context.tenant_id || "rodol_prod",
+      environment_code: currentConfig?.environmentCode || context.environment_code || "c8te0u_prod",
       company: context.company || "01",
       branch: context.branch || "0101",
-      user: context.user || currentConfig.username || "admin",
+      user: context.user || currentConfig?.username || "admin",
       module: context.module || "SIGAFAT",
       session_id: context.session_id || ""
     };
+
+    const key = JSON.stringify(payload);
+    if (key === lastSentContextKey) return;
+    lastSentContextKey = key;
 
     iframe.contentWindow.postMessage(
       { type: "PROTHEUS_CONTEXT", payload },
@@ -258,15 +193,12 @@
 
   function loadIframe(config) {
     const iframe = shadow.querySelector("#copilot-iframe");
-    const waiting = shadow.querySelector("#copilot-waiting");
     const context = extractProtheusContext();
 
     if (!iframeLoaded) {
       iframe.src = buildIframeUrl(config, context);
       iframe.onload = () => {
         iframeLoaded = true;
-        if (waiting) waiting.style.display = "none";
-        iframe.style.display = "block";
         sendContextToIframe(context);
       };
     } else {
@@ -274,48 +206,28 @@
     }
   }
 
-  function initSessionChecker(config) {
+  function init(config) {
     currentConfig = config;
+    loadIframe(config);
 
-    function check() {
-      const active = detectActiveSession();
-
-      if (active && !isSessionReady) {
-        isSessionReady = true;
-        loadIframe(config);
-      } else if (!active && isSessionReady) {
-        isSessionReady = false;
-        iframeLoaded = false;
-        const iframe = shadow.querySelector("#copilot-iframe");
-        const waiting = shadow.querySelector("#copilot-waiting");
-        if (iframe) {
-          iframe.style.display = "none";
-          iframe.src = "";
-        }
-        if (waiting) {
-          waiting.style.display = "flex";
-          updateWaitingMessage("Aguardando efetuar login no Protheus...");
-        }
-      } else if (active && isSessionReady) {
-        const ctx = extractProtheusContext();
-        sendContextToIframe(ctx);
-      }
+    // Monitora atualizações no contexto do Protheus
+    function syncContext() {
+      const ctx = extractProtheusContext();
+      sendContextToIframe(ctx);
     }
 
-    check();
-    pollInterval = setInterval(check, 3000);
+    pollInterval = setInterval(syncContext, 2500);
 
     observer = new MutationObserver(() => {
-      check();
+      syncContext();
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  // Alternar painel
   function togglePanel() {
     const isVisible = panel.style.display === "flex";
     panel.style.display = isVisible ? "none" : "flex";
-    if (!isVisible && isSessionReady && currentConfig) {
+    if (!isVisible) {
       const ctx = extractProtheusContext();
       sendContextToIframe(ctx);
     }
@@ -324,14 +236,12 @@
   fab.addEventListener("click", togglePanel);
   shadow.querySelector("#copilot-close").addEventListener("click", togglePanel);
 
-  // Escuta comandos e atalhos da extensão
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === "toggle-widget") {
       togglePanel();
     }
   });
 
-  // Carrega configurações salvas do storage
   chrome.storage.sync.get(
     ["tenantId", "environmentCode", "username", "widgetUrl"],
     (result) => {
@@ -341,7 +251,7 @@
         username: result.username || "admin",
         widgetUrl: result.widgetUrl || "https://copilot.elitecorp.tec.br/"
       };
-      initSessionChecker(config);
+      init(config);
     }
   );
 })();
