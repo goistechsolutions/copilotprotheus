@@ -373,13 +373,47 @@ const AREAS_CONFIG = {
   }
 };
 
-export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace, context }) {
+
+function parseNumeric(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const candidate = value.trim();
+  if (!/^[+-]?\s*(?:R\$\s*)?\d[\d\s.,]*(?:%|\s*)$/.test(candidate)) return null;
+  const normalized = candidate.replace(/\s/g, '').replace(/\.(?=\d{3}(?:,|$))/g, '').replace(',', '.').replace(/[^\d.-]/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatCurrency(val) {
+  if (typeof val === 'number') {
+    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  return String(val);
+}
+
+function getSafeRows(result) {
+  const candidateRows = Array.isArray(result?.structured?.rows)
+    ? result.structured.rows
+    : Array.isArray(result?.data)
+      ? result.data
+      : Array.isArray(result?.items)
+        ? result.items
+        : [];
+  return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
+}
+
+export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace, context, initialData }) {
   const [activeAreaKey, setActiveAreaKey] = useState(initialArea || 'financeiro');
   const [period, setPeriod] = useState('Mês Atual');
   const [chartView, setChartView] = useState('semanal');
   const [copilotQuestion, setCopilotQuestion] = useState('');
   const [copilotMessages, setCopilotMessages] = useState([]);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
+  const [realData, setRealData] = useState(initialData || null);
+
+  useEffect(() => {
+    if (initialData) setRealData(initialData);
+  }, [initialData]);
 
   useEffect(() => {
     if (initialArea && AREAS_CONFIG[initialArea]) {
@@ -388,6 +422,17 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
   }, [initialArea]);
 
   const currentArea = AREAS_CONFIG[activeAreaKey] || AREAS_CONFIG.financeiro;
+
+  const dynamicRows = React.useMemo(() => getSafeRows(realData), [realData]);
+  const dynamicColumns = React.useMemo(() => {
+    if (Array.isArray(realData?.structured?.columns) && realData.structured.columns.length > 0) {
+      return realData.structured.columns;
+    }
+    if (dynamicRows.length > 0) return Object.keys(dynamicRows[0]);
+    return [];
+  }, [realData, dynamicRows]);
+  const hasRealData = dynamicRows.length > 0;
+
 
   // Atualiza as mensagens do Copilot quando troca de área
   useEffect(() => {
@@ -433,6 +478,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           const status = await getAgentTaskStatus(response.task_id);
           if (['completed', 'success'].includes(status.status)) {
             replyText = status.response_text || status.summary || status.answer || 'Aqui está o resultado da sua consulta no Protheus.';
+            setRealData(status);
             break;
           }
           if (status.status === 'execution_failed') {
@@ -590,6 +636,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         {/* Conteúdo da Área Selecionada */}
         <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]">
           {/* OVERLAY DE ESTADO VAZIO */}
+          {!hasRealData && (
           <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-8">
             <div className="bg-white p-8 rounded-2xl shadow-lg border border-[#e2e8f0] text-center max-w-md">
               <div className="w-16 h-16 bg-[#eff4f9] rounded-full flex items-center justify-center mx-auto mb-4">
@@ -608,8 +655,9 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
               </button>
             </div>
           </div>
+          )}
 
-          <div className="p-6 space-y-6 opacity-30 pointer-events-none filter grayscale">
+          <div className={`p-6 space-y-6 ${!hasRealData ? "opacity-30 pointer-events-none filter grayscale" : ""}`}>
             {/* Título da Visão */}
             <div className="flex items-center justify-between">
             <div>
@@ -819,8 +867,8 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           <div className="bg-white rounded-2xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-[#e2e8f0] flex items-center justify-between bg-[#f8fafc]">
               <div>
-                <h3 className="font-bold text-[#0f172a] text-[15px]">{currentArea.tableTitle}</h3>
-                <p className="text-xs text-[#64748b]">{currentArea.tableSubtitle}</p>
+                <h3 className="font-bold text-[#0f172a] text-[15px]">{hasRealData ? (realData?.structured?.summary || currentArea.tableTitle) : currentArea.tableTitle}</h3>
+                <p className="text-xs text-[#64748b]">{hasRealData ? "Dados retornados pelo Protheus" : currentArea.tableSubtitle}</p>
               </div>
               <button
                 onClick={() => handleSendCopilot(`Listar registros detalhados de ${currentArea.label}`)}
@@ -835,25 +883,35 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#f8fafc] text-[#64748b] font-bold uppercase tracking-wider border-b border-[#e2e8f0]">
                   <tr>
-                    {currentArea.tableHeaders.map((header, hIdx) => (
-                      <th key={hIdx} className={`px-6 py-3 ${hIdx === currentArea.tableHeaders.length - 2 ? 'text-right' : hIdx === currentArea.tableHeaders.length - 1 ? 'text-center' : ''}`}>
+                    {(hasRealData ? dynamicColumns : currentArea.tableHeaders).map((header, hIdx) => (
+                      <th key={hIdx} className="px-6 py-3 text-left">
                         {header}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e2e8f0]">
-                  {currentArea.tableRows.map((row, rIdx) => (
+                  {!hasRealData ? currentArea.tableRows.map((row, rIdx) => (
                     <tr key={rIdx} className="hover:bg-[#f8fafc] transition-colors">
                       <td className="px-6 py-3.5 font-medium text-[#64748b]">{row.col1}</td>
                       <td className="px-6 py-3.5 font-semibold text-[#0f172a]">{row.col2}</td>
                       <td className="px-6 py-3.5 text-[#64748b]">{row.col3}</td>
                       <td className={`px-6 py-3.5 text-right font-bold ${row.col4Class || 'text-[#0f172a]'}`}>{row.col4}</td>
                       <td className="px-6 py-3.5 text-center">
-                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${row.statusClass}`}>
-                          {row.status}
-                        </span>
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${row.statusClass}`}>{row.status}</span>
                       </td>
+                    </tr>
+                  )) : dynamicRows.map((row, rIdx) => (
+                    <tr key={rIdx} className="hover:bg-[#f8fafc] transition-colors">
+                      {dynamicColumns.map((col, cIdx) => {
+                        const val = row[col];
+                        const isNum = typeof val === 'number';
+                        return (
+                          <td key={cIdx} className={`px-6 py-3.5 ${isNum ? 'text-right font-semibold text-[#0f172a]' : 'text-[#64748b]'}`}>
+                            {isNum ? formatCurrency(val) : String(val ?? '')}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>

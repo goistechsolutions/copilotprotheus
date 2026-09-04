@@ -43,9 +43,12 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const navigateToDashboard = (targetArea) => {
+  const [dashboardData, setDashboardData] = useState(null);
+
+  const navigateToDashboard = (targetArea, data = null) => {
     const area = targetArea || 'financeiro';
     setSelectedArea(area);
+    if (data) setDashboardData(data);
     setCurrentPage('dashboard');
     try {
       const url = new URL(window.location.href);
@@ -109,6 +112,7 @@ export default function App() {
         initialArea={selectedArea}
         onNavigateToWorkspace={navigateToWorkspace}
         context={context}
+        initialData={dashboardData}
       />
     );
   }

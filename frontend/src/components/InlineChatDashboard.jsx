@@ -395,7 +395,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
         {onNavigateToDashboard && (
           <button
             type="button"
-            onClick={() => onNavigateToDashboard(areaInfo.key)}
+            onClick={() => onNavigateToDashboard(areaInfo.key, result)}
             className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 bg-[#004fce] hover:bg-[#003ea6] text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             <LayoutDashboard className="w-3.5 h-3.5" />
