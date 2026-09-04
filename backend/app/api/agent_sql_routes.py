@@ -126,7 +126,8 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 10. Nunca acessar campos marcados como sigilosos/mascarados e nunca retornar senha, token, JWT, secret, certificado ou chave.
 11. Contexto operacional: empresa='{empresa}', filial='{filial}', XFILIAL='{xfilial}'. Se o snapshot não sustentar a regra necessária, informe a impossibilidade em vez de fabricar SQL.
 12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant, empresa e filial. O environment_code identifica exclusivamente a conexão/API e não deve ser usado para relacionar tabelas, campos ou índices.
-13. O snapshot SX3 é a única fonte de campos físicos. Um identificador com aparência Protheus, como F1_TOTAL, não é campo válido se não estiver listado em FIELD para a tabela. Para totais calculados, use SUM/COUNT/AVG somente sobre um campo físico listado e atribua um alias de apresentação explícito com AS; o alias não pode ser usado como campo físico, filtro ou chave de JOIN."""
+13. O snapshot SX3 é a única fonte de campos físicos. Um identificador com aparência Protheus, como F1_TOTAL, não é campo válido se não estiver listado em FIELD para a tabela. Para totais calculados, use SUM/COUNT/AVG somente sobre um campo físico listado e atribua um alias de apresentação explícito com AS; o alias não pode ser usado como campo físico, filtro ou chave de JOIN.
+14. MUITO IMPORTANTE: Quando utilizar alias em uma tabela no FROM/JOIN (ex: FROM SF2010 SF2), você deve OBRIGATORIAMENTE utilizar ESSE EXATO ALIAS nas colunas do SELECT e WHERE (ex: SF2.F2_DOC). Nunca abrevie ou invente um alias não declarado (como F2.F2_DOC). O banco Oracle gerará erro de sintaxe e causará um Internal Server Error 500 no Protheus se o alias estiver incorreto."""
 
     domain = _infer_query_domain(prompt)
     domain_instruction = ""
