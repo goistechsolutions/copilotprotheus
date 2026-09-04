@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   BarChart3,
   Bell,
@@ -114,7 +114,7 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [task, setTask] = useState(null);
-  const abortRef = React.useRef(null);
+  const abortRef = useRef(null);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
