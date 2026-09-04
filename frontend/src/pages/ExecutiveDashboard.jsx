@@ -860,6 +860,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
               </table>
             </div>
           </div>
+          </div>
         </main>
       </div>
 
