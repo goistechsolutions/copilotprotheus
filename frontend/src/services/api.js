@@ -1,3 +1,8 @@
+import {
+  isTaskTerminal,
+  normalizeTaskPayload,
+} from './taskStatus';
+
 export function getApiBaseUrl() {
   if (import.meta.env.VITE_API_BASE) {
     return import.meta.env.VITE_API_BASE;
@@ -102,4 +107,65 @@ export async function exportStructuredReport(payload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+
+export async function waitForAgentTask(
+  taskId,
+  {
+    timeoutMs = 120000,
+    intervalMs = 800,
+    onUpdate,
+    signal,
+  } = {},
+) {
+  if (!taskId) {
+    throw new Error('Identificador da tarefa não informado.');
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  let lastPayload = normalizeTaskPayload({
+    task_id: taskId,
+    status: 'queued',
+  });
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) {
+      const error = new Error('Consulta cancelada pelo usuário.');
+      error.code = 'TASK_CANCELLED';
+      error.lastPayload = lastPayload;
+      throw error;
+    }
+
+    const response = await getAgentTaskStatus(taskId);
+    lastPayload = normalizeTaskPayload(response);
+    onUpdate?.(lastPayload);
+
+    if (isTaskTerminal(lastPayload.status)) {
+      return lastPayload;
+    }
+
+    await new Promise((resolve, reject) => {
+      const timer = window.setTimeout(resolve, intervalMs);
+
+      if (!signal) return;
+
+      const abortHandler = () => {
+        window.clearTimeout(timer);
+        const error = new Error('Consulta cancelada pelo usuário.');
+        error.code = 'TASK_CANCELLED';
+        error.lastPayload = lastPayload;
+        reject(error);
+      };
+
+      signal.addEventListener('abort', abortHandler, { once: true });
+    });
+  }
+
+  const error = new Error(
+    'Tempo limite excedido aguardando o processamento do agente.',
+  );
+  error.code = 'TASK_TIMEOUT';
+  error.lastPayload = lastPayload;
+  throw error;
 }

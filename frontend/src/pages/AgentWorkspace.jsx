@@ -19,7 +19,12 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { askAgent, getAgentTaskStatus } from '../services/api';
+import { askAgent, waitForAgentTask } from '../services/api';
+import {
+  getTaskStatusLabel,
+  normalizeTaskPayload,
+  TASK_STATUS,
+} from '../services/taskStatus';
 import Composer from '../components/Composer';
 import Conversation from '../components/Conversation';
 import StructuredResultPanel from '../components/StructuredResultPanel';
@@ -56,17 +61,7 @@ function conversationKey(context) {
   ].map(value => encodeURIComponent(value || 'unknown')).join(':');
 }
 
-async function waitForAgentTask(taskId, timeoutMs = 120000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const task = await getAgentTaskStatus(taskId);
-    if (['success', 'execution_failed', 'error', 'completed'].includes(task.status)) {
-      return task;
-    }
-    await new Promise(resolve => setTimeout(resolve, 800));
-  }
-  throw new Error('Tempo limite excedido aguardando o processamento do agente.');
-}
+
 
 function readContextFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -118,6 +113,12 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   const [messages, setMessages] = useState([]);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [task, setTask] = useState(null);
+  const abortRef = React.useRef(null);
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   // Sync Dark Mode with document element & storage
   useEffect(() => {
@@ -546,7 +547,31 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                     onNavigateToDashboard={onNavigateToDashboard}
                   />
 
-                  {loading && (
+                  {loading && task && (
+            <div className="flex items-center gap-4 mb-4 ml-[52px]">
+              <div
+                className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 flex items-center shadow-sm"
+                role="status"
+                aria-live="polite"
+              >
+                <div className="w-4 h-4 mr-2 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                {getTaskStatusLabel(task.status)}
+                {task.correlationId && (
+                  <span className="ml-2 font-mono text-[10px] bg-blue-100 px-1.5 py-0.5 rounded text-blue-700">
+                    ID: {task.correlationId}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => abortRef.current?.abort()}
+                className="rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-semibold transition-colors shadow-sm"
+              >
+                Cancelar consulta
+              </button>
+            </div>
+          )}
+          {loading && !task && (
                     <div className="flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[12px] text-[#004FCE] dark:text-[#60A5FA] font-medium animate-pulse">
                       <Sparkles size={15} />
                       <span>Consultando dados no Protheus via Oracle QueryRest...</span>

@@ -36,7 +36,8 @@ import {
   Database,
   MessageSquare
 } from 'lucide-react';
-import { askAgent, getAgentTaskStatus } from '../services/api';
+import { askAgent, waitForAgentTask } from '../services/api';
+import { normalizeTaskPayload, TASK_STATUS, getTaskStatusLabel } from '../services/taskStatus';
 
 // Configurações das Áreas Executivas
 const AREAS_CONFIG = {
@@ -460,38 +461,31 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         throw new Error('Contexto multi-tenant ausente ou incompleto.');
       }
       
-      const response = await askAgent({
+      const payload = {
         prompt: question,
         tenant_id: context.tenant_id,
         environment_code: context.environment,
         empresa: context.company,
         filial: context.branch,
         module: currentArea.module,
-        conversation_id: `dash-${activeAreaKey}-${Date.now()}`
-      });
-
+        conversation_id: `dash-${activeAreaKey}-${Date.now()}`,
+        execute: true,
+      };
+      
+      const accepted = normalizeTaskPayload(await askAgent(payload));
+      const finalTask = accepted.taskId 
+        ? await waitForAgentTask(accepted.taskId) 
+        : accepted;
+        
       let replyText = `Consulta de ${currentArea.label} processada com sucesso no Protheus.`;
-      if (response?.task_id) {
-        const deadline = Date.now() + 60000;
-        while (Date.now() < deadline) {
-          await new Promise(r => setTimeout(r, 1500));
-          const status = await getAgentTaskStatus(response.task_id);
-          if (['completed', 'success'].includes(status.status)) {
-            replyText = status.response_text || status.summary || status.answer || 'Aqui está o resultado da sua consulta no Protheus.';
-            setRealData(status);
-            break;
-          }
-          if (status.status === 'execution_failed') {
-            replyText = `Erro na execução: ${status.execution_error || 'Falha na consulta Oracle.'}`;
-            break;
-          }
-          if (['failed', 'error'].includes(status.status)) {
-            replyText = `Falha na consulta: ${status.error || status.message || 'Erro na execução SQL'}`;
-            break;
-          }
-        }
-      } else if (response?.response_text) {
-        replyText = response.response_text;
+      
+      if (finalTask.status === TASK_STATUS.SUCCESS) {
+        replyText = finalTask.message || 'Aqui está o resultado da sua consulta no Protheus.';
+        setRealData(finalTask.result || finalTask);
+      } else if (finalTask.status === TASK_STATUS.FAILED) {
+        replyText = `Erro na execução: ${finalTask.error || 'Falha na consulta Oracle.'}`;
+      } else {
+        replyText = `Consulta não concluída: ${getTaskStatusLabel(finalTask.status)}`;
       }
 
       setCopilotMessages(prev => [
