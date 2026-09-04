@@ -193,14 +193,18 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
     setLoading(true);
 
     try {
+      if (!context.tenant_id || !context.environment || !context.company || !context.branch) {
+        throw new Error('Contexto multi-tenant ausente ou incompleto. Certifique-se de acessar a partir da extensão autorizada com empresa, filial e tenant configurados.');
+      }
+
       const payload = {
         ...context,
-        tenant_id: context.tenant_id || 'rodol_prod',
-        environment_code: context.environment || 'c8te0u_prod',
-        company_code: context.company || '01',
-        empresa: context.company || '01',
-        filial: context.branch || '0101',
-        module: context.module || 'SIGAFAT',
+        tenant_id: context.tenant_id,
+        environment_code: context.environment,
+        company_code: context.company,
+        empresa: context.company,
+        filial: context.branch,
+        module: context.module,
         request_id: `REQ-${Date.now()}`,
         conversation_id: conversationId,
         session_id: conversationId,

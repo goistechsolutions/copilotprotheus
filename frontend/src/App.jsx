@@ -69,14 +69,49 @@ export default function App() {
     } catch {}
   };
 
+  const [context, setContext] = useState(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      return {
+        tenant_id: urlParams.get('tenantId') || urlParams.get('tenant_id') || '',
+        company: urlParams.get('company') || '',
+        branch: urlParams.get('branch') || '',
+        user: urlParams.get('user') || '',
+        environment: urlParams.get('environment') || '',
+        module: urlParams.get('module') || '',
+      };
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (!event?.data || !['PROTHEUS_CONTEXT', 'cprot-context-update', 'cprot-config'].includes(event.data.type)) return;
+      const incoming = event.data.payload || event.data.context || {};
+      setContext((prev) => ({
+        ...prev,
+        tenant_id: incoming.tenant_id || event.data.tenantId || prev.tenant_id,
+        company: incoming.company_code || incoming.company || prev.company,
+        branch: incoming.branch || prev.branch,
+        user: incoming.user || prev.user,
+        environment: incoming.environment_code || incoming.environment || prev.environment,
+        module: incoming.module || prev.module,
+      }));
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   if (currentPage === 'dashboard') {
     return (
       <ExecutiveDashboard
         initialArea={selectedArea}
         onNavigateToWorkspace={navigateToWorkspace}
+        context={context}
       />
     );
   }
 
-  return <AgentWorkspace onNavigateToDashboard={navigateToDashboard} />;
+  return <AgentWorkspace onNavigateToDashboard={navigateToDashboard} externalContext={context} />;
 }

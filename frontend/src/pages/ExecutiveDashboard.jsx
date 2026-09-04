@@ -31,7 +31,10 @@ import {
   Layers,
   Scale,
   Award,
-  Activity
+  Activity,
+  Calculator,
+  Database,
+  MessageSquare
 } from 'lucide-react';
 import { askAgent, getAgentTaskStatus } from '../services/api';
 
@@ -48,11 +51,11 @@ const AREAS_CONFIG = {
     bannerTitle: 'Gestão de Liquidez & Tesouraria Protheus',
     bannerSubtitle: 'Dados de Contas a Pagar/Receber e Bancos sincronizados via QueryRest',
     bannerMetricLabel: 'Previsão de Receita',
-    bannerMetricValue: 'R$ 1.840.000',
+    bannerMetricValue: '---',
     kpis: [
       {
         label: 'Saldo Disponível',
-        value: 'R$ 1.240.500',
+        value: '---',
         change: '+4.2%',
         isPositive: true,
         icon: Wallet,
@@ -61,7 +64,7 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Contas a Pagar (SE2)',
-        value: 'R$ 480.230',
+        value: '---',
         change: '+1.5%',
         isPositive: false,
         icon: ArrowDownRight,
@@ -70,7 +73,7 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Contas a Receber (SE1)',
-        value: 'R$ 890.750',
+        value: '---',
         change: '+8.7%',
         isPositive: true,
         icon: ArrowUpRight,
@@ -79,7 +82,7 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Lucro Líquido / EBITDA',
-        value: 'R$ 310.420',
+        value: '---',
         change: '+12.4%',
         isPositive: true,
         icon: TrendingUp,
@@ -91,19 +94,15 @@ const AREAS_CONFIG = {
     compositionTitle: 'Composição de Despesas',
     compositionSubtitle: 'Maiores centros de custos no período',
     compositionItems: [
-      { label: 'Folha de Pagamento', percentage: 45, detail: 'R$ 216k', color: '#004fce' },
-      { label: 'Fornecedores / Insumos', percentage: 32, detail: 'R$ 153k', color: '#0f66ff' },
-      { label: 'Tributário e Impostos', percentage: 15, detail: 'R$ 72k', color: '#f59e0b' },
-      { label: 'Infraestrutura / TI', percentage: 8, detail: 'R$ 38k', color: '#64748b' }
+      { label: 'Folha de Pagamento', percentage: 45, detail: '---', color: '#004fce' },
+      { label: 'Fornecedores / Insumos', percentage: 32, detail: '---', color: '#0f66ff' },
+      { label: 'Tributário e Impostos', percentage: 15, detail: '---', color: '#f59e0b' },
+      { label: 'Infraestrutura / TI', percentage: 8, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Últimas Movimentações Financeiras',
     tableSubtitle: 'Títulos e duplicatas integradas via SE1 / SE2',
     tableHeaders: ['Vencimento / Data', 'Descrição / Titular', 'Tipo', 'Valor', 'Status'],
-    tableRows: [
-      { col1: 'Hoje, 09:41', col2: 'Pagamento Fornecedor ABC Logística', col3: 'Contas a Pagar', col4: '- R$ 12.450,00', col4Class: 'text-[#ef4444]', status: 'Liquidado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
-      { col1: 'Ontem, 15:20', col2: 'Recebimento NF-e 4589 - Distribuidora Sul', col3: 'Contas a Receber', col4: '+ R$ 8.900,00', col4Class: 'text-[#22c55e]', status: 'Recebido', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
-      { col1: 'Amanhã, 10:00', col2: 'Impostos Federais - DARF Simples', col3: 'Tributário', col4: '- R$ 45.120,00', col4Class: 'text-[#ef4444]', status: 'Agendado', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' }
-    ],
+    tableRows: [],
     initialCopilotMsg: 'Olá! Notei uma variação de 12% no DDA para o próximo vencimento no Protheus. Deseja que eu analise o detalhamento das duplicatas a pagar?',
     copilotSuggestions: ['Sim, analisar DDA', 'Duplicatas a pagar', 'Inadimplência de clientes']
   },
@@ -119,11 +118,11 @@ const AREAS_CONFIG = {
     bannerTitle: 'Inteligência de Vendas & Curva ABC de Clientes',
     bannerSubtitle: 'Cruzamento de notas fiscais (SF2/SD2) e carteira de pedidos',
     bannerMetricLabel: 'Meta do Mês (81.6%)',
-    bannerMetricValue: 'R$ 2.450.800',
+    bannerMetricValue: '---',
     kpis: [
       {
         label: 'Faturamento Acumulado',
-        value: 'R$ 2.450.800',
+        value: '---',
         change: '+14.8%',
         isPositive: true,
         icon: TrendingUp,
@@ -141,7 +140,7 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Ticket Médio por Venda',
-        value: 'R$ 8.420',
+        value: '---',
         change: '+3.5%',
         isPositive: true,
         icon: Tag,
@@ -162,19 +161,15 @@ const AREAS_CONFIG = {
     compositionTitle: 'Faturamento por Categoria',
     compositionSubtitle: 'Participação das linhas de produtos',
     compositionItems: [
-      { label: 'Linha Industrial / Peças', percentage: 48, detail: 'R$ 1.176k', color: '#004fce' },
-      { label: 'Linha Varejo / Consumo', percentage: 28, detail: 'R$ 686k', color: '#0f66ff' },
-      { label: 'Contratos de Serviços', percentage: 16, detail: 'R$ 392k', color: '#22c55e' },
-      { label: 'Acessórios e Outros', percentage: 8, detail: 'R$ 196k', color: '#64748b' }
+      { label: 'Linha Industrial / Peças', percentage: 48, detail: '---', color: '#004fce' },
+      { label: 'Linha Varejo / Consumo', percentage: 28, detail: '---', color: '#0f66ff' },
+      { label: 'Contratos de Serviços', percentage: 16, detail: '---', color: '#22c55e' },
+      { label: 'Acessórios e Outros', percentage: 8, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Últimos Pedidos de Venda',
     tableSubtitle: 'Pedidos registrados no Protheus (SC5 / SC6)',
     tableHeaders: ['Número / Emissão', 'Cliente (SA1)', 'Filial', 'Valor Total', 'Status'],
-    tableRows: [
-      { col1: 'PV-008920 (Hoje)', col2: 'Indústrias Metalúrgicas Beta S/A', col3: '0101', col4: 'R$ 48.900,00', col4Class: 'text-[#0f172a]', status: 'Faturado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
-      { col1: 'PV-008919 (Hoje)', col2: 'Comércio e Distribuição Norte Ltda', col3: '0101', col4: 'R$ 19.350,00', col4Class: 'text-[#0f172a]', status: 'Liberado', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' },
-      { col1: 'PV-008918 (Ontem)', col2: 'Transportes e Logística Paulista', col3: '0102', col4: 'R$ 32.100,00', col4Class: 'text-[#0f172a]', status: 'Em Análise', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' }
-    ],
+    tableRows: [],
     initialCopilotMsg: 'Olá! O faturamento acumulado de vendas já atingiu 81.6% da meta mensal. Deseja ver os 10 clientes com maior volume de compras este mês?',
     copilotSuggestions: ['Top 10 clientes', 'Pedidos de hoje', 'Faturamento por filial']
   },
@@ -190,11 +185,11 @@ const AREAS_CONFIG = {
     bannerTitle: 'Otimização de Custos & Compras Estratégicas',
     bannerSubtitle: 'Monitoramento de lead time e ordens de compra pendentes',
     bannerMetricLabel: 'Volume Total em Compras',
-    bannerMetricValue: 'R$ 980.400',
+    bannerMetricValue: '---',
     kpis: [
       {
         label: 'Volume de Compras no Mês',
-        value: 'R$ 980.400',
+        value: '---',
         change: '-4.1%',
         isPositive: true,
         icon: ShoppingCart,
@@ -221,7 +216,7 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Economia em Negociações',
-        value: 'R$ 74.200',
+        value: '---',
         change: '+7.5% saving',
         isPositive: true,
         icon: ShieldCheck,
@@ -233,19 +228,15 @@ const AREAS_CONFIG = {
     compositionTitle: 'Distribuição por Grupo de Compras',
     compositionSubtitle: 'Categorias com maior impacto no orçamento',
     compositionItems: [
-      { label: 'Matérias-Primas', percentage: 52, detail: 'R$ 510k', color: '#004fce' },
-      { label: 'Embalagens e Descartáveis', percentage: 24, detail: 'R$ 235k', color: '#0f66ff' },
-      { label: 'Manutenção / MRO', percentage: 14, detail: 'R$ 137k', color: '#f59e0b' },
-      { label: 'Serviços Terceirizados', percentage: 10, detail: 'R$ 98k', color: '#64748b' }
+      { label: 'Matérias-Primas', percentage: 52, detail: '---', color: '#004fce' },
+      { label: 'Embalagens e Descartáveis', percentage: 24, detail: '---', color: '#0f66ff' },
+      { label: 'Manutenção / MRO', percentage: 14, detail: '---', color: '#f59e0b' },
+      { label: 'Serviços Terceirizados', percentage: 10, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Pedidos de Compra Pendentes de Entrega',
     tableSubtitle: 'Ordens de compra ativas no Protheus (SC7)',
     tableHeaders: ['Ordem / Emissão', 'Fornecedor (SA2)', 'Previsão Entrega', 'Valor Total', 'Status'],
-    tableRows: [
-      { col1: 'PC-004510 (15/10)', col2: 'Siderúrgica Nacional do Brasil', col3: '28/10/2026', col4: 'R$ 115.000,00', col4Class: 'text-[#0f172a]', status: 'Aprovado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
-      { col1: 'PC-004509 (18/10)', col2: 'Embalagens Industriais Master', col3: '30/10/2026', col4: 'R$ 38.400,00', col4Class: 'text-[#0f172a]', status: 'Aguardando', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' },
-      { col1: 'PC-004508 (20/10)', col2: 'Química Industrial Global Ltda', col3: '02/11/2026', col4: 'R$ 64.800,00', col4Class: 'text-[#0f172a]', status: 'Em Trânsito', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' }
-    ],
+    tableRows: [],
     initialCopilotMsg: 'Olá! Há 4 pedidos de compra com prazo de entrega para esta semana no Protheus. Deseja verificar se algum fornecedor está com entrega em atraso?',
     copilotSuggestions: ['Pedidos com atraso', 'Top fornecedores', 'Cotações pendentes']
   },
@@ -261,11 +252,11 @@ const AREAS_CONFIG = {
     bannerTitle: 'Gestão Inteligente de Saldos & Reposição',
     bannerSubtitle: 'Monitoramento de giro de estoque, curva ABC e ponto de pedido',
     bannerMetricLabel: 'Valor Total em Estoque',
-    bannerMetricValue: 'R$ 3.820.000',
+    bannerMetricValue: '---',
     kpis: [
       {
         label: 'Valor Total do Estoque (SB2)',
-        value: 'R$ 3.820.000',
+        value: '---',
         change: '-2.3%',
         isPositive: true,
         icon: Package,
@@ -304,18 +295,14 @@ const AREAS_CONFIG = {
     compositionTitle: 'Curva ABC de Estoque',
     compositionSubtitle: 'Distribuição de valor por classe de produto',
     compositionItems: [
-      { label: 'Classe A (Alto Valor)', percentage: 70, detail: 'R$ 2.674k', color: '#004fce' },
-      { label: 'Classe B (Médio Valor)', percentage: 20, detail: 'R$ 764k', color: '#0f66ff' },
-      { label: 'Classe C (Baixo Valor)', percentage: 10, detail: 'R$ 382k', color: '#64748b' }
+      { label: 'Classe A (Alto Valor)', percentage: 70, detail: '---', color: '#004fce' },
+      { label: 'Classe B (Médio Valor)', percentage: 20, detail: '---', color: '#0f66ff' },
+      { label: 'Classe C (Baixo Valor)', percentage: 10, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Itens Críticos / Ponto de Reposição',
     tableSubtitle: 'Produtos com saldo próximo ou abaixo do estoque de segurança (SB1)',
     tableHeaders: ['Código / Descrição', 'Armazém', 'Saldo Atual', 'Ponto Pedido', 'Status'],
-    tableRows: [
-      { col1: 'PROD-00412 - Bobina de Aço 1.5mm', col2: 'Almoxarifado 01', col3: '14 un', col4: '30 un', col4Class: 'text-[#ef4444]', status: 'Crítico', statusClass: 'bg-[#ef4444]/10 text-[#ef4444]' },
-      { col1: 'PROD-00189 - Válvula Hidráulica 3/4', col2: 'Almoxarifado 01', col3: '8 un', col4: '15 un', col4Class: 'text-[#f59e0b]', status: 'Atenção', statusClass: 'bg-[#f59e0b]/10 text-[#f59e0b]' },
-      { col1: 'PROD-00823 - Rolamento Blindado 6204', col2: 'Almoxarifado 02', col3: '22 un', col4: '25 un', col4Class: 'text-[#0f172a]', status: 'Repor', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' }
-    ],
+    tableRows: [],
     initialCopilotMsg: 'Olá! Identifiquei 18 produtos com saldo abaixo do ponto de reposição na filial 0101. Deseja gerar a listagem completa com sugestão de compra?',
     copilotSuggestions: ['Listar itens críticos', 'Estoque parado > 90 dias', 'Saldo por armazém']
   },
@@ -331,11 +318,11 @@ const AREAS_CONFIG = {
     bannerTitle: 'Demonstrações Financeiras & DRE Gerencial',
     bannerSubtitle: 'Estrutura patrimonial, liquidez corrente e conciliação de contas',
     bannerMetricLabel: 'Patrimônio Líquido',
-    bannerMetricValue: 'R$ 11.300.000',
+    bannerMetricValue: '---',
     kpis: [
       {
         label: 'Ativo Total Consolidado',
-        value: 'R$ 14.500.000',
+        value: '---',
         change: '+5.4% no exercício',
         isPositive: true,
         icon: BookOpen,
@@ -344,7 +331,7 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Passivo Circulante',
-        value: 'R$ 3.200.000',
+        value: '---',
         change: '-2.1% no período',
         isPositive: true,
         icon: Scale,
@@ -353,7 +340,7 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Patrimônio Líquido',
-        value: 'R$ 11.300.000',
+        value: '---',
         change: '+7.8% no exercício',
         isPositive: true,
         icon: Award,
@@ -374,23 +361,19 @@ const AREAS_CONFIG = {
     compositionTitle: 'Estrutura do Balanço Patrimonial',
     compositionSubtitle: 'Distribuição dos ativos da empresa',
     compositionItems: [
-      { label: 'Ativo Circulante (Disponível + Recebíveis)', percentage: 62, detail: 'R$ 8.990k', color: '#004fce' },
-      { label: 'Ativo Não Circulante (Imobilizado / Intangível)', percentage: 38, detail: 'R$ 5.510k', color: '#0f66ff' }
+      { label: 'Ativo Circulante (Disponível + Recebíveis)', percentage: 62, detail: '---', color: '#004fce' },
+      { label: 'Ativo Não Circulante (Imobilizado / Intangível)', percentage: 38, detail: '---', color: '#0f66ff' }
     ],
     tableTitle: 'Lançamentos Contábeis Recentes',
     tableSubtitle: 'Lote contábil ativo no Protheus (CT2 / CT1)',
     tableHeaders: ['Data / Lote', 'Conta Débito / Crédito', 'Histórico do Lançamento', 'Valor', 'Status'],
-    tableRows: [
-      { col1: 'Hoje (Lote 001)', col2: '1.1.1.01 -> 3.1.1.01', col3: 'Recebimento de Duplicata Cliente Beta', col4: 'R$ 48.900,00', col4Class: 'text-[#0f172a]', status: 'Conciliado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
-      { col1: 'Hoje (Lote 001)', col2: '4.1.2.05 -> 1.1.1.01', col3: 'Pagamento Fornecedor ABC Logística', col4: 'R$ 12.450,00', col4Class: 'text-[#0f172a]', status: 'Conciliado', statusClass: 'bg-[#22c55e]/10 text-[#22c55e]' },
-      { col1: 'Ontem (Lote 098)', col2: '4.1.3.01 -> 2.1.2.01', col3: 'Provisão de Folha de Pagamento 10/2026', col4: 'R$ 216.000,00', col4Class: 'text-[#0f172a]', status: 'Lançado', statusClass: 'bg-[#0f66ff]/10 text-[#0f66ff]' }
-    ],
+    tableRows: [],
     initialCopilotMsg: 'Olá! O fechamento contábil preliminar deste mês aponta um EBITDA de 22.4% e índice de liquidez de 2.42x. Deseja visualizar o DRE consolidado?',
     copilotSuggestions: ['DRE consolidado', 'Balancete do mês', 'Lançamentos manuais']
   }
 };
 
-export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace }) {
+export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace, context }) {
   const [activeAreaKey, setActiveAreaKey] = useState(initialArea || 'financeiro');
   const [period, setPeriod] = useState('Mês Atual');
   const [chartView, setChartView] = useState('semanal');
@@ -428,12 +411,16 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace 
     setIsCopilotLoading(true);
 
     try {
+      if (!context.tenant_id || !context.environment || !context.company || !context.branch) {
+        throw new Error('Contexto multi-tenant ausente ou incompleto.');
+      }
+      
       const response = await askAgent({
         prompt: question,
-        tenant_id: 'rodol_prod',
-        environment_code: 'c8te0u_prod',
-        empresa: '01',
-        filial: '0101',
+        tenant_id: context.tenant_id,
+        environment_code: context.environment,
+        empresa: context.company,
+        filial: context.branch,
         module: currentArea.module,
         conversation_id: `dash-${activeAreaKey}-${Date.now()}`
       });
@@ -444,12 +431,16 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace 
         while (Date.now() < deadline) {
           await new Promise(r => setTimeout(r, 1500));
           const status = await getAgentTaskStatus(response.task_id);
-          if (status.status === 'completed') {
-            replyText = status.response_text || 'Aqui está o resultado da sua consulta no Protheus.';
+          if (['completed', 'success'].includes(status.status)) {
+            replyText = status.response_text || status.summary || status.answer || 'Aqui está o resultado da sua consulta no Protheus.';
             break;
           }
-          if (status.status === 'failed') {
-            replyText = `Falha na consulta: ${status.error || 'Erro na execução SQL'}`;
+          if (status.status === 'execution_failed') {
+            replyText = `Erro na execução: ${status.execution_error || 'Falha na consulta Oracle.'}`;
+            break;
+          }
+          if (['failed', 'error'].includes(status.status)) {
+            replyText = `Falha na consulta: ${status.error || status.message || 'Erro na execução SQL'}`;
             break;
           }
         }
@@ -550,7 +541,9 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace 
             <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse"></span>
             <span className="font-medium">Oracle TOTVS Cloud</span>
           </div>
-          <div className="text-[11px] text-[#94a3b8] mt-0.5 font-mono">c8te0u_prod (Emp. 01 / 0101)</div>
+          <div className="text-[11px] text-[#94a3b8] mt-0.5 font-mono">
+            {context?.environment || 'Ambiente'} (Emp. {context?.company || '??'} / {context?.branch || '??'})
+          </div>
         </div>
       </aside>
 
@@ -561,7 +554,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace 
           <div className="flex items-center gap-4">
             <div className="bg-[#eff4f9] px-3 py-1.5 rounded-lg flex items-center gap-2 text-[#475569] text-[13px] font-medium border border-[#e2e8f0]">
               <Building2 className="w-4 h-4 text-[#004fce]" />
-              <span>EliteCorp / Matriz</span>
+              <span>{context?.tenant_id ? context.tenant_id.replace('_prod', '').toUpperCase() : 'Sem Contexto'}</span>
               <ChevronDown className="w-3.5 h-3.5 text-[#94a3b8]" />
             </div>
 
@@ -595,9 +588,30 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace 
         </header>
 
         {/* Conteúdo da Área Selecionada */}
-        <main className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Título da Visão */}
-          <div className="flex items-center justify-between">
+        <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]">
+          {/* OVERLAY DE ESTADO VAZIO */}
+          <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-8">
+            <div className="bg-white p-8 rounded-2xl shadow-lg border border-[#e2e8f0] text-center max-w-md">
+              <div className="w-16 h-16 bg-[#eff4f9] rounded-full flex items-center justify-center mx-auto mb-4">
+                <Database className="w-8 h-8 text-[#004fce]" />
+              </div>
+              <h2 className="text-lg font-bold text-[#0f172a] mb-2">Painel Demonstrativo</h2>
+              <p className="text-[13px] text-[#475569] mb-6">
+                Este dashboard visual não está atualmente conectado a uma fonte de dados real (QueryRest). Para obter análises reais, faça perguntas ao Copiloto.
+              </p>
+              <button
+                onClick={onNavigateToWorkspace}
+                className="px-5 py-2.5 bg-[#004fce] hover:bg-[#003db3] text-white rounded-xl text-[13px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-2"
+              >
+                <MessageSquare className="w-4 h-4" />
+                Ir para Workspace
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6 opacity-30 pointer-events-none filter grayscale">
+            {/* Título da Visão */}
+            <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-[#0f172a] tracking-tight">{currentArea.title}</h1>
