@@ -2,13 +2,6 @@ export function getApiBaseUrl() {
   if (import.meta.env.VITE_API_BASE) {
     return import.meta.env.VITE_API_BASE;
   }
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    // No ambiente de produção (Cloudflare Pages / Domínio da Empresa), a API roda na Hetzner em copilot-api
-    if (host.includes('elitecorp.tec.br') || host.includes('pages.dev')) {
-      return 'https://copilot-api.elitecorp.tec.br/api';
-    }
-  }
   return '/api';
 }
 
