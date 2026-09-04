@@ -313,13 +313,15 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
       )}
 
       {/* 3. AI Insights Box */}
-      <div className="bg-[#fefce8] dark:bg-amber-950/30 border border-[#fef08a] dark:border-amber-800/40 rounded-xl p-3 text-[12px] text-[#854d0e] dark:text-amber-200 leading-relaxed shadow-xs flex items-start gap-2">
-        <Lightbulb className="w-4 h-4 text-[#eab308] shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Insight do Copiloto: </span>
-          Os dados consolidados indicam estabilidade operacional no período com execução de query nativa no Oracle TOTVS Cloud.
+      {result?.structured?.summary && (
+        <div className="bg-[#fefce8] dark:bg-amber-950/30 border border-[#fef08a] dark:border-amber-800/40 rounded-xl p-3 text-[12px] text-[#854d0e] dark:text-amber-200 leading-relaxed shadow-xs flex items-start gap-2">
+          <Lightbulb className="w-4 h-4 text-[#eab308] shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Insight do Copiloto: </span>
+            {result.structured.summary}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 4. Acordeões de Filtros e Detalhamento */}
       <div className="space-y-1.5 pt-1">

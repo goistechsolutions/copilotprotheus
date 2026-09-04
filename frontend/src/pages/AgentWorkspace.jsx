@@ -233,7 +233,7 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
         {
           role: 'assistant',
           text: replyMessage,
-          result: res,
+          result: ['completed', 'success'].includes(res.status) ? res : null,
           userPrompt: text,
         },
       ]);
