@@ -865,7 +865,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
                 <p className="text-xs text-[#64748b]">{hasRealData ? "Dados retornados pelo Protheus" : currentArea.tableSubtitle}</p>
               </div>
               <button
-                onClick={() => handleSendCopilot(`Listar registros detalhados de ${currentArea.label}`)}
+                onClick={() => onNavigateToWorkspace(activeAreaKey)}
                 className="text-xs font-semibold text-[#004fce] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <span>Consultar no Copilot</span>
@@ -916,105 +916,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         </main>
       </div>
 
-      {/* 3. Painel Lateral do Copilot IA Integrado (30%) */}
-      <aside className="w-80 lg:w-96 bg-white border-l border-[#e2e8f0] flex flex-col flex-shrink-0 z-20">
-        <div className="p-4 border-b border-[#e2e8f0] flex items-center justify-between bg-white">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#004fce] flex items-center justify-center text-white shadow-sm">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-[14px] text-[#0f172a]">Copiloto IA</div>
-              <div className="flex items-center gap-1.5 text-[11px] text-[#22c55e]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-ping"></span>
-                <span className="font-semibold">{currentArea.label} ({currentArea.module})</span>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => setCopilotMessages([
-              {
-                role: 'assistant',
-                text: currentArea.initialCopilotMsg,
-                suggestions: currentArea.copilotSuggestions
-              }
-            ])}
-            className="p-1.5 text-[#94a3b8] hover:text-[#0f172a] hover:bg-[#f1f5f9] rounded-lg transition-colors cursor-pointer"
-            title="Reiniciar conversa"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f8fafc]">
-          {copilotMessages.map((msg, index) => (
-            <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-              <div
-                className={`p-3.5 rounded-2xl text-[13px] leading-relaxed max-w-[90%] ${
-                  msg.role === 'user'
-                    ? 'bg-[#004fce] text-white rounded-br-none shadow-sm'
-                    : 'bg-white text-[#171c20] border border-[#e2e8f0] rounded-bl-none shadow-sm'
-                }`}
-              >
-                {msg.text}
-              </div>
-
-              {msg.suggestions && msg.suggestions.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {msg.suggestions.map((sug, sIndex) => (
-                    <button
-                      key={sIndex}
-                      onClick={() => handleSendCopilot(sug)}
-                      className="px-2.5 py-1 rounded-full bg-white border border-[#e2e8f0] text-[11px] font-semibold text-[#004fce] hover:bg-[#e0ecff] transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                    >
-                      <Sparkles className="w-3 h-3 text-[#004fce]" />
-                      <span>{sug}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {isCopilotLoading && (
-            <div className="flex items-center gap-2 p-3 bg-white rounded-xl border border-[#e2e8f0] text-xs text-[#64748b] shadow-sm">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#004fce]" />
-              <span>Consultando {currentArea.module} via Oracle REST...</span>
-            </div>
-          )}
-        </div>
-
-        <div className="p-3 border-t border-[#e2e8f0] bg-white">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSendCopilot();
-            }}
-            className="relative"
-          >
-            <textarea
-              value={copilotQuestion}
-              onChange={(e) => setCopilotQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendCopilot();
-                }
-              }}
-              placeholder={`Pergunte ao Protheus sobre ${currentArea.label}...`}
-              rows={2}
-              className="w-full pl-3 pr-10 py-2.5 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-[13px] placeholder-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#004fce]/20 focus:border-[#004fce] resize-none"
-            />
-            <button
-              type="submit"
-              disabled={!copilotQuestion.trim() || isCopilotLoading}
-              className="absolute right-2 bottom-3 p-1.5 bg-[#004fce] text-white rounded-lg hover:bg-[#003ea6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-            </button>
-          </form>
-        </div>
-      </aside>
+      
     </div>
   );
 }
