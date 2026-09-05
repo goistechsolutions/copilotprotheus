@@ -1,0 +1,28 @@
+commit 1e7646e7b16fd3f1e519c8793b1559199a07d233
+Author: goistechsolutions <murilo@elitecorp.tec.br>
+Date:   Sat Sep 5 06:02:07 2026 -0300
+
+    fix(agent): implement CatalogValidationError, fix exception routing, normalize agent result on frontend
+
+diff --git a/frontend/src/pages/ExecutiveDashboard.jsx b/frontend/src/pages/ExecutiveDashboard.jsx
+index 9b325e3..34049ea 100644
+--- a/frontend/src/pages/ExecutiveDashboard.jsx
++++ b/frontend/src/pages/ExecutiveDashboard.jsx
+@@ -392,17 +392,6 @@ function formatCurrency(val) {
+   return String(val);
+ }
+ 
+-function getSafeRows(result) {
+-  const candidateRows = Array.isArray(result?.result?.rows) ? result.result.rows : Array.isArray(result?.structured?.rows)
+-    ? result.structured.rows
+-    : Array.isArray(result?.data)
+-      ? result.data
+-      : Array.isArray(result?.items)
+-        ? result.items
+-        : [];
+-  return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
+-}
+-
+ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace, context, initialData }) {
+   const [activeAreaKey, setActiveAreaKey] = useState(initialArea || 'financeiro');
+   const [period, setPeriod] = useState('Mês Atual');
