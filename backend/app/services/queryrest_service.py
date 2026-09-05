@@ -103,6 +103,8 @@ async def queryrest_exec_tenant(
             404: "Endpoint QueryRest do Protheus não localizado.",
             408: "Timeout na comunicação com o Protheus.",
         }.get(status_code, "Falha na execução do QueryRest do Protheus.")
+        if status_code == 500 and e.response_body:
+            detail = f"{detail} Detalhes do banco: {e.response_body[:300]}"
         raise HTTPException(status_code=status_code, detail=detail)
     except Exception:
         logger.error("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s", tenant_id, environment_code)
