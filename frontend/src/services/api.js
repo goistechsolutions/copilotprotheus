@@ -184,3 +184,21 @@ export async function apiGetAuthMe() {
   }
   return response.json();
 }
+
+export async function apiLogin(tenant_id, username, password) {
+  const url = \\/auth/login\;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    credentials: 'include',
+    body: JSON.stringify({ tenant_id, username, password })
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Falha no login');
+  }
+  return response.json();
+}

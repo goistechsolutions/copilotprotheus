@@ -153,7 +153,7 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
         value=encoded_jwt,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -172,7 +172,7 @@ def logout(response: Response):
         value="",
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=0,      # Expira imediatamente
         expires=0,      # Compatibilidade com browsers mais antigos
         path="/",
