@@ -1,0 +1,1 @@
+Documentação técnica completa gerada: objetivo, riscos, contratos, implementação backend/frontend, políticas de JWT obrigatório, EntitlementGuard enforce, AuthGate, postMessage, auditoria, desenvolvimento local, testes, plano de aplicação e critérios de aceite.

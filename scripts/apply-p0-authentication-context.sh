@@ -1,0 +1,1 @@
+Script completo gerado: valida clone/branch/ambiente, bloqueia configurações inseguras, verifica arquivos críticos, executa testes backend, lint/build frontend, secret scanning e checklist de revisão.
