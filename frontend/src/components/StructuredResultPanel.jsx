@@ -318,7 +318,7 @@ export default function StructuredResultPanel({ result, context, onClose }) {
           </p>
           <div className="flex items-baseline gap-2">
             <h2 className="text-[26px] font-bold text-[#171C20] dark:text-white tracking-tight">
-              {computedKpis?.total !== null ? formatCurrency(computedKpis.total) : `${rows.length} registros`}
+              {computedKpis?.total != null ? formatCurrency(computedKpis.total) : `${rows.length} registros`}
             </h2>
           </div>
           <div className="mt-3 flex items-center gap-1 text-[#22C55E] text-[12px] font-semibold">
@@ -351,12 +351,13 @@ export default function StructuredResultPanel({ result, context, onClose }) {
           <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-3 -translate-y-3 group-hover:scale-110 transition-transform duration-500 pointer-events-none">
             <Wallet size={64} className="text-[#22C55E]" />
           </div>
-          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-            Média por Registro
+          <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5 uppercase tracking-wider">
+            <PieChart size={14} className="text-[#0F66FF] dark:text-[#3882FF]" />
+            Ticket Médio / Valor Médio
           </p>
           <div className="flex items-baseline gap-2">
             <h2 className="text-[26px] font-bold text-[#171C20] dark:text-white tracking-tight">
-              {computedKpis?.avg !== null ? formatCurrency(computedKpis.avg) : '—'}
+              {computedKpis?.avg != null ? formatCurrency(computedKpis.avg) : '-'}
             </h2>
           </div>
           <div className="mt-3 flex items-center gap-1 text-[#22C55E] text-[12px] font-semibold">
