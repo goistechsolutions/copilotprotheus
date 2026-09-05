@@ -62,7 +62,9 @@ function formatValue(val, isCurrency = false) {
 }
 
 function getSafeRows(result) {
-  const candidateRows = Array.isArray(result?.structured?.rows)
+  const candidateRows = Array.isArray(result?.result?.rows)
+    ? result.result.rows
+    : Array.isArray(result?.structured?.rows)
     ? result.structured.rows
     : Array.isArray(result?.data)
       ? result.data
@@ -100,6 +102,9 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
 
   const rows = useMemo(() => getSafeRows(result), [result]);
   const columns = useMemo(() => {
+    if (Array.isArray(result?.result?.columns) && result.result.columns.length > 0) {
+      return result.result.columns;
+    }
     if (Array.isArray(result?.structured?.columns) && result.structured.columns.length > 0) {
       return result.structured.columns;
     }

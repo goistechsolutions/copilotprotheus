@@ -840,16 +840,22 @@ async def process_agent_task(task_id: str, payload: dict):
                     )
                     response["records"] = len(rows)
                     response["data"] = safe_rows
-                    response["structured"] = {
+                    response["result"] = {
                         "columns": list(safe_rows[0].keys()) if safe_rows and isinstance(safe_rows[0], dict) else [],
                         "rows": safe_rows,
-                        "total_records": len(rows),
-                        "display_limit": None,
+                        "metadata": {
+                            "row_count": len(rows),
+                            "source": "queryrest"
+                        },
+                        "kpis": [],
+                        "series": []
                     }
+                    response["message"] = "Consulta concluída."
                     logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
 
                     if len(rows) == 0:
-                        response["summary"] = "A consulta ao banco Oracle do Protheus foi executada com sucesso, porém retornou zero registros (tabela vazia ou sem correspondências no período)."
+                        response["message"] = "Consulta concluída sem registros."
+                        response["result"] = {"columns": [], "rows": [], "metadata": {"row_count": 0, "source": "queryrest"}, "kpis": [], "series": []}
                     elif safe_rows and isinstance(safe_rows[0], dict):
                         response["summary"] = (
                             f"A consulta ao Protheus retornou {len(rows)} registros. "
@@ -864,8 +870,11 @@ async def process_agent_task(task_id: str, payload: dict):
                         default_source="protheus_queryrest",
                     )
                     response["status"] = "execution_failed"
+                    response["message"] = error_info["message"]
+                    response["retryable"] = False
+                    response["result"] = None
+                    # backward compatibility
                     response["execution_error"] = error_info["message"]
-                    response["error"] = error_info["message"]
                     response.update(error_info)
                     logger.warning(
                         "agent_queryrest_failed task_id=%s status=%s error_code=%s",
