@@ -77,8 +77,14 @@ function readContextFromUrl() {
   };
 }
 
-export default function AgentWorkspace({ onNavigateToDashboard }) {
-  const [externalContext, setExternalContext] = useState(readContextFromUrl());
+export default function AgentWorkspace({ onNavigateToDashboard, externalContext: propContext }) {
+  const [externalContext, setExternalContext] = useState(propContext || readContextFromUrl());
+  
+  useEffect(() => {
+    if (propContext) {
+      setExternalContext(propContext);
+    }
+  }, [propContext]);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     try {
       const stored = window.localStorage.getItem('copilot.theme');
@@ -135,6 +141,12 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   const historyStorageKey = useMemo(() => `copilot.conversations:${conversationKey(context)}`, [context]);
 
   useEffect(() => {
+    abortRef.current?.abort();
+    setTask(null);
+    setResult(null);
+  }, [historyStorageKey]);
+
+  useEffect(() => {
     const storedHistory = safeStorageRead(historyStorageKey, []);
     const conversations = Array.isArray(storedHistory) ? storedHistory : [];
     try {
@@ -172,28 +184,7 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
     safeStorageWrite(historyStorageKey, next);
   }, [messages, conversationId, historyStorageKey, result]);
 
-  useEffect(() => {
-    const handleMessage = (event) => {
-      if (!event?.data || !['PROTHEUS_CONTEXT', 'cprot-context-update'].includes(event.data.type)) return;
-      if (event.source !== window.parent && event.source !== window) return;
 
-      const incoming = event.data.payload || event.data.context || {};
-      setExternalContext((prev) => ({
-        ...prev,
-        tenant_id: incoming.tenant_id || event.data.tenantId || prev.tenant_id,
-        company: incoming.company_code || incoming.company || prev.company,
-        branch: incoming.branch || prev.branch,
-        user: incoming.user || prev.user,
-        profile: incoming.profile || prev.profile || 'Gerente Financeiro',
-        session_id: incoming.session_id || prev.session_id,
-        environment: incoming.environment_code || incoming.environment || prev.environment,
-        module: incoming.module || prev.module,
-      }));
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
 
   const send = async (text) => {
     if (!text?.trim()) return;

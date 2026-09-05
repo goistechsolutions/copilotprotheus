@@ -178,3 +178,14 @@ def logout(response: Response):
         path="/",
     )
     return {"success": True, "message": "Logout realizado com sucesso."}
+
+from app.core.auth import require_current_user
+
+@router.get("/me")
+async def get_auth_me(current_user: dict = Depends(require_current_user)):
+    return {
+        "authenticated": True,
+        "user_id": str(current_user.get("user_id") or current_user.get("sub")),
+        "tenant_id": current_user.get("tenant_id"),
+        "role": current_user.get("role"),
+    }

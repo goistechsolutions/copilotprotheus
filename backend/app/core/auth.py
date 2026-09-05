@@ -74,3 +74,45 @@ async def get_current_user_flexible(
             detail=f"Token inválido: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+async def require_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    access_token: Optional[str] = Cookie(default=None),
+) -> dict:
+    """Valida JWT obrigatoriamente via Bearer header ou cookie 'access_token'."""
+    token: Optional[str] = None
+
+    if credentials and credentials.credentials:
+        token = credentials.credentials
+    elif access_token:
+        token = access_token
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Autenticação necessária para usar o Copilot.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        
+        if not payload.get("user_id") and not payload.get("sub"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticação necessária para usar o Copilot.")
+        if not payload.get("tenant_id") or not payload.get("role"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticação necessária para usar o Copilot.")
+            
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Autenticação necessária para usar o Copilot.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Autenticação necessária para usar o Copilot.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )

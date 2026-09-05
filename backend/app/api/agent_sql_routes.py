@@ -34,9 +34,10 @@ from app.services.protheus_service import ProtheusServiceError, get_tenant_confi
 from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.entitlement_guard import EntitlementDenied, EntitlementGuard
 from app.services.protheus_module_catalog import quote_tenant_schema
+from app.core.auth import get_current_user, require_current_user
 
 logger = logging.getLogger("app.api.agent_sql")
-router = APIRouter(prefix="/agent", tags=["agent-sql"])
+router = APIRouter(prefix="/agent", tags=["agent-sql"], dependencies=[Depends(require_current_user)])
 
 
 def _normalized_agent_error(
@@ -960,7 +961,7 @@ class QueryRestProxyRequest(BaseModel):
 @router.post("/queryrest")
 async def queryrest_proxy(
     payload: QueryRestProxyRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_current_user),
 ) -> Dict[str, Any]:
     """Executa uma consulta somente leitura recebida do gateway autenticado."""
     token_tenant = str(
@@ -1063,20 +1064,30 @@ async def queryrest_proxy(
 
 @router.post("/ask/v2")
 @router.post("/ask/v2/")
-async def ask_v2(payload: dict) -> Dict[str, Any]:
-    # Checagem rapida de tenant antes de disparar task
-    tenant_id = payload.get("tenant_id")
+async def ask_v2(payload: dict, current_user: dict = Depends(require_current_user)) -> Dict[str, Any]:
+    authenticated_tenant = current_user.get("tenant_id")
+    requested_tenant = payload.get("tenant_id")
+    
+    if requested_tenant and requested_tenant != authenticated_tenant:
+        raise HTTPException(
+            status_code=403,
+            detail="Contexto da solicitação não autorizado."
+        )
+        
+    payload["tenant_id"] = authenticated_tenant
+    payload["role"] = current_user.get("role")
+    
     environment_code = str(
         payload.get("environment_code")
         or (payload.get("context") or {}).get("environment_code")
         or ""
     ).strip()
-    if not tenant_id or tenant_id == "default" or environment_code.lower() in {"", "default", "none", "null"}:
+    if not authenticated_tenant or authenticated_tenant == "default" or environment_code.lower() in {"", "default", "none", "null"}:
         return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
 
     task_id = str(uuid.uuid4())
     correlation_id = get_correlation_id()
-    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id}
+    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id, "tenant_id": authenticated_tenant}
     logger.info("agent_task_accepted task_id=%s", task_id)
     asyncio.create_task(process_agent_task(task_id, payload))
     return {"status": "processing", "task_id": task_id, "correlation_id": correlation_id}
@@ -1089,10 +1100,19 @@ async def ask_v2_upload(
     query: str = Form(...),
     context: str = Form("{}"),
     file: UploadFile = File(...),
+    current_user: dict = Depends(require_current_user),
 ):
     """Enfileira análise de arquivo usando o mesmo fluxo agent-sql OAuth2."""
+    authenticated_tenant = current_user.get("tenant_id")
+    requested_tenant = str(tenant_id or "").strip()
+    
+    if requested_tenant and requested_tenant != authenticated_tenant:
+        raise HTTPException(
+            status_code=403,
+            detail="Contexto da solicitação não autorizado."
+        )
 
-    clean_tenant = str(tenant_id or "").strip()
+    clean_tenant = str(authenticated_tenant or "").strip()
     clean_environment = str(environment_code or "").strip()
     if not clean_tenant or clean_tenant.lower() in {"default", "none", "null"}:
         raise HTTPException(status_code=400, detail="tenant_id real é obrigatório.")
@@ -1117,6 +1137,7 @@ async def ask_v2_upload(
     payload = {
         "query": query,
         "tenant_id": clean_tenant,
+        "role": current_user.get("role"),
         "environment_code": clean_environment,
         "company_id": company_id,
         "execute": True,
@@ -1134,7 +1155,7 @@ async def ask_v2_upload(
 
     task_id = str(uuid.uuid4())
     correlation_id = get_correlation_id()
-    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id}
+    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id, "tenant_id": authenticated_tenant}
     logger.info("agent_task_accepted task_id=%s", task_id)
     asyncio.create_task(process_agent_task(task_id, payload))
     return {"status": "processing", "task_id": task_id, "correlation_id": correlation_id}
@@ -1142,10 +1163,15 @@ async def ask_v2_upload(
 
 @router.get("/ask/v2/status/{task_id}")
 @router.get("/ask/v2/status/{task_id}/")
-async def ask_v2_status(task_id: str):
+async def ask_v2_status(task_id: str, current_user: dict = Depends(require_current_user)):
 
     if task_id not in AGENT_TASKS:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+        
+    authenticated_tenant = current_user.get("tenant_id")
+    task_tenant = AGENT_TASKS[task_id].get("tenant_id")
+    if task_tenant and task_tenant != authenticated_tenant:
+        raise HTTPException(status_code=403, detail="Contexto da solicitação não autorizado.")
     
     # Mantém os campos error/error_code e também summary por compatibilidade com clientes antigos.
     if AGENT_TASKS[task_id].get("status") == "error":

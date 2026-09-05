@@ -169,3 +169,18 @@ export async function waitForAgentTask(
   error.lastPayload = lastPayload;
   throw error;
 }
+
+export async function apiGetAuthMe() {
+  const url = `${getApiBaseUrl()}/auth/me`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json'
+    },
+    credentials: 'include'
+  });
+  if (!response.ok) {
+    throw new Error('Não autenticado');
+  }
+  return response.json();
+}
