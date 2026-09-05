@@ -1076,6 +1076,7 @@ async def ask_v2(payload: dict, current_user: dict = Depends(require_current_use
         
     payload["tenant_id"] = authenticated_tenant
     payload["role"] = current_user.get("role")
+    payload["user_id"] = current_user.get("user_id") or current_user.get("sub")
     
     environment_code = str(
         payload.get("environment_code")
@@ -1138,6 +1139,7 @@ async def ask_v2_upload(
         "query": query,
         "tenant_id": clean_tenant,
         "role": current_user.get("role"),
+        "user_id": current_user.get("user_id") or current_user.get("sub"),
         "environment_code": clean_environment,
         "company_id": company_id,
         "execute": True,
