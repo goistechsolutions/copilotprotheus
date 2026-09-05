@@ -264,12 +264,6 @@ def validate_query_security(
     if "D_E_L_E_T_" not in upper_sql:
         raise HTTPException(status_code=400, detail="Toda consulta nativa deve filtrar registros excluídos com D_E_L_E_T_ <> '*'.")
 
-    if not _has_oracle_limit(upper_sql) and not re.search(r"\b(?:SUM|COUNT|MAX|MIN|AVG)\s*\(", upper_sql):
-        raise HTTPException(
-            status_code=400,
-            detail="A consulta não agregada precisa possuir limite Oracle com ROWNUM ou FETCH FIRST.",
-        )
-
     normalized_allowed = _normalize_allowed_tables(allowed_tables)
     table_refs = _extract_table_refs(upper_sql)
     if not table_refs:

@@ -59,7 +59,7 @@ DIRETRIZES RESTRITAS DE SQL (PROTHEUS):
 - JOINs devem sempre priorizar o Índice Principal (SIX/X2_UNICO). NUNCA inferir JOIN por X3_RELACAO.
 - NUNCA acesse tabelas SYS (SYS_COMPANY) sem autorização explicita.
 - Para obter dados, chame 'consultar_protheus' com endpoint="QueryRest" e query_params={{"cQuery": "sua query SQL"}}.
-- NUNCA use SELECT TOP. Limite linhas com: WHERE ROWNUM <= 1000 ou FETCH FIRST 1000 ROWS ONLY no final.
+- NUNCA use SELECT TOP. Não adicione limites de linhas aleatórios na consulta a menos que o usuário solicite.
 - Datas no Protheus sao strings 'YYYYMMDD' (ex: 30/06/2026 eh '20260630').
 
 ====================

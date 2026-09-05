@@ -116,7 +116,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     DIRETRIZES GERAIS E INNEGOCIÁVEIS:
 1. Retorne EXCLUSIVAMENTE uma única instrução SELECT ou WITH Oracle. Não envolva a resposta em markdown, comentários ou texto introdutório.
 2. Use somente tabelas, nomes físicos e campos presentes no snapshot autorizado. Nunca derive nome físico com sufixo, nunca invente tabela/campo e nunca use `X3_RELACAO` para criar JOIN.
-3. Banco ORACLE: nunca use `SELECT TOP` ou `LIMIT`. Toda consulta não agregada deve ter limite Oracle (`ROWNUM <= 500` ou `FETCH FIRST 500 ROWS ONLY`); consultas agregadas devem usar SUM, COUNT, MAX, MIN ou AVG quando o pedido permitir.
+3. Banco ORACLE: nunca use `SELECT TOP` ou `LIMIT`. Se precisar limitar resultados, use a sintaxe Oracle (`ROWNUM <= N` ou `FETCH FIRST N ROWS ONLY`). Não limite o número de registros arbitrariamente (ex: não use `FETCH FIRST 500 ROWS ONLY`), a menos que o usuário solicite expressamente. Limites artificiais corrompem a totalização de KPIs e valores financeiros no Dashboard.
 4. Use aliases claros e selecione somente os campos necessários. Nunca use `SELECT *`.
 5. Toda tabela Protheus do FROM/JOIN deve possuir seu próprio filtro `alias.D_E_L_E_T_ <> '*'`.
 6. Respeite as flags SHARING/SX2 de cada tabela. Inclua empresa, unidade e/ou filial somente quando o snapshot indicar que o nível é usado; a filial operacional autorizada é '{xfilial}'. Nunca deduza XFILIAL.
