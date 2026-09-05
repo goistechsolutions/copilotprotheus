@@ -1538,6 +1538,10 @@ def create_user(
         full_name    =req.full_name.strip(),
         password_hash=_hash(req.password),
     )
+    if req.role_code:
+        role = db.query(Role).filter(Role.role_code == req.role_code).first()
+        if role:
+            new_user.role_id = role.id
     db.add(new_user)
     db.flush()
 

@@ -25,6 +25,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     status: str
+    role_code: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -63,13 +64,11 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
             full_name=req.full_name,
             password_hash=hash_password(req.password)
         )
+        if req.role:
+            role = db.query(Role).filter(Role.role_code == req.role).first()
+            if role:
+                new_user.role_id = role.id
         db.add(new_user)
-        db.flush()
-
-        role = db.query(Role).filter(Role.role_code == req.role).first()
-        if role:
-            new_user.role_id = role.id
-
         db.commit()
         db.refresh(new_user)
         return new_user
