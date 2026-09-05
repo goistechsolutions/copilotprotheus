@@ -90,10 +90,11 @@ async def queryrest_exec_tenant(
         )
     except ProtheusQueryRestError as e:
         logger.error(
-            "[QueryRest Tenant] Falha tenant=%s ambiente=%s status=%s",
+            "[QueryRest Tenant] Falha tenant=%s ambiente=%s status=%s body=%s",
             tenant_id,
             environment_code,
             e.status_code,
+            e.response_body,
         )
         status_code = e.status_code if e.status_code and e.status_code >= 400 else 502
         detail = {

@@ -921,17 +921,33 @@ async def process_agent_task(task_id: str, payload: dict):
 
     except HTTPException as e:
         error_info = _normalized_http_exception(e, correlation_id)
-        AGENT_TASKS[task_id] = {
-            "status": "error",
-            "error": error_info["message"],
-            **error_info,
-        }
+        
+        if isinstance(e, CatalogValidationError):
+            AGENT_TASKS[task_id] = {
+                "status": "validation_failed",
+                "error": e.message,
+                "error_code": e.code,
+                "correlation_id": correlation_id,
+            }
+        elif e.status_code == 403:
+            AGENT_TASKS[task_id] = {
+                "status": "forbidden",
+                "error": e.detail,
+                "error_code": "ENTITLEMENT_DENIED",
+                "correlation_id": correlation_id,
+            }
+        else:
+            AGENT_TASKS[task_id] = {
+                "status": "error",
+                "error": error_info["message"],
+                **error_info,
+            }
         logger.warning(
             "agent_task_failed task_id=%s status=%s error_source=%s error_code=%s",
             task_id,
             e.status_code,
             error_info["error_source"],
-            error_info["error_code"],
+            AGENT_TASKS[task_id].get("error_code") or error_info["error_code"],
         )
     except ProgrammingError as e:
         db_error = str(e).splitlines()[0][:240]
