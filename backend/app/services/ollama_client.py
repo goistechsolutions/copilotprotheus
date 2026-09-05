@@ -70,11 +70,7 @@ DICIONARIO DE DADOS (TENANT ATUAL):
         from app.models.knowledge import DictionaryTable, DictionaryField
         
         db = SessionLocal()
-        import uuid
-        try:
-            tid = uuid.UUID(tenant_id)
-        except:
-            tid = None
+        tid = tenant_id
             
         if tid:
             tid = str(tid)

@@ -87,7 +87,7 @@ class KnowledgeCRUD:
         tenant_id = None
         try:
             if payload.get('tenant_id') and payload['tenant_id'] != 'default':
-                tenant_id = uuid.UUID(payload['tenant_id'])
+                tenant_id = payload['tenant_id']
         except Exception:
             pass
 
@@ -116,11 +116,7 @@ class KnowledgeCRUD:
         return result
 
     def list_audit(self, tenant_id: str, limit=100):
-        import uuid
-        try:
-            tid = uuid.UUID(tenant_id)
-        except Exception:
-            return []
+        tid = tenant_id
         q = text('SELECT * FROM audit_logs WHERE tenant_id = :tenant_id ORDER BY created_at DESC LIMIT :limit')
         return self.db.execute(q, {'tenant_id': tid, 'limit': limit}).mappings().all()
 

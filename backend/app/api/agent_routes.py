@@ -45,7 +45,7 @@ def validate_query(req: ValidateQueryRequest, db: Session = Depends(get_db)):
     
     # Audit logging
     try:
-        tid = uuid.UUID(req.tenant_id)
+        tid = req.tenant_id
         cid = uuid.UUID(req.company_id) if req.company_id else None
         
         audit = AgentQueryAudit(
@@ -107,7 +107,7 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
             
         # 4. Success Audit & Usage Update
         try:
-            tid = uuid.UUID(req.tenant_id)
+            tid = req.tenant_id
             cid = uuid.UUID(req.company_id) if req.company_id else None
             
             audit = AgentQueryAudit(
@@ -135,7 +135,7 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
         elapsed = int((time.time() - start_time) * 1000)
         # Log error
         try:
-            tid = uuid.UUID(req.tenant_id)
+            tid = req.tenant_id
             audit = AgentQueryAudit(
                 tenant_id=tid,
                 query_sql=final_sql,

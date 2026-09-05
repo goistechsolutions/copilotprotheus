@@ -34,21 +34,12 @@ def hash_password(password: str) -> str:
 
 @router.get("/users/{tenant_id}", response_model=List[UserResponse])
 def get_users_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
-    try:
-        tenant_uuid = uuid.UUID(tenant_id)
-        users = db.query(User).filter(User.tenant_id == tenant_uuid).order_by(User.created_at.desc()).all()
-        return users
-    except ValueError:
-        return []
+    users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.created_at.desc()).all()
+    return users
 
 @router.post("/register", response_model=UserResponse)
 def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)):
-    try:
-        tenant_uuid = uuid.UUID(req.tenant_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="tenant_id deve ser um UUID válido na V3")
-
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_uuid).first()
+    tenant = db.query(Tenant).filter(Tenant.tenant_code == req.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
@@ -67,7 +58,7 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
             raise HTTPException(status_code=400, detail="Senha é obrigatória para novos usuários.")
 
         new_user = User(
-            tenant_id=tenant_uuid,
+            tenant_id=req.tenant_id,
             email=req.username,
             full_name=req.full_name,
             password_hash=hash_password(req.password)
@@ -108,13 +99,8 @@ class LoginRequest(BaseModel):
 
 @router.post("/login")
 def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    try:
-        tenant_uuid = uuid.UUID(req.tenant_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="tenant_id inválido (deve ser UUID na nova versão v3)")
-
     user = db.query(User).filter(
-        User.tenant_id == tenant_uuid,
+        User.tenant_id == req.tenant_id,
         User.email == req.username
     ).first()
 
