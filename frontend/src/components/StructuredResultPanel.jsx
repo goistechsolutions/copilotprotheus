@@ -30,6 +30,7 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  PieChart,
   X,
   Zap,
 } from 'lucide-react';
