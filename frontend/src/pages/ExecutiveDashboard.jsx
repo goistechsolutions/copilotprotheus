@@ -551,8 +551,8 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
   return (
     <div className="flex h-screen w-full bg-[#f5faff] font-['Inter',sans-serif] text-[#171c20] overflow-hidden">
-      {/* 1. Sidebar de Navegação por Áreas (Financeiro, Vendas, Compras, Estoque, Contabilidade) */}
-      <aside className="w-64 bg-white border-r border-[#e2e8f0] flex flex-col flex-shrink-0 z-20">
+      {/* 1. Sidebar ocultada pois o painel deve focar apenas no resultado */}
+      <aside className="hidden">
         {/* Logo / Brand Header */}
         <div className="p-5 flex items-center justify-between border-b border-[#e2e8f0]">
           <div className="flex items-center gap-3">
@@ -631,6 +631,18 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         {/* Top Header */}
         <header className="h-16 bg-white/90 backdrop-blur-md border-b border-[#e2e8f0] px-6 flex items-center justify-between flex-shrink-0 z-10">
           <div className="flex items-center gap-4">
+            
+            {/* Logo / Brand */}
+            <div className="flex items-center gap-3 pr-4 border-r border-[#e2e8f0]">
+              <div className="w-8 h-8 rounded-lg bg-[#004fce] flex items-center justify-center text-white shadow-sm">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="font-bold text-[14px] text-[#0f172a] leading-tight">Copilot Protheus</div>
+                <div className="text-[10px] font-semibold text-[#004fce] tracking-wider uppercase">Painel Executivo</div>
+              </div>
+            </div>
+
             <div className="bg-[#eff4f9] px-3 py-1.5 rounded-lg flex items-center gap-2 text-[#475569] text-[13px] font-medium border border-[#e2e8f0]">
               <Building2 className="w-4 h-4 text-[#004fce]" />
               <span>{context?.tenant_id ? context.tenant_id.replace('_prod', '').toUpperCase() : 'Sem Contexto'}</span>
