@@ -186,7 +186,7 @@ export async function apiGetAuthMe() {
 }
 
 export async function apiLogin(tenant_id, username, password) {
-  const url = \\/auth/login\;
+  const url = `${getApiBaseUrl()}/auth/login`;
   const response = await fetch(url, {
     method: 'POST',
     headers: {
