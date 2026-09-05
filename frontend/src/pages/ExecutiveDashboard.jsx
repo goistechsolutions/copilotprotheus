@@ -57,7 +57,7 @@ const AREAS_CONFIG = {
       {
         label: 'Saldo Disponível',
         value: '---',
-        change: '+4.2%',
+        change: '',
         isPositive: true,
         icon: Wallet,
         color: '#004fce',
@@ -66,7 +66,7 @@ const AREAS_CONFIG = {
       {
         label: 'Contas a Pagar (SE2)',
         value: '---',
-        change: '+1.5%',
+        change: '',
         isPositive: false,
         icon: ArrowDownRight,
         color: '#ef4444',
@@ -75,7 +75,7 @@ const AREAS_CONFIG = {
       {
         label: 'Contas a Receber (SE1)',
         value: '---',
-        change: '+8.7%',
+        change: '',
         isPositive: true,
         icon: ArrowUpRight,
         color: '#22c55e',
@@ -84,7 +84,7 @@ const AREAS_CONFIG = {
       {
         label: 'Lucro Líquido / EBITDA',
         value: '---',
-        change: '+12.4%',
+        change: '',
         isPositive: true,
         icon: TrendingUp,
         isHighlight: true
@@ -95,10 +95,10 @@ const AREAS_CONFIG = {
     compositionTitle: 'Composição de Despesas',
     compositionSubtitle: 'Maiores centros de custos no período',
     compositionItems: [
-      { label: 'Folha de Pagamento', percentage: 45, detail: '---', color: '#004fce' },
-      { label: 'Fornecedores / Insumos', percentage: 32, detail: '---', color: '#0f66ff' },
-      { label: 'Tributário e Impostos', percentage: 15, detail: '---', color: '#f59e0b' },
-      { label: 'Infraestrutura / TI', percentage: 8, detail: '---', color: '#64748b' }
+      { label: 'Folha de Pagamento', percentage: 0, detail: '---', color: '#004fce' },
+      { label: 'Fornecedores / Insumos', percentage: 0, detail: '---', color: '#0f66ff' },
+      { label: 'Tributário e Impostos', percentage: 0, detail: '---', color: '#f59e0b' },
+      { label: 'Infraestrutura / TI', percentage: 0, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Últimas Movimentações Financeiras',
     tableSubtitle: 'Títulos e duplicatas integradas via SE1 / SE2',
@@ -118,13 +118,13 @@ const AREAS_CONFIG = {
     bannerBadge: 'Gestão de Faturamento Protheus',
     bannerTitle: 'Inteligência de Vendas & Curva ABC de Clientes',
     bannerSubtitle: 'Cruzamento de notas fiscais (SF2/SD2) e carteira de pedidos',
-    bannerMetricLabel: 'Meta do Mês (81.6%)',
+    bannerMetricLabel: 'Meta do Mês ',
     bannerMetricValue: '---',
     kpis: [
       {
         label: 'Faturamento Acumulado',
         value: '---',
-        change: '+14.8%',
+        change: '',
         isPositive: true,
         icon: TrendingUp,
         color: '#22c55e',
@@ -132,8 +132,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Pedidos Emitidos (SC5)',
-        value: '291 pedidos',
-        change: '+8.2%',
+        value: '---',
+        change: '',
         isPositive: true,
         icon: ShoppingBag,
         color: '#004fce',
@@ -142,7 +142,7 @@ const AREAS_CONFIG = {
       {
         label: 'Ticket Médio por Venda',
         value: '---',
-        change: '+3.5%',
+        change: '',
         isPositive: true,
         icon: Tag,
         color: '#0f66ff',
@@ -150,8 +150,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Margem Bruta Média',
-        value: '34.8%',
-        change: '+1.9%',
+        value: '---',
+        change: '',
         isPositive: true,
         icon: PieChart,
         isHighlight: true
@@ -162,10 +162,10 @@ const AREAS_CONFIG = {
     compositionTitle: 'Faturamento por Categoria',
     compositionSubtitle: 'Participação das linhas de produtos',
     compositionItems: [
-      { label: 'Linha Industrial / Peças', percentage: 48, detail: '---', color: '#004fce' },
-      { label: 'Linha Varejo / Consumo', percentage: 28, detail: '---', color: '#0f66ff' },
-      { label: 'Contratos de Serviços', percentage: 16, detail: '---', color: '#22c55e' },
-      { label: 'Acessórios e Outros', percentage: 8, detail: '---', color: '#64748b' }
+      { label: 'Linha Industrial / Peças', percentage: 0, detail: '---', color: '#004fce' },
+      { label: 'Linha Varejo / Consumo', percentage: 0, detail: '---', color: '#0f66ff' },
+      { label: 'Contratos de Serviços', percentage: 0, detail: '---', color: '#22c55e' },
+      { label: 'Acessórios e Outros', percentage: 0, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Últimos Pedidos de Venda',
     tableSubtitle: 'Pedidos registrados no Protheus (SC5 / SC6)',
@@ -191,7 +191,7 @@ const AREAS_CONFIG = {
       {
         label: 'Volume de Compras no Mês',
         value: '---',
-        change: '-4.1%',
+        change: '',
         isPositive: true,
         icon: ShoppingCart,
         color: '#004fce',
@@ -199,8 +199,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Pedidos de Compra Abertos',
-        value: '42 pedidos',
-        change: '-5 pedidos',
+        value: '---',
+        change: '',
         isPositive: true,
         icon: Clock,
         color: '#f59e0b',
@@ -208,8 +208,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Lead Time Médio',
-        value: '6.2 dias',
-        change: '-0.8 dias',
+        value: '---',
+        change: '',
         isPositive: true,
         icon: Truck,
         color: '#22c55e',
@@ -218,7 +218,7 @@ const AREAS_CONFIG = {
       {
         label: 'Economia em Negociações',
         value: '---',
-        change: '+7.5% saving',
+        change: '',
         isPositive: true,
         icon: ShieldCheck,
         isHighlight: true
@@ -229,10 +229,10 @@ const AREAS_CONFIG = {
     compositionTitle: 'Distribuição por Grupo de Compras',
     compositionSubtitle: 'Categorias com maior impacto no orçamento',
     compositionItems: [
-      { label: 'Matérias-Primas', percentage: 52, detail: '---', color: '#004fce' },
-      { label: 'Embalagens e Descartáveis', percentage: 24, detail: '---', color: '#0f66ff' },
-      { label: 'Manutenção / MRO', percentage: 14, detail: '---', color: '#f59e0b' },
-      { label: 'Serviços Terceirizados', percentage: 10, detail: '---', color: '#64748b' }
+      { label: 'Matérias-Primas', percentage: 0, detail: '---', color: '#004fce' },
+      { label: 'Embalagens e Descartáveis', percentage: 0, detail: '---', color: '#0f66ff' },
+      { label: 'Manutenção / MRO', percentage: 0, detail: '---', color: '#f59e0b' },
+      { label: 'Serviços Terceirizados', percentage: 0, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Pedidos de Compra Pendentes de Entrega',
     tableSubtitle: 'Ordens de compra ativas no Protheus (SC7)',
@@ -258,7 +258,7 @@ const AREAS_CONFIG = {
       {
         label: 'Valor Total do Estoque (SB2)',
         value: '---',
-        change: '-2.3%',
+        change: '',
         isPositive: true,
         icon: Package,
         color: '#004fce',
@@ -266,8 +266,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Giro Anual do Estoque',
-        value: '4.8x / ano',
-        change: '+0.4x',
+        value: '---',
+        change: '',
         isPositive: true,
         icon: RefreshCw,
         color: '#22c55e',
@@ -275,8 +275,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Itens em Ponto de Pedido',
-        value: '18 produtos',
-        change: 'Abaixo do mínimo',
+        value: '---',
+        change: '',
         isPositive: false,
         icon: AlertTriangle,
         color: '#f59e0b',
@@ -284,8 +284,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Acuracidade de Inventário',
-        value: '98.6%',
-        change: '+0.8% acurácia',
+        value: '---',
+        change: '',
         isPositive: true,
         icon: CheckCircle2,
         isHighlight: true
@@ -296,9 +296,9 @@ const AREAS_CONFIG = {
     compositionTitle: 'Curva ABC de Estoque',
     compositionSubtitle: 'Distribuição de valor por classe de produto',
     compositionItems: [
-      { label: 'Classe A (Alto Valor)', percentage: 70, detail: '---', color: '#004fce' },
-      { label: 'Classe B (Médio Valor)', percentage: 20, detail: '---', color: '#0f66ff' },
-      { label: 'Classe C (Baixo Valor)', percentage: 10, detail: '---', color: '#64748b' }
+      { label: 'Classe A (Alto Valor)', percentage: 0, detail: '---', color: '#004fce' },
+      { label: 'Classe B (Médio Valor)', percentage: 0, detail: '---', color: '#0f66ff' },
+      { label: 'Classe C (Baixo Valor)', percentage: 0, detail: '---', color: '#64748b' }
     ],
     tableTitle: 'Itens Críticos / Ponto de Reposição',
     tableSubtitle: 'Produtos com saldo próximo ou abaixo do estoque de segurança (SB1)',
@@ -324,7 +324,7 @@ const AREAS_CONFIG = {
       {
         label: 'Ativo Total Consolidado',
         value: '---',
-        change: '+5.4% no exercício',
+        change: '',
         isPositive: true,
         icon: BookOpen,
         color: '#004fce',
@@ -333,7 +333,7 @@ const AREAS_CONFIG = {
       {
         label: 'Passivo Circulante',
         value: '---',
-        change: '-2.1% no período',
+        change: '',
         isPositive: true,
         icon: Scale,
         color: '#64748b',
@@ -342,7 +342,7 @@ const AREAS_CONFIG = {
       {
         label: 'Patrimônio Líquido',
         value: '---',
-        change: '+7.8% no exercício',
+        change: '',
         isPositive: true,
         icon: Award,
         color: '#22c55e',
@@ -350,8 +350,8 @@ const AREAS_CONFIG = {
       },
       {
         label: 'Índice de Liquidez Corrente',
-        value: '2.42x',
-        change: 'Saudável (> 1.5)',
+        value: '---',
+        change: '',
         isPositive: true,
         icon: Activity,
         isHighlight: true
@@ -362,8 +362,8 @@ const AREAS_CONFIG = {
     compositionTitle: 'Estrutura do Balanço Patrimonial',
     compositionSubtitle: 'Distribuição dos ativos da empresa',
     compositionItems: [
-      { label: 'Ativo Circulante (Disponível + Recebíveis)', percentage: 62, detail: '---', color: '#004fce' },
-      { label: 'Ativo Não Circulante (Imobilizado / Intangível)', percentage: 38, detail: '---', color: '#0f66ff' }
+      { label: 'Ativo Circulante (Disponível + Recebíveis)', percentage: 0, detail: '---', color: '#004fce' },
+      { label: 'Ativo Não Circulante (Imobilizado / Intangível)', percentage: 0, detail: '---', color: '#0f66ff' }
     ],
     tableTitle: 'Lançamentos Contábeis Recentes',
     tableSubtitle: 'Lote contábil ativo no Protheus (CT2 / CT1)',
@@ -678,31 +678,29 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           </div>
         </header>
 
-        {/* Conteúdo da Área Selecionada */}
-        <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]">
-          {/* OVERLAY DE ESTADO VAZIO */}
-          {!hasRealData && (
-          <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-8">
-            <div className="bg-white p-8 rounded-2xl shadow-lg border border-[#e2e8f0] text-center max-w-md">
-              <div className="w-16 h-16 bg-[#eff4f9] rounded-full flex items-center justify-center mx-auto mb-4">
-                <Database className="w-8 h-8 text-[#004fce]" />
+          {/* Conteúdo da Área Selecionada */}
+          <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]">
+            {!hasRealData ? (
+              <div className="absolute inset-0 z-10 bg-[#f8fafc] flex flex-col items-center justify-center p-8">
+                <div className="bg-white p-8 rounded-2xl shadow-lg border border-[#e2e8f0] text-center max-w-md">
+                  <div className="w-16 h-16 bg-[#eff4f9] rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Database className="w-8 h-8 text-[#004fce]" />
+                  </div>
+                  <h2 className="text-lg font-bold text-[#0f172a] mb-2">Painel sem dados</h2>
+                  <p className="text-[13px] text-[#475569] mb-6">
+                    Os indicadores desta área serão exibidos após uma consulta válida ao Protheus.
+                  </p>
+                  <button
+                    onClick={onNavigateToWorkspace}
+                    className="px-5 py-2.5 bg-[#004fce] hover:bg-[#003db3] text-white rounded-xl text-[13px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-2"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Abrir Copilot Chat
+                  </button>
+                </div>
               </div>
-              <h2 className="text-lg font-bold text-[#0f172a] mb-2">Painel Demonstrativo</h2>
-              <p className="text-[13px] text-[#475569] mb-6">
-                Este dashboard visual não está atualmente conectado a uma fonte de dados real (QueryRest). Para obter análises reais, faça perguntas ao Copiloto.
-              </p>
-              <button
-                onClick={onNavigateToWorkspace}
-                className="px-5 py-2.5 bg-[#004fce] hover:bg-[#003db3] text-white rounded-xl text-[13px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-2"
-              >
-                <MessageSquare className="w-4 h-4" />
-                Ir para Workspace
-              </button>
-            </div>
-          </div>
-          )}
-
-          <div className={`p-6 space-y-6 ${!hasRealData ? "opacity-30 pointer-events-none filter grayscale" : ""}`}>
+            ) : (
+            <div className="p-6 space-y-6">
             {/* Título da Visão */}
             <div className="flex items-center justify-between">
             <div>
@@ -988,10 +986,11 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
-          </div>
-          </div>
-        </main>
+            </div>
+            )}
+          </main>
       </div>
 
       

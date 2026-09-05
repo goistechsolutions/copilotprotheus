@@ -53,9 +53,10 @@ function parseNumeric(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatCurrency(val) {
+function formatValue(val, isCurrency = false) {
   if (typeof val === 'number') {
-    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    if (isCurrency) return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
   }
   return String(val);
 }
@@ -132,14 +133,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
       }
     }
 
-    if (!numericCol) {
-      for (const col of columns) {
-        if (rows.some(r => typeof parseNumeric(r[col]) === 'number')) {
-          numericCol = col;
-          break;
-        }
-      }
-    }
+    // Removed automatic numeric column guessing for unrelated columns
 
     if (!labelCol && columns.length > 0) {
       labelCol = columns[0] !== numericCol ? columns[0] : (columns[1] || columns[0]);
@@ -147,6 +141,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
 
     if (!numericCol) return null;
 
+    const isCurrency = numericCol ? (numericCol.toLowerCase().includes('valor') || numericCol.toLowerCase().includes('total') || numericCol.toLowerCase().includes('preco') || numericCol.toLowerCase().includes('fat')) : false;
     let sum = 0;
     let count = 0;
     let maxVal = -Infinity;
@@ -181,6 +176,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
       labelCol,
       chartLabels: chartLabels.slice(0, 12),
       chartValues: chartValues.slice(0, 12),
+      isCurrency,
     };
   }, [rows, columns]);
 
@@ -225,7 +221,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
       },
       tooltip: {
         callbacks: {
-          label: (context) => formatCurrency(context.raw)
+          label: (context) => formatValue(context.raw, true)
         }
       }
     },
@@ -263,7 +259,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
               <TrendingUp className="w-3.5 h-3.5 text-[#22c55e]" />
             </div>
             <div className="text-lg font-bold text-[#15803d] dark:text-emerald-300">
-              {formatCurrency(stats.total)}
+              {formatValue(stats.total, stats.isCurrency)}
             </div>
           </div>
 
@@ -276,7 +272,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
               <Activity className="w-3.5 h-3.5 text-[#004fce]" />
             </div>
             <div className="text-lg font-bold text-[#1d4ed8] dark:text-blue-300">
-              {formatCurrency(stats.average)}
+              {formatValue(stats.average, stats.isCurrency)}
             </div>
           </div>
 
@@ -288,7 +284,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
                   PONTO DE MAIOR VOLUME
                 </span>
                 <div className="text-[13px] font-bold text-[#0f172a] dark:text-white mt-0.5">
-                  {stats.maxLabel}: <span className="text-[#004fce] dark:text-[#60a5fa]">{formatCurrency(stats.maxVal)}</span>
+                  {stats.maxLabel}: <span className="text-[#004fce] dark:text-[#60a5fa]">{formatValue(stats.maxVal, stats.isCurrency)}</span>
                 </div>
               </div>
               <Sparkles className="w-4 h-4 text-[#004fce] shrink-0" />

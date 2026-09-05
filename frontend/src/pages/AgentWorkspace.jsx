@@ -190,6 +190,8 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
     if (!text?.trim()) return;
 
     setMessages((current) => [...current, { role: 'user', text }]);
+    setResult(null);
+    setTask(null);
     setLoading(true);
 
     try {
@@ -217,7 +219,15 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
         ? await waitForAgentTask(accepted.task_id)
         : accepted;
 
-      setResult(res);
+      const hasExecutionError = ['failed', 'error', 'execution_failed'].includes(res.status);
+
+      if (hasExecutionError) {
+        setResult(null);
+        setTask({ status: 'execution_failed', error: res.execution_error || res.error || res.summary || res.message || 'Falha na execução' });
+      } else {
+        setResult(res);
+        setTask(res);
+      }
 
       let replyMessage = 'Análise executiva concluída com sucesso no Protheus.';
       if (res.status === 'execution_failed') {
@@ -233,14 +243,17 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
         {
           role: 'assistant',
           text: replyMessage,
-          result: ['completed', 'success'].includes(res.status) ? res : null,
+          status: res.status,
+          result: hasExecutionError ? null : res,
           userPrompt: text,
         },
       ]);
     } catch (error) {
+      setResult(null);
+      setTask({ status: 'execution_failed', error: String(error.message || error) });
       setMessages((current) => [
         ...current,
-        { role: 'assistant', text: `**Erro:** ${String(error.message || error)}` },
+        { role: 'assistant', status: 'error', text: `**Erro:** ${String(error.message || error)}` },
       ]);
     }
 
@@ -248,10 +261,12 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
   };
 
   const handleNewConversation = () => {
+    abortRef.current?.abort();
+    setResult(null);
+    setTask(null);
     const newId = makeConversationId();
     setConversationId(newId);
     setMessages([]);
-    setResult(null);
     try {
       window.localStorage.setItem(`${historyStorageKey}:active`, newId);
     } catch {}
