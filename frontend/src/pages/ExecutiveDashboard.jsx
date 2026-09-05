@@ -434,6 +434,45 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
   }, [realData, dynamicRows]);
   const hasRealData = dynamicRows.length > 0;
 
+  const stats = React.useMemo(() => {
+    if (!dynamicRows.length || !dynamicColumns.length) return null;
+    let numericCol = null;
+    let labelCol = null;
+    for (const col of dynamicColumns) {
+      const lower = col.toLowerCase();
+      if (!numericCol && (lower.includes('valor') || lower.includes('total') || lower.includes('preco') || lower.includes('fat') || lower.includes('saldo'))) numericCol = col;
+      if (!labelCol && (lower.includes('mes') || lower.includes('data') || lower.includes('desc') || lower.includes('nome') || lower.includes('cliente') || lower.includes('produto'))) labelCol = col;
+    }
+    if (!numericCol) {
+      for (const col of dynamicColumns) {
+        if (dynamicRows.some(r => typeof parseNumeric(r[col]) === 'number')) {
+          numericCol = col;
+          break;
+        }
+      }
+    }
+    if (!labelCol && dynamicColumns.length > 0) {
+      labelCol = dynamicColumns[0] !== numericCol ? dynamicColumns[0] : (dynamicColumns[1] || dynamicColumns[0]);
+    }
+    if (!numericCol) return null;
+    let sum = 0;
+    let count = 0;
+    let maxVal = -Infinity;
+    let maxRow = null;
+    dynamicRows.forEach(r => {
+      const val = parseNumeric(r[numericCol]);
+      if (val !== null) {
+        sum += val;
+        count++;
+        if (val > maxVal) { maxVal = val; maxRow = r; }
+      }
+    });
+    const avg = count > 0 ? sum / count : 0;
+    const maxLabel = maxRow ? String(maxRow[labelCol] || '') : '';
+    return { numericCol, labelCol, total: sum, average: avg, maxVal, maxLabel, count };
+  }, [dynamicRows, dynamicColumns]);
+
+
 
   // Atualiza as mensagens do Copilot quando troca de área
   useEffect(() => {
@@ -698,7 +737,34 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
           {/* 4 Cards Bento de KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {currentArea.kpis.map((kpi, index) => {
+            {hasRealData && stats ? (
+              <>
+                <div className="bg-[#004fce] rounded-xl p-5 text-white shadow-md shadow-[#004fce]/20 relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-3 relative z-10">
+                    <span className="text-[11px] font-bold text-white/80 uppercase tracking-wider">{stats.numericCol || 'TOTAL'}</span>
+                  </div>
+                  <div className="text-2xl font-bold text-white mb-2 relative z-10">{formatCurrency(stats.total)}</div>
+                </div>
+                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-3 relative z-10">
+                    <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Média</span>
+                  </div>
+                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{formatCurrency(stats.average)}</div>
+                </div>
+                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-3 relative z-10">
+                    <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Pico {stats.maxLabel ? '(' + stats.maxLabel + ')' : ''}</span>
+                  </div>
+                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{stats.maxVal !== -Infinity ? formatCurrency(stats.maxVal) : '---'}</div>
+                </div>
+                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-3 relative z-10">
+                    <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Registros</span>
+                  </div>
+                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{dynamicRows.length}</div>
+                </div>
+              </>
+            ) : currentArea.kpis.map((kpi, index) => {
               const KpiIcon = kpi.icon;
               if (kpi.isHighlight) {
                 return (

@@ -146,23 +146,39 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
       if (activeConversation?.messages?.length) {
         setMessages(activeConversation.messages);
       }
+      if (activeConversation?.result) {
+        setResult(activeConversation.result);
+      }
     } catch {}
   }, [historyStorageKey, conversationId]);
 
   useEffect(() => {
+    if (isIframe && result) {
+      try {
+        window.parent.postMessage({ type: 'cprot-result-state', open: true }, '*');
+      } catch {}
+    }
+  }, [isIframe, result]);
+
+  useEffect(() => {
     const textMessages = messages
       .filter(item => ['user', 'assistant'].includes(item.role) && item.text?.trim())
-      .map(item => ({ role: item.role, text: item.text.trim().slice(0, 4000) }));
+      .map(item => ({ 
+        role: item.role, 
+        text: item.text.trim().slice(0, 4000),
+        result: item.result || null,
+        userPrompt: item.userPrompt || null
+      }));
     if (!textMessages.some(item => item.role === 'user')) return;
 
     const storedHistory = safeStorageRead(historyStorageKey, []);
     const title = textMessages.find(item => item.role === 'user')?.text.slice(0, 52) || 'Nova consulta';
     const next = [
-      { id: conversationId, title, date: 'Agora', messages: textMessages },
+      { id: conversationId, title, date: 'Agora', messages: textMessages, result },
       ...storedHistory.filter(item => item.id !== conversationId),
     ].slice(0, 20);
     safeStorageWrite(historyStorageKey, next);
-  }, [messages, conversationId, historyStorageKey]);
+  }, [messages, conversationId, historyStorageKey, result]);
 
   useEffect(() => {
     const handleMessage = (event) => {
@@ -468,27 +484,34 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
             </div>
           )}
 
-          {/* ESTADO RESULTADO (Ou Modo Iframe) -> Grid 70/30 Split Stitch (Apenas Standalone) / Chat Completo (Iframe) */}
-          {(showWorkspace || isIframe) && (
-            <div className={`flex-1 flex ${!isIframe ? 'flex-col lg:flex-row gap-4 sm:gap-6' : 'flex-col'} items-stretch min-h-0 h-full`}>
-              {/* Left Panel: ANALYTICAL DASHBOARD (Apenas no modo Desktop Standalone) */}
-              {showWorkspace && !isIframe && (
-                <section className="flex-1 lg:w-[70%] min-w-0 flex flex-col">
-                  <StructuredResultPanel
-                    result={result}
-                    context={context}
-                    onClose={() => setResult(null)}
-                  />
-                </section>
-              )}
+        {/* ESTADO RESULTADO (Ou Modo Iframe) -> Grid 70/30 Split Stitch (Apenas Standalone) / Chat Completo (Iframe) */}
+        {(showWorkspace || isIframe) && (
+          <div className={`flex-1 flex ${(!isIframe || result) ? 'flex-col lg:flex-row gap-4 sm:gap-6' : 'flex-col'} items-stretch min-h-0 h-full`}>
+            {/* Left Panel: ANALYTICAL DASHBOARD */}
+            {showWorkspace && (!isIframe || result) && (
+              <section className={`flex-1 lg:w-[70%] min-w-0 flex flex-col ${!result ? 'hidden lg:flex' : ''}`}>
+                <StructuredResultPanel
+                  result={result}
+                  context={context}
+                  onClose={() => {
+                    setResult(null);
+                    if (isIframe) {
+                      try {
+                        window.parent.postMessage({ type: 'cprot-result-state', open: false }, '*');
+                      } catch {}
+                    }
+                  }}
+                />
+              </section>
+            )}
 
-              {/* Right Panel: COPILOT CHAT (100% no Iframe / 30% no Split Standalone) */}
-              <aside className={`
-                flex flex-col shrink-0 overflow-hidden
-                ${isIframe
-                  ? 'w-full h-full p-2.5 bg-white dark:bg-[#1E293B] rounded-xl'
-                  : 'stitch-card p-4 sm:p-5 w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20'}
-              `}>
+            {/* Right Panel: COPILOT CHAT (100% no Iframe sem resultado / 30% no Split) */}
+            <aside className={`
+              flex flex-col shrink-0 overflow-hidden
+              ${isIframe && !result
+                ? 'w-full h-full p-2.5 bg-white dark:bg-[#1E293B] rounded-xl'
+                : 'stitch-card p-4 sm:p-5 w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20'}
+            `}>
                 {/* Copilot Header */}
                 <div className="p-2.5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 rounded-xl mb-3">
                   <div className="flex items-center gap-1.5 flex-wrap">
