@@ -31,6 +31,7 @@ import Conversation from '../components/Conversation';
 import StructuredResultPanel from '../components/StructuredResultPanel';
 import SuggestionCards from '../components/SuggestionCards';
 import HistoryRail from '../components/HistoryRail';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 function makeConversationId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -521,19 +522,21 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
 
             {/* Left Panel: ANALYTICAL DASHBOARD */}
             {showWorkspace && (!isIframe || result) && (
-              <section className={`flex-1 min-w-0 flex flex-col ${!result ? 'hidden lg:flex' : ''} ${isIframe ? 'w-full' : 'lg:w-[70%]'}`}>
-                <StructuredResultPanel
-                  result={result}
-                  context={context}
-                  onClose={() => {
-                    setResult(null);
-                    if (isIframe) {
-                      try {
-                        window.parent.postMessage({ type: 'cprot-result-state', open: false }, '*');
-                      } catch {}
-                    }
-                  }}
-                />
+              <section className={`flex-1 min-w-0 flex flex-col bg-white dark:bg-[#1E293B] rounded-2xl ${!result ? 'hidden lg:flex' : ''} ${isIframe ? 'w-full' : 'lg:w-[70%]'}`}>
+                <ErrorBoundary>
+                  <StructuredResultPanel
+                    result={result}
+                    context={context}
+                    onClose={() => {
+                      setResult(null);
+                      if (isIframe) {
+                        try {
+                          window.parent.postMessage({ type: 'cprot-result-state', open: false }, '*');
+                        } catch {}
+                      }
+                    }}
+                  />
+                </ErrorBoundary>
               </section>
             )}
 
@@ -543,7 +546,7 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
               ${isIframe && !result && !showHistory
                 ? 'w-full h-full p-2.5 bg-white dark:bg-[#1E293B] rounded-xl'
                 : `stitch-card p-4 sm:p-5 w-full min-h-[580px] h-[calc(100vh-8rem)] sticky top-20 ${!result && showHistory ? 'lg:flex-1' : 'lg:w-[30%]'}`}
-              ${isIframe && result ? 'hidden' : ''}
+              ${isIframe && result ? 'hidden lg:flex' : ''}
             `}>
                 {/* Copilot Header */}
                 <div className="p-2.5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 rounded-xl mb-3">
