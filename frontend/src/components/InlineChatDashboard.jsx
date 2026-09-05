@@ -85,7 +85,7 @@ export function detectQueryArea(queryText = '', moduleCode = '', result = null) 
 
 export default function InlineChatDashboard({ result, userPrompt, context, onNavigateToDashboard }) {
   const [showFilters, setShowFilters] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   const rows = Array.isArray(result?.rows) ? result.rows : [];
   const columns = Array.isArray(result?.columns) && result.columns.length > 0 ? result.columns : (rows.length > 0 ? Object.keys(rows[0]) : []);
