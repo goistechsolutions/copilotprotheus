@@ -838,12 +838,12 @@ async def process_agent_task(task_id: str, payload: dict):
                         masked_fields=masked_fields if entitlement_guard.mode == "enforce" else None,
                     )
                     response["records"] = len(rows)
-                    response["data"] = safe_rows[:500]
+                    response["data"] = safe_rows
                     response["structured"] = {
                         "columns": list(safe_rows[0].keys()) if safe_rows and isinstance(safe_rows[0], dict) else [],
-                        "rows": safe_rows[:500],
+                        "rows": safe_rows,
                         "total_records": len(rows),
-                        "display_limit": 500,
+                        "display_limit": None,
                     }
                     logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
 
@@ -1042,7 +1042,7 @@ async def queryrest_proxy(
                 "tenant_id": ctx.tenant_id,
                 "environment_code": payload.environment_code,
                 "records": len(rows),
-                "items": rows[:500],
+                "items": rows,
             }
         except HTTPException:
             raise
