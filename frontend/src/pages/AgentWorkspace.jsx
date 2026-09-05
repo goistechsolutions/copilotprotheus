@@ -18,6 +18,7 @@ import {
   User,
   X,
   Zap,
+  History,
 } from 'lucide-react';
 import { askAgent, waitForAgentTask } from '../services/api';
 import {
@@ -29,6 +30,7 @@ import Composer from '../components/Composer';
 import Conversation from '../components/Conversation';
 import StructuredResultPanel from '../components/StructuredResultPanel';
 import SuggestionCards from '../components/SuggestionCards';
+import HistoryRail from '../components/HistoryRail';
 
 function makeConversationId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -114,6 +116,8 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [task, setTask] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [chatHistoryList, setChatHistoryList] = useState([]);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -137,6 +141,7 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   useEffect(() => {
     const storedHistory = safeStorageRead(historyStorageKey, []);
     const conversations = Array.isArray(storedHistory) ? storedHistory : [];
+    setChatHistoryList(conversations);
     try {
       const active = window.localStorage.getItem(`${historyStorageKey}:active`);
       const activeId = active || conversationId;
@@ -153,12 +158,16 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   }, [historyStorageKey, conversationId]);
 
   useEffect(() => {
-    if (isIframe && result) {
+    if (isIframe && (result || showHistory)) {
       try {
         window.parent.postMessage({ type: 'cprot-result-state', open: true }, '*');
       } catch {}
+    } else if (isIframe && !result && !showHistory) {
+      try {
+        window.parent.postMessage({ type: 'cprot-result-state', open: false }, '*');
+      } catch {}
     }
-  }, [isIframe, result]);
+  }, [isIframe, result, showHistory]);
 
   useEffect(() => {
     const textMessages = messages
@@ -178,6 +187,7 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
       ...storedHistory.filter(item => item.id !== conversationId),
     ].slice(0, 20);
     safeStorageWrite(historyStorageKey, next);
+    setChatHistoryList(next);
   }, [messages, conversationId, historyStorageKey, result]);
 
   useEffect(() => {
@@ -269,8 +279,19 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
     setConversationId(newId);
     setMessages([]);
     setResult(null);
+    setShowHistory(false);
     try {
       window.localStorage.setItem(`${historyStorageKey}:active`, newId);
+    } catch {}
+  };
+
+  const handleSelectHistory = (item) => {
+    setConversationId(item.id);
+    setMessages(item.messages || []);
+    setResult(item.result || null);
+    setShowHistory(false);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, item.id);
     } catch {}
   };
 
@@ -486,10 +507,21 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
 
         {/* ESTADO RESULTADO (Ou Modo Iframe) -> Grid 70/30 Split Stitch (Apenas Standalone) / Chat Completo (Iframe) */}
         {(showWorkspace || isIframe) && (
-          <div className={`flex-1 flex ${(!isIframe || result) ? 'flex-col lg:flex-row gap-4 sm:gap-6' : 'flex-col'} items-stretch min-h-0 h-full`}>
+          <div className={`flex-1 flex ${(!isIframe || result || showHistory) ? 'flex-col lg:flex-row gap-4 sm:gap-6' : 'flex-col'} items-stretch min-h-0 h-full`}>
+            {/* Left Panel: HISTORY RAIL (Apenas quando showHistory é true no Iframe) */}
+            {isIframe && showHistory && !result && (
+              <section className="hidden lg:flex w-[232px] shrink-0 h-full">
+                <HistoryRail
+                  items={chatHistoryList}
+                  onSelect={handleSelectHistory}
+                  onNew={handleNewConversation}
+                />
+              </section>
+            )}
+
             {/* Left Panel: ANALYTICAL DASHBOARD */}
             {showWorkspace && (!isIframe || result) && (
-              <section className={`flex-1 lg:w-[70%] min-w-0 flex flex-col ${!result ? 'hidden lg:flex' : ''}`}>
+              <section className={`flex-1 min-w-0 flex flex-col ${!result ? 'hidden lg:flex' : ''} ${isIframe ? 'w-full' : 'lg:w-[70%]'}`}>
                 <StructuredResultPanel
                   result={result}
                   context={context}
@@ -508,9 +540,10 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
             {/* Right Panel: COPILOT CHAT (100% no Iframe sem resultado / 30% no Split) */}
             <aside className={`
               flex flex-col shrink-0 overflow-hidden
-              ${isIframe && !result
+              ${isIframe && !result && !showHistory
                 ? 'w-full h-full p-2.5 bg-white dark:bg-[#1E293B] rounded-xl'
-                : 'stitch-card p-4 sm:p-5 w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20'}
+                : `stitch-card p-4 sm:p-5 w-full min-h-[580px] h-[calc(100vh-8rem)] sticky top-20 ${!result && showHistory ? 'lg:flex-1' : 'lg:w-[30%]'}`}
+              ${isIframe && result ? 'hidden' : ''}
             `}>
                 {/* Copilot Header */}
                 <div className="p-2.5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 rounded-xl mb-3">
@@ -530,6 +563,17 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
 
                   {/* Ações no modo Iframe (Nova Consulta & Alternador de Tema) */}
                   <div className="flex items-center gap-1">
+                    {isIframe && (
+                      <button
+                        type="button"
+                        onClick={() => setShowHistory(prev => !prev)}
+                        title="Ver Histórico"
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer border ${showHistory ? 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : 'text-[#004FCE] dark:text-[#60A5FA] hover:bg-blue-50 dark:hover:bg-blue-950/60 border-blue-200/60 dark:border-blue-900/60'}`}
+                      >
+                        <History size={13} strokeWidth={2.5} />
+                        <span className="hidden sm:inline">Histórico</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={handleNewConversation}

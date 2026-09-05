@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Bot, User, Sparkles, Copy, Check, Terminal } from 'lucide-react';
-import InlineChatDashboard from './InlineChatDashboard';
 
 function CodeBlock({ children, className }) {
   const [copied, setCopied] = useState(false);
@@ -99,15 +98,7 @@ export default function Conversation({ messages, context, onNavigateToDashboard 
                 </ReactMarkdown>
               </div>
 
-              {/* Renderização do Dashboard Inline para Respostas com Dados */}
-              {!isUser && message.result && (
-                <InlineChatDashboard
-                  result={message.result}
-                  userPrompt={message.userPrompt}
-                  context={context}
-                  onNavigateToDashboard={onNavigateToDashboard}
-                />
-              )}
+              {/* Renderização do Dashboard Inline removida a pedido do usuário, agora aparece apenas na esquerda */}
             </div>
 
             {isUser && (
