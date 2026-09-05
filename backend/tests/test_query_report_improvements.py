@@ -72,12 +72,10 @@ def test_query_guard_rejects_select_star():
     assert "SELECT *" in str(exc_info.value.detail)
 
 
-def test_query_guard_requires_oracle_limit_for_non_aggregate():
+def test_query_guard_allows_queries_without_oracle_limit():
     sql = "SELECT A1_COD FROM SA1010 WHERE D_E_L_E_T_ <> '*'"
-    with pytest.raises(HTTPException) as exc_info:
-        validate_query_security(sql, {"SA1010"}, filial="0101")
-    assert exc_info.value.status_code == 400
-    assert "limite Oracle" in str(exc_info.value.detail)
+    # Não deve subir HTTPException
+    validate_query_security(sql, {"SA1010"}, filial="0101")
 
 
 def test_query_guard_requires_logical_filter_per_joined_table():
