@@ -61,21 +61,6 @@ function formatValue(val, isCurrency = false) {
   return String(val);
 }
 
-function getSafeRows(result) {
-  const candidateRows = Array.isArray(result?.rows)
-    ? result.rows
-    : Array.isArray(result?.result?.rows)
-    ? result.result.rows
-    : Array.isArray(result?.structured?.rows)
-    ? result.structured.rows
-    : Array.isArray(result?.data)
-      ? result.data
-      : Array.isArray(result?.items)
-        ? result.items
-        : [];
-  return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
-}
-
 export function detectQueryArea(queryText = '', moduleCode = '', result = null) {
   const norm = (String(queryText) + ' ' + String(result?.summary || '')).toLowerCase();
   const mod = String(moduleCode).toUpperCase();
@@ -102,22 +87,8 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
   const [showFilters, setShowFilters] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
-  const rows = useMemo(() => getSafeRows(result), [result]);
-  const columns = useMemo(() => {
-    if (Array.isArray(result?.columns) && result.columns.length > 0) {
-      return result.columns;
-    }
-    if (Array.isArray(result?.result?.columns) && result.result.columns.length > 0) {
-      return result.result.columns;
-    }
-    if (Array.isArray(result?.structured?.columns) && result.structured.columns.length > 0) {
-      return result.structured.columns;
-    }
-    if (rows.length > 0) {
-      return Object.keys(rows[0]);
-    }
-    return [];
-  }, [result, rows]);
+  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  const columns = Array.isArray(result?.columns) && result.columns.length > 0 ? result.columns : (rows.length > 0 ? Object.keys(rows[0]) : []);
 
   const areaInfo = useMemo(() => {
     return detectQueryArea(userPrompt, context?.module, result);

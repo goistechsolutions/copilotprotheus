@@ -27,6 +27,7 @@ import {
 } from '../services/taskStatus';
 import Composer from '../components/Composer';
 import Conversation from '../components/Conversation';
+import { normalizeAgentResult } from '../utils/normalizeAgentResult';
 import StructuredResultPanel from '../components/StructuredResultPanel';
 import SuggestionCards from '../components/SuggestionCards';
 
@@ -219,32 +220,41 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
         ? await waitForAgentTask(accepted.task_id)
         : accepted;
 
-      const hasExecutionError = ['failed', 'error', 'execution_failed'].includes(res.status);
+      const normalized = normalizeAgentResult(res);
 
-      if (hasExecutionError) {
+      if (normalized.status === 'error') {
         setResult(null);
-        setTask({ status: 'execution_failed', error: res.execution_error || res.error || res.summary || res.message || 'Falha na execução' });
-      } else {
-        setResult(res);
-        setTask(res);
+        setTask({
+          status: res.status || 'error',
+          error: normalized.message,
+          error_code: normalized.errorCode,
+          correlation_id: normalized.correlationId,
+        });
+        setMessages((current) => [
+          ...current,
+          {
+            role: 'assistant',
+            text: normalized.message,
+            status: 'error',
+            result: null,
+            correlation_id: normalized.correlationId,
+            userPrompt: text,
+          },
+        ]);
+        return;
       }
 
-      let replyMessage = 'Análise executiva concluída com sucesso no Protheus.';
-      if (res.status === 'execution_failed') {
-        replyMessage = `Erro na consulta Oracle: ${res.execution_error || 'Falha na execução.'}`;
-      } else if (res.status === 'error') {
-        replyMessage = `Consulta bloqueada: ${res.error || res.summary || res.message || 'Contexto não autorizado.'}`;
-      } else if (res.summary) replyMessage = res.summary;
-      else if (res.message) replyMessage = res.message;
-      else if (res.answer) replyMessage = res.answer;
+      setResult(normalized.result);
+      setTask(normalized.result);
 
       setMessages((current) => [
         ...current,
         {
           role: 'assistant',
-          text: replyMessage,
-          status: res.status,
-          result: hasExecutionError ? null : res,
+          text: normalized.message || 'Análise executiva concluída com sucesso no Protheus.',
+          status: 'success',
+          result: normalized.result,
+          correlation_id: normalized.correlationId,
           userPrompt: text,
         },
       ]);

@@ -392,17 +392,6 @@ function formatCurrency(val) {
   return String(val);
 }
 
-function getSafeRows(result) {
-  const candidateRows = Array.isArray(result?.result?.rows) ? result.result.rows : Array.isArray(result?.structured?.rows)
-    ? result.structured.rows
-    : Array.isArray(result?.data)
-      ? result.data
-      : Array.isArray(result?.items)
-        ? result.items
-        : [];
-  return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
-}
-
 export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace, context, initialData }) {
   const [activeAreaKey, setActiveAreaKey] = useState(initialArea || 'financeiro');
   const [period, setPeriod] = useState('Mês Atual');

@@ -26,6 +26,7 @@ from app.services.dictionary_context_service import (
     render_context_for_prompt,
 )
 from app.services.protheus_context_service import (
+    CatalogValidationError,
     build_protheus_context,
     mask_sensitive_rows,
     validate_query_security,
@@ -869,7 +870,18 @@ async def process_agent_task(task_id: str, payload: dict):
                         correlation_id,
                         default_source="protheus_queryrest",
                     )
-                    response["status"] = "execution_failed"
+                    
+                    if isinstance(http_ex, CatalogValidationError):
+                        response["status"] = "validation_failed"
+                        response["error_code"] = http_ex.code
+                        error_info["error_code"] = http_ex.code
+                    elif http_ex.status_code == 403:
+                        response["status"] = "forbidden"
+                        response["error_code"] = "ENTITLEMENT_DENIED"
+                    else:
+                        response["status"] = "execution_failed"
+                        response["error_code"] = "PROTHEUS_QUERYREST_ERROR"
+
                     response["message"] = error_info["message"]
                     response["retryable"] = False
                     response["result"] = None

@@ -97,19 +97,6 @@ function buildCsv(rows, columns) {
   ].join('\n');
 }
 
-function getSafeRows(result) {
-  const candidateRows = Array.isArray(result?.result?.rows)
-    ? result.result.rows
-    : Array.isArray(result?.structured?.rows)
-    ? result.structured.rows
-    : Array.isArray(result?.data)
-      ? result.data
-      : Array.isArray(result?.items)
-        ? result.items
-        : [];
-  return candidateRows.filter(row => row && typeof row === 'object' && !Array.isArray(row));
-}
-
 export default function StructuredResultPanel({ result, context, onClose }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
@@ -117,20 +104,8 @@ export default function StructuredResultPanel({ result, context, onClose }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [period, setPeriod] = useState('Últimos 6 meses');
 
-  const rows = useMemo(() => getSafeRows(result), [result]);
-
-  const columns = useMemo(() => {
-    if (Array.isArray(result?.result?.columns) && result.result.columns.length > 0) {
-      return result.result.columns;
-    }
-    if (Array.isArray(result?.structured?.columns) && result.structured.columns.length > 0) {
-      return result.structured.columns;
-    }
-    if (rows.length > 0) {
-      return Object.keys(rows[0]);
-    }
-    return [];
-  }, [result, rows]);
+  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  const columns = Array.isArray(result?.columns) && result.columns.length > 0 ? result.columns : (rows.length > 0 ? Object.keys(rows[0]) : []);
 
   // KPIs Dinâmicos calculados a partir dos dados do Protheus
   const computedKpis = useMemo(() => {
