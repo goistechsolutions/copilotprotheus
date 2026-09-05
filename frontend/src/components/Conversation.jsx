@@ -101,7 +101,7 @@ export default function Conversation({ messages, context, onNavigateToDashboard 
               </div>
 
               {/* Renderização do Dashboard Inline para Respostas com Dados */}
-              {!isUser && !['failed', 'error', 'execution_failed'].includes(message.status) && message.result && message.result.status !== 'error' && Array.isArray(message.result.rows) && (
+              {!isUser && !['failed', 'error', 'execution_failed'].includes(message.status) && message.result && message.result.status !== 'error' && (Array.isArray(message.result.result?.rows) || Array.isArray(message.result.structured?.rows) || Array.isArray(message.result.data) || Array.isArray(message.result.items) || Array.isArray(message.result.rows)) && (
                 <ErrorBoundary>
                   <InlineChatDashboard
                     result={message.result}

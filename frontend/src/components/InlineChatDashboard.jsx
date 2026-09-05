@@ -62,7 +62,9 @@ function formatValue(val, isCurrency = false) {
 }
 
 function getSafeRows(result) {
-  const candidateRows = Array.isArray(result?.result?.rows)
+  const candidateRows = Array.isArray(result?.rows)
+    ? result.rows
+    : Array.isArray(result?.result?.rows)
     ? result.result.rows
     : Array.isArray(result?.structured?.rows)
     ? result.structured.rows
@@ -102,6 +104,9 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
 
   const rows = useMemo(() => getSafeRows(result), [result]);
   const columns = useMemo(() => {
+    if (Array.isArray(result?.columns) && result.columns.length > 0) {
+      return result.columns;
+    }
     if (Array.isArray(result?.result?.columns) && result.result.columns.length > 0) {
       return result.result.columns;
     }
@@ -314,12 +319,12 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
       )}
 
       {/* 3. AI Insights Box */}
-      {result?.structured?.summary && (
+      {(result?.summary || result?.structured?.summary) && (
         <div className="bg-[#fefce8] dark:bg-amber-950/30 border border-[#fef08a] dark:border-amber-800/40 rounded-xl p-3 text-[12px] text-[#854d0e] dark:text-amber-200 leading-relaxed shadow-xs flex items-start gap-2">
           <Lightbulb className="w-4 h-4 text-[#eab308] shrink-0 mt-0.5" />
           <div>
             <span className="font-bold">Insight do Copiloto: </span>
-            {result.structured.summary}
+            {(result.summary || result.structured.summary)}
           </div>
         </div>
       )}

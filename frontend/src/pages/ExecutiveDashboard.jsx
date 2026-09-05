@@ -393,7 +393,7 @@ function formatCurrency(val) {
 }
 
 function getSafeRows(result) {
-  const candidateRows = Array.isArray(result?.structured?.rows)
+  const candidateRows = Array.isArray(result?.result?.rows) ? result.result.rows : Array.isArray(result?.structured?.rows)
     ? result.structured.rows
     : Array.isArray(result?.data)
       ? result.data
@@ -426,8 +426,8 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
   const dynamicRows = React.useMemo(() => getSafeRows(realData), [realData]);
   const dynamicColumns = React.useMemo(() => {
-    if (Array.isArray(realData?.structured?.columns) && realData.structured.columns.length > 0) {
-      return realData.structured.columns;
+    if (Array.isArray(realData?.result?.columns) && realData.result.columns.length > 0) {
+      return realData.result.columns;
     }
     if (dynamicRows.length > 0) return Object.keys(dynamicRows[0]);
     return [];
@@ -937,7 +937,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           <div className="bg-white rounded-2xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-[#e2e8f0] flex items-center justify-between bg-[#f8fafc]">
               <div>
-                <h3 className="font-bold text-[#0f172a] text-[15px]">{hasRealData ? (realData?.structured?.summary || currentArea.tableTitle) : currentArea.tableTitle}</h3>
+                <h3 className="font-bold text-[#0f172a] text-[15px]">{hasRealData ? (realData?.summary || currentArea.tableTitle) : currentArea.tableTitle}</h3>
                 <p className="text-xs text-[#64748b]">{hasRealData ? "Dados retornados pelo Protheus" : currentArea.tableSubtitle}</p>
               </div>
               <button
