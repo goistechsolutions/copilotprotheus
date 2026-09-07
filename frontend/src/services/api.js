@@ -143,6 +143,7 @@ export async function waitForAgentTask(
   }
 
   const deadline = Date.now() + timeoutMs;
+  let pollAttempt = 0;
   let lastPayload = normalizeTaskPayload({
     task_id: taskId,
     status: 'queued',
@@ -164,8 +165,10 @@ export async function waitForAgentTask(
       return lastPayload;
     }
 
+    const pollDelay = Math.min(intervalMs * (2 ** Math.min(pollAttempt, 3)), 3000);
+    pollAttempt += 1;
     await new Promise((resolve, reject) => {
-      const timer = window.setTimeout(resolve, intervalMs);
+      const timer = window.setTimeout(resolve, pollDelay);
 
       if (!signal) return;
 

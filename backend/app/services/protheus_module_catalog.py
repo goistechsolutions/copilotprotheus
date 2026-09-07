@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Sequence
+
+
+_COLUMN_CACHE: dict[tuple[str, str], set[str]] = {}
 
 from sqlalchemy import text
 
@@ -144,6 +147,10 @@ def require_tenant_module(
 
 
 def _available_columns(db: Any, schema_name: str, table_name: str) -> set[str]:
+    cache_key = (str(schema_name).strip().lower(), str(table_name).strip().lower())
+    cached = _COLUMN_CACHE.get(cache_key)
+    if cached is not None:
+        return set(cached)
     rows = db.execute(
         text("""
             SELECT column_name
@@ -153,7 +160,20 @@ def _available_columns(db: Any, schema_name: str, table_name: str) -> set[str]:
         """),
         {"schema_name": schema_name, "table_name": table_name},
     ).mappings().all()
-    return {str(row["column_name"]).lower() for row in rows}
+    columns = {str(row["column_name"]).lower() for row in rows}
+    _COLUMN_CACHE[cache_key] = set(columns)
+    return columns
+
+
+def invalidate_column_cache(schema_name: str | None = None) -> None:
+    """Invalida apenas metadados de estrutura; nenhum dado operacional é armazenado."""
+    if schema_name is None:
+        _COLUMN_CACHE.clear()
+        return
+    prefix = str(schema_name).strip().lower()
+    for key in list(_COLUMN_CACHE):
+        if key[0] == prefix:
+            _COLUMN_CACHE.pop(key, None)
 
 
 def filter_allowed_dictionary_tables(

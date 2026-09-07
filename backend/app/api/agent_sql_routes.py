@@ -709,6 +709,19 @@ async def process_agent_task(task_id: str, payload: dict):
                 }
                 return
 
+            query_domain = _infer_query_domain(str(prompt))
+            if query_domain:
+                domain_families = _DOMAIN_TABLE_FAMILIES[query_domain]
+                focused_context = [
+                    item for item in context
+                    if _table_families_from_context([item]).intersection(domain_families)
+                ]
+                if focused_context:
+                    # Mantém apenas tabelas do domínio identificado no prompt; a
+                    # autorização já foi calculada sobre o snapshot completo e os
+                    # nomes/fields abaixo continuam sendo derivados do catálogo real.
+                    context = focused_context
+
             context_text = render_context_for_prompt(context)
             allowed_table_names = {
                 str(name).strip()
@@ -925,7 +938,7 @@ async def process_agent_task(task_id: str, payload: dict):
         if isinstance(e, CatalogValidationError):
             AGENT_TASKS[task_id] = {
                 "status": "validation_failed",
-                "error": e.message,
+                "error": str(e.detail),
                 "error_code": e.code,
                 "correlation_id": correlation_id,
             }
