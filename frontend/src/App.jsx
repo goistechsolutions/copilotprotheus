@@ -40,9 +40,9 @@ export default function App() {
   const [selectedArea, setSelectedArea] = useState(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('area') || 'financeiro';
+      return urlParams.get('area') || 'vendas';
     } catch {
-      return 'financeiro';
+      return 'vendas';
     }
   });
 

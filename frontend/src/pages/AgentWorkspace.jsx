@@ -5,6 +5,8 @@ import {
   CheckCircle2,
   Database,
   Download,
+  FileText,
+  History,
   Layers,
   LayoutDashboard,
   MessageSquare,
@@ -19,7 +21,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { askAgent, waitForAgentTask } from '../services/api';
+import { downloadStructuredReport, exportStructuredReport, askAgent, waitForAgentTask } from '../services/api';
 import {
   getTaskStatusLabel,
   normalizeTaskPayload,
@@ -121,6 +123,8 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [task, setTask] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -185,7 +189,50 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
     safeStorageWrite(historyStorageKey, next);
   }, [messages, conversationId, historyStorageKey, result]);
 
+  useEffect(() => {
+    const storedHistory = safeStorageRead(historyStorageKey, []);
+    setHistoryItems(Array.isArray(storedHistory) ? storedHistory : []);
+  }, [historyStorageKey, messages, result, conversationId]);
 
+  const handleSelectConversation = (item) => {
+    if (!item?.id) return;
+    setConversationId(item.id);
+    setMessages(Array.isArray(item.messages) ? item.messages : []);
+    setResult(item.result || null);
+    setShowHistory(false);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, item.id);
+    } catch {}
+  };
+
+  const handleExportConversationPdf = async () => {
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    const columns = Array.isArray(result?.columns) && result.columns.length > 0
+      ? result.columns
+      : (rows.length > 0 ? Object.keys(rows[0]) : []);
+    if (!rows.length || !columns.length) return;
+    try {
+      const metadata = await exportStructuredReport('pdf', {
+        title: result?.summary || 'Relatório do Copilot Protheus',
+        tenant_code: context.tenant_id,
+        environment_code: context.environment,
+        company_id: context.company_id || context.company || null,
+        columns,
+        rows,
+      });
+      const blob = await downloadStructuredReport(metadata.download_url);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = metadata.filename || `copilot_conversa_${Date.now()}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      setTask({ status: 'export_failed', error: error.message || 'Não foi possível exportar o PDF.' });
+    }
+  };
 
   const send = async (text) => {
     if (!text?.trim()) return;
@@ -556,8 +603,28 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
                     </span>
                   </div>
 
-                  {/* Ações no modo Iframe (Nova Consulta & Alternador de Tema) */}
+                  {/* Ações do chat */}
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowHistory(prev => !prev)}
+                      title="Histórico de conversas"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+                    >
+                      <History size={13} />
+                      <span className="hidden sm:inline">Histórico</span>
+                    </button>
+                    {result?.rows?.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleExportConversationPdf}
+                        title="Exportar resultado para PDF"
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] dark:text-[#60A5FA] hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors cursor-pointer border border-blue-200/60 dark:border-blue-900/60"
+                      >
+                        <FileText size={13} />
+                        <span className="hidden sm:inline">PDF</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={handleNewConversation}
@@ -580,6 +647,30 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
                     )}
                   </div>
                 </div>
+
+                {showHistory && (
+                  <div className="mb-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">Histórico de conversas</span>
+                      <span className="text-[10px] text-slate-400">{historyItems.length} registro(s)</span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {historyItems.length === 0 ? (
+                        <p className="px-3 py-4 text-[11px] text-slate-500">Nenhuma conversa persistida neste contexto.</p>
+                      ) : historyItems.map(item => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() => handleSelectConversation(item)}
+                          className={`w-full text-left px-3 py-2.5 border-b last:border-b-0 border-slate-100 dark:border-slate-800 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors ${item.id === conversationId ? 'bg-blue-50/70 dark:bg-slate-800' : ''}`}
+                        >
+                          <span className="block text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate">{item.title || 'Consulta sem título'}</span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">{item.date || 'Histórico local'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Chat History Stream */}
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">

@@ -392,8 +392,55 @@ function formatCurrency(val) {
   return String(val);
 }
 
+const SALES_PANELS = [
+  {
+    id: 'overview',
+    label: 'Análise de vendas',
+    title: 'Análise de vendas',
+    subtitle: 'Visão consolidada do faturamento e dos registros retornados pelo Protheus.',
+    groupPatterns: ['DATA', 'EMISSAO', 'MES', 'PERIODO'],
+  },
+  {
+    id: 'seller',
+    label: 'Por vendedor',
+    title: 'Análise de vendas por vendedor',
+    subtitle: 'Agrupamento por vendedor somente quando esse campo existir no resultado autorizado.',
+    groupPatterns: ['VENDEDOR', 'VENDEDOR1', 'NOME_VEND', 'A3_NOME', 'CODVEND'],
+  },
+  {
+    id: 'product',
+    label: 'Por produtos',
+    title: 'Análise de vendas por produtos',
+    subtitle: 'Agrupamento por produto somente quando esse campo existir no resultado autorizado.',
+    groupPatterns: ['PRODUTO', 'DESCR_PROD', 'B1_DESC', 'CODPROD', 'ITEM'],
+  },
+];
+
+function findColumn(columns, patterns) {
+  return columns.find(column => patterns.some(pattern => String(column).toUpperCase().includes(pattern)));
+}
+
+function buildGroupedRows(rows, columns, patterns) {
+  const groupColumn = findColumn(columns, patterns);
+  const numericColumn = findColumn(columns, ['VALOR', 'TOTAL', 'FATUR', 'VLR', 'PRECO', 'QUANT']);
+  if (!groupColumn || !numericColumn) return { rows: [], columns: [] };
+  const groups = new Map();
+  rows.forEach(row => {
+    const label = String(row[groupColumn] ?? '').trim();
+    const value = parseNumeric(row[numericColumn]);
+    if (!label || value === null) return;
+    groups.set(label, (groups.get(label) || 0) + value);
+  });
+  if (!groups.size) return { rows: [], columns: [] };
+  return {
+    rows: Array.from(groups.entries()).map(([label, value]) => ({ [groupColumn]: label, [numericColumn]: value })),
+    columns: [groupColumn, numericColumn],
+  };
+}
+
 export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace, context, initialData }) {
   const [activeAreaKey, setActiveAreaKey] = useState(initialArea || 'financeiro');
+  const [activeSalesPanel, setActiveSalesPanel] = useState('overview');
   const [period, setPeriod] = useState('Mês Atual');
   const [chartView, setChartView] = useState('semanal');
   const [copilotQuestion, setCopilotQuestion] = useState('');
@@ -412,6 +459,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
   }, [initialArea]);
 
   const currentArea = AREAS_CONFIG[activeAreaKey] || AREAS_CONFIG.financeiro;
+  const salesView = SALES_PANELS.find(panel => panel.id === activeSalesPanel) || SALES_PANELS[0];
 
   const dynamicRows = React.useMemo(() => {
     const r = realData?.result || realData || {};
@@ -426,33 +474,43 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
     return [];
   }, [realData, dynamicRows]);
   const hasRealData = dynamicRows.length > 0;
+  const groupedSales = React.useMemo(
+    () => buildGroupedRows(dynamicRows, dynamicColumns, salesView.groupPatterns),
+    [dynamicRows, dynamicColumns, salesView.groupPatterns],
+  );
+  const panelRows = activeAreaKey === 'vendas' && activeSalesPanel !== 'overview' && groupedSales.rows.length
+    ? groupedSales.rows
+    : dynamicRows;
+  const panelColumns = activeAreaKey === 'vendas' && activeSalesPanel !== 'overview' && groupedSales.columns.length
+    ? groupedSales.columns
+    : dynamicColumns;
 
   const stats = React.useMemo(() => {
-    if (!dynamicRows.length || !dynamicColumns.length) return null;
+    if (!panelRows.length || !panelColumns.length) return null;
     let numericCol = null;
     let labelCol = null;
-    for (const col of dynamicColumns) {
+    for (const col of panelColumns) {
       const lower = col.toLowerCase();
       if (!numericCol && (lower.includes('valor') || lower.includes('total') || lower.includes('preco') || lower.includes('fat') || lower.includes('saldo'))) numericCol = col;
       if (!labelCol && (lower.includes('mes') || lower.includes('data') || lower.includes('desc') || lower.includes('nome') || lower.includes('cliente') || lower.includes('produto'))) labelCol = col;
     }
     if (!numericCol) {
-      for (const col of dynamicColumns) {
-        if (dynamicRows.some(r => typeof parseNumeric(r[col]) === 'number')) {
+      for (const col of panelColumns) {
+        if (panelRows.some(r => typeof parseNumeric(r[col]) === 'number')) {
           numericCol = col;
           break;
         }
       }
     }
-    if (!labelCol && dynamicColumns.length > 0) {
-      labelCol = dynamicColumns[0] !== numericCol ? dynamicColumns[0] : (dynamicColumns[1] || dynamicColumns[0]);
+    if (!labelCol && panelColumns.length > 0) {
+      labelCol = panelColumns[0] !== numericCol ? panelColumns[0] : (panelColumns[1] || panelColumns[0]);
     }
     if (!numericCol) return null;
     let sum = 0;
     let count = 0;
     let maxVal = -Infinity;
     let maxRow = null;
-    dynamicRows.forEach(r => {
+    panelRows.forEach(r => {
       const val = parseNumeric(r[numericCol]);
       if (val !== null) {
         sum += val;
@@ -463,7 +521,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
     const avg = count > 0 ? sum / count : 0;
     const maxLabel = maxRow ? String(maxRow[labelCol] || '') : '';
     return { numericCol, labelCol, total: sum, average: avg, maxVal, maxLabel, count };
-  }, [dynamicRows, dynamicColumns]);
+  }, [panelRows, panelColumns]);
 
 
 
@@ -671,6 +729,18 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           </div>
         </header>
 
+        {activeAreaKey === 'vendas' && (
+          <div className="px-6 pt-4 bg-[#f8fafc]">
+            <div className="flex flex-wrap gap-2 p-1 bg-white border border-[#e2e8f0] rounded-xl shadow-sm w-fit">
+              {SALES_PANELS.map(panel => (
+                <button key={panel.id} type="button" onClick={() => setActiveSalesPanel(panel.id)} className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeSalesPanel === panel.id ? 'bg-[#004fce] text-white shadow-sm' : 'text-[#64748b] hover:bg-[#eff4f9] hover:text-[#0f172a]'}`}>
+                  {panel.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
           {/* Conteúdo da Área Selecionada */}
           <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]">
             {!hasRealData ? (
@@ -698,12 +768,12 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
             <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-[#0f172a] tracking-tight">{currentArea.title}</h1>
+                <h1 className="text-2xl font-bold text-[#0f172a] tracking-tight">{activeAreaKey === 'vendas' ? salesView.title : currentArea.title}</h1>
                 <span className="px-2 py-0.5 rounded-md bg-[#e0ecff] text-[#004fce] text-xs font-mono font-bold">
                   {currentArea.module}
                 </span>
               </div>
-              <p className="text-sm text-[#64748b] mt-0.5">{currentArea.subtitle}</p>
+              <p className="text-sm text-[#64748b] mt-0.5">{activeAreaKey === 'vendas' ? salesView.subtitle : currentArea.subtitle}</p>
             </div>
 
             <div className="flex items-center gap-2.5">
@@ -764,7 +834,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
                   <div className="flex items-center justify-between mb-3 relative z-10">
                     <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Registros</span>
                   </div>
-                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{dynamicRows.length}</div>
+                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{panelRows.length}</div>
                 </div>
               </>
             ) : currentArea.kpis.map((kpi, index) => {
@@ -821,8 +891,8 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
             <div className="lg:col-span-2 bg-white rounded-2xl border border-[#e2e8f0] p-6 shadow-sm flex flex-col">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="font-bold text-[#0f172a] text-[16px]">{currentArea.chartTitle}</h3>
-                  <p className="text-xs text-[#64748b]">{currentArea.chartSubtitle}</p>
+                  <h3 className="font-bold text-[#0f172a] text-[16px]">{activeAreaKey === 'vendas' ? salesView.title : currentArea.chartTitle}</h3>
+                  <p className="text-xs text-[#64748b]">{activeAreaKey === 'vendas' ? salesView.subtitle : currentArea.chartSubtitle}</p>
                 </div>
                 <div className="flex bg-[#eff4f9] rounded-lg p-1 border border-[#e2e8f0]">
                   <button
@@ -896,8 +966,8 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
             <div className="bg-white rounded-2xl border border-[#e2e8f0] p-6 shadow-sm flex flex-col justify-between">
               <div>
-                <h3 className="font-bold text-[#0f172a] text-[16px] mb-1">{currentArea.compositionTitle}</h3>
-                <p className="text-xs text-[#64748b] mb-4">{currentArea.compositionSubtitle}</p>
+                <h3 className="font-bold text-[#0f172a] text-[16px] mb-1">{activeAreaKey === 'vendas' ? salesView.title : currentArea.compositionTitle}</h3>
+                <p className="text-xs text-[#64748b] mb-4">{activeAreaKey === 'vendas' ? salesView.subtitle : currentArea.compositionSubtitle}</p>
 
                 <div className="space-y-3">
                   {currentArea.compositionItems.map((item, idx) => (
@@ -930,7 +1000,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           <div className="bg-white rounded-2xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-[#e2e8f0] flex items-center justify-between bg-[#f8fafc]">
               <div>
-                <h3 className="font-bold text-[#0f172a] text-[15px]">{hasRealData ? ((realData?.result?.summary || realData?.summary || currentArea.tableTitle)) : currentArea.tableTitle}</h3>
+                <h3 className="font-bold text-[#0f172a] text-[15px]">{hasRealData ? ((realData?.result?.summary || realData?.summary || (activeAreaKey === 'vendas' ? salesView.title : currentArea.tableTitle))) : (activeAreaKey === 'vendas' ? salesView.title : currentArea.tableTitle)}</h3>
                 <p className="text-xs text-[#64748b]">{hasRealData ? "Dados retornados pelo Protheus" : currentArea.tableSubtitle}</p>
               </div>
               <button
@@ -946,7 +1016,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#f8fafc] text-[#64748b] font-bold uppercase tracking-wider border-b border-[#e2e8f0]">
                   <tr>
-                    {(hasRealData ? dynamicColumns : currentArea.tableHeaders).map((header, hIdx) => (
+                    {(hasRealData ? panelColumns : currentArea.tableHeaders).map((header, hIdx) => (
                       <th key={hIdx} className="px-6 py-3 text-left">
                         {header}
                       </th>
@@ -964,9 +1034,9 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
                         <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${row.statusClass}`}>{row.status}</span>
                       </td>
                     </tr>
-                  )) : dynamicRows.map((row, rIdx) => (
+                  )) : panelRows.map((row, rIdx) => (
                     <tr key={rIdx} className="hover:bg-[#f8fafc] transition-colors">
-                      {dynamicColumns.map((col, cIdx) => {
+                      {panelColumns.map((col, cIdx) => {
                         const val = row[col];
                         const isNum = typeof val === 'number';
                         return (

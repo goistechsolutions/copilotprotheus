@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { exportStructuredReport } from '../services/api';
+import { downloadStructuredReport, exportStructuredReport } from '../services/api';
 import { Bar } from 'react-chartjs-2';
 import {
   BarElement,
@@ -203,21 +203,40 @@ export default function StructuredResultPanel({ result, context, onClose }) {
     exportFile(csvContent, `protheus_export_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
   };
 
-  const handleExportExcel = async () => {
+  const exportStructured = async (format) => {
     if (!rows.length) return;
+    const payload = {
+      title: 'Relatório Executivo Protheus',
+      tenant_code: context?.tenant_id,
+      environment_code: context?.environment,
+      company_id: context?.company_id || context?.company || null,
+      columns,
+      rows,
+    };
+    const metadata = await exportStructuredReport(format, payload);
+    const blob = await downloadStructuredReport(metadata.download_url);
+    const extension = format === 'pdf' ? 'pdf' : 'xlsx';
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = metadata.filename || `relatorio_protheus_${Date.now()}.${extension}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+  };
+
+  const handleExportExcel = async () => {
     try {
-      const payload = {
-        title: 'Relatório Executivo Protheus',
-        context: context || {},
-        columns,
-        rows,
-      };
-      const blob = await exportStructuredReport('xlsx', payload);
-      const url = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `relatorio_protheus_${Date.now()}.xlsx`;
-      anchor.click();
+      await exportStructured('xlsx');
+    } catch {
+      handleExportCsv();
+    }
+  };
+
+  const handleExportPdf = async () => {
+    try {
+      await exportStructured('pdf');
     } catch {
       handleExportCsv();
     }
@@ -245,11 +264,19 @@ export default function StructuredResultPanel({ result, context, onClose }) {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={handleExportPdf}
+            className="px-3.5 py-2 bg-[#004FCE] text-white font-medium text-[13px] rounded-xl hover:bg-[#003ea6] transition-colors shadow-xs flex items-center gap-2 cursor-pointer"
+          >
+            <FileText size={16} />
+            <span>Exportar PDF</span>
+          </button>
+          <button
+            type="button"
             onClick={handleExportExcel}
             className="px-3.5 py-2 bg-white dark:bg-[#1E293B] border border-border-hairline text-[#171C20] dark:text-white font-medium text-[13px] rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-xs flex items-center gap-2 cursor-pointer"
           >
-            <Download size={16} className="text-[#004FCE]" />
-            <span>Exportar Excel</span>
+            <FileSpreadsheet size={16} className="text-[#004FCE]" />
+            <span>Excel</span>
           </button>
           {onClose && (
             <button

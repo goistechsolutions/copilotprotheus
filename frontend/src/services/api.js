@@ -101,12 +101,31 @@ export async function getAgentTaskStatus(taskId) {
   });
 }
 
-export async function exportStructuredReport(payload) {
+export async function exportStructuredReport(formatOrPayload, maybePayload = {}) {
   const base = getApiBaseUrl();
+  const payload = typeof formatOrPayload === 'string'
+    ? { ...maybePayload, format: formatOrPayload }
+    : (formatOrPayload || {});
   return fetchWithRetry(`${base}/report/export-structured`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function downloadStructuredReport(downloadUrl) {
+  if (!downloadUrl) throw new Error('URL de download do relatório não informada.');
+  const base = getApiBaseUrl();
+  const url = downloadUrl.startsWith('http')
+    ? downloadUrl
+    : (downloadUrl.startsWith('/') && typeof window !== 'undefined'
+      ? `${window.location.origin}${downloadUrl}`
+      : `${base}/${String(downloadUrl).replace(/^\//, '')}`);
+  const response = await fetch(url, { credentials: 'include' });
+  if (!response.ok) {
+    const payload = await readErrorPayload(response);
+    throw new ApiRequestError(String(payload.message || payload.error || `HTTP ${response.status}`), payload, response.status);
+  }
+  return response.blob();
 }
 
 
