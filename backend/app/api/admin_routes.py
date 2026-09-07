@@ -53,6 +53,7 @@ from app.schemas.dictionary_sync import (
     DictionarySourceSummary,
     DictionarySyncDiff,
 )
+from app.services.module_sync_resolver import resolve_modules_to_numeric_codes
 
 router = APIRouter()
 
@@ -791,8 +792,15 @@ def preview_sync_schema(
             if not company:
                 raise HTTPException(status_code=400, detail="Empresa ativa não localizada no tenant.")
 
-        if request.mode == DictionarySyncMode.CURATED and not request.module_codes:
-            raise HTTPException(status_code=400, detail="Informe ao menos um módulo para o modo curated.")
+        selected_module_codes = []
+        if request.mode == DictionarySyncMode.CURATED:
+            if not request.module_codes:
+                raise HTTPException(status_code=400, detail="Informe ao menos um módulo para o modo curated.")
+            selected_module_codes = resolve_modules_to_numeric_codes(
+                db=db,
+                tenant_schema=clean_tenant,
+                selected_modules=request.module_codes,
+            )
 
         from app.services.sync_dictionary_v52 import (
             fetch_curated_by_modules,
@@ -805,7 +813,7 @@ def preview_sync_schema(
                 db=db,
                 tenant_code=clean_tenant,
                 environment_code=request.environment_code,
-                modules=request.module_codes,
+                modules=selected_module_codes,
             )
             raw_sx2 = []
             raw_sx3 = []
@@ -1025,43 +1033,26 @@ async def sync_schema(
 
     master_rows = db.query(ProtheusModuleMaster).filter(ProtheusModuleMaster.active == True).all()
 
-    # Monta lista de chaves para filtrar X2.X2_MODULO
-    module_keys = set()
+    # X2.X2_MODULO deve ser filtrado exclusivamente por mod_code numérico.
+    # Sigla, descrição e UUID não são chaves físicas do SX2.
+    selected_module_codes = resolve_modules_to_numeric_codes(
+        db=db,
+        tenant_schema=clean_tenant,
+        selected_modules=clean_modulos,
+    )
+    selected_module_set = set(selected_module_codes)
+    module_keys = set(selected_module_codes)
     sigla_map = {}
     code_to_name = {}
 
     for m in master_rows:
+        module_code = str(m.mod_code).strip()
+        if module_code not in selected_module_set:
+            continue
         m_sigla = (m.mod_sigla or "").strip().upper()
-        m_desc  = (m.mod_name  or m_sigla).strip().upper()
-
-        is_selected = False
-        if not clean_modulos:
-            is_selected = True
-        else:
-            for cm in clean_modulos:
-                if cm == m_sigla or cm == str(m.mod_code) or cm in m_desc:
-                    is_selected = True
-                    break
-
-        if is_selected:
-            module_keys.add(str(m.mod_code))
-            if str(m.mod_code).isdigit():
-                module_keys.add(f"{int(m.mod_code):02d}")
-            if m_sigla:
-                module_keys.add(m_sigla)
-                if m_sigla.startswith("SIGA"):
-                    module_keys.add(m_sigla.replace("SIGA", ""))
-            
-            sigla_map[str(m.mod_code)] = m_sigla
-            code_to_name[str(m.mod_code)] = m_desc
-
-    for cm in clean_modulos:
-        if cm not in module_keys:
-            module_keys.add(cm)
-            if cm.isdigit():
-                module_keys.add(f"{int(cm):02d}")
-            sigla_map[cm] = cm
-            code_to_name[cm] = cm
+        m_desc = (m.mod_name or m_sigla).strip().upper()
+        sigla_map[module_code] = m_sigla
+        code_to_name[module_code] = m_desc
 
     if module_keys:
         in_values = [f"'{c}'" for c in module_keys]
@@ -1202,54 +1193,24 @@ async def sync_schema(
         if not schema_dict:
             raise Exception("Nenhuma tabela retornada pelo Protheus.")
 
-        # Persiste em "{clean_tenant}".tenant_schemas (cache legivel no schema do tenant)
+        # dictionary_* é o catálogo autoritativo; tenant_schemas não participa mais do fluxo.
         clean_tenant = secure_clean_tenant(str(tenant_id))
-
         ensure_tenant_tables(db, clean_tenant)
 
-        if not clean_modulos:
-            db.execute(text(f'DELETE FROM "{clean_tenant}".tenant_schemas'))
-            db.execute(text(f'DELETE FROM "{clean_tenant}".dictionary_tables'))
-            db.execute(text(f'DELETE FROM "{clean_tenant}".dictionary_fields'))
-        else:
-            for clean_mod in clean_modulos:
-                db.execute(
-                    text(f'DELETE FROM "{clean_tenant}".tenant_schemas WHERE mod_sigla = :m OR CAST(mod_code AS TEXT) = :m'),
-                    {"m": clean_mod}
-                )
-                db.execute(
-                    text(f'DELETE FROM "{clean_tenant}".dictionary_tables WHERE module_code = :m'),
-                    {"m": str(clean_mod)}
-                )
-            if schema_dict:
-                chaves = tuple(schema_dict.keys())
-                db.execute(
-                    text(f'DELETE FROM "{clean_tenant}".dictionary_fields WHERE table_code IN :chaves'),
-                    {"chaves": chaves}
-                )
+        for selected_code in selected_module_codes:
+            db.execute(
+                text(f'DELETE FROM "{clean_tenant}".dictionary_fields WHERE table_code IN (SELECT table_code FROM "{clean_tenant}".dictionary_tables WHERE module_code = :module_code)'),
+                {"module_code": str(selected_code)},
+            )
+            db.execute(
+                text(f'DELETE FROM "{clean_tenant}".dictionary_tables WHERE module_code = :module_code'),
+                {"module_code": str(selected_code)},
+            )
 
         for chave, meta in schema_dict.items():
             mod_val = meta.get("x2_modulo", "")
             mod_int = int(mod_val) if mod_val.isdigit() else 0
             mod_sigla = meta.get("codmod") or mod_val
-            
-            # V4: tenant_schemas
-            db.execute(
-                text(f"""
-                    INSERT INTO "{clean_tenant}".tenant_schemas (tenant_id, mod_code, mod_sigla, campo, chave, tabela, nome, schema_json, updated_at)
-                    VALUES (:t, :mc, :ms, :cmp, :c, :tbl, :n, :j, NOW())
-                """),
-                {
-                    "t": clean_tenant,
-                    "mc": mod_int,
-                    "ms": mod_sigla,
-                    "cmp": "*",
-                    "c": chave,
-                    "tbl": meta.get("tabela", ""),
-                    "n": meta.get("nome", ""),
-                    "j": json.dumps(meta, ensure_ascii=False)
-                }
-            )
             
             comp_row = db.execute(text(f'SELECT id, company_code FROM "{clean_tenant}".company_info ORDER BY id ASC LIMIT 1')).first()
             comp_id = comp_row[0] if comp_row else None

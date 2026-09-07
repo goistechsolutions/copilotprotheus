@@ -2,7 +2,7 @@ const DEFAULT_CONFIG = {
   tenantId: "",
   environmentCode: "",
   widgetUrl: "https://copilot.elitecorp.tec.br/",
-  launchUrl: "https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html",
+  launchUrl: "",
 };
 
 const CONTENT_SCRIPT_MATCH_PATTERNS = [
@@ -109,13 +109,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "OPEN_PROTHEUS") {
-    chrome.storage.local.get(["launchUrl", "tenantId", "environmentCode"], (config) => {
-      if (config.launchUrl) {
-        const url = new URL(config.launchUrl);
-        url.searchParams.set("tenant_id", config.tenantId || "");
-        url.searchParams.set("environment_code", config.environmentCode || "");
-        chrome.tabs.create({ url: url.toString() });
+    chrome.storage.local.get(["launchUrl"], (config) => {
+      if (!config.launchUrl) {
+        console.warn("Copilot Protheus: configure a URL do WebApp TOTVS antes de abrir o Protheus.");
+        return;
       }
+      // O contexto é enviado ao widget via postMessage após a carga;
+      // não deve ser colocado na URL do WebApp ou no histórico do navegador.
+      chrome.tabs.create({ url: config.launchUrl });
     });
   }
 });

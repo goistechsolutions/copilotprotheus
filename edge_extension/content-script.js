@@ -18,6 +18,8 @@
     return cachedBodyText.text;
   }
 
+  const DEFAULT_WIDGET_URL = "https://copilot.elitecorp.tec.br/";
+
   const PROTHEUS_MODULE_MAP = {
     "faturamento": "SIGAFAT",
     "compras": "SIGACOM",
@@ -48,13 +50,13 @@
 
   function extractProtheusContext() {
     const context = {
-      tenant_id: currentConfig?.tenantId || "rodol_prod",
-      company: "01",
-      branch: "0101",
-      user: currentConfig?.username || "admin",
-      environment_code: currentConfig?.environmentCode || "c8te0u_prod",
-      module: "SIGAFAT",
-      session_id: "protheus-" + Date.now()
+      tenant_id: currentConfig?.tenantId || null,
+      company: null,
+      branch: null,
+      user: currentConfig?.username || null,
+      environment_code: currentConfig?.environmentCode || null,
+      module: null,
+      session_id: null
     };
 
     try {
@@ -77,7 +79,7 @@
       // 2. Extração do Ambiente TOTVS Cloud
       const envMatch = bodyText.match(/c8te0u[_\w]+/i) || bodyText.match(/TOTVS[^\n]{0,60}/i);
       if (envMatch) {
-        context.environment_code = envMatch[0].trim();
+        context.environment_code = envMatch[0].trim().toLowerCase();
       }
 
       // 3. Extração de Empresa / Filial
@@ -250,27 +252,29 @@
   `;
   shadow.appendChild(panel);
 
-  // Escuta redimensionamento solicitado pelo Copilot
+  function getWidgetOrigin(config) {
+    try {
+      return new URL(config.widgetUrl || DEFAULT_WIDGET_URL).origin;
+    } catch {
+      return new URL(DEFAULT_WIDGET_URL).origin;
+    }
+  }
+
+  // Escuta redimensionamento solicitado pelo Copilot somente da origem configurada.
   window.addEventListener("message", (event) => {
     const iframe = shadow.querySelector("#copilot-iframe");
     if (!iframe || event.source !== iframe.contentWindow) return;
+    if (event.origin !== getWidgetOrigin(currentConfig || {})) return;
 
     if (event.data?.type === "cprot-result-state") {
       panel.classList.toggle("results-open", Boolean(event.data.open));
     }
   });
 
-  function buildIframeUrl(config, context) {
-    const baseUrl = config.widgetUrl || "https://copilot.elitecorp.tec.br/";
-    const url = new URL(baseUrl);
-    url.searchParams.set("tenant_id", config.tenantId || context.tenant_id || "rodol_prod");
-    url.searchParams.set("environment_code", config.environmentCode || context.environment_code || "c8te0u_prod");
-    url.searchParams.set("company", context.company || "01");
-    url.searchParams.set("branch", context.branch || "0101");
-    url.searchParams.set("user", context.user || config.username || "admin");
-    url.searchParams.set("module", context.module || "SIGAFAT");
-    url.searchParams.set("session_id", context.session_id || "");
-    return url.toString();
+  function buildIframeUrl(config) {
+    // Contexto operacional é enviado por postMessage após o carregamento;
+    // não deve ser exposto na URL, histórico ou referer do navegador.
+    return config.widgetUrl || DEFAULT_WIDGET_URL;
   }
 
   function sendContextToIframe(context) {
@@ -278,13 +282,13 @@
     if (!iframe?.contentWindow) return;
 
     const payload = {
-      tenant_id: currentConfig?.tenantId || context.tenant_id || "rodol_prod",
-      environment_code: currentConfig?.environmentCode || context.environment_code || "c8te0u_prod",
-      company: context.company || "01",
-      branch: context.branch || "0101",
-      user: context.user || currentConfig?.username || "admin",
-      module: context.module || "SIGAFAT",
-      session_id: context.session_id || ""
+      tenant_id: currentConfig?.tenantId || context.tenant_id || null,
+      environment_code: currentConfig?.environmentCode || context.environment_code || null,
+      company: context.company || null,
+      branch: context.branch || null,
+      user: context.user || currentConfig?.username || null,
+      module: context.module || null,
+      session_id: context.session_id || null
     };
 
     const key = JSON.stringify(payload);
@@ -293,7 +297,7 @@
 
     iframe.contentWindow.postMessage(
       { type: "PROTHEUS_CONTEXT", payload },
-      "*"
+      getWidgetOrigin(currentConfig || {})
     );
   }
 
@@ -302,7 +306,7 @@
     const context = extractProtheusContext();
 
     if (!iframeLoaded) {
-      iframe.src = buildIframeUrl(config, context);
+      iframe.src = buildIframeUrl(config);
       iframe.onload = () => {
         iframeLoaded = true;
         sendContextToIframe(context);
@@ -348,14 +352,14 @@
     }
   });
 
-  chrome.storage.sync.get(
+  chrome.storage.local.get(
     ["tenantId", "environmentCode", "username", "widgetUrl"],
     (result) => {
       const config = {
-        tenantId: result.tenantId || "rodol_prod",
-        environmentCode: result.environmentCode || "c8te0u_prod",
-        username: result.username || "admin",
-        widgetUrl: result.widgetUrl || "https://copilot.elitecorp.tec.br/"
+        tenantId: result.tenantId || "",
+        environmentCode: result.environmentCode || "",
+        username: result.username || "",
+        widgetUrl: result.widgetUrl || DEFAULT_WIDGET_URL
       };
       init(config);
     }

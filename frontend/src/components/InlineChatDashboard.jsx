@@ -317,9 +317,9 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
 
         {showFilters && (
           <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-            <div><strong>Empresa / Filial:</strong> {context?.company || '01'} / {context?.branch || '0101'}</div>
+            <div><strong>Empresa / Filial:</strong> {context?.company || '—'} / {context?.branch || '—'}</div>
             <div><strong>Módulo:</strong> {areaInfo.module}</div>
-            <div><strong>Ambiente:</strong> {context?.environment || 'c8te0u_prod'}</div>
+            <div><strong>Ambiente:</strong> {context?.environment || 'Ambiente não identificado'}</div>
             <div><strong>Exclusão Lógica:</strong> D_E_L_E_T_ &lt;&gt; &apos;*&apos;</div>
           </div>
         )}

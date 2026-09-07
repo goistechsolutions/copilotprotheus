@@ -67,14 +67,14 @@ function conversationKey(context) {
 function readContextFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
-    tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
-    company: params.get('company_id') || params.get('company') || '01',
-    branch: params.get('branch') || '0101',
-    user: params.get('user') || 'João Silva',
-    profile: params.get('profile') || 'Gerente Financeiro',
-    session_id: params.get('session_id') || '',
-    environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
-    module: params.get('module') || 'SIGAFAT',
+    tenant_id: params.get('tenant_id') || params.get('tenant') || null,
+    company: params.get('company_id') || params.get('company') || null,
+    branch: params.get('branch') || null,
+    user: params.get('user') || null,
+    profile: params.get('profile') || null,
+    session_id: params.get('session_id') || null,
+    environment: params.get('environment_code') || params.get('environment') || null,
+    module: params.get('module') || null,
   };
 }
 
@@ -105,14 +105,14 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
 
   const context = useMemo(
     () => ({
-      tenant_id: externalContext.tenant_id || 'rodol_prod',
-      company: externalContext.company || '01',
-      branch: externalContext.branch || '0101',
-      user: externalContext.user || 'João Silva',
-      profile: externalContext.profile || 'Gerente Financeiro',
-      session_id: externalContext.session_id || '',
-      environment: externalContext.environment || 'c8te0u_prod',
-      module: externalContext.module || 'SIGAFAT',
+      tenant_id: externalContext.tenant_id || null,
+      company: externalContext.company || null,
+      branch: externalContext.branch || null,
+      user: externalContext.user || null,
+      profile: externalContext.profile || null,
+      session_id: externalContext.session_id || null,
+      environment: externalContext.environment || null,
+      module: externalContext.module || null,
     }),
     [externalContext]
   );
@@ -190,10 +190,35 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
   const send = async (text) => {
     if (!text?.trim()) return;
 
+    const requiredContext = {
+      tenant_id: context.tenant_id,
+      environment_code: context.environment,
+      company_code: context.company,
+      filial: context.branch,
+      module: context.module,
+    };
+    const missingContext = Object.entries(requiredContext)
+      .filter(([, value]) => !String(value || '').trim())
+      .map(([key]) => key);
+
     setMessages((current) => [...current, { role: 'user', text }]);
     setResult(null);
     setTask(null);
     setLoading(true);
+
+    if (missingContext.length > 0) {
+      const contextError = {
+        status: 'error',
+        error_source: 'context',
+        error_code: 'CONTEXT_NOT_VALIDATED',
+        message: `Contexto do Protheus não validado. Campos ausentes: ${missingContext.join(', ')}.`,
+        retryable: false,
+      };
+      setResult(contextError);
+      setMessages((current) => [...current, { role: 'assistant', text: contextError.message }]);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (!context.tenant_id || !context.environment || !context.company || !context.branch) {
@@ -388,10 +413,10 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
               </div>
               <div className="hidden md:flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-3 text-[11px] font-semibold text-slate-500">
                 <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  Filial {context.branch || '0101'}
+                  Filial {context.branch || '—'}
                 </span>
                 <span className="bg-blue-50 dark:bg-blue-950/60 text-[#004FCE] dark:text-[#60A5FA] px-2 py-0.5 rounded">
-                  {context.module || 'SIGAFAT'}
+                  {context.module || 'Módulo não identificado'}
                 </span>
               </div>
             </div>
@@ -445,10 +470,10 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
                 </div>
                 <div className="hidden xl:block text-left">
                   <p className="text-[12px] font-bold text-[#171C20] dark:text-white leading-tight">
-                    {context.user || 'João Silva'}
+                    {context.user || 'Usuário não identificado'}
                   </p>
                   <p className="text-[10px] text-slate-400 font-medium">
-                    {context.profile || 'Gerente Financeiro'}
+                    {context.profile || 'Perfil não identificado'}
                   </p>
                 </div>
               </div>
@@ -520,14 +545,14 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
                       <Database size={10} className="text-[#004FCE]" />
-                      PROTHEUS - {context.branch || '0101'}
+                      PROTHEUS - {context.branch || 'Filial não identificada'}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
                       <User size={10} className="text-[#004FCE]" />
-                      {context.user || 'admin'}
+                      {context.user || 'Usuário não identificado'}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-[10px] font-semibold text-[#004FCE] dark:text-[#60A5FA] border border-blue-200/60 dark:border-blue-900/60">
-                      {context.module || 'Perfil: Negócio'}
+                      {context.module || 'Módulo não identificado'}
                     </span>
                   </div>
 
