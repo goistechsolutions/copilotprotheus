@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 import uuid
 import asyncio
 import time
+import math
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -87,6 +88,66 @@ def _normalized_http_exception(exc: HTTPException, correlation_id: str, default_
         default_source=default_source,
     )
 
+
+def _is_non_metric_field(field_name: str) -> bool:
+    name = str(field_name or "").strip().upper()
+    return bool(re.search(
+        r"(^|_)(MES|MÊS|ANO|YEAR|PERIODO|PERÍODO|DATA|DATE|COD|CODIGO|CÓDIGO|ID|NUMERO|NÚMERO|NR|FILIAL|EMPRESA|BRANCH)(_|$)",
+        name,
+    )) or name.startswith(("MES_", "MÊS_", "ANO_", "DATA_", "COD_", "CODIGO_"))
+
+
+def _parse_summary_number(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value) if math.isfinite(float(value)) else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = value.strip().replace("R$", "").replace("%", "").replace(" ", "")
+    if not re.fullmatch(r"[+-]?[0-9][0-9.,]*", candidate):
+        return None
+    if "," in candidate and "." in candidate:
+        candidate = candidate.replace(".", "").replace(",", ".")
+    elif "," in candidate:
+        candidate = candidate.replace(",", ".")
+    try:
+        parsed = float(candidate)
+        return parsed if math.isfinite(parsed) else None
+    except ValueError:
+        return None
+
+
+def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "Consulta concluída sem registros para o contexto e filtros informados."
+    columns = list(rows[0].keys()) if isinstance(rows[0], dict) else []
+    candidates = []
+    for column in columns:
+        values = [_parse_summary_number(row.get(column)) for row in rows if isinstance(row, dict)]
+        numeric_values = [value for value in values if value is not None]
+        if not numeric_values or _is_non_metric_field(column):
+            continue
+        name = str(column).upper()
+        semantic = bool(re.search(r"VALOR|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name))
+        candidates.append((1 if semantic else 0, column, numeric_values))
+    candidates.sort(key=lambda item: (item[0], len(item[2])), reverse=True)
+    if not candidates:
+        return f"A consulta retornou {len(rows)} registros. Não foi identificada uma métrica numérica financeira segura; consulte a tabela detalhada para analisar os campos autorizados."
+    _, metric, values = candidates[0]
+    total = sum(values)
+    average = total / len(values)
+    dimensions = [
+        column for column in columns
+        if re.search(r"VENDEDOR|VEND|SUBGRUPO|PRODUTO|CLIENTE|MES|MÊS|PERIODO|PERÍODO", str(column).upper())
+        and not _is_non_metric_field(column) or re.search(r"MES|MÊS|SUBGRUPO", str(column).upper())
+    ]
+    dimension_text = f" Dimensões presentes: {', '.join(dict.fromkeys(str(item) for item in dimensions))}." if dimensions else ""
+    return (
+        f"A consulta ao Protheus retornou {len(rows)} registros. "
+        f"Considerando somente o campo numérico autorizado {metric}, o total dos registros retornados é R$ {total:,.2f} "
+        f"e a média por registro é R$ {average:,.2f}.{dimension_text} "
+        "Nenhuma comparação, projeção ou atribuição de vendedor/produto foi inferida além das colunas retornadas."
+    )
+
 # Gerenciador em memória para polling de tarefas do agente
 AGENT_TASKS = {}
 
@@ -131,6 +192,8 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 13. O snapshot SX3 é a única fonte de campos físicos. Um identificador com aparência Protheus, como F1_TOTAL, não é campo válido se não estiver listado em FIELD para a tabela. Para totais calculados, use SUM/COUNT/AVG somente sobre um campo físico listado e atribua um alias de apresentação explícito com AS; o alias não pode ser usado como campo físico, filtro ou chave de JOIN.
 14. MUITO IMPORTANTE: Quando utilizar alias em uma tabela no FROM/JOIN (ex: FROM SF2010 SF2), você deve OBRIGATORIAMENTE utilizar ESSE EXATO ALIAS nas colunas do SELECT e WHERE (ex: SF2.F2_DOC). Nunca abrevie ou invente um alias não declarado (como F2.F2_DOC). O banco Oracle gerará erro de sintaxe e causará um Internal Server Error 500 no Protheus se o alias estiver incorreto.
 15. PROIBIÇÃO ABSOLUTA DE ALUCINAÇÃO DE CAMPOS: Você está INVENTANDO campos que não existem no dicionário. NUNCA crie colunas começando com "X" (ex: F2_XCLIENT, F2_X_COND, C5_XNOME, C5_XVEND, C6_XDESC) tentando trazer descrições. Se a tabela de domínio (ex: SA1 para clientes) não estiver no contexto, retorne APENAS o código original (ex: F2_CLIENTE). A invenção de campos inexistentes gera ORA-00904 e causa erro 500 no QueryRest. Use a sintaxe INNER JOIN ao invés de apenas JOIN para maior clareza.
+17. CONSULTAS GERENCIAIS AGRUPADAS: Se o pedido contiver "agrupado", "agrupando", "por vendedor", "por produto", "por subgrupo", "mensal", "por mês" ou combinação equivalente, a resposta DEVE ser uma agregação SQL real. Selecione cada dimensão solicitada, uma métrica física financeira/quantitativa autorizada usando SUM/COUNT/AVG e inclua no GROUP BY todas as dimensões não agregadas. Nunca trate campos de mês, ano, data, código, filial, empresa, identificador ou número como métrica financeira. Não retorne linhas transacionais detalhadas quando a solicitação exigir consolidação. Se não existir no snapshot um campo físico autorizado para a métrica ou uma dimensão solicitada, não substitua por outro campo: informe que a análise não pode ser construída com o catálogo disponível.
+18. COERÊNCIA DO RESULTADO: Para análise mensal do ano, a consulta deve retornar uma coluna de período/mês e uma métrica agregada por mês; para vendedor e subgrupo, deve retornar as respectivas dimensões e a métrica agregada. O alias da métrica deve ser explícito, por exemplo SUM(campo_físico) AS VALOR_TOTAL, sem reutilizar alias ou códigos como valor.
 16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão a conversão falhará e o banco retornará erro 500 no QueryRest. Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\'). Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'."""
 
     domain = _infer_query_domain(prompt)
@@ -877,31 +940,10 @@ async def process_agent_task(task_id: str, payload: dict):
                             "Os dados estruturados estão disponíveis na tabela e nas visualizações do relatório."
                         )
                         
-                        try:
-                            from app.services.gemini_client import ask_gemini
-                            import json
-                            sample_rows = safe_rows[:5]
-                            summary_prompt = (
-                                f"O usuário fez a seguinte solicitação: '{prompt}'. "
-                                f"A consulta retornou {len(rows)} registros. "
-                                f"Aqui está uma amostra dos primeiros registros:\n{json.dumps(sample_rows, ensure_ascii=False, indent=2)}\n\n"
-                                "Escreva um resumo em linguagem natural, muito direto e executivo, respondendo à solicitação do usuário com base nos dados. "
-                                "Destaque os principais números da amostra (se houver), evite inventar dados além do que está na amostra, e mencione que a lista completa detalhada está disponível no painel de resultados da tela. "
-                                "Não inclua tabelas markdown ou formatação complexa. Apenas 1 a 2 parágrafos explicativos."
-                            )
-                            summary_message = await ask_gemini(
-                                question=summary_prompt,
-                                intent="data_summary",
-                                context={"tenant_system_prompt": "Você é um assistente executivo e objetivo focado em relatar dados gerenciais de forma clara e direta no chat."},
-                                allow_tools=False
-                            )
-                            if summary_message and not summary_message.startswith("Erro"):
-                                response["message"] = summary_message.strip()
-                            else:
-                                response["message"] = "Consulta concluída."
-                        except Exception as e:
-                            logger.error(f"Failed to generate dynamic summary: {e}")
-                            response["message"] = "Consulta concluída com sucesso."
+                        # O resumo é determinístico e derivado de todas as linhas retornadas.
+                        # Não usamos uma amostra no LLM para evitar totais, atribuições ou
+                        # agrupamentos que não estejam sustentados pelo resultado real.
+                        response["message"] = _build_safe_result_summary(safe_rows)
                     else:
                         logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
                         response["message"] = "Consulta concluída."

@@ -394,9 +394,6 @@ function formatCurrency(val) {
 
 function buildManagerialMessage(result, areaLabel) {
   const data = result?.result || result || {};
-  const supplied = data.executive_summary || data.summary || data.message;
-  if (supplied && String(supplied).trim()) return String(supplied).trim();
-
   const rows = Array.isArray(data.rows) ? data.rows : [];
   const columns = Array.isArray(data.columns) && data.columns.length ? data.columns : (rows[0] ? Object.keys(rows[0]) : []);
   if (!rows.length) return `A análise de ${areaLabel} não retornou registros para o contexto e filtros informados.`;
@@ -436,7 +433,7 @@ function findColumn(columns, patterns) {
 }
 
 function isIdentifierColumn(column) {
-  return /(^|_)(COD|CODIGO|ID|NUMERO|NR|DATA|DATE|FILIAL|EMPRESA|BRANCH)(_|$)/i.test(String(column));
+  return /(^|_)(COD|CODIGO|ID|NUMERO|NR|DATA|DATE|FILIAL|EMPRESA|BRANCH|MES|MÊS|ANO|YEAR|PERIODO|PERÍODO)(_|$)/i.test(String(column));
 }
 
 function findValueColumn(rows, columns) {
@@ -446,7 +443,7 @@ function findValueColumn(rows, columns) {
       if (!values.length) return null;
       const name = String(column).toUpperCase();
       const semantic = /(VALOR|TOTAL|FATUR|RECEITA|SALDO|PRECO|PREÇO|MARGEM|QUANT|QTD|VOLUME)/i.test(name) ? 100 : 0;
-      const identifierPenalty = isIdentifierColumn(column) ? 80 : 0;
+      const identifierPenalty = isIdentifierColumn(column) ? 160 : 0;
       return { column, score: semantic - identifierPenalty + values.length };
     })
     .filter(Boolean)
