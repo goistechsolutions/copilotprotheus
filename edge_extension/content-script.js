@@ -13,7 +13,20 @@
     if (now - cachedBodyText.timestamp < 300) {
       return cachedBodyText.text;
     }
-    cachedBodyText.text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+
+    const parts = [document.body?.innerText || ""];
+    // innerText não contém necessariamente o valor atual de inputs/selects do WebApp.
+    // Lemos somente controles visíveis e nunca campos de senha ou token.
+    document.querySelectorAll("input, select, textarea, [aria-label], [data-testid], [title]").forEach((element) => {
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") return;
+      const type = String(element.getAttribute("type") || "").toLowerCase();
+      if (type === "password" || type === "hidden") return;
+      const value = element.value || element.getAttribute("aria-label") || element.getAttribute("data-testid") || element.getAttribute("title") || "";
+      if (value) parts.push(String(value));
+    });
+
+    cachedBodyText.text = parts.join(" ").replace(/\s+/g, " ").trim();
     cachedBodyText.timestamp = now;
     return cachedBodyText.text;
   }
@@ -61,47 +74,42 @@
 
     try {
       const bodyText = getBodyText();
+      const normalizedText = bodyText.replace(/\u00a0/g, " ");
 
-      // 1. Extração do Módulo Ativo (ex: SIGAFAT, SIGAFIN, SIGACOM, ou nome textual)
-      const sigaMatch = bodyText.match(/\bSIGA[A-Z]{3,}\b/i);
-      if (sigaMatch) {
-        context.module = sigaMatch[0].toUpperCase();
+      // Programa inicial SIGAMDI é o menu do WebApp, não um módulo de negócio.
+      const sigaMatches = normalizedText.match(/\bSIGA[A-Z]{3,}\b/gi) || [];
+      const operationalModule = sigaMatches.find((value) => value.toUpperCase() !== "SIGAMDI");
+      if (operationalModule) {
+        context.module = operationalModule.toUpperCase();
       } else {
         for (const key of Object.keys(PROTHEUS_MODULE_MAP)) {
-          const regex = new RegExp(`\\b${key}\\b`, "i");
-          if (regex.test(bodyText)) {
+          if (new RegExp(`\\b${key}\\b`, "i").test(normalizedText)) {
             context.module = PROTHEUS_MODULE_MAP[key];
             break;
           }
         }
       }
 
-      // 2. Extração do Ambiente TOTVS Cloud
-      const envMatch = bodyText.match(/c8te0u[_\w]+/i) || bodyText.match(/TOTVS[^\n]{0,60}/i);
-      if (envMatch) {
-        context.environment_code = envMatch[0].trim().toLowerCase();
+      // O ambiente é obtido do valor junto ao rótulo, sem depender de um código fixo.
+      const envMatch = normalizedText.match(/(?:Ambiente(?:\s+no\s+servidor)?|Environment(?:\s+Code)?)\s*[:=]?\s*([A-Za-z0-9][A-Za-z0-9_-]{1,80})/i);
+      if (envMatch?.[1] && !/^no$/i.test(envMatch[1])) {
+        context.environment_code = envMatch[1].trim();
       }
 
-      // 3. Extração de Empresa / Filial
-      const companyBranchPatterns = [
-        /\b(\d{2})\s*[\/-]\s*(\d{2,4})\b/,
-        /Empresa[:\s]+([^\n]{2,40})/i,
-        /Filial[:\s]+([^\n]{2,40})/i
-      ];
-
-      for (const pattern of companyBranchPatterns) {
-        const match = bodyText.match(pattern);
-        if (!match) continue;
-        if (match[2]) {
-          context.company = (match[1] || "").trim();
-          context.branch = (match[2] || "").trim();
-          break;
-        }
+      // Aceita tanto "01/0101" quanto campos separados de Empresa e Filial.
+      const pairMatch = normalizedText.match(/\b(\d{1,4})\s*[\/-]\s*(\d{2,10})\b/);
+      const companyMatch = normalizedText.match(/(?:Empresa|Company)\s*[:=]?\s*([A-Za-z0-9]{1,20})/i);
+      const branchMatch = normalizedText.match(/(?:Filial|Branch)\s*[:=]?\s*([A-Za-z0-9]{2,20})/i);
+      if (pairMatch) {
+        context.company = pairMatch[1].trim();
+        context.branch = pairMatch[2].trim();
+      } else {
+        context.company = companyMatch?.[1]?.trim() || null;
+        context.branch = branchMatch?.[1]?.trim() || null;
       }
 
-      // 4. Usuário
-      const userMatch = bodyText.match(/Usuário[:\s]+([^\n]{2,40})/i) || bodyText.match(/User[:\s]+([^\n]{2,40})/i);
-      if (userMatch && userMatch[1]) {
+      const userMatch = normalizedText.match(/(?:Usuário|Usuario|User)\s*[:=]?\s*([^,;|]{2,80})/i);
+      if (userMatch?.[1]) {
         context.user = userMatch[1].trim();
       }
     } catch (err) {
@@ -285,7 +293,9 @@
       tenant_id: currentConfig?.tenantId || context.tenant_id || null,
       environment_code: currentConfig?.environmentCode || context.environment_code || null,
       company: context.company || null,
+      company_code: context.company || null,
       branch: context.branch || null,
+      filial: context.branch || null,
       user: context.user || currentConfig?.username || null,
       module: context.module || null,
       session_id: context.session_id || null
