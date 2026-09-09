@@ -160,10 +160,9 @@ export default function App() {
     if (currentPage === 'dashboard') {
       return (
         <ExecutiveDashboard
-          initialArea={selectedArea}
           onNavigateToWorkspace={navigateToWorkspace}
           context={context}
-          initialData={dashboardData}
+          result={dashboardData}
         />
       );
     }
