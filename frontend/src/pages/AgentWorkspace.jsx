@@ -313,6 +313,7 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
             userPrompt: text,
           },
         ]);
+        setLoading(false);
         return;
       }
 
