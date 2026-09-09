@@ -104,17 +104,24 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
     let numericCol = null;
     let labelCol = null;
 
+    // First try to find a strong monetary/quantity column, skipping identifiers/dates
     for (const col of columns) {
       const lower = col.toLowerCase();
-      if (!numericCol && (lower.includes('valor') || lower.includes('total') || lower.includes('preco') || lower.includes('fat') || lower.includes('saldo'))) {
+      if (lower.includes('ano') || lower.includes('mes') || lower.includes('data') || lower.includes('cod') || lower.includes('id')) {
+        continue;
+      }
+      if (!numericCol && (lower.includes('valor') || lower.includes('total') || lower.includes('preco') || lower.includes('fat') || lower.includes('saldo') || lower.includes('qtd') || lower.includes('quant'))) {
         numericCol = col;
       }
-      if (!labelCol && (lower.includes('mes') || lower.includes('data') || lower.includes('desc') || lower.includes('nome') || lower.includes('cliente') || lower.includes('produto'))) {
+    }
+    
+    // Fallback logic for label
+    for (const col of columns) {
+      const lower = col.toLowerCase();
+      if (!labelCol && (lower.includes('mes') || lower.includes('data') || lower.includes('desc') || lower.includes('nome') || lower.includes('cliente') || lower.includes('produto') || lower.includes('vendedor'))) {
         labelCol = col;
       }
     }
-
-    // Removed automatic numeric column guessing for unrelated columns
 
     if (!labelCol && columns.length > 0) {
       labelCol = columns[0] !== numericCol ? columns[0] : (columns[1] || columns[0]);

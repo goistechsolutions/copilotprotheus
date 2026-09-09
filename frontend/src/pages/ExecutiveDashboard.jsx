@@ -439,9 +439,12 @@ function isIdentifierColumn(column) {
 function findValueColumn(rows, columns) {
   const candidates = columns
     .map((column) => {
+      const name = String(column).toUpperCase();
+      if (/(^|_)(ANO|MES|DATA|DATE)(_|$)/i.test(name)) return null;
+      
       const values = rows.map((row) => parseNumeric(row[column])).filter((value) => value !== null);
       if (!values.length) return null;
-      const name = String(column).toUpperCase();
+      
       const semantic = /(VALOR|TOTAL|FATUR|RECEITA|SALDO|PRECO|PREÇO|MARGEM|QUANT|QTD|VOLUME)/i.test(name) ? 100 : 0;
       const identifierPenalty = isIdentifierColumn(column) ? 160 : 0;
       return { column, score: semantic - identifierPenalty + values.length };
@@ -497,9 +500,20 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
   const currentArea = AREAS_CONFIG[activeAreaKey] || AREAS_CONFIG.financeiro;
   const salesView = SALES_PANELS.find(panel => panel.id === activeSalesPanel) || SALES_PANELS[0];
 
-  const selectedPanelData = activeAreaKey === 'vendas'
-    ? (salesPanelData[activeSalesPanel] || null)
-    : realData;
+  const selectedPanelData = React.useMemo(() => {
+    if (activeAreaKey !== 'vendas') return realData;
+    if (salesPanelData[activeSalesPanel]) return salesPanelData[activeSalesPanel];
+    
+    const overviewData = salesPanelData['overview']?.result || salesPanelData['overview'];
+    if (overviewData && Array.isArray(overviewData.rows)) {
+      const cols = Array.isArray(overviewData.columns) && overviewData.columns.length ? overviewData.columns : (overviewData.rows[0] ? Object.keys(overviewData.rows[0]) : []);
+      const targetConfig = SALES_PANELS.find(p => p.id === activeSalesPanel);
+      if (targetConfig && findColumn(cols, targetConfig.groupPatterns)) {
+        return overviewData;
+      }
+    }
+    return null;
+  }, [activeAreaKey, activeSalesPanel, salesPanelData, realData]);
   const dynamicRows = React.useMemo(() => {
     const r = selectedPanelData?.result || selectedPanelData || {};
     return Array.isArray(r.rows) ? r.rows : [];
@@ -555,14 +569,24 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
   const visualizationRows = React.useMemo(() => {
     if (!stats?.numericCol || !stats?.labelCol) return [];
-    return panelRows
+    const isTimeDimension = /(^|_)(MES|ANO|DATA|DATE|PERIODO)(_|$)/i.test(String(stats.labelCol));
+    
+    let rows = panelRows
       .map((row) => ({
         label: String(row[stats.labelCol] ?? '—'),
         value: parseNumeric(row[stats.numericCol]),
       }))
-      .filter((item) => item.value !== null)
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+      .filter((item) => item.value !== null);
+      
+    if (isTimeDimension) {
+      // Sort chronologically (by label)
+      rows.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+    } else {
+      // Sort by value descending
+      rows.sort((a, b) => b.value - a.value);
+    }
+    
+    return rows.slice(0, 8);
   }, [panelRows, stats]);
 
   const compositionRows = React.useMemo(() => {
@@ -594,6 +618,16 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
   const selectSalesPanel = async (panelId) => {
     setActiveSalesPanel(panelId);
     if (activeAreaKey !== 'vendas' || panelId === 'overview' || salesPanelData[panelId] || salesPanelLoading[panelId]) return;
+    
+    const overviewData = salesPanelData['overview']?.result || salesPanelData['overview'];
+    if (overviewData && Array.isArray(overviewData.rows)) {
+      const cols = Array.isArray(overviewData.columns) && overviewData.columns.length ? overviewData.columns : (overviewData.rows[0] ? Object.keys(overviewData.rows[0]) : []);
+      const targetConfig = SALES_PANELS.find(p => p.id === panelId);
+      if (targetConfig && findColumn(cols, targetConfig.groupPatterns)) {
+        return; // Pode agrupar localmente
+      }
+    }
+
     const prompt = SALES_PANEL_PROMPTS[panelId];
     if (!prompt) return;
     setSalesPanelLoading((previous) => ({ ...previous, [panelId]: true }));
