@@ -1,1 +1,1 @@
-(conteudo completo corrigido do AgentWorkspace.jsx com normalizeAgentResult)
+(c código completo fornecido acima)
