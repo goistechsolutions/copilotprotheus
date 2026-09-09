@@ -480,10 +480,15 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
   const [copilotQuestion, setCopilotQuestion] = useState('');
   const [copilotMessages, setCopilotMessages] = useState([]);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
+  const [salesPanelLoading, setSalesPanelLoading] = useState({});
+  const [salesPanelData, setSalesPanelData] = useState({ overview: initialData || null });
   const [realData, setRealData] = useState(initialData || null);
 
   useEffect(() => {
-    if (initialData) setRealData(initialData);
+    if (initialData) {
+      setRealData(initialData);
+      setSalesPanelData((previous) => ({ ...previous, overview: initialData }));
+    }
   }, [initialData]);
 
   useEffect(() => {
@@ -495,19 +500,23 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
   const currentArea = AREAS_CONFIG[activeAreaKey] || AREAS_CONFIG.financeiro;
   const salesView = SALES_PANELS.find(panel => panel.id === activeSalesPanel) || SALES_PANELS[0];
 
+  const selectedPanelData = activeAreaKey === 'vendas'
+    ? (salesPanelData[activeSalesPanel] || null)
+    : realData;
   const dynamicRows = React.useMemo(() => {
-    const r = realData?.result || realData || {};
+    const r = selectedPanelData?.result || selectedPanelData || {};
     return Array.isArray(r.rows) ? r.rows : [];
-  }, [realData]);
+  }, [selectedPanelData]);
   const dynamicColumns = React.useMemo(() => {
-    const r = realData?.result || realData || {};
+    const r = selectedPanelData?.result || selectedPanelData || {};
     if (Array.isArray(r.columns) && r.columns.length > 0) {
       return r.columns;
     }
     if (dynamicRows.length > 0) return Object.keys(dynamicRows[0]);
     return [];
-  }, [realData, dynamicRows]);
+  }, [selectedPanelData, dynamicRows]);
   const hasRealData = dynamicRows.length > 0;
+  const isSelectedPanelLoading = Boolean(activeAreaKey === 'vendas' && salesPanelLoading[activeSalesPanel]);
   const groupedSales = React.useMemo(
     () => buildGroupedRows(dynamicRows, dynamicColumns, salesView.groupPatterns),
     [dynamicRows, dynamicColumns, salesView.groupPatterns],
@@ -544,8 +553,8 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
   const panelDataAvailable = activeAreaKey !== 'vendas' || activeSalesPanel === 'overview' || groupedSales.rows.length > 0;
   const panelUnavailableMessage = activeSalesPanel === 'seller'
-    ? 'O resultado atual não contém uma coluna autorizada de vendedor e uma métrica numérica agrupável.'
-    : 'O resultado atual não contém uma coluna autorizada de produto e uma métrica numérica agrupável.';
+    ? 'A consulta específica de vendedor ainda não retornou uma coluna autorizada de vendedor e uma métrica numérica agrupável.'
+    : 'A consulta específica de produto ainda não retornou uma coluna autorizada de produto e uma métrica numérica agrupável.';
 
   const visualizationRows = React.useMemo(() => {
     if (!stats?.numericCol || !stats?.labelCol) return [];
@@ -580,8 +589,26 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
     ]);
   }, [activeAreaKey]);
 
+  const SALES_PANEL_PROMPTS = {
+    seller: 'Analise as vendas faturadas no período consultado agrupadas por vendedor. Retorne uma linha por vendedor com o identificador ou nome autorizado do vendedor e o valor total ou quantidade total, usando somente tabelas e campos disponíveis no catálogo Protheus.',
+    product: 'Analise as vendas faturadas no período consultado agrupadas por produto. Retorne uma linha por produto com o código ou descrição autorizada do produto e o valor total ou quantidade total, usando somente tabelas e campos disponíveis no catálogo Protheus.',
+  };
+
+  const selectSalesPanel = async (panelId) => {
+    setActiveSalesPanel(panelId);
+    if (activeAreaKey !== 'vendas' || panelId === 'overview' || salesPanelData[panelId] || salesPanelLoading[panelId]) return;
+    const prompt = SALES_PANEL_PROMPTS[panelId];
+    if (!prompt) return;
+    setSalesPanelLoading((previous) => ({ ...previous, [panelId]: true }));
+    try {
+      await handleSendCopilot(prompt, panelId);
+    } finally {
+      setSalesPanelLoading((previous) => ({ ...previous, [panelId]: false }));
+    }
+  };
+
   // Manipulador de envio de pergunta para o Copilot no painel lateral
-  const handleSendCopilot = async (customPrompt) => {
+  const handleSendCopilot = async (customPrompt, targetPanel = activeSalesPanel) => {
     const question = customPrompt || copilotQuestion;
     if (!question.trim() || isCopilotLoading) return;
 
@@ -602,7 +629,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         empresa: context.company,
         filial: context.branch,
         module: currentArea.module,
-        conversation_id: `dash-${activeAreaKey}-${Date.now()}`,
+        conversation_id: `dash-${activeAreaKey}-${targetPanel}-${Date.now()}`,
         execute: true,
       };
       
@@ -617,6 +644,9 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         const resolvedResult = finalTask.result || finalTask;
         replyText = buildManagerialMessage(resolvedResult, currentArea.label);
         setRealData(resolvedResult);
+        if (activeAreaKey === 'vendas') {
+          setSalesPanelData((previous) => ({ ...previous, [targetPanel]: resolvedResult }));
+        }
       } else if (finalTask.status === TASK_STATUS.FAILED) {
         replyText = `Erro na execução: ${finalTask.error || 'Falha na consulta Oracle.'}`;
       } else {
@@ -778,8 +808,8 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           <div className="px-6 pt-4 bg-[#f8fafc]">
             <div className="flex flex-wrap gap-2 p-1 bg-white border border-[#e2e8f0] rounded-xl shadow-sm w-fit">
               {SALES_PANELS.map(panel => (
-                <button key={panel.id} type="button" onClick={() => setActiveSalesPanel(panel.id)} className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeSalesPanel === panel.id ? 'bg-[#004fce] text-white shadow-sm' : 'text-[#64748b] hover:bg-[#eff4f9] hover:text-[#0f172a]'}`}>
-                  {panel.label}
+                <button key={panel.id} type="button" onClick={() => selectSalesPanel(panel.id)} className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeSalesPanel === panel.id ? 'bg-[#004fce] text-white shadow-sm' : 'text-[#64748b] hover:bg-[#eff4f9] hover:text-[#0f172a]'}`}>
+                  {panel.label}{salesPanelLoading[panel.id] ? ' · carregando' : ''}
                 </button>
               ))}
             </div>
@@ -788,7 +818,15 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
           {/* Conteúdo da Área Selecionada */}
           <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]">
-            {!hasRealData || !panelDataAvailable ? (
+            {isSelectedPanelLoading ? (
+              <div className="absolute inset-0 z-10 bg-[#f8fafc] flex flex-col items-center justify-center p-8">
+                <div className="bg-white p-8 rounded-2xl shadow-lg border border-[#e2e8f0] text-center max-w-md">
+                  <RefreshCw className="w-10 h-10 text-[#004fce] mx-auto mb-4 animate-spin" />
+                  <h2 className="text-lg font-bold text-[#0f172a] mb-2">Carregando {salesView.label.toLowerCase()}</h2>
+                  <p className="text-[13px] text-[#475569]">Consultando o Protheus com o contexto atual e aplicando as permissões RBAC.</p>
+                </div>
+              </div>
+            ) : !hasRealData || !panelDataAvailable ? (
               <div className="absolute inset-0 z-10 bg-[#f8fafc] flex flex-col items-center justify-center p-8">
                 <div className="bg-white p-8 rounded-2xl shadow-lg border border-[#e2e8f0] text-center max-w-md">
                   <div className="w-16 h-16 bg-[#eff4f9] rounded-full flex items-center justify-center mx-auto mb-4">
