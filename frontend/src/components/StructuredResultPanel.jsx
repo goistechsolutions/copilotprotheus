@@ -21,7 +21,6 @@ import {
   Download,
   Info,
 } from 'lucide-react';
-import remarkGfm from 'remark-gfm';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -176,7 +175,7 @@ export default function StructuredResultPanel({ result, context, onAction }) {
       {/* 1. HEADER & RESUMO */}
       <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
         <div className="prose prose-sm dark:prose-invert max-w-3xl leading-relaxed text-[#171C20] dark:text-slate-200">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown>
             {result?.message || 'Consulta concluída.'}
           </ReactMarkdown>
         </div>

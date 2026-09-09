@@ -125,7 +125,7 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
     # Identify dimensions and measures
     for col in columns:
         name = str(col).upper()
-        if re.search(r"(^|_)(ANO|MES|DATA|DATE|PERIODO|COD|CODIGO|ID|NUMERO|NR|FILIAL|EMPRESA|BRANCH|VENDEDOR|VEND|PRODUTO|ITEM|GRUPO)(_|$)", name) and not _is_non_metric_field(col):
+        if re.search(r"(^|_)(ANO|MES|DATA|DATE|PERIODO|COD|CODIGO|ID|NUMERO|NR|FILIAL|EMPRESA|BRANCH|VENDEDOR|VEND|PRODUTO|ITEM|GRUPO)(_|$)", name):
             # It's a dimension
             kind = "time" if re.search(r"ANO|MES|DATA|DATE|PERIODO", name) else "string"
             dimensions.append({

@@ -46,6 +46,8 @@ def test_semantic_result_contract_empty():
     
     # The empty handling is done at the route level in process_agent_task,
     # but let's test how _build_semantic_result handles empty (should not be called directly,
-    # but good to protect if called with empty list)
-    with pytest.raises(IndexError):
-        _build_semantic_result(rows)
+    result = _build_semantic_result(rows)
+    assert result["columns"] == []
+    assert result["rows"] == []
+    assert result["dimensions"] == []
+    assert result["measures"] == []
