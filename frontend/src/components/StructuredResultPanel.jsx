@@ -74,6 +74,36 @@ function formatCurrency(val) {
   return String(val);
 }
 
+function isIdentifierColumn(column) {
+  return /(^|_)(COD|CODIGO|ID|NUMERO|NR|DATA|DATE|FILIAL|EMPRESA|BRANCH)(_|$)/i.test(String(column));
+}
+
+function findPrimaryNumericColumn(rows, columns) {
+  const ranked = columns
+    .map((column) => {
+      const values = rows.map((row) => parseNumeric(row[column])).filter((value) => value !== null);
+      if (!values.length) return null;
+      const name = String(column).toUpperCase();
+      const semanticScore = /(VALOR|TOTAL|FATUR|RECEITA|SALDO|PRECO|PREÇO|MARGEM|QUANT|QTD|VOLUME)/i.test(name) ? 100 : 0;
+      const identifierPenalty = isIdentifierColumn(column) ? 80 : 0;
+      return { column, count: values.length, score: semanticScore - identifierPenalty + values.length };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.column || null;
+}
+
+function buildExecutiveNarrative(result, rows, columns, primaryColumn, average) {
+  const provided = result?.executive_summary || result?.summary || result?.message;
+  if (provided && String(provided).trim()) return String(provided).trim();
+  if (!rows.length) return 'A consulta não retornou registros para o contexto e filtros informados.';
+  const metric = primaryColumn ? ` na métrica ${primaryColumn}` : '';
+  const amount = primaryColumn && rows.some((row) => parseNumeric(row[primaryColumn]) !== null)
+    ? ` O total calculado é ${formatCurrency(rows.reduce((sum, row) => sum + (parseNumeric(row[primaryColumn]) || 0), 0))}, com média de ${formatCurrency(average)}.`
+    : '';
+  return `A consulta retornou ${rows.length} registro(s) autorizado(s) pelo Protheus${metric}.${amount} A análise abaixo representa exclusivamente o resultado retornado, sem projeções ou comparação com períodos não consultados.`;
+}
+
 function exportFile(content, filename, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -113,13 +143,9 @@ export default function StructuredResultPanel({ result, context, onClose }) {
 
     let totalVal = 0;
     let hasNumeric = false;
-    const numCols = columns.filter(c => {
-      const vals = rows.slice(0, 20).map(r => parseNumeric(r[c]));
-      return vals.filter(v => v !== null).length > 5;
-    });
+    const primaryCol = findPrimaryNumericColumn(rows, columns);
 
-    if (numCols.length > 0) {
-      const primaryCol = numCols[0];
+    if (primaryCol) {
       rows.forEach(r => {
         const n = parseNumeric(r[primaryCol]);
         if (n !== null) {
@@ -138,6 +164,11 @@ export default function StructuredResultPanel({ result, context, onClose }) {
       count: totalRecords,
     };
   }, [rows, columns]);
+
+  const executiveNarrative = useMemo(
+    () => buildExecutiveNarrative(result, rows, columns, findPrimaryNumericColumn(rows, columns), computedKpis?.avg),
+    [result, rows, columns, computedKpis],
+  );
 
   // Chart Data
   const chartData = useMemo(() => {
@@ -257,7 +288,7 @@ export default function StructuredResultPanel({ result, context, onClose }) {
             Painel de Inteligência Protheus
           </h1>
           <p className="text-[13px] text-[#475569] dark:text-slate-400 mt-0.5">
-            {result?.summary || 'Visão consolidada solicitada via Copiloto Protheus.'}
+            {executiveNarrative}
           </p>
         </div>
 
@@ -331,7 +362,7 @@ export default function StructuredResultPanel({ result, context, onClose }) {
           </div>
           <div className="mt-3 flex items-center gap-1 text-[#22C55E] text-[12px] font-semibold">
             <TrendingUp size={15} />
-            <span>+5.2% vs. período anterior</span>
+            <span>{computedKpis?.total != null ? 'Total calculado no resultado atual' : 'Sem métrica numérica compatível'}</span>
           </div>
         </div>
 
@@ -350,7 +381,7 @@ export default function StructuredResultPanel({ result, context, onClose }) {
           </div>
           <div className="mt-3 flex items-center gap-1 text-[#004FCE] dark:text-[#60A5FA] text-[12px] font-semibold">
             <CheckCircle2 size={15} />
-            <span>100% integrados via QueryRest</span>
+            <span>Registros retornados pelo Protheus</span>
           </div>
         </div>
 
@@ -370,7 +401,7 @@ export default function StructuredResultPanel({ result, context, onClose }) {
           </div>
           <div className="mt-3 flex items-center gap-1 text-[#22C55E] text-[12px] font-semibold">
             <TrendingUp size={15} />
-            <span>Projeção estável</span>
+            <span>{computedKpis?.avg != null ? 'Média do resultado atual' : 'Sem média calculável'}</span>
           </div>
         </div>
 
@@ -378,16 +409,16 @@ export default function StructuredResultPanel({ result, context, onClose }) {
         <div className="bg-[#004FCE] text-white p-5 rounded-2xl shadow-md border border-blue-400/40 relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-6 -translate-y-6 pointer-events-none" />
           <p className="text-[11px] font-semibold text-blue-100 uppercase tracking-wider mb-2 relative z-10">
-            Status Operacional
-          </p>
+            Leitura gerencial
+            </p>
           <div className="flex items-baseline gap-2 relative z-10">
             <h2 className="text-[26px] font-bold text-white tracking-tight">
-              Concluído
+              {rows.length ? 'Disponível' : 'Sem dados'}
             </h2>
           </div>
           <div className="mt-3 flex items-center gap-1 text-blue-100 text-[12px] font-semibold relative z-10">
             <Zap size={15} />
-            <span>Segurança RBAC aplicada</span>
+            <span>{rows.length ? 'Baseada nos registros atuais' : 'Nenhum registro retornado'}</span>
           </div>
         </div>
       </div>

@@ -392,6 +392,21 @@ function formatCurrency(val) {
   return String(val);
 }
 
+function buildManagerialMessage(result, areaLabel) {
+  const data = result?.result || result || {};
+  const supplied = data.executive_summary || data.summary || data.message;
+  if (supplied && String(supplied).trim()) return String(supplied).trim();
+
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const columns = Array.isArray(data.columns) && data.columns.length ? data.columns : (rows[0] ? Object.keys(rows[0]) : []);
+  if (!rows.length) return `A análise de ${areaLabel} não retornou registros para o contexto e filtros informados.`;
+  const valueColumn = findValueColumn(rows, columns);
+  if (!valueColumn) return `A consulta de ${areaLabel} retornou ${rows.length} registro(s). O resultado não contém uma métrica numérica segura para consolidação gerencial.`;
+  const total = rows.reduce((sum, row) => sum + (parseNumeric(row[valueColumn]) || 0), 0);
+  const average = total / rows.length;
+  return `A análise de ${areaLabel} retornou ${rows.length} registro(s) no Protheus. Na métrica ${valueColumn}, o total apurado é ${formatCurrency(total)} e a média por registro é ${formatCurrency(average)}. Os indicadores refletem somente os dados autorizados desta consulta; não há projeção ou comparação sem período correspondente no resultado.`;
+}
+
 const SALES_PANELS = [
   {
     id: 'overview',
@@ -420,9 +435,28 @@ function findColumn(columns, patterns) {
   return columns.find(column => patterns.some(pattern => String(column).toUpperCase().includes(pattern)));
 }
 
+function isIdentifierColumn(column) {
+  return /(^|_)(COD|CODIGO|ID|NUMERO|NR|DATA|DATE|FILIAL|EMPRESA|BRANCH)(_|$)/i.test(String(column));
+}
+
+function findValueColumn(rows, columns) {
+  const candidates = columns
+    .map((column) => {
+      const values = rows.map((row) => parseNumeric(row[column])).filter((value) => value !== null);
+      if (!values.length) return null;
+      const name = String(column).toUpperCase();
+      const semantic = /(VALOR|TOTAL|FATUR|RECEITA|SALDO|PRECO|PREÇO|MARGEM|QUANT|QTD|VOLUME)/i.test(name) ? 100 : 0;
+      const identifierPenalty = isIdentifierColumn(column) ? 80 : 0;
+      return { column, score: semantic - identifierPenalty + values.length };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+  return candidates[0]?.column || null;
+}
+
 function buildGroupedRows(rows, columns, patterns) {
   const groupColumn = findColumn(columns, patterns);
-  const numericColumn = findColumn(columns, ['VALOR', 'TOTAL', 'FATUR', 'VLR', 'PRECO', 'QUANT']);
+  const numericColumn = findValueColumn(rows, columns);
   if (!groupColumn || !numericColumn) return { rows: [], columns: [] };
   const groups = new Map();
   rows.forEach(row => {
@@ -487,24 +521,9 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
   const stats = React.useMemo(() => {
     if (!panelRows.length || !panelColumns.length) return null;
-    let numericCol = null;
-    let labelCol = null;
-    for (const col of panelColumns) {
-      const lower = col.toLowerCase();
-      if (!numericCol && (lower.includes('valor') || lower.includes('total') || lower.includes('preco') || lower.includes('fat') || lower.includes('saldo'))) numericCol = col;
-      if (!labelCol && (lower.includes('mes') || lower.includes('data') || lower.includes('desc') || lower.includes('nome') || lower.includes('cliente') || lower.includes('produto'))) labelCol = col;
-    }
-    if (!numericCol) {
-      for (const col of panelColumns) {
-        if (panelRows.some(r => typeof parseNumeric(r[col]) === 'number')) {
-          numericCol = col;
-          break;
-        }
-      }
-    }
-    if (!labelCol && panelColumns.length > 0) {
-      labelCol = panelColumns[0] !== numericCol ? panelColumns[0] : (panelColumns[1] || panelColumns[0]);
-    }
+    const numericCol = findValueColumn(panelRows, panelColumns);
+    let labelCol = panelColumns.find((col) => !isIdentifierColumn(col) && col !== numericCol);
+    if (!labelCol) labelCol = panelColumns.find((col) => col !== numericCol) || panelColumns[0];
     if (!numericCol) return null;
     let sum = 0;
     let count = 0;
@@ -523,7 +542,32 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
     return { numericCol, labelCol, total: sum, average: avg, maxVal, maxLabel, count };
   }, [panelRows, panelColumns]);
 
+  const panelDataAvailable = activeAreaKey !== 'vendas' || activeSalesPanel === 'overview' || groupedSales.rows.length > 0;
+  const panelUnavailableMessage = activeSalesPanel === 'seller'
+    ? 'O resultado atual não contém uma coluna autorizada de vendedor e uma métrica numérica agrupável.'
+    : 'O resultado atual não contém uma coluna autorizada de produto e uma métrica numérica agrupável.';
 
+  const visualizationRows = React.useMemo(() => {
+    if (!stats?.numericCol || !stats?.labelCol) return [];
+    return panelRows
+      .map((row) => ({
+        label: String(row[stats.labelCol] ?? '—'),
+        value: parseNumeric(row[stats.numericCol]),
+      }))
+      .filter((item) => item.value !== null)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+  }, [panelRows, stats]);
+
+  const compositionRows = React.useMemo(() => {
+    if (!stats?.numericCol || !stats?.labelCol || !visualizationRows.length) return [];
+    const total = visualizationRows.reduce((sum, item) => sum + Math.max(item.value, 0), 0);
+    return visualizationRows.slice(0, 5).map((item, index) => ({
+      ...item,
+      percentage: total > 0 ? Math.round((Math.max(item.value, 0) / total) * 100) : 0,
+      color: ['#004fce', '#0f66ff', '#22c55e', '#f59e0b', '#64748b'][index],
+    }));
+  }, [visualizationRows, stats]);
 
   // Atualiza as mensagens do Copilot quando troca de área
   useEffect(() => {
@@ -567,11 +611,12 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         ? await waitForAgentTask(accepted.taskId) 
         : accepted;
         
-      let replyText = `Consulta de ${currentArea.label} processada com sucesso no Protheus.`;
+      let replyText = `A consulta de ${currentArea.label} foi processada.`;
       
       if (finalTask.status === TASK_STATUS.SUCCESS) {
-        replyText = finalTask.message || 'Aqui está o resultado da sua consulta no Protheus.';
-        setRealData(finalTask.result || finalTask);
+        const resolvedResult = finalTask.result || finalTask;
+        replyText = buildManagerialMessage(resolvedResult, currentArea.label);
+        setRealData(resolvedResult);
       } else if (finalTask.status === TASK_STATUS.FAILED) {
         replyText = `Erro na execução: ${finalTask.error || 'Falha na consulta Oracle.'}`;
       } else {
@@ -583,7 +628,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
         {
           role: 'assistant',
           text: replyText,
-          suggestions: ['Detalhar por filial', 'Exportar para Excel']
+          suggestions: activeAreaKey === 'vendas' ? ['Ver por vendedor', 'Ver por produto', 'Exportar para Excel'] : ['Detalhar resultado', 'Exportar para Excel']
         }
       ]);
     } catch (err) {
@@ -743,15 +788,15 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
 
           {/* Conteúdo da Área Selecionada */}
           <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]">
-            {!hasRealData ? (
+            {!hasRealData || !panelDataAvailable ? (
               <div className="absolute inset-0 z-10 bg-[#f8fafc] flex flex-col items-center justify-center p-8">
                 <div className="bg-white p-8 rounded-2xl shadow-lg border border-[#e2e8f0] text-center max-w-md">
                   <div className="w-16 h-16 bg-[#eff4f9] rounded-full flex items-center justify-center mx-auto mb-4">
                     <Database className="w-8 h-8 text-[#004fce]" />
                   </div>
-                  <h2 className="text-lg font-bold text-[#0f172a] mb-2">Painel sem dados</h2>
+                  <h2 className="text-lg font-bold text-[#0f172a] mb-2">{hasRealData ? 'Visão não disponível' : 'Painel sem dados'}</h2>
                   <p className="text-[13px] text-[#475569] mb-6">
-                    Os indicadores desta área serão exibidos após uma consulta válida ao Protheus.
+                    {hasRealData ? panelUnavailableMessage : 'Os indicadores desta área serão exibidos após uma consulta válida ao Protheus.'}
                   </p>
                   <button
                     onClick={onNavigateToWorkspace}
@@ -796,13 +841,13 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
                 <Sparkles className="w-3 h-3" />
                 <span>{currentArea.bannerBadge}</span>
               </div>
-              <h2 className="text-xl font-bold">{currentArea.bannerTitle}</h2>
-              <p className="text-xs text-white/80">{currentArea.bannerSubtitle}</p>
+              <h2 className="text-xl font-bold">{activeAreaKey === 'vendas' ? salesView.title : currentArea.bannerTitle}</h2>
+              <p className="text-xs text-white/80">{activeAreaKey === 'vendas' ? `Visão orientada pelos ${panelRows.length} registro(s) retornado(s) nesta consulta.` : currentArea.bannerSubtitle}</p>
             </div>
             <div className="hidden md:flex items-center gap-4 relative z-10">
               <div className="text-right">
-                <div className="text-xs text-white/75">{currentArea.bannerMetricLabel}</div>
-                <div className="text-xl font-bold">{currentArea.bannerMetricValue}</div>
+                <div className="text-xs text-white/75">{activeAreaKey === 'vendas' && stats ? stats.numericCol : currentArea.bannerMetricLabel}</div>
+                <div className="text-xl font-bold">{activeAreaKey === 'vendas' && stats ? formatCurrency(stats.total) : currentArea.bannerMetricValue}</div>
               </div>
             </div>
             <div className="absolute right-0 top-0 bottom-0 w-96 bg-white/10 blur-3xl rounded-full transform translate-x-12"></div>
@@ -914,63 +959,42 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
                 </div>
               </div>
 
-              <div className="flex-1 min-h-[240px] relative flex items-end">
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
-                  <div className="border-b border-[#f1f5f9] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>Meta Alta</span>
-                  </div>
-                  <div className="border-b border-[#f1f5f9] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>Média Prevista</span>
-                  </div>
-                  <div className="border-b border-[#f1f5f9] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>Ponto Mínimo</span>
-                  </div>
-                  <div className="border-b border-[#e2e8f0] w-full flex justify-between text-[10px] text-[#94a3b8]">
-                    <span>Zero</span>
-                  </div>
-                </div>
-
-                <svg className="w-full h-full absolute inset-0 pb-6 overflow-visible" preserveAspectRatio="none" viewBox="0 0 800 240">
-                  <defs>
-                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#004fce" stopOpacity="0.25" />
-                      <stop offset="100%" stopColor="#004fce" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d="M 0,180 Q 150,210 300,140 T 550,90 T 800,40 L 800,240 L 0,240 Z"
-                    fill="url(#areaGrad)"
-                  />
-                  <path
-                    d="M 0,180 Q 150,210 300,140 T 550,90 T 800,40"
-                    fill="none"
-                    stroke="#004fce"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                  />
-                  <circle cx="0" cy="180" r="4" fill="#ffffff" stroke="#004fce" strokeWidth="2.5" />
-                  <circle cx="300" cy="140" r="4" fill="#ffffff" stroke="#004fce" strokeWidth="2.5" />
-                  <circle cx="550" cy="90" r="4" fill="#ffffff" stroke="#004fce" strokeWidth="2.5" />
-                  <circle cx="800" cy="40" r="6" fill="#004fce" stroke="#ffffff" strokeWidth="2.5" />
-                </svg>
-
-                <div className="w-full flex justify-between px-2 text-[11px] font-medium text-[#64748b] z-10 pt-2">
-                  <span>Semana 1</span>
-                  <span>Semana 2</span>
-                  <span>Semana 3</span>
-                  <span>Semana 4</span>
-                  <span>Fechamento</span>
-                </div>
+              <div className="flex-1 min-h-[240px] flex items-end gap-3 border-b border-[#e2e8f0] pb-2">
+                {visualizationRows.length ? visualizationRows.map((item, index) => {
+                  const max = Math.max(...visualizationRows.map((entry) => entry.value), 1);
+                  const height = Math.max((item.value / max) * 100, 6);
+                  return (
+                    <div key={`${item.label}-${index}`} className="flex-1 min-w-0 h-full flex flex-col justify-end items-center gap-2" title={`${item.label}: ${formatCurrency(item.value)}`}>
+                      <span className="text-[10px] font-semibold text-[#475569] truncate max-w-full">{formatCurrency(item.value)}</span>
+                      <div className="w-full max-w-[54px] rounded-t-lg bg-gradient-to-t from-[#004fce] to-[#4b8cff] transition-all" style={{ height: `${height}%` }} />
+                      <span className="text-[10px] text-[#64748b] truncate max-w-full">{item.label}</span>
+                    </div>
+                  );
+                }) : (
+                  <div className="w-full h-full flex items-center justify-center text-sm text-[#64748b]">Não há métrica numérica visualizável neste resultado.</div>
+                )}
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-[#e2e8f0] p-6 shadow-sm flex flex-col justify-between">
               <div>
-                <h3 className="font-bold text-[#0f172a] text-[16px] mb-1">{activeAreaKey === 'vendas' ? salesView.title : currentArea.compositionTitle}</h3>
-                <p className="text-xs text-[#64748b] mb-4">{activeAreaKey === 'vendas' ? salesView.subtitle : currentArea.compositionSubtitle}</p>
+                <h3 className="font-bold text-[#0f172a] text-[16px] mb-1">{activeAreaKey === 'vendas' ? (stats?.labelCol ? `Distribuição por ${stats.labelCol}` : salesView.title) : currentArea.compositionTitle}</h3>
+                <p className="text-xs text-[#64748b] mb-4">{activeAreaKey === 'vendas' ? `Valores derivados de ${stats?.numericCol || 'uma métrica numérica'} no resultado atual.` : currentArea.compositionSubtitle}</p>
 
                 <div className="space-y-3">
-                  {currentArea.compositionItems.map((item, idx) => (
+                  {activeAreaKey === 'vendas' ? (compositionRows.length ? compositionRows.map((item, idx) => (
+                    <div key={`${item.label}-${idx}`}>
+                      <div className="flex justify-between text-xs font-semibold mb-1 gap-3">
+                        <span className="text-[#475569] truncate">{item.label}</span>
+                        <span className="text-[#0f172a] shrink-0">{item.percentage}% · {formatCurrency(item.value)}</span>
+                      </div>
+                      <div className="w-full h-2 bg-[#f1f5f9] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${item.percentage}%`, backgroundColor: item.color }}></div>
+                      </div>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-[#64748b]">A consulta não retornou uma dimensão compatível para composição.</p>
+                  )) : currentArea.compositionItems.map((item, idx) => (
                     <div key={idx}>
                       <div className="flex justify-between text-xs font-semibold mb-1">
                         <span className="text-[#475569]">{item.label}</span>
