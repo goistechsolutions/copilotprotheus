@@ -15,8 +15,6 @@
     }
 
     const parts = [document.body?.innerText || ""];
-    // innerText não contém necessariamente o valor atual de inputs/selects do WebApp.
-    // Lemos somente controles visíveis e nunca campos de senha ou token.
     document.querySelectorAll("input, select, textarea, [aria-label], [data-testid], [title]").forEach((element) => {
       const style = window.getComputedStyle(element);
       if (style.display === "none" || style.visibility === "hidden") return;
@@ -76,7 +74,6 @@
       const bodyText = getBodyText();
       const normalizedText = bodyText.replace(/\u00a0/g, " ");
 
-      // Programa inicial SIGAMDI é o menu do WebApp, não um módulo de negócio.
       const sigaMatches = normalizedText.match(/\bSIGA[A-Z]{3,}\b/gi) || [];
       const operationalModule = sigaMatches.find((value) => value.toUpperCase() !== "SIGAMDI");
       if (operationalModule) {
@@ -90,16 +87,22 @@
         }
       }
 
-      // O ambiente é obtido do valor junto ao rótulo, sem depender de um código fixo.
       const envMatch = normalizedText.match(/(?:Ambiente(?:\s+no\s+servidor)?|Environment(?:\s+Code)?)\s*[:=]?\s*([A-Za-z0-9][A-Za-z0-9_-]{1,80})/i);
       if (envMatch?.[1] && !/^no$/i.test(envMatch[1])) {
         context.environment_code = envMatch[1].trim();
       }
 
-      // Aceita tanto "01/0101" quanto campos separados de Empresa e Filial.
-      const pairMatch = normalizedText.match(/\b(\d{1,4})\s*[\/-]\s*(\d{2,10})\b/);
+      let pairMatch = normalizedText.match(/\b(\d{1,4})\s*[\/-]\s*(\d{2,10})\b/);
+      if (pairMatch) {
+         const nextStr = normalizedText.substring(pairMatch.index + pairMatch[0].length, pairMatch.index + pairMatch[0].length + 5);
+         if (nextStr.match(/^\s*[\/-]\s*\d{2,4}/)) {
+             pairMatch = null;
+         }
+      }
+
       const companyMatch = normalizedText.match(/(?:Empresa|Company)\s*[:=]?\s*([A-Za-z0-9]{1,20})/i);
       const branchMatch = normalizedText.match(/(?:Filial|Branch)\s*[:=]?\s*([A-Za-z0-9]{2,20})/i);
+      
       if (pairMatch) {
         context.company = pairMatch[1].trim();
         context.branch = pairMatch[2].trim();
@@ -119,14 +122,12 @@
     return context;
   }
 
-  // Criar Shadow DOM para isolamento visual total
   const host = document.createElement("div");
   host.id = "copilot-protheus-host";
   document.body.appendChild(host);
 
   const shadow = host.attachShadow({ mode: "open" });
 
-  // Injeção de estilos diretos garantidos
   const style = document.createElement("style");
   style.textContent = `
     #copilot-fab {
@@ -268,7 +269,6 @@
     }
   }
 
-  // Escuta redimensionamento solicitado pelo Copilot somente da origem configurada.
   window.addEventListener("message", (event) => {
     const iframe = shadow.querySelector("#copilot-iframe");
     if (!iframe || event.source !== iframe.contentWindow) return;
@@ -280,8 +280,6 @@
   });
 
   function buildIframeUrl(config) {
-    // Contexto operacional é enviado por postMessage após o carregamento;
-    // não deve ser exposto na URL, histórico ou referer do navegador.
     return config.widgetUrl || DEFAULT_WIDGET_URL;
   }
 
@@ -330,7 +328,6 @@
     currentConfig = config;
     loadIframe(config);
 
-    // Monitora atualizações no contexto do Protheus
     function syncContext() {
       const ctx = extractProtheusContext();
       sendContextToIframe(ctx);
