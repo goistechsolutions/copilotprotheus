@@ -95,7 +95,8 @@ class EntitlementGuard:
     """Valida os direitos contratados antes da geração/execução de uma consulta."""
 
     def __init__(self, mode: str | None = None, session_ttl_seconds: int | None = None):
-        configured_mode = str(mode or os.getenv("ENTITLEMENT_GUARD_MODE", "shadow")).strip().lower()
+        default_mode = "enforce" if os.getenv("ENVIRONMENT") in ["production", "development"] else "shadow"
+        configured_mode = str(mode or os.getenv("ENTITLEMENT_GUARD_MODE", default_mode)).strip().lower()
         self.mode = configured_mode if configured_mode in {"off", "shadow", "enforce"} else "shadow"
         configured_ttl = session_ttl_seconds or int(os.getenv("ENTITLEMENT_SESSION_TTL_SECONDS", "900"))
         self.session_ttl_seconds = max(60, min(configured_ttl, 86_400))

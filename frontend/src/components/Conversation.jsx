@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Bot, User, Sparkles, Copy, Check, Terminal } from 'lucide-react';
 import InlineChatDashboard from './InlineChatDashboard';
+import { ErrorBoundary } from './ErrorBoundary';
 
 function CodeBlock({ children, className }) {
   const [copied, setCopied] = useState(false);
@@ -100,13 +101,15 @@ export default function Conversation({ messages, context, onNavigateToDashboard 
               </div>
 
               {/* Renderização do Dashboard Inline para Respostas com Dados */}
-              {!isUser && message.result && (
-                <InlineChatDashboard
-                  result={message.result}
-                  userPrompt={message.userPrompt}
-                  context={context}
-                  onNavigateToDashboard={onNavigateToDashboard}
-                />
+              {!isUser && !['failed', 'error', 'execution_failed', 'validation_failed', 'forbidden'].includes(message.status) && message.result && message.result.status !== 'error' && Array.isArray(message.result.rows) && (
+                <ErrorBoundary>
+                  <InlineChatDashboard
+                    result={message.result}
+                    userPrompt={message.userPrompt}
+                    context={context}
+                    onNavigateToDashboard={onNavigateToDashboard}
+                  />
+                </ErrorBoundary>
               )}
             </div>
 

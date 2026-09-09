@@ -5,6 +5,8 @@ import {
   CheckCircle2,
   Database,
   Download,
+  FileText,
+  History,
   Layers,
   LayoutDashboard,
   MessageSquare,
@@ -19,7 +21,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { askAgent, waitForAgentTask } from '../services/api';
+import { downloadStructuredReport, exportStructuredReport, askAgent, waitForAgentTask } from '../services/api';
 import {
   getTaskStatusLabel,
   normalizeTaskPayload,
@@ -27,6 +29,7 @@ import {
 } from '../services/taskStatus';
 import Composer from '../components/Composer';
 import Conversation from '../components/Conversation';
+import { normalizeAgentResult } from '../utils/normalizeAgentResult';
 import StructuredResultPanel from '../components/StructuredResultPanel';
 import SuggestionCards from '../components/SuggestionCards';
 
@@ -66,19 +69,25 @@ function conversationKey(context) {
 function readContextFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
-    tenant_id: params.get('tenant_id') || params.get('tenant') || 'rodol_prod',
-    company: params.get('company_id') || params.get('company') || '01',
-    branch: params.get('branch') || '0101',
-    user: params.get('user') || 'João Silva',
-    profile: params.get('profile') || 'Gerente Financeiro',
-    session_id: params.get('session_id') || '',
-    environment: params.get('environment_code') || params.get('environment') || 'c8te0u_prod',
-    module: params.get('module') || 'SIGAFAT',
+    tenant_id: params.get('tenant_id') || params.get('tenant') || null,
+    company: params.get('company_id') || params.get('company') || null,
+    branch: params.get('branch') || null,
+    user: params.get('user') || null,
+    profile: params.get('profile') || null,
+    session_id: params.get('session_id') || null,
+    environment: params.get('environment_code') || params.get('environment') || null,
+    module: params.get('module') || null,
   };
 }
 
-export default function AgentWorkspace({ onNavigateToDashboard }) {
-  const [externalContext, setExternalContext] = useState(readContextFromUrl());
+export default function AgentWorkspace({ onNavigateToDashboard, externalContext: propContext }) {
+  const [externalContext, setExternalContext] = useState(propContext || readContextFromUrl());
+  
+  useEffect(() => {
+    if (propContext) {
+      setExternalContext(propContext);
+    }
+  }, [propContext]);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     try {
       const stored = window.localStorage.getItem('copilot.theme');
@@ -98,14 +107,14 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
 
   const context = useMemo(
     () => ({
-      tenant_id: externalContext.tenant_id || 'rodol_prod',
-      company: externalContext.company || '01',
-      branch: externalContext.branch || '0101',
-      user: externalContext.user || 'João Silva',
-      profile: externalContext.profile || 'Gerente Financeiro',
-      session_id: externalContext.session_id || '',
-      environment: externalContext.environment || 'c8te0u_prod',
-      module: externalContext.module || 'SIGAFAT',
+      tenant_id: externalContext.tenant_id || null,
+      company: externalContext.company || null,
+      branch: externalContext.branch || null,
+      user: externalContext.user || null,
+      profile: externalContext.profile || null,
+      session_id: externalContext.session_id || null,
+      environment: externalContext.environment || null,
+      module: externalContext.module || null,
     }),
     [externalContext]
   );
@@ -114,6 +123,8 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [task, setTask] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -133,6 +144,12 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
 
 
   const historyStorageKey = useMemo(() => `copilot.conversations:${conversationKey(context)}`, [context]);
+
+  useEffect(() => {
+    abortRef.current?.abort();
+    setTask(null);
+    setResult(null);
+  }, [historyStorageKey]);
 
   useEffect(() => {
     const storedHistory = safeStorageRead(historyStorageKey, []);
@@ -173,33 +190,82 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   }, [messages, conversationId, historyStorageKey, result]);
 
   useEffect(() => {
-    const handleMessage = (event) => {
-      if (!event?.data || !['PROTHEUS_CONTEXT', 'cprot-context-update'].includes(event.data.type)) return;
-      if (event.source !== window.parent && event.source !== window) return;
+    const storedHistory = safeStorageRead(historyStorageKey, []);
+    setHistoryItems(Array.isArray(storedHistory) ? storedHistory : []);
+  }, [historyStorageKey, messages, result, conversationId]);
 
-      const incoming = event.data.payload || event.data.context || {};
-      setExternalContext((prev) => ({
-        ...prev,
-        tenant_id: incoming.tenant_id || event.data.tenantId || prev.tenant_id,
-        company: incoming.company_code || incoming.company || prev.company,
-        branch: incoming.branch || prev.branch,
-        user: incoming.user || prev.user,
-        profile: incoming.profile || prev.profile || 'Gerente Financeiro',
-        session_id: incoming.session_id || prev.session_id,
-        environment: incoming.environment_code || incoming.environment || prev.environment,
-        module: incoming.module || prev.module,
-      }));
-    };
+  const handleSelectConversation = (item) => {
+    if (!item?.id) return;
+    setConversationId(item.id);
+    setMessages(Array.isArray(item.messages) ? item.messages : []);
+    setResult(item.result || null);
+    setShowHistory(false);
+    try {
+      window.localStorage.setItem(`${historyStorageKey}:active`, item.id);
+    } catch {}
+  };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  const handleExportConversationPdf = async () => {
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    const columns = Array.isArray(result?.columns) && result.columns.length > 0
+      ? result.columns
+      : (rows.length > 0 ? Object.keys(rows[0]) : []);
+    if (!rows.length || !columns.length) return;
+    try {
+      const metadata = await exportStructuredReport('pdf', {
+        title: result?.summary || 'Relatório do Copilot Protheus',
+        tenant_code: context.tenant_id,
+        environment_code: context.environment,
+        company_id: context.company_id || context.company || null,
+        columns,
+        rows,
+      });
+      const blob = await downloadStructuredReport(metadata.download_url);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = metadata.filename || `copilot_conversa_${Date.now()}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      setTask({ status: 'export_failed', error: error.message || 'Não foi possível exportar o PDF.' });
+    }
+  };
 
   const send = async (text) => {
     if (!text?.trim()) return;
 
+    const requiredContext = {
+      tenant_id: context.tenant_id,
+      environment_code: context.environment,
+      company_code: context.company,
+      filial: context.branch,
+      module: context.module,
+    };
+    const missingContext = Object.entries(requiredContext)
+      .filter(([, value]) => !String(value || '').trim())
+      .map(([key]) => key);
+
     setMessages((current) => [...current, { role: 'user', text }]);
+    setResult(null);
+    setTask(null);
     setLoading(true);
+
+    if (missingContext.length > 0) {
+      const contextError = {
+        status: 'error',
+        error_source: 'context',
+        error_code: 'CONTEXT_NOT_VALIDATED',
+        message: `Contexto do Protheus não validado. Campos ausentes: ${missingContext.join(', ')}.`,
+        retryable: false,
+      };
+      setResult(contextError);
+      setMessages((current) => [...current, { role: 'assistant', text: contextError.message }]);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (!context.tenant_id || !context.environment || !context.company || !context.branch) {
@@ -226,30 +292,51 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
         ? await waitForAgentTask(accepted.task_id)
         : accepted;
 
-      setResult(res);
+      const normalized = normalizeAgentResult(res);
 
-      let replyMessage = 'Análise executiva concluída com sucesso no Protheus.';
-      if (res.status === 'execution_failed') {
-        replyMessage = `Erro na consulta Oracle: ${res.execution_error || 'Falha na execução.'}`;
-      } else if (res.status === 'error') {
-        replyMessage = `Consulta bloqueada: ${res.error || res.summary || res.message || 'Contexto não autorizado.'}`;
-      } else if (res.summary) replyMessage = res.summary;
-      else if (res.message) replyMessage = res.message;
-      else if (res.answer) replyMessage = res.answer;
+      if (normalized.status === 'error') {
+        setResult(null);
+        setTask({
+          status: res.status || 'error',
+          error: normalized.message,
+          error_code: normalized.errorCode,
+          correlation_id: normalized.correlationId,
+        });
+        setMessages((current) => [
+          ...current,
+          {
+            role: 'assistant',
+            text: normalized.message,
+            status: 'error',
+            result: null,
+            correlation_id: normalized.correlationId,
+            userPrompt: text,
+          },
+        ]);
+        setLoading(false);
+        return;
+      }
+
+      setResult(normalized.result);
+      setTask(normalized.result);
 
       setMessages((current) => [
         ...current,
         {
           role: 'assistant',
-          text: replyMessage,
-          result: ['completed', 'success'].includes(res.status) ? res : null,
+          text: normalized.message || 'Análise executiva concluída com sucesso no Protheus.',
+          status: 'success',
+          result: normalized.result,
+          correlation_id: normalized.correlationId,
           userPrompt: text,
         },
       ]);
     } catch (error) {
+      setResult(null);
+      setTask({ status: 'execution_failed', error: String(error.message || error) });
       setMessages((current) => [
         ...current,
-        { role: 'assistant', text: `**Erro:** ${String(error.message || error)}` },
+        { role: 'assistant', status: 'error', text: `**Erro:** ${String(error.message || error)}` },
       ]);
     }
 
@@ -257,10 +344,12 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
   };
 
   const handleNewConversation = () => {
+    abortRef.current?.abort();
+    setResult(null);
+    setTask(null);
     const newId = makeConversationId();
     setConversationId(newId);
     setMessages([]);
-    setResult(null);
     try {
       window.localStorage.setItem(`${historyStorageKey}:active`, newId);
     } catch {}
@@ -372,10 +461,10 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
               </div>
               <div className="hidden md:flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-3 text-[11px] font-semibold text-slate-500">
                 <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  Filial {context.branch || '0101'}
+                  Filial {context.branch || '—'}
                 </span>
                 <span className="bg-blue-50 dark:bg-blue-950/60 text-[#004FCE] dark:text-[#60A5FA] px-2 py-0.5 rounded">
-                  {context.module || 'SIGAFAT'}
+                  {context.module || 'Módulo não identificado'}
                 </span>
               </div>
             </div>
@@ -429,10 +518,10 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                 </div>
                 <div className="hidden xl:block text-left">
                   <p className="text-[12px] font-bold text-[#171C20] dark:text-white leading-tight">
-                    {context.user || 'João Silva'}
+                    {context.user || 'Usuário não identificado'}
                   </p>
                   <p className="text-[10px] text-slate-400 font-medium">
-                    {context.profile || 'Gerente Financeiro'}
+                    {context.profile || 'Perfil não identificado'}
                   </p>
                 </div>
               </div>
@@ -504,19 +593,39 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
                       <Database size={10} className="text-[#004FCE]" />
-                      PROTHEUS - {context.branch || '0101'}
+                      PROTHEUS - {context.branch || 'Filial não identificada'}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
                       <User size={10} className="text-[#004FCE]" />
-                      {context.user || 'admin'}
+                      {context.user || 'Usuário não identificado'}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-[10px] font-semibold text-[#004FCE] dark:text-[#60A5FA] border border-blue-200/60 dark:border-blue-900/60">
-                      {context.module || 'Perfil: Negócio'}
+                      {context.module || 'Módulo não identificado'}
                     </span>
                   </div>
 
-                  {/* Ações no modo Iframe (Nova Consulta & Alternador de Tema) */}
+                  {/* Ações do chat */}
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowHistory(prev => !prev)}
+                      title="Histórico de conversas"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+                    >
+                      <History size={13} />
+                      <span className="hidden sm:inline">Histórico</span>
+                    </button>
+                    {result?.rows?.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleExportConversationPdf}
+                        title="Exportar resultado para PDF"
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] dark:text-[#60A5FA] hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors cursor-pointer border border-blue-200/60 dark:border-blue-900/60"
+                      >
+                        <FileText size={13} />
+                        <span className="hidden sm:inline">PDF</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={handleNewConversation}
@@ -539,6 +648,30 @@ export default function AgentWorkspace({ onNavigateToDashboard }) {
                     )}
                   </div>
                 </div>
+
+                {showHistory && (
+                  <div className="mb-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">Histórico de conversas</span>
+                      <span className="text-[10px] text-slate-400">{historyItems.length} registro(s)</span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {historyItems.length === 0 ? (
+                        <p className="px-3 py-4 text-[11px] text-slate-500">Nenhuma conversa persistida neste contexto.</p>
+                      ) : historyItems.map(item => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() => handleSelectConversation(item)}
+                          className={`w-full text-left px-3 py-2.5 border-b last:border-b-0 border-slate-100 dark:border-slate-800 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors ${item.id === conversationId ? 'bg-blue-50/70 dark:bg-slate-800' : ''}`}
+                        >
+                          <span className="block text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate">{item.title || 'Consulta sem título'}</span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">{item.date || 'Histórico local'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Chat History Stream */}
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">

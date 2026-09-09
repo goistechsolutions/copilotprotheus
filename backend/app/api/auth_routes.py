@@ -25,6 +25,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     status: str
+    role_code: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -34,21 +35,12 @@ def hash_password(password: str) -> str:
 
 @router.get("/users/{tenant_id}", response_model=List[UserResponse])
 def get_users_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
-    try:
-        tenant_uuid = uuid.UUID(tenant_id)
-        users = db.query(User).filter(User.tenant_id == tenant_uuid).order_by(User.created_at.desc()).all()
-        return users
-    except ValueError:
-        return []
+    users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.created_at.desc()).all()
+    return users
 
 @router.post("/register", response_model=UserResponse)
 def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)):
-    try:
-        tenant_uuid = uuid.UUID(req.tenant_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="tenant_id deve ser um UUID válido na V3")
-
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_uuid).first()
+    tenant = db.query(Tenant).filter(Tenant.tenant_code == req.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
@@ -67,18 +59,16 @@ def register_or_update_agent(req: RegisterRequest, db: Session = Depends(get_db)
             raise HTTPException(status_code=400, detail="Senha é obrigatória para novos usuários.")
 
         new_user = User(
-            tenant_id=tenant_uuid,
+            tenant_id=req.tenant_id,
             email=req.username,
             full_name=req.full_name,
             password_hash=hash_password(req.password)
         )
+        if req.role:
+            role = db.query(Role).filter(Role.role_code == req.role).first()
+            if role:
+                new_user.role_id = role.id
         db.add(new_user)
-        db.flush()
-
-        role = db.query(Role).filter(Role.role_code == req.role).first()
-        if role:
-            new_user.role_id = role.id
-
         db.commit()
         db.refresh(new_user)
         return new_user
@@ -108,13 +98,8 @@ class LoginRequest(BaseModel):
 
 @router.post("/login")
 def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    try:
-        tenant_uuid = uuid.UUID(req.tenant_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="tenant_id inválido (deve ser UUID na nova versão v3)")
-
     user = db.query(User).filter(
-        User.tenant_id == tenant_uuid,
+        User.tenant_id == req.tenant_id,
         User.email == req.username
     ).first()
 
@@ -153,7 +138,7 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
         value=encoded_jwt,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -172,9 +157,20 @@ def logout(response: Response):
         value="",
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=0,      # Expira imediatamente
         expires=0,      # Compatibilidade com browsers mais antigos
         path="/",
     )
     return {"success": True, "message": "Logout realizado com sucesso."}
+
+from app.core.auth import require_current_user
+
+@router.get("/me")
+async def get_auth_me(current_user: dict = Depends(require_current_user)):
+    return {
+        "authenticated": True,
+        "user_id": str(current_user.get("user_id") or current_user.get("sub")),
+        "tenant_id": current_user.get("tenant_id"),
+        "role": current_user.get("role"),
+    }

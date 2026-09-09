@@ -71,7 +71,7 @@ def test_ask_v2_status_preserves_specific_context_error():
     }
 
     try:
-        result = asyncio.run(ask_v2_status(task_id))
+        result = asyncio.run(ask_v2_status(task_id, current_user={"tenant_id": "test"}))
     finally:
         AGENT_TASKS.pop(task_id, None)
 

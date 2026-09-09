@@ -13,6 +13,13 @@ _SQL_WORDS = {
 }
 
 
+
+class CatalogValidationError(HTTPException):
+    def __init__(self, code: str, message: str, internal_details: dict):
+        super().__init__(status_code=422, detail=message)
+        self.code = code
+        self.internal_details = internal_details
+
 def build_protheus_context(empresa: Optional[str], filial: Optional[str]) -> Dict[str, str]:
     """Padroniza e valida o contexto operacional de empresa e filial."""
     if not empresa or not str(empresa).strip():
@@ -269,12 +276,17 @@ def validate_query_security(
     if not table_refs:
         raise HTTPException(status_code=400, detail="A consulta não possui uma tabela autorizável no FROM/JOIN.")
 
+    unknown_tables = set()
     for table_name, _alias in table_refs:
         if table_name not in normalized_allowed:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Bloqueio de Segurança RBAC: a tabela '{table_name}' não está autorizada no snapshot.",
-            )
+            unknown_tables.add(table_name)
+    
+    if unknown_tables:
+        raise CatalogValidationError(
+            code="SQL_CATALOG_VALIDATION_FAILED",
+            message="A solicitação exigiu uma estrutura que não está disponível no dicionário autorizado. Nenhum dado foi carregado ou calculado.",
+            internal_details={"unknown_tables": sorted(list(unknown_tables))}
+        )
 
     if len(table_refs) == 1:
         if "D_E_L_E_T_" not in upper_sql:

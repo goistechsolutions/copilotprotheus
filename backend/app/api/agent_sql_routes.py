@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 import uuid
 import asyncio
 import time
+import math
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -26,6 +27,7 @@ from app.services.dictionary_context_service import (
     render_context_for_prompt,
 )
 from app.services.protheus_context_service import (
+    CatalogValidationError,
     build_protheus_context,
     mask_sensitive_rows,
     validate_query_security,
@@ -34,9 +36,10 @@ from app.services.protheus_service import ProtheusServiceError, get_tenant_confi
 from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.entitlement_guard import EntitlementDenied, EntitlementGuard
 from app.services.protheus_module_catalog import quote_tenant_schema
+from app.core.auth import get_current_user, require_current_user
 
 logger = logging.getLogger("app.api.agent_sql")
-router = APIRouter(prefix="/agent", tags=["agent-sql"])
+router = APIRouter(prefix="/agent", tags=["agent-sql"], dependencies=[Depends(require_current_user)])
 
 
 def _normalized_agent_error(
@@ -85,6 +88,148 @@ def _normalized_http_exception(exc: HTTPException, correlation_id: str, default_
         default_source=default_source,
     )
 
+
+def _is_non_metric_field(field_name: str) -> bool:
+    name = str(field_name or "").strip().upper()
+    return bool(re.search(
+        r"(^|_)(MES|MÊS|ANO|YEAR|PERIODO|PERÍODO|DATA|DATE|COD|CODIGO|CÓDIGO|ID|NUMERO|NÚMERO|NR|FILIAL|EMPRESA|BRANCH)(_|$)",
+        name,
+    )) or name.startswith(("MES_", "MÊS_", "ANO_", "DATA_", "COD_", "CODIGO_"))
+
+
+def _parse_summary_number(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value) if math.isfinite(float(value)) else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = value.strip().replace("R$", "").replace("%", "").replace(" ", "")
+    if not re.fullmatch(r"[+-]?[0-9][0-9.,]*", candidate):
+        return None
+    if "," in candidate and "." in candidate:
+        candidate = candidate.replace(".", "").replace(",", ".")
+    elif "," in candidate:
+        candidate = candidate.replace(",", ".")
+    try:
+        parsed = float(candidate)
+        return parsed if math.isfinite(parsed) else None
+    except ValueError:
+        return None
+
+
+
+def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
+    columns = list(rows[0].keys()) if rows and isinstance(rows[0], dict) else []
+    dimensions = []
+    measures = []
+    
+    # Identify dimensions and measures
+    for col in columns:
+        name = str(col).upper()
+        if re.search(r"(^|_)(ANO|MES|DATA|DATE|PERIODO|COD|CODIGO|ID|NUMERO|NR|FILIAL|EMPRESA|BRANCH|VENDEDOR|VEND|PRODUTO|ITEM|GRUPO)(_|$)", name):
+            # It's a dimension
+            kind = "time" if re.search(r"ANO|MES|DATA|DATE|PERIODO", name) else "string"
+            dimensions.append({
+                "key": col,
+                "label": col,
+                "kind": kind
+            })
+        else:
+            # Check if it's a measure
+            values = [_parse_summary_number(row.get(col)) for row in rows if isinstance(row, dict)]
+            numeric_values = [v for v in values if v is not None]
+            if numeric_values and re.search(r"VALOR|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name):
+                measures.append({
+                    "key": col,
+                    "label": col,
+                    "format": "currency" if re.search(r"VALOR|FATUR|RECEITA|SALDO|PRE[ÇC]O", name) else "number",
+                    "aggregation": "sum"
+                })
+
+    # Build KPIs
+    kpis = []
+    series = []
+    
+    if measures:
+        primary_measure = measures[0]
+        # Calculate KPI value
+        total_val = sum((_parse_summary_number(row.get(primary_measure["key"])) or 0) for row in rows)
+        
+        kpi = {
+            "key": f"total_{primary_measure['key'].lower()}",
+            "label": primary_measure["label"],
+            "value": total_val,
+            "format": primary_measure["format"],
+            "source_column": primary_measure["key"],
+            "aggregation": primary_measure["aggregation"]
+        }
+        
+        time_dim = next((d for d in dimensions if d["kind"] == "time"), None)
+        if time_dim:
+            kpi["dimension"] = time_dim["key"]
+            
+            # Build series
+            points = []
+            for row in rows:
+                lbl = str(row.get(time_dim["key"], ""))
+                val = _parse_summary_number(row.get(primary_measure["key"])) or 0
+                points.append({"label": lbl, "value": val})
+                
+            series.append({
+                "id": f"series_{primary_measure['key'].lower()}",
+                "label": primary_measure["label"],
+                "dimension": time_dim["key"],
+                "measure": primary_measure["key"],
+                "format": primary_measure["format"],
+                "points": points
+            })
+            
+        kpis.append(kpi)
+        
+    return {
+        "columns": columns,
+        "rows": rows,
+        "metadata": {
+            "row_count": len(rows),
+            "source": "queryrest"
+        },
+        "dimensions": dimensions,
+        "measures": measures,
+        "kpis": kpis,
+        "series": series
+    }
+
+def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "Consulta concluída sem registros para o contexto e filtros informados."
+    columns = list(rows[0].keys()) if isinstance(rows[0], dict) else []
+    candidates = []
+    for column in columns:
+        values = [_parse_summary_number(row.get(column)) for row in rows if isinstance(row, dict)]
+        numeric_values = [value for value in values if value is not None]
+        if not numeric_values or _is_non_metric_field(column):
+            continue
+        name = str(column).upper()
+        semantic = bool(re.search(r"VALOR|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name))
+        candidates.append((1 if semantic else 0, column, numeric_values))
+    candidates.sort(key=lambda item: (item[0], len(item[2])), reverse=True)
+    if not candidates:
+        return f"A consulta retornou {len(rows)} registros. Não foi identificada uma métrica numérica financeira segura; consulte a tabela detalhada para analisar os campos autorizados."
+    _, metric, values = candidates[0]
+    total = sum(values)
+    average = total / len(values)
+    dimensions = [
+        column for column in columns
+        if re.search(r"VENDEDOR|VEND|SUBGRUPO|PRODUTO|CLIENTE|MES|MÊS|PERIODO|PERÍODO", str(column).upper())
+        and not _is_non_metric_field(column) or re.search(r"MES|MÊS|SUBGRUPO", str(column).upper())
+    ]
+    dimension_text = f" Dimensões presentes: {', '.join(dict.fromkeys(str(item) for item in dimensions))}." if dimensions else ""
+    return (
+        f"A consulta ao Protheus retornou {len(rows)} registros. "
+        f"Considerando somente o campo numérico autorizado {metric}, o total dos registros retornados é R$ {total:,.2f} "
+        f"e a média por registro é R$ {average:,.2f}.{dimension_text} "
+        "Nenhuma comparação, projeção ou atribuição de vendedor/produto foi inferida além das colunas retornadas."
+    )
+
 # Gerenciador em memória para polling de tarefas do agente
 AGENT_TASKS = {}
 
@@ -128,7 +273,10 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 12. Fidelidade: gere SQL somente com evidências do catálogo autorizado e preserve o escopo tenant, empresa e filial. O environment_code identifica exclusivamente a conexão/API e não deve ser usado para relacionar tabelas, campos ou índices.
 13. O snapshot SX3 é a única fonte de campos físicos. Um identificador com aparência Protheus, como F1_TOTAL, não é campo válido se não estiver listado em FIELD para a tabela. Para totais calculados, use SUM/COUNT/AVG somente sobre um campo físico listado e atribua um alias de apresentação explícito com AS; o alias não pode ser usado como campo físico, filtro ou chave de JOIN.
 14. MUITO IMPORTANTE: Quando utilizar alias em uma tabela no FROM/JOIN (ex: FROM SF2010 SF2), você deve OBRIGATORIAMENTE utilizar ESSE EXATO ALIAS nas colunas do SELECT e WHERE (ex: SF2.F2_DOC). Nunca abrevie ou invente um alias não declarado (como F2.F2_DOC). O banco Oracle gerará erro de sintaxe e causará um Internal Server Error 500 no Protheus se o alias estiver incorreto.
-15. PROIBIÇÃO ABSOLUTA DE ALUCINAÇÃO DE CAMPOS: Você está INVENTANDO campos que não existem no dicionário. NUNCA crie colunas começando com "X" (ex: F2_XCLIENT, F2_X_COND, C5_XNOME, C5_XVEND, C6_XDESC) tentando trazer descrições. Se a tabela de domínio (ex: SA1 para clientes) não estiver no contexto, retorne APENAS o código original (ex: F2_CLIENTE). A invenção de campos inexistentes gera ORA-00904 e causa erro 500 no QueryRest. Use a sintaxe INNER JOIN ao invés de apenas JOIN para maior clareza."""
+15. PROIBIÇÃO ABSOLUTA DE ALUCINAÇÃO DE CAMPOS: Você está INVENTANDO campos que não existem no dicionário. NUNCA crie colunas começando com "X" (ex: F2_XCLIENT, F2_X_COND, C5_XNOME, C5_XVEND, C6_XDESC) tentando trazer descrições. Se a tabela de domínio (ex: SA1 para clientes) não estiver no contexto, retorne APENAS o código original (ex: F2_CLIENTE). A invenção de campos inexistentes gera ORA-00904 e causa erro 500 no QueryRest. Use a sintaxe INNER JOIN ao invés de apenas JOIN para maior clareza.
+17. CONSULTAS GERENCIAIS AGRUPADAS: Se o pedido contiver "agrupado", "agrupando", "por vendedor", "por produto", "por subgrupo", "mensal", "por mês" ou combinação equivalente, a resposta DEVE ser uma agregação SQL real. Selecione cada dimensão solicitada, uma métrica física financeira/quantitativa autorizada usando SUM/COUNT/AVG e inclua no GROUP BY todas as dimensões não agregadas. Nunca trate campos de mês, ano, data, código, filial, empresa, identificador ou número como métrica financeira. Não retorne linhas transacionais detalhadas quando a solicitação exigir consolidação. Se não existir no snapshot um campo físico autorizado para a métrica ou uma dimensão solicitada, não substitua por outro campo: informe que a análise não pode ser construída com o catálogo disponível.
+18. COERÊNCIA DO RESULTADO: Para análise mensal do ano, a consulta deve retornar uma coluna de período/mês e uma métrica agregada por mês; para vendedor e subgrupo, deve retornar as respectivas dimensões e a métrica agregada. O alias da métrica deve ser explícito, por exemplo SUM(campo_físico) AS VALOR_TOTAL, sem reutilizar alias ou códigos como valor.
+16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão a conversão falhará e o banco retornará erro 500 no QueryRest. Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\'). Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'."""
 
     domain = _infer_query_domain(prompt)
     domain_instruction = ""
@@ -706,6 +854,19 @@ async def process_agent_task(task_id: str, payload: dict):
                 }
                 return
 
+            query_domain = _infer_query_domain(str(prompt))
+            if query_domain:
+                domain_families = _DOMAIN_TABLE_FAMILIES[query_domain]
+                focused_context = [
+                    item for item in context
+                    if _table_families_from_context([item]).intersection(domain_families)
+                ]
+                if focused_context:
+                    # Mantém apenas tabelas do domínio identificado no prompt; a
+                    # autorização já foi calculada sobre o snapshot completo e os
+                    # nomes/fields abaixo continuam sendo derivados do catálogo real.
+                    context = focused_context
+
             context_text = render_context_for_prompt(context)
             allowed_table_names = {
                 str(name).strip()
@@ -839,22 +1000,34 @@ async def process_agent_task(task_id: str, payload: dict):
                     )
                     response["records"] = len(rows)
                     response["data"] = safe_rows
-                    response["structured"] = {
-                        "columns": list(safe_rows[0].keys()) if safe_rows and isinstance(safe_rows[0], dict) else [],
-                        "rows": safe_rows,
-                        "total_records": len(rows),
-                        "display_limit": None,
-                    }
-                    logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
+                    if safe_rows and isinstance(safe_rows[0], dict):
+                        response["result"] = _build_semantic_result(safe_rows)
+                    else:
+                        response["result"] = {
+                            "columns": [],
+                            "rows": safe_rows,
+                            "metadata": {"row_count": len(rows), "source": "queryrest"},
+                            "dimensions": [], "measures": [], "kpis": [], "series": []
+                        }
 
                     if len(rows) == 0:
-                        response["summary"] = "A consulta ao banco Oracle do Protheus foi executada com sucesso, porém retornou zero registros (tabela vazia ou sem correspondências no período)."
+                        response["message"] = "Consulta concluída sem registros."
+                        response["result"] = {"columns": [], "rows": [], "metadata": {"row_count": 0, "source": "queryrest"}, "dimensions": [], "measures": [], "kpis": [], "series": []}
+                        logger.info("agent_queryrest_success task_id=%s records=0", task_id)
                     elif safe_rows and isinstance(safe_rows[0], dict):
+                        logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
                         response["summary"] = (
                             f"A consulta ao Protheus retornou {len(rows)} registros. "
                             "Os dados estruturados estão disponíveis na tabela e nas visualizações do relatório."
                         )
+                        
+                        # O resumo é determinístico e derivado de todas as linhas retornadas.
+                        # Não usamos uma amostra no LLM para evitar totais, atribuições ou
+                        # agrupamentos que não estejam sustentados pelo resultado real.
+                        response["message"] = _build_safe_result_summary(safe_rows)
                     else:
+                        logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
+                        response["message"] = "Consulta concluída."
                         response["summary"] = f"A consulta retornou {len(rows)} registros, mas o formato recebido não é tabular."
                 except HTTPException as http_ex:
                     error_info = _normalized_http_exception(
@@ -862,9 +1035,23 @@ async def process_agent_task(task_id: str, payload: dict):
                         correlation_id,
                         default_source="protheus_queryrest",
                     )
-                    response["status"] = "execution_failed"
+                    
+                    if isinstance(http_ex, CatalogValidationError):
+                        response["status"] = "validation_failed"
+                        response["error_code"] = http_ex.code
+                        error_info["error_code"] = http_ex.code
+                    elif http_ex.status_code == 403:
+                        response["status"] = "forbidden"
+                        response["error_code"] = "ENTITLEMENT_DENIED"
+                    else:
+                        response["status"] = "execution_failed"
+                        response["error_code"] = "PROTHEUS_QUERYREST_ERROR"
+
+                    response["message"] = error_info["message"]
+                    response["retryable"] = False
+                    response["result"] = None
+                    # backward compatibility
                     response["execution_error"] = error_info["message"]
-                    response["error"] = error_info["message"]
                     response.update(error_info)
                     logger.warning(
                         "agent_queryrest_failed task_id=%s status=%s error_code=%s",
@@ -898,17 +1085,33 @@ async def process_agent_task(task_id: str, payload: dict):
 
     except HTTPException as e:
         error_info = _normalized_http_exception(e, correlation_id)
-        AGENT_TASKS[task_id] = {
-            "status": "error",
-            "error": error_info["message"],
-            **error_info,
-        }
+        
+        if isinstance(e, CatalogValidationError):
+            AGENT_TASKS[task_id] = {
+                "status": "validation_failed",
+                "error": str(e.detail),
+                "error_code": e.code,
+                "correlation_id": correlation_id,
+            }
+        elif e.status_code == 403:
+            AGENT_TASKS[task_id] = {
+                "status": "forbidden",
+                "error": e.detail,
+                "error_code": "ENTITLEMENT_DENIED",
+                "correlation_id": correlation_id,
+            }
+        else:
+            AGENT_TASKS[task_id] = {
+                "status": "error",
+                "error": error_info["message"],
+                **error_info,
+            }
         logger.warning(
             "agent_task_failed task_id=%s status=%s error_source=%s error_code=%s",
             task_id,
             e.status_code,
             error_info["error_source"],
-            error_info["error_code"],
+            AGENT_TASKS[task_id].get("error_code") or error_info["error_code"],
         )
     except ProgrammingError as e:
         db_error = str(e).splitlines()[0][:240]
@@ -960,7 +1163,7 @@ class QueryRestProxyRequest(BaseModel):
 @router.post("/queryrest")
 async def queryrest_proxy(
     payload: QueryRestProxyRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_current_user),
 ) -> Dict[str, Any]:
     """Executa uma consulta somente leitura recebida do gateway autenticado."""
     token_tenant = str(
@@ -1063,20 +1266,31 @@ async def queryrest_proxy(
 
 @router.post("/ask/v2")
 @router.post("/ask/v2/")
-async def ask_v2(payload: dict) -> Dict[str, Any]:
-    # Checagem rapida de tenant antes de disparar task
-    tenant_id = payload.get("tenant_id")
+async def ask_v2(payload: dict, current_user: dict = Depends(require_current_user)) -> Dict[str, Any]:
+    authenticated_tenant = current_user.get("tenant_id")
+    requested_tenant = payload.get("tenant_id")
+    
+    if requested_tenant and requested_tenant != authenticated_tenant:
+        raise HTTPException(
+            status_code=403,
+            detail="Contexto da solicitação não autorizado."
+        )
+        
+    payload["tenant_id"] = authenticated_tenant
+    payload["role"] = current_user.get("role")
+    payload["user_id"] = current_user.get("user_id") or current_user.get("sub")
+    
     environment_code = str(
         payload.get("environment_code")
         or (payload.get("context") or {}).get("environment_code")
         or ""
     ).strip()
-    if not tenant_id or tenant_id == "default" or environment_code.lower() in {"", "default", "none", "null"}:
+    if not authenticated_tenant or authenticated_tenant == "default" or environment_code.lower() in {"", "default", "none", "null"}:
         return {"summary": "Desculpe, mas eu preciso estar aberto dentro do ERP Protheus (com um contexto válido) para executar consultas no banco de dados."}
 
     task_id = str(uuid.uuid4())
     correlation_id = get_correlation_id()
-    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id}
+    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id, "tenant_id": authenticated_tenant}
     logger.info("agent_task_accepted task_id=%s", task_id)
     asyncio.create_task(process_agent_task(task_id, payload))
     return {"status": "processing", "task_id": task_id, "correlation_id": correlation_id}
@@ -1089,10 +1303,19 @@ async def ask_v2_upload(
     query: str = Form(...),
     context: str = Form("{}"),
     file: UploadFile = File(...),
+    current_user: dict = Depends(require_current_user),
 ):
     """Enfileira análise de arquivo usando o mesmo fluxo agent-sql OAuth2."""
+    authenticated_tenant = current_user.get("tenant_id")
+    requested_tenant = str(tenant_id or "").strip()
+    
+    if requested_tenant and requested_tenant != authenticated_tenant:
+        raise HTTPException(
+            status_code=403,
+            detail="Contexto da solicitação não autorizado."
+        )
 
-    clean_tenant = str(tenant_id or "").strip()
+    clean_tenant = str(authenticated_tenant or "").strip()
     clean_environment = str(environment_code or "").strip()
     if not clean_tenant or clean_tenant.lower() in {"default", "none", "null"}:
         raise HTTPException(status_code=400, detail="tenant_id real é obrigatório.")
@@ -1117,6 +1340,8 @@ async def ask_v2_upload(
     payload = {
         "query": query,
         "tenant_id": clean_tenant,
+        "role": current_user.get("role"),
+        "user_id": current_user.get("user_id") or current_user.get("sub"),
         "environment_code": clean_environment,
         "company_id": company_id,
         "execute": True,
@@ -1134,7 +1359,7 @@ async def ask_v2_upload(
 
     task_id = str(uuid.uuid4())
     correlation_id = get_correlation_id()
-    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id}
+    AGENT_TASKS[task_id] = {"status": "processing", "correlation_id": correlation_id, "tenant_id": authenticated_tenant}
     logger.info("agent_task_accepted task_id=%s", task_id)
     asyncio.create_task(process_agent_task(task_id, payload))
     return {"status": "processing", "task_id": task_id, "correlation_id": correlation_id}
@@ -1142,10 +1367,15 @@ async def ask_v2_upload(
 
 @router.get("/ask/v2/status/{task_id}")
 @router.get("/ask/v2/status/{task_id}/")
-async def ask_v2_status(task_id: str):
+async def ask_v2_status(task_id: str, current_user: dict = Depends(require_current_user)):
 
     if task_id not in AGENT_TASKS:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+        
+    authenticated_tenant = current_user.get("tenant_id")
+    task_tenant = AGENT_TASKS[task_id].get("tenant_id")
+    if task_tenant and task_tenant != authenticated_tenant:
+        raise HTTPException(status_code=403, detail="Contexto da solicitação não autorizado.")
     
     # Mantém os campos error/error_code e também summary por compatibilidade com clientes antigos.
     if AGENT_TASKS[task_id].get("status") == "error":

@@ -101,12 +101,31 @@ export async function getAgentTaskStatus(taskId) {
   });
 }
 
-export async function exportStructuredReport(payload) {
+export async function exportStructuredReport(formatOrPayload, maybePayload = {}) {
   const base = getApiBaseUrl();
+  const payload = typeof formatOrPayload === 'string'
+    ? { ...maybePayload, format: formatOrPayload }
+    : (formatOrPayload || {});
   return fetchWithRetry(`${base}/report/export-structured`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function downloadStructuredReport(downloadUrl) {
+  if (!downloadUrl) throw new Error('URL de download do relatório não informada.');
+  const base = getApiBaseUrl();
+  const url = downloadUrl.startsWith('http')
+    ? downloadUrl
+    : (downloadUrl.startsWith('/') && typeof window !== 'undefined'
+      ? `${window.location.origin}${downloadUrl}`
+      : `${base}/${String(downloadUrl).replace(/^\//, '')}`);
+  const response = await fetch(url, { credentials: 'include' });
+  if (!response.ok) {
+    const payload = await readErrorPayload(response);
+    throw new ApiRequestError(String(payload.message || payload.error || `HTTP ${response.status}`), payload, response.status);
+  }
+  return response.blob();
 }
 
 
@@ -124,6 +143,7 @@ export async function waitForAgentTask(
   }
 
   const deadline = Date.now() + timeoutMs;
+  let pollAttempt = 0;
   let lastPayload = normalizeTaskPayload({
     task_id: taskId,
     status: 'queued',
@@ -145,8 +165,10 @@ export async function waitForAgentTask(
       return lastPayload;
     }
 
+    const pollDelay = Math.min(intervalMs * (2 ** Math.min(pollAttempt, 3)), 3000);
+    pollAttempt += 1;
     await new Promise((resolve, reject) => {
-      const timer = window.setTimeout(resolve, intervalMs);
+      const timer = window.setTimeout(resolve, pollDelay);
 
       if (!signal) return;
 
@@ -168,4 +190,37 @@ export async function waitForAgentTask(
   error.code = 'TASK_TIMEOUT';
   error.lastPayload = lastPayload;
   throw error;
+}
+
+export async function apiGetAuthMe() {
+  const url = `${getApiBaseUrl()}/auth/me`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json'
+    },
+    credentials: 'include'
+  });
+  if (!response.ok) {
+    throw new Error('Não autenticado');
+  }
+  return response.json();
+}
+
+export async function apiLogin(tenant_id, username, password) {
+  const url = `${getApiBaseUrl()}/auth/login`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    credentials: 'include',
+    body: JSON.stringify({ tenant_id, username, password })
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Falha no login');
+  }
+  return response.json();
 }

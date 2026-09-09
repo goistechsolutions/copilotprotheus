@@ -363,6 +363,13 @@ def ensure_public_tables(db, force: bool = False):
             created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_roles_role_code ON public.roles (role_code);
+        
+        INSERT INTO public.roles (role_code, role_name, scope_level)
+        VALUES 
+            ('tenant_admin', 'Administrador do Tenant', 'tenant'),
+            ('tenant_user', 'Usuário Padrão', 'tenant'),
+            ('platform_admin', 'Administrador da Plataforma', 'platform')
+        ON CONFLICT (role_code) DO NOTHING;
         """,
         """
         CREATE TABLE IF NOT EXISTS public.users (

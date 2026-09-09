@@ -35,7 +35,7 @@ def _log_token_usage_background(tenant_id: str, request_type: str, prompt_tokens
     except Exception as e:
         print(f"Failed to log tokens: {e}")
 
-def get_system_prompt(tenant_name: str = "Empresa", tenant_id: str = "default"):
+def get_system_prompt(tenant_name: str = "Empresa", tenant_id: str | None = None):
     from datetime import datetime
     hoje_str = datetime.now().strftime("%d/%m/%Y")
     hoje_db = datetime.now().strftime("%Y%m%d")
@@ -70,13 +70,11 @@ DICIONARIO DE DADOS (TENANT ATUAL):
         from app.models.knowledge import DictionaryTable, DictionaryField
         
         db = SessionLocal()
-        import uuid
-        try:
-            tid = uuid.UUID(tenant_id)
-        except:
-            tid = None
-            
-        if tid:
+        tid = str(tenant_id or "").strip()
+
+        # O prompt global não pode abrir um schema tenant-scoped sem contexto validado.
+        # Quando não há tenant real, mantém somente as instruções gerais.
+        if tid and tid.lower() not in {"default", "public", "none", "null"}:
             tid = str(tid)
             from app.db.database import get_tenant_session
             db_tenant = get_tenant_session(tid)
@@ -95,8 +93,9 @@ DICIONARIO DE DADOS (TENANT ATUAL):
                 db_tenant.close()
         db.close()
     except Exception as e:
-        print(f"Erro ao buscar schemas no banco: {e}")
-        base_prompt += "Erro ao carregar dicionario de dados.\n"
+        # Falhas do catálogo não devem interromper o serviço nem gerar fallback de tenant.
+        print(f"Aviso ao carregar dicionario de dados: {type(e).__name__}")
+        base_prompt += "Dicionário de dados não carregado para este contexto.\n"
 
     base_prompt += """
 ====================
