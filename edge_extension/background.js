@@ -1,6 +1,9 @@
 const DEFAULT_CONFIG = {
   tenantId: "",
   environmentCode: "",
+  companyCode: "",
+  branchCode: "",
+  moduleCode: "",
   widgetUrl: "https://copilot.elitecorp.tec.br/",
   launchUrl: "",
 };

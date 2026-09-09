@@ -64,11 +64,11 @@
   function extractProtheusContext() {
     const context = {
       tenant_id: currentConfig?.tenantId || null,
-      company: null,
-      branch: null,
+      company: currentConfig?.companyCode || null,
+      branch: currentConfig?.branchCode || null,
       user: currentConfig?.username || null,
       environment_code: currentConfig?.environmentCode || null,
-      module: null,
+      module: currentConfig?.moduleCode || null,
       session_id: null
     };
 
@@ -292,12 +292,12 @@
     const payload = {
       tenant_id: currentConfig?.tenantId || context.tenant_id || null,
       environment_code: currentConfig?.environmentCode || context.environment_code || null,
-      company: context.company || null,
-      company_code: context.company || null,
-      branch: context.branch || null,
-      filial: context.branch || null,
+      company: context.company || currentConfig?.companyCode || null,
+      company_code: context.company || currentConfig?.companyCode || null,
+      branch: context.branch || currentConfig?.branchCode || null,
+      filial: context.branch || currentConfig?.branchCode || null,
       user: context.user || currentConfig?.username || null,
-      module: context.module || null,
+      module: context.module || currentConfig?.moduleCode || null,
       session_id: context.session_id || null
     };
 
@@ -363,11 +363,14 @@
   });
 
   chrome.storage.local.get(
-    ["tenantId", "environmentCode", "username", "widgetUrl"],
+    ["tenantId", "environmentCode", "companyCode", "branchCode", "moduleCode", "username", "widgetUrl"],
     (result) => {
       const config = {
         tenantId: result.tenantId || "",
         environmentCode: result.environmentCode || "",
+        companyCode: result.companyCode || "",
+        branchCode: result.branchCode || "",
+        moduleCode: result.moduleCode || "",
         username: result.username || "",
         widgetUrl: result.widgetUrl || DEFAULT_WIDGET_URL
       };

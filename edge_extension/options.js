@@ -1,7 +1,7 @@
 const form = document.getElementById("config-form");
 const statusMessage = document.getElementById("statusMessage");
 
-const FIELDS = ["tenantId", "environmentCode", "username", "password", "widgetUrl", "launchUrl"];
+const FIELDS = ["tenantId", "environmentCode", "companyCode", "branchCode", "moduleCode", "username", "password", "widgetUrl", "launchUrl"];
 
 async function loadConfig() {
   const data = await chrome.storage.local.get(FIELDS);
@@ -40,6 +40,9 @@ form.addEventListener("submit", async (e) => {
 
   const tenantId = document.getElementById("tenantId").value.trim();
   const environmentCode = document.getElementById("environmentCode").value.trim();
+  const companyCode = document.getElementById("companyCode").value.trim();
+  const branchCode = document.getElementById("branchCode").value.trim();
+  const moduleCode = document.getElementById("moduleCode").value.trim().toUpperCase();
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
   const widgetUrl = document.getElementById("widgetUrl").value.trim();
@@ -58,7 +61,7 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  const config = { tenantId, environmentCode, username, password, widgetUrl, launchUrl, widgetOrigin };
+  const config = { tenantId, environmentCode, companyCode, branchCode, moduleCode, username, password, widgetUrl, launchUrl, widgetOrigin };
   await chrome.storage.local.set(config);
   chrome.runtime.sendMessage({ type: "CONFIG_UPDATED", config });
   showStatus("Configurações salvas com sucesso.");
