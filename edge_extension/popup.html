@@ -30,29 +30,32 @@
 
     <div class="form-group">
       <label for="tenantId">Tenant ID</label>
-      <input type="text" id="tenantId" placeholder="Identificador do tenant" autocomplete="off" required>
+      <input type="text" id="tenantId" placeholder="rodol_prod" autocomplete="off">
     </div>
 
     <div class="form-group">
       <label for="environmentCode">Ambiente Protheus</label>
-      <input type="text" id="environmentCode" placeholder="Código do ambiente Protheus" autocomplete="off" required>
+      <input type="text" id="environmentCode" placeholder="c8te0u_prod" autocomplete="off">
     </div>
 
     <div class="form-group">
       <label for="username">Usuário</label>
-      <input type="text" id="username" placeholder="Usuário do contexto (opcional)" autocomplete="username">
+      <input type="text" id="username" placeholder="admin" autocomplete="username">
     </div>
 
-    <p class="security-note">A extensão não armazena nem envia senha. A autenticação OAuth2 do Protheus é realizada exclusivamente pelo backend.</p>
+    <div class="form-group">
+      <label for="password">Senha</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
 
     <div class="form-group">
       <label for="widgetUrl">URL do Frontend / Widget</label>
-      <input type="url" id="widgetUrl" placeholder="URL pública do frontend do agente" autocomplete="url" required>
+      <input type="url" id="widgetUrl" placeholder="https://copilot.elitecorp.tec.br/" autocomplete="url">
     </div>
 
     <div class="form-group">
       <label for="launchUrl">URL TOTVS Cloud WebApp</label>
-      <input type="url" id="launchUrl" placeholder="URL do WebApp TOTVS" autocomplete="url" required>
+      <input type="url" id="launchUrl" placeholder="https://rodollta195384.protheus.cloudtotvs.com.br:10703/webapp/index.html" autocomplete="url">
     </div>
 
     <button id="saveConfigBtn" class="btn btn-save">Salvar Configurações</button>

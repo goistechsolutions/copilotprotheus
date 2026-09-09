@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Copilot Protheus - Assistente Executivo",
-  "version": "1.1.2",
+  "version": "1.1.0",
   "description": "Assistente de Inteligência Executiva integrado ao WebApp da TOTVS Protheus",
   "action": {
     "default_popup": "popup.html",

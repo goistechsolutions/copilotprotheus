@@ -1,16 +1,7 @@
 const DEFAULT_CONFIG = {
   tenantId: "",
   environmentCode: "",
-  companyCode: "",
-  branchCode: "",
-  moduleCode: "",
   widgetUrl: "https://copilot.elitecorp.tec.br/",
-  launchUrl: "",
-};
-
-const LEGACY_CONFIG_VALUES = {
-  tenantId: "rodol_prod",
-  environmentCode: "c8te0u_prod",
   launchUrl: "https://rodolltda195384.protheus.cloudtotvs.com.br:10703/webapp/index.html",
 };
 
@@ -21,32 +12,12 @@ const CONTENT_SCRIPT_MATCH_PATTERNS = [
   "https://rodolltda195384.protheus.cloudtotvs.com.br:10703/*",
 ];
 
-async function migrateLegacyConfig() {
-  const keys = Object.keys(DEFAULT_CONFIG);
-  const existing = await chrome.storage.local.get(keys);
-  const patch = {};
-
-  for (const [key, legacyValue] of Object.entries(LEGACY_CONFIG_VALUES)) {
-    if (existing[key] === legacyValue) patch[key] = "";
-  }
-
-  if (Object.keys(patch).length > 0) {
-    await chrome.storage.local.set({ ...patch, configVersion: "1.1.1" });
-    console.info("Copilot Protheus: configuração legada removida; informe o contexto real.");
-  }
-}
-
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === "install") {
     const existing = await chrome.storage.local.get(Object.keys(DEFAULT_CONFIG));
     const merged = { ...DEFAULT_CONFIG, ...existing };
     await chrome.storage.local.set(merged);
   }
-  await migrateLegacyConfig();
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  migrateLegacyConfig().catch((error) => console.warn("Copilot Protheus: falha na migração de configuração.", error));
 });
 
 function safeSendMessage(tabId, message, callback) {
@@ -138,14 +109,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "OPEN_PROTHEUS") {
-    chrome.storage.local.get(["launchUrl"], (config) => {
-      if (!config.launchUrl) {
-        console.warn("Copilot Protheus: configure a URL do WebApp TOTVS antes de abrir o Protheus.");
-        return;
+    chrome.storage.local.get(["launchUrl", "tenantId", "environmentCode"], (config) => {
+      if (config.launchUrl) {
+        const url = new URL(config.launchUrl);
+        url.searchParams.set("tenant_id", config.tenantId || "");
+        url.searchParams.set("environment_code", config.environmentCode || "");
+        chrome.tabs.create({ url: url.toString() });
       }
-      // O contexto é enviado ao widget via postMessage após a carga;
-      // não deve ser colocado na URL do WebApp ou no histórico do navegador.
-      chrome.tabs.create({ url: config.launchUrl });
     });
   }
 });

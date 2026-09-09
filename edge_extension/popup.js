@@ -1,4 +1,4 @@
-const FIELDS = ["tenantId", "environmentCode", "username", "widgetUrl", "launchUrl"];
+const FIELDS = ["tenantId", "environmentCode", "username", "password", "widgetUrl", "launchUrl"];
 
 async function loadConfig() {
   const data = await chrome.storage.local.get(FIELDS);
@@ -32,6 +32,7 @@ document.getElementById("saveConfigBtn").addEventListener("click", async () => {
   const tenantId = document.getElementById("tenantId").value.trim();
   const environmentCode = document.getElementById("environmentCode").value.trim();
   const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
   const widgetUrl = document.getElementById("widgetUrl").value.trim();
   const launchUrl = document.getElementById("launchUrl").value.trim();
 
@@ -48,9 +49,8 @@ document.getElementById("saveConfigBtn").addEventListener("click", async () => {
     return;
   }
 
-  const config = { tenantId, environmentCode, username, widgetUrl, launchUrl, widgetOrigin };
+  const config = { tenantId, environmentCode, username, password, widgetUrl, launchUrl, widgetOrigin };
   await chrome.storage.local.set(config);
-  await chrome.storage.local.remove(["password"]);
   chrome.runtime.sendMessage({ type: "CONFIG_UPDATED", config });
   showStatus("Configurações salvas com sucesso.");
 });

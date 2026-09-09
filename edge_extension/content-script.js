@@ -13,23 +13,10 @@
     if (now - cachedBodyText.timestamp < 300) {
       return cachedBodyText.text;
     }
-
-    const parts = [document.body?.innerText || ""];
-    document.querySelectorAll("input, select, textarea, [aria-label], [data-testid], [title]").forEach((element) => {
-      const style = window.getComputedStyle(element);
-      if (style.display === "none" || style.visibility === "hidden") return;
-      const type = String(element.getAttribute("type") || "").toLowerCase();
-      if (type === "password" || type === "hidden") return;
-      const value = element.value || element.getAttribute("aria-label") || element.getAttribute("data-testid") || element.getAttribute("title") || "";
-      if (value) parts.push(String(value));
-    });
-
-    cachedBodyText.text = parts.join(" ").replace(/\s+/g, " ").trim();
+    cachedBodyText.text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
     cachedBodyText.timestamp = now;
     return cachedBodyText.text;
   }
-
-  const DEFAULT_WIDGET_URL = "https://copilot.elitecorp.tec.br/";
 
   const PROTHEUS_MODULE_MAP = {
     "faturamento": "SIGAFAT",
@@ -61,58 +48,58 @@
 
   function extractProtheusContext() {
     const context = {
-      tenant_id: currentConfig?.tenantId || null,
-      company: currentConfig?.companyCode || null,
-      branch: currentConfig?.branchCode || null,
-      user: currentConfig?.username || null,
-      environment_code: currentConfig?.environmentCode || null,
-      module: currentConfig?.moduleCode || null,
-      session_id: null
+      tenant_id: currentConfig?.tenantId || "rodol_prod",
+      company: "01",
+      branch: "0101",
+      user: currentConfig?.username || "admin",
+      environment_code: currentConfig?.environmentCode || "c8te0u_prod",
+      module: "SIGAFAT",
+      session_id: "protheus-" + Date.now()
     };
 
     try {
       const bodyText = getBodyText();
-      const normalizedText = bodyText.replace(/\u00a0/g, " ");
 
-      const sigaMatches = normalizedText.match(/\bSIGA[A-Z]{3,}\b/gi) || [];
-      const operationalModule = sigaMatches.find((value) => value.toUpperCase() !== "SIGAMDI");
-      if (operationalModule) {
-        context.module = operationalModule.toUpperCase();
+      // 1. Extração do Módulo Ativo (ex: SIGAFAT, SIGAFIN, SIGACOM, ou nome textual)
+      const sigaMatch = bodyText.match(/\bSIGA[A-Z]{3,}\b/i);
+      if (sigaMatch) {
+        context.module = sigaMatch[0].toUpperCase();
       } else {
         for (const key of Object.keys(PROTHEUS_MODULE_MAP)) {
-          if (new RegExp(`\\b${key}\\b`, "i").test(normalizedText)) {
+          const regex = new RegExp(`\\b${key}\\b`, "i");
+          if (regex.test(bodyText)) {
             context.module = PROTHEUS_MODULE_MAP[key];
             break;
           }
         }
       }
 
-      const envMatch = normalizedText.match(/(?:Ambiente(?:\s+no\s+servidor)?|Environment(?:\s+Code)?)\s*[:=]?\s*([A-Za-z0-9][A-Za-z0-9_-]{1,80})/i);
-      if (envMatch?.[1] && !/^no$/i.test(envMatch[1])) {
-        context.environment_code = envMatch[1].trim();
+      // 2. Extração do Ambiente TOTVS Cloud
+      const envMatch = bodyText.match(/c8te0u[_\w]+/i) || bodyText.match(/TOTVS[^\n]{0,60}/i);
+      if (envMatch) {
+        context.environment_code = envMatch[0].trim();
       }
 
-      let pairMatch = normalizedText.match(/\b(\d{1,4})\s*[\/-]\s*(\d{2,10})\b/);
-      if (pairMatch) {
-         const nextStr = normalizedText.substring(pairMatch.index + pairMatch[0].length, pairMatch.index + pairMatch[0].length + 5);
-         if (nextStr.match(/^\s*[\/-]\s*\d{2,4}/)) {
-             pairMatch = null;
-         }
+      // 3. Extração de Empresa / Filial
+      const companyBranchPatterns = [
+        /\b(\d{2})\s*[\/-]\s*(\d{2,4})\b/,
+        /Empresa[:\s]+([^\n]{2,40})/i,
+        /Filial[:\s]+([^\n]{2,40})/i
+      ];
+
+      for (const pattern of companyBranchPatterns) {
+        const match = bodyText.match(pattern);
+        if (!match) continue;
+        if (match[2]) {
+          context.company = (match[1] || "").trim();
+          context.branch = (match[2] || "").trim();
+          break;
+        }
       }
 
-      const companyMatch = normalizedText.match(/(?:Empresa|Company)\s*[:=]?\s*([A-Za-z0-9]{1,20})/i);
-      const branchMatch = normalizedText.match(/(?:Filial|Branch)\s*[:=]?\s*([A-Za-z0-9]{2,20})/i);
-      
-      if (pairMatch) {
-        context.company = pairMatch[1].trim();
-        context.branch = pairMatch[2].trim();
-      } else {
-        context.company = companyMatch?.[1]?.trim() || null;
-        context.branch = branchMatch?.[1]?.trim() || null;
-      }
-
-      const userMatch = normalizedText.match(/(?:Usuário|Usuario|User)\s*[:=]?\s*([^,;|]{2,80})/i);
-      if (userMatch?.[1]) {
+      // 4. Usuário
+      const userMatch = bodyText.match(/Usuário[:\s]+([^\n]{2,40})/i) || bodyText.match(/User[:\s]+([^\n]{2,40})/i);
+      if (userMatch && userMatch[1]) {
         context.user = userMatch[1].trim();
       }
     } catch (err) {
@@ -122,12 +109,14 @@
     return context;
   }
 
+  // Criar Shadow DOM para isolamento visual total
   const host = document.createElement("div");
   host.id = "copilot-protheus-host";
   document.body.appendChild(host);
 
   const shadow = host.attachShadow({ mode: "open" });
 
+  // Injeção de estilos diretos garantidos
   const style = document.createElement("style");
   style.textContent = `
     #copilot-fab {
@@ -261,26 +250,27 @@
   `;
   shadow.appendChild(panel);
 
-  function getWidgetOrigin(config) {
-    try {
-      return new URL(config.widgetUrl || DEFAULT_WIDGET_URL).origin;
-    } catch {
-      return new URL(DEFAULT_WIDGET_URL).origin;
-    }
-  }
-
+  // Escuta redimensionamento solicitado pelo Copilot
   window.addEventListener("message", (event) => {
     const iframe = shadow.querySelector("#copilot-iframe");
     if (!iframe || event.source !== iframe.contentWindow) return;
-    if (event.origin !== getWidgetOrigin(currentConfig || {})) return;
 
     if (event.data?.type === "cprot-result-state") {
       panel.classList.toggle("results-open", Boolean(event.data.open));
     }
   });
 
-  function buildIframeUrl(config) {
-    return config.widgetUrl || DEFAULT_WIDGET_URL;
+  function buildIframeUrl(config, context) {
+    const baseUrl = config.widgetUrl || "https://copilot.elitecorp.tec.br/";
+    const url = new URL(baseUrl);
+    url.searchParams.set("tenant_id", config.tenantId || context.tenant_id || "rodol_prod");
+    url.searchParams.set("environment_code", config.environmentCode || context.environment_code || "c8te0u_prod");
+    url.searchParams.set("company", context.company || "01");
+    url.searchParams.set("branch", context.branch || "0101");
+    url.searchParams.set("user", context.user || config.username || "admin");
+    url.searchParams.set("module", context.module || "SIGAFAT");
+    url.searchParams.set("session_id", context.session_id || "");
+    return url.toString();
   }
 
   function sendContextToIframe(context) {
@@ -288,15 +278,13 @@
     if (!iframe?.contentWindow) return;
 
     const payload = {
-      tenant_id: currentConfig?.tenantId || context.tenant_id || null,
-      environment_code: currentConfig?.environmentCode || context.environment_code || null,
-      company: context.company || currentConfig?.companyCode || null,
-      company_code: context.company || currentConfig?.companyCode || null,
-      branch: context.branch || currentConfig?.branchCode || null,
-      filial: context.branch || currentConfig?.branchCode || null,
-      user: context.user || currentConfig?.username || null,
-      module: context.module || currentConfig?.moduleCode || null,
-      session_id: context.session_id || null
+      tenant_id: currentConfig?.tenantId || context.tenant_id || "rodol_prod",
+      environment_code: currentConfig?.environmentCode || context.environment_code || "c8te0u_prod",
+      company: context.company || "01",
+      branch: context.branch || "0101",
+      user: context.user || currentConfig?.username || "admin",
+      module: context.module || "SIGAFAT",
+      session_id: context.session_id || ""
     };
 
     const key = JSON.stringify(payload);
@@ -305,7 +293,7 @@
 
     iframe.contentWindow.postMessage(
       { type: "PROTHEUS_CONTEXT", payload },
-      getWidgetOrigin(currentConfig || {})
+      "*"
     );
   }
 
@@ -314,7 +302,7 @@
     const context = extractProtheusContext();
 
     if (!iframeLoaded) {
-      iframe.src = buildIframeUrl(config);
+      iframe.src = buildIframeUrl(config, context);
       iframe.onload = () => {
         iframeLoaded = true;
         sendContextToIframe(context);
@@ -328,6 +316,7 @@
     currentConfig = config;
     loadIframe(config);
 
+    // Monitora atualizações no contexto do Protheus
     function syncContext() {
       const ctx = extractProtheusContext();
       sendContextToIframe(ctx);
@@ -359,17 +348,14 @@
     }
   });
 
-  chrome.storage.local.get(
-    ["tenantId", "environmentCode", "companyCode", "branchCode", "moduleCode", "username", "widgetUrl"],
+  chrome.storage.sync.get(
+    ["tenantId", "environmentCode", "username", "widgetUrl"],
     (result) => {
       const config = {
-        tenantId: result.tenantId || "",
-        environmentCode: result.environmentCode || "",
-        companyCode: result.companyCode || "",
-        branchCode: result.branchCode || "",
-        moduleCode: result.moduleCode || "",
-        username: result.username || "",
-        widgetUrl: result.widgetUrl || DEFAULT_WIDGET_URL
+        tenantId: result.tenantId || "rodol_prod",
+        environmentCode: result.environmentCode || "c8te0u_prod",
+        username: result.username || "admin",
+        widgetUrl: result.widgetUrl || "https://copilot.elitecorp.tec.br/"
       };
       init(config);
     }
