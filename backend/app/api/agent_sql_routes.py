@@ -865,18 +865,46 @@ async def process_agent_task(task_id: str, payload: dict):
                         "kpis": [],
                         "series": []
                     }
-                    response["message"] = "Consulta concluída."
-                    logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
 
                     if len(rows) == 0:
                         response["message"] = "Consulta concluída sem registros."
                         response["result"] = {"columns": [], "rows": [], "metadata": {"row_count": 0, "source": "queryrest"}, "kpis": [], "series": []}
+                        logger.info("agent_queryrest_success task_id=%s records=0", task_id)
                     elif safe_rows and isinstance(safe_rows[0], dict):
+                        logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
                         response["summary"] = (
                             f"A consulta ao Protheus retornou {len(rows)} registros. "
                             "Os dados estruturados estão disponíveis na tabela e nas visualizações do relatório."
                         )
+                        
+                        try:
+                            from app.services.gemini_client import ask_gemini
+                            import json
+                            sample_rows = safe_rows[:5]
+                            summary_prompt = (
+                                f"O usuário fez a seguinte solicitação: '{prompt}'. "
+                                f"A consulta retornou {len(rows)} registros. "
+                                f"Aqui está uma amostra dos primeiros registros:\n{json.dumps(sample_rows, ensure_ascii=False, indent=2)}\n\n"
+                                "Escreva um resumo em linguagem natural, muito direto e executivo, respondendo à solicitação do usuário com base nos dados. "
+                                "Destaque os principais números da amostra (se houver), evite inventar dados além do que está na amostra, e mencione que a lista completa detalhada está disponível no painel de resultados da tela. "
+                                "Não inclua tabelas markdown ou formatação complexa. Apenas 1 a 2 parágrafos explicativos."
+                            )
+                            summary_message = await ask_gemini(
+                                question=summary_prompt,
+                                intent="data_summary",
+                                context={"tenant_system_prompt": "Você é um assistente executivo e objetivo focado em relatar dados gerenciais de forma clara e direta no chat."},
+                                allow_tools=False
+                            )
+                            if summary_message and not summary_message.startswith("Erro"):
+                                response["message"] = summary_message.strip()
+                            else:
+                                response["message"] = "Consulta concluída."
+                        except Exception as e:
+                            logger.error(f"Failed to generate dynamic summary: {e}")
+                            response["message"] = "Consulta concluída com sucesso."
                     else:
+                        logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))
+                        response["message"] = "Consulta concluída."
                         response["summary"] = f"A consulta retornou {len(rows)} registros, mas o formato recebido não é tabular."
                 except HTTPException as http_ex:
                     error_info = _normalized_http_exception(
