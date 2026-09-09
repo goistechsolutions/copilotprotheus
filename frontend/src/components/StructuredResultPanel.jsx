@@ -75,7 +75,7 @@ function formatCurrency(val) {
 }
 
 function isIdentifierColumn(column) {
-  return /(^|_)(COD|CODIGO|ID|NUMERO|NR|DATA|DATE|FILIAL|EMPRESA|BRANCH)(_|$)/i.test(String(column));
+  return /(^|_)(COD|CODIGO|ID|NUMERO|NR|DATA|DATE|FILIAL|EMPRESA|BRANCH|MES|MÊS|ANO|YEAR|PERIODO|PERÍODO)(_|$)/i.test(String(column));
 }
 
 function findPrimaryNumericColumn(rows, columns) {
@@ -85,7 +85,7 @@ function findPrimaryNumericColumn(rows, columns) {
       if (!values.length) return null;
       const name = String(column).toUpperCase();
       const semanticScore = /(VALOR|TOTAL|FATUR|RECEITA|SALDO|PRECO|PREÇO|MARGEM|QUANT|QTD|VOLUME)/i.test(name) ? 100 : 0;
-      const identifierPenalty = isIdentifierColumn(column) ? 80 : 0;
+      const identifierPenalty = isIdentifierColumn(column) ? 160 : 0;
       return { column, count: values.length, score: semanticScore - identifierPenalty + values.length };
     })
     .filter(Boolean)
@@ -170,29 +170,35 @@ export default function StructuredResultPanel({ result, context, onClose }) {
     [result, rows, columns, computedKpis],
   );
 
-  // Chart Data
+  // Chart Data: consolida linhas pela dimensão exibida; nunca plota os primeiros
+  // registros transacionais como se fossem uma série gerencial.
   const chartData = useMemo(() => {
     if (!rows.length || !columns.length) return null;
+    const numCol = findPrimaryNumericColumn(rows, columns);
+    if (!numCol) return null;
+    const labelCol = columns.find((column) => column !== numCol && /NOME|DESC|VENDEDOR|VEND|PRODUTO|CLIENTE|MES|MÊS|ANO|PERIODO|PERÍODO|DATA|EMISSAO/i.test(String(column)))
+      || columns.find((column) => column !== numCol && !isIdentifierColumn(column))
+      || columns.find((column) => column !== numCol);
+    if (!labelCol) return null;
 
-    const labelCol = columns.find(c => /NOME|DESC|FILIAL|PRODUTO|CLIENTE|MES|DATA|EMISSAO/i.test(c)) || columns[0];
-    const numCol = columns.find(c => /VALOR|TOTAL|FATUR|SALDO|PRECO|QUANT/i.test(c)) || columns[1] || columns[0];
-
-    const slice = rows.slice(0, 8);
-    const labels = slice.map(r => String(r[labelCol] || '—').slice(0, 16));
-    const values = slice.map(r => parseNumeric(r[numCol]) || 0);
-
+    const grouped = new Map();
+    rows.forEach((row) => {
+      const label = String(row[labelCol] ?? '—').trim() || '—';
+      const value = parseNumeric(row[numCol]);
+      if (value !== null) grouped.set(label, (grouped.get(label) || 0) + value);
+    });
+    const entries = Array.from(grouped.entries()).sort((a, b) => b[1] - a[1]).slice(0, 12);
+    if (!entries.length) return null;
     return {
-      labels,
-      datasets: [
-        {
-          type: 'bar',
-          label: numCol || 'Valor',
-          data: values,
-          backgroundColor: '#004FCE',
-          borderRadius: 6,
-          barThickness: 28,
-        },
-      ],
+      labels: entries.map(([label]) => label.slice(0, 16)),
+      datasets: [{
+        type: 'bar',
+        label: numCol,
+        data: entries.map(([, value]) => value),
+        backgroundColor: '#004FCE',
+        borderRadius: 6,
+        barThickness: 28,
+      }],
     };
   }, [rows, columns]);
 

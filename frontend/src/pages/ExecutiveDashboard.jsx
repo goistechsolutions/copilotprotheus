@@ -424,7 +424,7 @@ const SALES_PANELS = [
     label: 'Por produtos',
     title: 'Análise de vendas por produtos',
     subtitle: 'Agrupamento por produto somente quando esse campo existir no resultado autorizado.',
-    groupPatterns: ['PRODUTO', 'DESCR_PROD', 'B1_DESC', 'CODPROD', 'ITEM'],
+    groupPatterns: ['SUBGRUPO_PRODUTO', 'SUBGRUPO', 'PRODUTO', 'DESCR_PROD', 'B1_DESC', 'CODPROD', 'ITEM'],
   },
 ];
 
@@ -518,10 +518,10 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
     () => buildGroupedRows(dynamicRows, dynamicColumns, salesView.groupPatterns),
     [dynamicRows, dynamicColumns, salesView.groupPatterns],
   );
-  const panelRows = activeAreaKey === 'vendas' && activeSalesPanel !== 'overview' && groupedSales.rows.length
+  const panelRows = activeAreaKey === 'vendas' && groupedSales.rows.length
     ? groupedSales.rows
     : dynamicRows;
-  const panelColumns = activeAreaKey === 'vendas' && activeSalesPanel !== 'overview' && groupedSales.columns.length
+  const panelColumns = activeAreaKey === 'vendas' && groupedSales.columns.length
     ? groupedSales.columns
     : dynamicColumns;
 
@@ -548,7 +548,7 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
     return { numericCol, labelCol, total: sum, average: avg, maxVal, maxLabel, count };
   }, [panelRows, panelColumns]);
 
-  const panelDataAvailable = activeAreaKey !== 'vendas' || activeSalesPanel === 'overview' || groupedSales.rows.length > 0;
+  const panelDataAvailable = activeAreaKey !== 'vendas' || groupedSales.rows.length > 0;
   const panelUnavailableMessage = activeSalesPanel === 'seller'
     ? 'A consulta específica de vendedor ainda não retornou uma coluna autorizada de vendedor e uma métrica numérica agrupável.'
     : 'A consulta específica de produto ainda não retornou uma coluna autorizada de produto e uma métrica numérica agrupável.';
