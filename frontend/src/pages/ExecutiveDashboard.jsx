@@ -460,9 +460,10 @@ function buildGroupedRows(rows, columns, patterns) {
   if (!groupColumn || !numericColumn) return { rows: [], columns: [] };
   const groups = new Map();
   rows.forEach(row => {
-    const label = String(row[groupColumn] ?? '').trim();
+    let label = String(row[groupColumn] ?? '').trim();
+    if (!label) label = 'Não Informado';
     const value = parseNumeric(row[numericColumn]);
-    if (!label || value === null) return;
+    if (value === null) return;
     groups.set(label, (groups.get(label) || 0) + value);
   });
   if (!groups.size) return { rows: [], columns: [] };
@@ -548,18 +549,23 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
     let sum = 0;
     let count = 0;
     let maxVal = -Infinity;
+    let minVal = Infinity;
     let maxRow = null;
+    let minRow = null;
     panelRows.forEach(r => {
       const val = parseNumeric(r[numericCol]);
       if (val !== null) {
         sum += val;
         count++;
         if (val > maxVal) { maxVal = val; maxRow = r; }
+        if (val < minVal) { minVal = val; minRow = r; }
       }
     });
     const avg = count > 0 ? sum / count : 0;
     const maxLabel = maxRow ? String(maxRow[labelCol] || '') : '';
-    return { numericCol, labelCol, total: sum, average: avg, maxVal, maxLabel, count };
+    const minLabel = minRow ? String(minRow[labelCol] || '') : '';
+    const maxPct = sum > 0 ? ((maxVal / sum) * 100).toFixed(1) : 0;
+    return { numericCol, labelCol, total: sum, average: avg, maxVal, maxLabel, maxPct, minVal, minLabel, count };
   }, [panelRows, panelColumns]);
 
   const panelDataAvailable = activeAreaKey !== 'vendas' || groupedSales.rows.length > 0;
@@ -926,29 +932,41 @@ export default function ExecutiveDashboard({ initialArea, onNavigateToWorkspace,
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {hasRealData && stats ? (
               <>
-                <div className="bg-[#004fce] rounded-xl p-5 text-white shadow-md shadow-[#004fce]/20 relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-3 relative z-10">
-                    <span className="text-[11px] font-bold text-white/80 uppercase tracking-wider">{stats.numericCol || 'TOTAL'}</span>
+                <div className="bg-[#004fce] rounded-xl p-5 text-white shadow-md shadow-[#004fce]/20 relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2 relative z-10">
+                      <span className="text-[11px] font-bold text-white/80 uppercase tracking-wider">{stats.numericCol || 'TOTAL'}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white relative z-10">{formatCurrency(stats.total)}</div>
                   </div>
-                  <div className="text-2xl font-bold text-white mb-2 relative z-10">{formatCurrency(stats.total)}</div>
+                  <div className="mt-2 text-[11px] text-white/70 relative z-10">Soma total deste agrupamento</div>
                 </div>
-                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-3 relative z-10">
-                    <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Média</span>
+                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2 relative z-10">
+                      <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Média</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[#0f172a] relative z-10">{formatCurrency(stats.average)}</div>
                   </div>
-                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{formatCurrency(stats.average)}</div>
+                  <div className="mt-2 text-[11px] text-[#64748b] relative z-10">Média baseada em {panelRows.length} grupos</div>
                 </div>
-                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-3 relative z-10">
-                    <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Pico {stats.maxLabel ? '(' + stats.maxLabel + ')' : ''}</span>
+                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2 relative z-10">
+                      <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Maior: {stats.maxLabel || '---'}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[#0f172a] relative z-10">{stats.maxVal !== -Infinity ? formatCurrency(stats.maxVal) : '---'}</div>
                   </div>
-                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{stats.maxVal !== -Infinity ? formatCurrency(stats.maxVal) : '---'}</div>
+                  <div className="mt-2 text-[11px] font-medium text-[#22c55e] relative z-10">Representa {stats.maxPct}% do total</div>
                 </div>
-                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-3 relative z-10">
-                    <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Registros</span>
+                <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] shadow-sm relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2 relative z-10">
+                      <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">Menor: {stats.minLabel || '---'}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[#0f172a] relative z-10">{stats.minVal !== Infinity ? formatCurrency(stats.minVal) : '---'}</div>
                   </div>
-                  <div className="text-2xl font-bold text-[#0f172a] mb-2 relative z-10">{panelRows.length}</div>
+                  <div className="mt-2 text-[11px] text-[#64748b] relative z-10">Base da análise</div>
                 </div>
               </>
             ) : currentArea.kpis.map((kpi, index) => {

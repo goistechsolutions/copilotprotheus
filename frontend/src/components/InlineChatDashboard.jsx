@@ -133,27 +133,44 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
     let sum = 0;
     let count = 0;
     let maxVal = -Infinity;
-    let maxRow = null;
+    let maxLabel = '';
 
-    const chartLabels = [];
-    const chartValues = [];
+    const groups = new Map();
 
     rows.forEach(r => {
       const val = parseNumeric(r[numericCol]);
       if (val !== null) {
         sum += val;
         count++;
-        if (val > maxVal) {
-          maxVal = val;
-          maxRow = r;
-        }
-        chartLabels.push(String(r[labelCol] || `Item ${count}`));
-        chartValues.push(val);
+        let label = String(r[labelCol] ?? '').trim();
+        if (!label) label = 'Não Informado';
+        groups.set(label, (groups.get(label) || 0) + val);
       }
     });
 
+    const chartLabels = [];
+    const chartValues = [];
+    
+    // Sort groups and populate chart arrays
+    const isTimeDimension = /(^|_)(MES|ANO|DATA|DATE|PERIODO)(_|$)/i.test(String(labelCol));
+    const sortedGroups = Array.from(groups.entries());
+    
+    if (isTimeDimension) {
+      sortedGroups.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+    } else {
+      sortedGroups.sort((a, b) => b[1] - a[1]);
+    }
+    
+    for (const [label, val] of sortedGroups) {
+      if (val > maxVal) {
+        maxVal = val;
+        maxLabel = label;
+      }
+      chartLabels.push(label);
+      chartValues.push(val);
+    }
+
     const avg = count > 0 ? sum / count : 0;
-    const maxLabel = maxRow ? String(maxRow[labelCol] || '') : '';
 
     return {
       total: sum,
@@ -164,7 +181,7 @@ export default function InlineChatDashboard({ result, userPrompt, context, onNav
       labelCol,
       chartLabels: chartLabels.slice(0, 12),
       chartValues: chartValues.slice(0, 12),
-      isCurrency,
+      isCurrency
     };
   }, [rows, columns]);
 
