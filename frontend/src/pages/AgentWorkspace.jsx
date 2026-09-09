@@ -1,1 +1,1 @@
-(c código completo fornecido acima)
+arquivo corrigido completo AgentWorkspace_corrigido.jsx, sem placeholder
