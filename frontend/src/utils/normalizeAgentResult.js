@@ -1,73 +1,137 @@
+/**
+ * Normaliza o contrato de resultado do Agent antes de qualquer renderização.
+ * Erros e contratos inválidos nunca expõem payload estruturado residual.
+ */
+
 const ERROR_STATUSES = new Set([
-  'failed', 'error', 'execution_failed',
-  'validation_failed', 'forbidden', 'unauthorized',
+  'failed',
+  'error',
+  'execution_failed',
+  'validation_failed',
+  'forbidden',
+  'unauthorized',
 ]);
 
+const SUCCESS_STATUSES = new Set(['success', 'completed']);
+const KPI_FORMATS = new Set(['currency', 'number', 'percent', 'date']);
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isTypedKpi(kpi, measures) {
+  if (!kpi || typeof kpi !== 'object') return false;
+
+  const value = Number(kpi.value);
+  if (!Number.isFinite(value)) return false;
+  if (typeof kpi.label !== 'string' || !kpi.label.trim()) return false;
+  if (!KPI_FORMATS.has(kpi.format)) return false;
+  if (typeof kpi.source_column !== 'string' || !kpi.source_column.trim()) return false;
+  if (typeof kpi.aggregation !== 'string' || !kpi.aggregation.trim()) return false;
+
+  return measures.some((measure) => measure?.key === kpi.source_column);
+}
+
+function hasDimension(dimensions, matcher) {
+  return dimensions.some((dimension) => matcher(String(dimension?.key || '').toUpperCase(), dimension));
+}
+
+function emptyResult(status, message, errorCode, correlationId) {
+  return {
+    status,
+    message: message || 'Consulta não concluída.',
+    errorCode: errorCode || null,
+    correlationId: correlationId || null,
+    result: null,
+    hasData: false,
+    hasTypedKpis: false,
+    hasTimeDimension: false,
+    hasSellerDimension: false,
+    hasProductDimension: false,
+    canExport: false,
+    canRenderDashboard: false,
+  };
+}
+
 export function normalizeAgentResult(raw) {
-  const root = raw || {};
-  const status = String(root.status || '').toLowerCase();
-  const errorCode = root.error_code || null;
+  const root = raw && typeof raw === 'object' ? raw : {};
+  const payload = root.result && typeof root.result === 'object' ? root.result : null;
+  const status = normalizeStatus(root.status || payload?.status);
+  const errorCode = root.error_code || payload?.error_code || null;
+  const message = root.message || root.error || payload?.message || '';
+  const correlationId = root.correlation_id || payload?.correlation_id || null;
 
-  if (ERROR_STATUSES.has(status) || root.error || errorCode) {
-    return {
-      status: 'error',
-      message: root.message || root.error || root.summary || 'Consulta não concluída.',
-      errorCode,
-      correlationId: root.correlation_id || null,
-      result: null,
-      hasData: false,
-      canExport: false,
-    };
+  const hasExplicitError = Boolean(root.error || payload?.error || errorCode);
+  if (ERROR_STATUSES.has(status) || hasExplicitError) {
+    return emptyResult('error', message, errorCode, correlationId);
   }
 
-  if (!['success', 'completed'].includes(status) || !root.result) {
-    return {
-      status: 'error',
-      message: 'Resposta do agente em formato inválido.',
-      errorCode: 'INVALID_AGENT_RESULT_CONTRACT',
-      correlationId: root.correlation_id || null,
-      result: null,
-      hasData: false,
-      canExport: false,
-    };
+  if (!SUCCESS_STATUSES.has(status) || !payload) {
+    return emptyResult(
+      'error',
+      message || 'Resposta do agente em formato inválido.',
+      errorCode || 'INVALID_AGENT_RESULT_CONTRACT',
+      correlationId,
+    );
   }
 
-  const payload = root.result;
-  const rows = Array.isArray(payload.rows) ? payload.rows : [];
-  const columns = Array.isArray(payload.columns) ? payload.columns : [];
-  const dimensions = Array.isArray(payload.dimensions) ? payload.dimensions : [];
-  const measures = Array.isArray(payload.measures) ? payload.measures : [];
-  const kpis = Array.isArray(payload.kpis) ? payload.kpis : [];
-  const series = Array.isArray(payload.series) ? payload.series : [];
+  const rows = asArray(payload.rows);
+  const columns = asArray(payload.columns);
+  const dimensions = asArray(payload.dimensions);
+  const measures = asArray(payload.measures);
+  const series = asArray(payload.series);
+  const kpis = asArray(payload.kpis).filter((kpi) => isTypedKpi(kpi, measures));
 
-  const validKpis = kpis.filter((kpi) =>
-    kpi &&
-    typeof kpi.label === 'string' &&
-    Number.isFinite(Number(kpi.value)) &&
-    ['currency', 'number', 'percent', 'date'].includes(kpi.format) &&
-    typeof kpi.source_column === 'string' &&
-    typeof kpi.aggregation === 'string'
+  const hasData = rows.length > 0;
+  const hasTimeDimension = hasDimension(
+    dimensions,
+    (key, dimension) => dimension?.kind === 'time' || /(^|_)(DATE|DATA|MES|PERIODO|ANO)(_|$)/.test(key),
+  );
+  const hasSellerDimension = hasDimension(
+    dimensions,
+    (key) => /VENDEDOR|SELLER/.test(key),
+  );
+  const hasProductDimension = hasDimension(
+    dimensions,
+    (key) => /PRODUTO|PRODUCT|GRUPO_PROD|GRUPO_PRODUCT/.test(key),
+  );
+  const hasTypedSeries = series.some((serie) =>
+    serie &&
+    typeof serie === 'object' &&
+    typeof serie.dimension === 'string' &&
+    typeof serie.measure === 'string' &&
+    asArray(serie.points).length > 0,
   );
 
   return {
     status: 'success',
-    message: root.message || root.summary || '',
+    message: message || payload.summary || '',
     errorCode: null,
-    correlationId: root.correlation_id || null,
+    correlationId,
     result: {
       columns,
       rows,
-      metadata: payload.metadata || { row_count: rows.length },
+      metadata: payload.metadata && typeof payload.metadata === 'object'
+        ? payload.metadata
+        : { row_count: rows.length },
       dimensions,
       measures,
-      kpis: validKpis,
+      kpis,
       series,
+      summary: payload.summary || root.summary || '',
     },
-    hasData: rows.length > 0,
-    hasTypedKpis: validKpis.length > 0,
-    hasTimeDimension: dimensions.some(d => d.kind === 'time'),
-    hasSellerDimension: dimensions.some(d => d.key.includes('VENDEDOR') || d.key.includes('VEND')),
-    hasProductDimension: dimensions.some(d => d.key.includes('PRODUTO') || d.key.includes('ITEM') || d.key.includes('GRUPO')),
-    canExport: rows.length > 0 && columns.length > 0,
+    hasData,
+    hasTypedKpis: kpis.length > 0,
+    hasTimeDimension,
+    hasSellerDimension,
+    hasProductDimension,
+    canExport: hasData && columns.length > 0,
+    canRenderDashboard: hasData && (kpis.length > 0 || hasTypedSeries),
   };
 }
+
+export const AGENT_RESULT_ERROR_STATUSES = ERROR_STATUSES;
