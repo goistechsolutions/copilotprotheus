@@ -1,1 +1,1 @@
-arquivo corrigido completo AgentWorkspace_corrigido.jsx, sem placeholder
+conteúdo JSX completo enviado na mensagem atual, iniciando por import { useEffect, useMemo, useState, useRef } from 'react'; e terminando no fechamento do componente AgentWorkspace
