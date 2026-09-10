@@ -184,7 +184,7 @@ def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
 
 def _extract_filter_field_refs(sql: str) -> set[tuple[str | None, str]]:
     match = re.search(
-        r"\bWHERE\b(?P<body>.*?)(?:\bGROUP\s+BY\b|\bORDER\s+BY\b|\bHAVING\b|\bFETCH\b|\bOFFSET\b|$)",
+        r"\b(?:WHERE|GROUP\s+BY|ORDER\s+BY|HAVING)\b(?P<body>.*?)(?:\bFETCH\b|\bOFFSET\b|$)",
         sql,
         re.IGNORECASE | re.DOTALL,
     )
@@ -303,17 +303,17 @@ def validate_query_security(
                     detail=f"A tabela '{table_name}' não possui filtro lógico D_E_L_E_T_ próprio.",
                 )
 
-    if allowed_fields:
+    if allowed_fields is not None:
         normalized_fields = {str(field).strip().upper() for field in allowed_fields if str(field).strip()}
         selected_fields = _extract_selected_fields(upper_sql)
         unauthorized = sorted(field for field in selected_fields if field not in normalized_fields and field != "D_E_L_E_T_")
         if unauthorized:
             raise HTTPException(
                 status_code=403,
-                detail=f"Bloqueio de Segurança RBAC: campo(s) físico(s) ausente(s) do catálogo SX3 autorizado no SELECT: {', '.join(unauthorized[:5])}.",
+                detail=f"Bloqueio de Segurança RBAC: campo(s) físico(s) ausente(s) ou não autorizado(s) no SELECT: {', '.join(unauthorized[:5])}.",
             )
 
-    if allowed_fields_by_table:
+    if allowed_fields_by_table is not None:
         normalized_by_table: dict[str, set[str]] = {}
         for table_name, fields in allowed_fields_by_table.items():
             normalized_fields = {str(field).strip().upper() for field in fields if str(field).strip()}
@@ -350,9 +350,10 @@ def validate_query_security(
                 detail=f"Bloqueio de Segurança RBAC: campo(s) físico(s) ausente(s) ou não autorizado(s) para a tabela no SELECT: {', '.join(sorted(set(unauthorized_refs))[:5])}.",
             )
 
-    if filter_fields_by_table:
+    effective_filter_fields = filter_fields_by_table if filter_fields_by_table else allowed_fields_by_table
+    if effective_filter_fields is not None:
         normalized_filter_by_table: dict[str, set[str]] = {}
-        for table_name, fields in filter_fields_by_table.items():
+        for table_name, fields in effective_filter_fields.items():
             normalized_fields = {str(field).strip().upper() for field in fields if str(field).strip()}
             for normalized_table in _normalize_allowed_tables([table_name]):
                 normalized_filter_by_table[normalized_table] = normalized_fields
@@ -384,7 +385,7 @@ def validate_query_security(
         if unauthorized_filter_refs:
             raise HTTPException(
                 status_code=403,
-                detail=f"Bloqueio de Segurança RBAC: campo(s) não autorizados no WHERE: {', '.join(sorted(set(unauthorized_filter_refs))[:5])}.",
+                detail=f"Bloqueio de Segurança RBAC: campo(s) físico(s) ausente(s) ou não autorizado(s) no WHERE/GROUP BY: {', '.join(sorted(set(unauthorized_filter_refs))[:5])}.",
             )
 
     return True

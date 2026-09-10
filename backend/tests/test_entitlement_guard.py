@@ -226,7 +226,7 @@ def test_dictionary_authorization_returns_filter_and_masked_fields():
 
 
 def test_query_guard_rejects_filter_field_without_can_filter():
-    with pytest.raises(HTTPException, match="não autorizados no WHERE"):
+    with pytest.raises(HTTPException, match="WHERE/GROUP BY"):
         validate_query_security(
             sql="SELECT A1_COD FROM SA1010 A1 WHERE A1.A1_NOME = 'fixture' AND A1.D_E_L_E_T_ <> '*' FETCH FIRST 10 ROWS ONLY",
             allowed_tables={"SA1"},
