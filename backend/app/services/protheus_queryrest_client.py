@@ -294,21 +294,29 @@ class ProtheusQueryRestClient:
         request_payload: dict[str, Any] = dict(payload or {})
         request_payload["query"] = query
         request_payload["cQuery"] = query
+        request_payload["cquery"] = query
 
         async with httpx.AsyncClient(
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=False,
             verify=False,
         ) as client:
-            if method.upper() == "GET":
-                return await client.get(
+            try:
+                if method.upper() == "GET":
+                    return await client.get(
+                        url,
+                        headers=headers,
+                        params={"cQuery": query, "query": query, "cquery": query},
+                    )
+
+                return await client.post(
                     url,
                     headers=headers,
-                    params={"cQuery": query, "query": query},
+                    json=request_payload,
                 )
-
-            return await client.post(
-                url,
-                headers=headers,
-                json=request_payload,
-            )
+            except httpx.RequestError as exc:
+                logger.error("Falha de rede ao acessar QueryRest: %s", exc)
+                raise ProtheusQueryRestError(
+                    message="Erro de comunicação com o Protheus na execução do QueryRest (Timeout ou conexão recusada).",
+                    status_code=502,
+                ) from exc
