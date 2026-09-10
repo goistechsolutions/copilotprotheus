@@ -235,7 +235,7 @@ async def _request_password_token(
             },
         )
     except httpx.RequestError as exc:
-        logger.error("Falha de rede ao obter token OAuth2 Protheus: %s", exc)
+        logger.exception("Falha de rede ao obter token OAuth2 Protheus: %s", exc)
         raise ProtheusAuthError(
             message=f"Erro de comunicação com o Protheus na obtenção do token (Timeout ou conexão recusada).",
             status_code=502,
