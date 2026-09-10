@@ -358,7 +358,7 @@ class ProtheusQueryRestClient:
                     json=request_payload,
                 )
             except httpx.RequestError as exc:
-                logger.error("Falha de rede ao acessar endpoint Protheus: %s", exc)
+                logger.exception("Falha de rede ao acessar endpoint Protheus: %s", exc)
                 raise ProtheusQueryRestError(
                     message="Erro de comunicação com o Protheus na execução da consulta (Timeout ou conexão recusada).",
                     status_code=502,
