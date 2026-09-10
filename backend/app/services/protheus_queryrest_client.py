@@ -118,6 +118,7 @@ def _parse_queryrest_json(response: httpx.Response) -> Any:
     raise ProtheusQueryRestError(
         f"QueryRest retornou conteúdo não JSON (content-type={content_type}, tamanho={len(raw)}).",
         response.status_code,
+        raw,
     )
 
 
@@ -126,9 +127,11 @@ class ProtheusQueryRestError(RuntimeError):
         self,
         message: str,
         status_code: int | None = None,
+        response_body: str | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.response_body = response_body
 
 
 def require_bearer_headers(headers: dict[str, str]) -> dict[str, str]:
@@ -250,7 +253,7 @@ class ProtheusQueryRestClient:
             detail = f"Falha na execução do QueryRest Protheus (HTTP {response.status_code})."
             if remote_error:
                 detail = f"{detail} Mensagem do AppServer: {remote_error}"
-            raise ProtheusQueryRestError(detail, response.status_code)
+            raise ProtheusQueryRestError(detail, response.status_code, response.text)
 
         return _parse_queryrest_json(response)
 

@@ -76,6 +76,7 @@ async def queryrest_exec_tenant(
     logger.info("[QueryRest Tenant] Executando consulta tenant=%s ambiente=%s company_id=%s", tenant_id, environment_code, company_id)
     
     from app.services.protheus_queryrest_client import ProtheusQueryRestClient, ProtheusQueryRestError
+    from app.services.protheus_token_service import ProtheusAuthError
 
     try:
         client = ProtheusQueryRestClient(
@@ -88,7 +89,7 @@ async def queryrest_exec_tenant(
             query=query,
             method="POST"
         )
-    except ProtheusQueryRestError as e:
+    except (ProtheusQueryRestError, ProtheusAuthError) as e:
         logger.error(
             "[QueryRest Tenant] Falha tenant=%s ambiente=%s status=%s body=%s",
             tenant_id,

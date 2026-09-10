@@ -274,6 +274,25 @@ async def _request_password_token(
         except Exception:
             pass
 
+    # 4. Compatibilidade com AppServer que exige credenciais estritamente na URL (Query String)
+    if response.status_code >= 400:
+        try:
+            response_query = await client.post(
+                token_url,
+                params={
+                    "grant_type": "password",
+                    "username": username,
+                    "password": password
+                },
+                headers={
+                    "Accept": "application/json",
+                },
+            )
+            if response_query.status_code < 400:
+                response = response_query
+        except Exception:
+            pass
+
     if response.status_code >= 400:
         logger.error("Falha OAuth2 Protheus status=%s", response.status_code)
         raise ProtheusAuthError(
