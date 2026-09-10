@@ -224,15 +224,22 @@ async def _request_password_token(
     # 1. Contrato oficial TOTVS: grant_type na query e credenciais somente
     # no endpoint /token, via headers. Essas credenciais nunca são usadas no
     # QueryRest.
-    response = await client.post(
-        token_url,
-        params={"grant_type": "password"},
-        headers={
-            "Accept": "application/json",
-            "username": username,
-            "password": password,
-        },
-    )
+    try:
+        response = await client.post(
+            token_url,
+            params={"grant_type": "password"},
+            headers={
+                "Accept": "application/json",
+                "username": username,
+                "password": password,
+            },
+        )
+    except httpx.RequestError as exc:
+        logger.error("Falha de rede ao obter token OAuth2 Protheus: %s", exc)
+        raise ProtheusAuthError(
+            message=f"Erro de comunicação com o Protheus na obtenção do token (Timeout ou conexão recusada).",
+            status_code=502,
+        ) from exc
 
     # 2. Compatibilidade com releases que exigem form-urlencoded no body
     if response.status_code >= 400:
@@ -333,7 +340,9 @@ async def get_valid_access_token(
         new_token: ProtheusToken | None = None
 
         async with httpx.AsyncClient(
-            timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=False,
+            timeout=REQUEST_TIMEOUT_SECONDS, 
+            follow_redirects=False,
+            verify=False,
         ) as client:
             encrypted_refresh = connection.get("encrypted_refresh_token")
 

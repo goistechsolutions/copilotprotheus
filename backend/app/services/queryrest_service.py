@@ -107,8 +107,8 @@ async def queryrest_exec_tenant(
         if status_code == 500 and e.response_body:
             detail = f"{detail} Detalhes do banco: {e.response_body[:300]}"
         raise HTTPException(status_code=status_code, detail=detail)
-    except Exception:
-        logger.error("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s", tenant_id, environment_code)
+    except Exception as e:
+        logger.exception("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s: %s", tenant_id, environment_code, str(e))
         raise HTTPException(
             status_code=502,
             detail="Erro de conexão com QueryRest do Protheus."
