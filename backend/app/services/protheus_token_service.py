@@ -58,7 +58,7 @@ def _token_url(base_rest_url: str) -> str:
 
 
 def _queryrest_url(base_rest_url: str) -> str:
-    return f"{_normalize_base_url(base_rest_url)}/QueryRest"
+    return f"{_normalize_base_url(base_rest_url)}/api/framework/v1/genericQuery"
 
 
 def _is_token_valid(expires_at: datetime | None) -> bool:

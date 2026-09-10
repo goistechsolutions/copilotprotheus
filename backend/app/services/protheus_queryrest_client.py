@@ -173,7 +173,8 @@ class ProtheusQueryRestClient:
         )
 
         base_url = str(connection["base_rest_url"]).rstrip("/")
-        url = f"{base_url}/QueryRest"
+        # O usuário solicitou a troca para a API padrão GenericQuery
+        url = f"{base_url}/api/framework/v1/genericQuery"
 
         token = await get_valid_access_token(
             self.db,
@@ -289,12 +290,54 @@ class ProtheusQueryRestClient:
         }
         logger.info("queryrest_auth_context %s", safe_auth_debug)
 
-        # O contrato REST Protheus documentado usa exclusivamente cQuery.
-        # Porém, a especificação da EliteCorp (PDF) exige o uso da chave 'query'.
+        import re
+        
+        # O contrato REST Protheus original usava cQuery, mas GenericQuery exige parsing do SQL
         request_payload: dict[str, Any] = dict(payload or {})
-        request_payload["query"] = query
-        request_payload["cQuery"] = query
-        request_payload["cquery"] = query
+        
+        # Extrai componentes do SQL se for GenericQuery
+        params = {}
+        if "genericQuery" in url.lower():
+            clean_query = re.sub(r"\s+", " ", query).strip()
+            select_idx = clean_query.upper().find('SELECT ')
+            from_idx = clean_query.upper().find(' FROM ')
+            
+            if select_idx != -1 and from_idx != -1:
+                fields = clean_query[select_idx+7:from_idx].strip()
+                rest = clean_query[from_idx+6:].strip()
+                first_kw_idx = len(rest)
+                
+                for kw in [' WHERE ', ' GROUP BY ', ' ORDER BY ', ' FETCH FIRST ', ' OFFSET ']:
+                    idx = rest.upper().find(kw)
+                    if idx != -1 and idx < first_kw_idx:
+                        first_kw_idx = idx
+                        
+                from_qry = rest[:first_kw_idx].strip()
+                where_clause = rest[first_kw_idx:].strip()
+                
+                if where_clause.upper().startswith("WHERE "):
+                    where_clause = where_clause[6:].strip()
+                elif where_clause:
+                    # GenericQuery emenda a clausula WHERE. Se começar com GROUP BY, injetamos 1=1
+                    where_clause = f"1=1 {where_clause}"
+                    
+                tables = from_qry.split(" ")[0].strip()
+                
+                params = {
+                    "tables": tables,
+                    "fields": fields,
+                    "FromQry": from_qry,
+                }
+                if where_clause:
+                    params["where"] = where_clause
+            
+            # Força o método para GET, que é o padrão do GenericQuery
+            method = "GET"
+        else:
+            params = {"cQuery": query, "query": query, "cquery": query}
+            request_payload["query"] = query
+            request_payload["cQuery"] = query
+            request_payload["cquery"] = query
 
         async with httpx.AsyncClient(
             timeout=REQUEST_TIMEOUT_SECONDS,
@@ -306,7 +349,7 @@ class ProtheusQueryRestClient:
                     return await client.get(
                         url,
                         headers=headers,
-                        params={"cQuery": query, "query": query, "cquery": query},
+                        params=params,
                     )
 
                 return await client.post(
@@ -315,8 +358,8 @@ class ProtheusQueryRestClient:
                     json=request_payload,
                 )
             except httpx.RequestError as exc:
-                logger.error("Falha de rede ao acessar QueryRest: %s", exc)
+                logger.error("Falha de rede ao acessar endpoint Protheus: %s", exc)
                 raise ProtheusQueryRestError(
-                    message="Erro de comunicação com o Protheus na execução do QueryRest (Timeout ou conexão recusada).",
+                    message="Erro de comunicação com o Protheus na execução da consulta (Timeout ou conexão recusada).",
                     status_code=502,
                 ) from exc
