@@ -1,0 +1,1 @@
+﻿import sys; sys.path.append('backend'); from app.db.database import SessionLocal; from sqlalchemy import text; db = SessionLocal(); print(db.execute(text('SELECT tenant_code, environment_code, auth_mode, base_rest_url FROM public.protheus_rest_connections LIMIT 1')).mappings().all())
