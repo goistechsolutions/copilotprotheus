@@ -297,7 +297,7 @@ class ProtheusQueryRestClient:
         
         # Extrai componentes do SQL se for GenericQuery
         params = {}
-        if "genericQuery" in url.lower():
+        if "genericquery" in url.lower():
             clean_query = re.sub(r"\s+", " ", query).strip()
             select_idx = clean_query.upper().find('SELECT ')
             from_idx = clean_query.upper().find(' FROM ')
