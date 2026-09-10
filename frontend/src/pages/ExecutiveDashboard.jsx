@@ -38,7 +38,7 @@ const toArray = value => Array.isArray(value) ? value : [];
 function normalizeDashboardPayload(result) {
   const root = result && typeof result === 'object' ? result : {};
   const rawStatus = String(root.status || root.taskStatus || '').trim().toLowerCase();
-  const status = SUCCESS_STATUSES.has(rawStatus) ? 'success' : (rawStatus || 'error');
+  const explicitStatus = rawStatus ? (SUCCESS_STATUSES.has(rawStatus) ? 'success' : rawStatus) : null;
 
   const candidate = root.result ?? root.data ?? root.structured ?? root.response ?? root;
   const data = candidate?.data && typeof candidate.data === 'object'
@@ -60,7 +60,7 @@ function normalizeDashboardPayload(result) {
       : [];
 
   return {
-    status,
+    status: explicitStatus || (rows.length > 0 ? 'success' : 'error'),
     message: root.message || root.summary || candidate?.message || candidate?.summary || data.summary || '',
     error: root.error || root.execution_error || root.detail || candidate?.error || null,
     correlationId: root.correlation_id || root.correlationId || candidate?.correlation_id || null,
