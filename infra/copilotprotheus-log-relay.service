@@ -1,0 +1,8 @@
+[Unit]
+Description=Relay sanitizado de logs do Copilot Protheus
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/copilotprotheus-relay-logs

@@ -257,3 +257,71 @@ async def get_tenants_metrics():
         raise HTTPException(status_code=500, detail=f"Erro ao buscar métricas dos tenants: {str(e)}")
     finally:
         db.close()
+
+
+# ----------------- LOGS DOS CONTAINERS -----------------
+
+@router.get("/container-logs", dependencies=[Depends(verify_admin)])
+async def get_container_logs(
+    service: str = "backend",
+    limit: int = 200,
+    queryrest_only: bool = False,
+):
+    """Lê somente o relay de logs sanitizados montado pelo host Hetzner.
+
+    O backend não acessa o Docker socket. O host deve gravar os logs em
+    CONTAINER_LOG_DIR e montar esse diretório como read-only no container.
+    """
+    import os
+    import re
+    from pathlib import Path
+
+    allowed_services = {"backend", "middleware", "frontend", "db", "cloudflared"}
+    if service not in allowed_services:
+        raise HTTPException(status_code=400, detail="Serviço de container não permitido.")
+    limit = max(1, min(int(limit), 1000))
+    log_dir = Path(os.getenv("CONTAINER_LOG_DIR", "/var/log/copilotprotheus"))
+    log_file = log_dir / f"{service}.log"
+    if not log_file.is_file():
+        return {
+            "service": service,
+            "available": False,
+            "source": "host_log_relay",
+            "entries": [],
+            "message": "Relay de logs do host não está disponível para este serviço.",
+        }
+
+    secret_pattern = re.compile(
+        r"(?i)(authorization\s*[:=]\s*bearer\s+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^,\s}]+"
+    )
+    sql_pattern = re.compile(r"(?i)((?:cquery|_queryparam|query)\s*[:=])(?:[^,}]+)")
+    queryrest_pattern = re.compile(r"(?i)queryrest|/queryrest/QueryRest")
+    entries: list[dict[str, str]] = []
+    try:
+        lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()[-limit * 3:]
+        for line in lines:
+            if queryrest_only and not queryrest_pattern.search(line):
+                continue
+            sanitized = secret_pattern.sub(r"\1[REDACTED]", line)
+            sanitized = sql_pattern.sub(r"\1[SQL_REDACTED]", sanitized)
+            level = "ERROR" if re.search(r"(?i)\b(error|exception|failed|falha)\b", sanitized) else (
+                "WARNING" if re.search(r"(?i)\b(warn|warning)\b", sanitized) else "INFO"
+            )
+            entries.append({"level": level, "message": sanitized})
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="Não foi possível ler o relay de logs do host.") from exc
+
+    return {
+        "service": service,
+        "available": True,
+        "source": "host_log_relay",
+        "queryrest_only": queryrest_only,
+        "entries": entries[-limit:],
+        "message": "Logs sanitizados; tokens, segredos e SQL foram removidos.",
+    }
+
+
+@router.get("/queryrest-diagnostic", dependencies=[Depends(verify_admin)])
+async def get_queryrest_diagnostic_logs(limit: int = 200):
+    """Atalho para filtrar eventos QueryRest no backend sem expor SQL."""
+    return await get_container_logs(service="backend", limit=limit, queryrest_only=True)

@@ -1,0 +1,10 @@
+[Unit]
+Description=Atualiza o relay de logs do Copilot Protheus
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=15s
+Unit=copilotprotheus-log-relay.service
+
+[Install]
+WantedBy=timers.target
