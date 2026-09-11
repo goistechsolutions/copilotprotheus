@@ -17,6 +17,24 @@ import { DollarSign, Users, ShoppingCart, Percent } from 'lucide-react';
  * para as camadas de visualização correspondentes dependendo do screenType.
  */
 export default function DashboardRenderer({ payload }) {
+  const formatLabel = (key) => {
+    if (!key) return '';
+    return key
+      .replace(/^VALOR_TOTAL_BRUTO_/, 'Valor Total Bruto ')
+      .replace(/^VALOR_FATURADO_TOTAL_/, 'Valor Faturado Total ')
+      .replace(/_NF$/, '')
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const formatDateTick = (str) => {
+    if (typeof str === 'string' && str.length === 8 && !isNaN(str)) {
+      return str.substring(6, 8) + '/' + str.substring(4, 6);
+    }
+    return str;
+  };
+
   // Mock data para demonstrar a camada visual funcionando
   const mockChartData = useMemo(() => [
     { name: 'Jan', value: 4000, secondary: 2400 },
@@ -80,7 +98,7 @@ export default function DashboardRenderer({ payload }) {
           data.kpis.map((kpi, idx) => (
             <MetricCard 
               key={idx}
-              title={kpi.label} 
+              title={formatLabel(kpi.label)} 
               value={kpi.format === 'currency' ? `R$ ${kpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : kpi.value} 
               trend="up" 
               trendValue="0%" 
@@ -99,27 +117,36 @@ export default function DashboardRenderer({ payload }) {
       </MetricsRow>
 
       {/* Fase 6: Insights Inteligentes */}
-      <InsightsGrid>
-        <InsightCard 
-          title="Atenção" 
-          description="Aumento de inadimplência na Filial 0101 nos últimos 15 dias." 
-          value="R$ 45.200 retidos"
-          type="critical"
-        />
-        <InsightCard 
-          title="Oportunidade" 
-          description="Produtos parados da categoria 'Monitores' com alta busca." 
-          value="+12% de margem sugerida"
-          type="opportunity"
-        />
-      </InsightsGrid>
+      {data?.insights?.length > 0 && (
+        <InsightsGrid>
+          {data.insights.map((insight, idx) => (
+            <InsightCard 
+              key={idx}
+              title={insight.title || "Insight"} 
+              description={insight.description} 
+              value={insight.value}
+              type={insight.type || "info"}
+            />
+          ))}
+        </InsightsGrid>
+      )}
       
       {/* Fase 7: Recharts */}
       {data?.series?.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {data.series.map((s, idx) => (
-            <BarChartCard key={idx} title={s.label} data={s.points} xAxisKey="label" color="#3b82f6" />
-          ))}
+        <div className={`grid grid-cols-1 gap-6 ${data.series.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
+          {data.series.map((s, idx) => {
+            const formattedPoints = s.points.map(p => ({ ...p, label: formatDateTick(p.label) }));
+            return (
+              <div key={idx} className={data.series.length === 1 ? "col-span-1" : ""}>
+                <BarChartCard 
+                  title={formatLabel(s.label)} 
+                  data={formattedPoints} 
+                  xAxisKey="label" 
+                  color="#3b82f6" 
+                />
+              </div>
+            );
+          })}
         </div>
       ) : (
         <>
