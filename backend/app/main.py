@@ -146,6 +146,7 @@ from app.api.admin_routes import router as admin_router
 from app.api.admin_billing_routes import router as admin_billing_router
 from app.api.auth_routes import router as auth_router
 from app.api.governance_routes import router as governance_router
+from app.api.business_governance_routes import router as business_governance_router
 from app.api.catalog_v52_routes import router as catalog_v52_router
 from fastapi.staticfiles import StaticFiles
 
@@ -160,6 +161,7 @@ app.include_router(admin_router, prefix="/api/admin")
 app.include_router(admin_billing_router, prefix="/api/admin")
 app.include_router(admin_auth_router)
 app.include_router(governance_router, prefix="/api")
+app.include_router(business_governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 # O fluxo /api/agent/ask/v2 é atendido exclusivamente por agent_sql_routes,
 # que exige tenant+ambiente e delega a execução ao cliente QueryRest OAuth2.

@@ -27,6 +27,15 @@ const PermissionEditorPage = lazy(() => import('./pages/PermissionEditorPage'));
 const QueryGuardPage     = lazy(() => import('./pages/QueryGuardPage'));
 const Adminer            = lazy(() => import('./pages/Adminer'));
 
+// --- Governança BKL vNext ---
+const DomainsPage            = lazy(() => import('./pages/governance/DomainsPage'));
+const IntentsPage            = lazy(() => import('./pages/governance/IntentsPage'));
+const SemanticDictionaryPage = lazy(() => import('./pages/governance/SemanticDictionaryPage'));
+const MetricsPage            = lazy(() => import('./pages/governance/MetricsPage'));
+const DashboardsPage         = lazy(() => import('./pages/governance/DashboardsPage'));
+const BusinessRulesPage      = lazy(() => import('./pages/governance/BusinessRulesPage'));
+const KnowledgeHealthPage    = lazy(() => import('./pages/governance/KnowledgeHealthPage'));
+
 const Loader = () => (
   <div className="flex items-center justify-center h-64">
     <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
@@ -72,10 +81,19 @@ export default function App() {
             {/* Integrações */}
             <Route path="integrations"      element={<S><Integrations /></S>} />
 
-            {/* Catálogo Protheus (Governance) */}
-            <Route path="dictionary"        element={<S><DictionarySyncPage /></S>} />
+            {/* Governança Protheus */}
+            <Route path="tables"                          element={<S><Tables /></S>} />
+            <Route path="dictionary"                      element={<S><DictionarySyncPage /></S>} />
+            <Route path="governance/domains"              element={<S><DomainsPage /></S>} />
+            <Route path="governance/intents"              element={<S><IntentsPage /></S>} />
+            <Route path="governance/semantic-dictionary"  element={<S><SemanticDictionaryPage /></S>} />
+            <Route path="governance/metrics"              element={<S><MetricsPage /></S>} />
+            <Route path="governance/dashboards"           element={<S><DashboardsPage /></S>} />
+            <Route path="governance/business-rules"       element={<S><BusinessRulesPage /></S>} />
+            <Route path="governance/health"               element={<S><KnowledgeHealthPage /></S>} />
+
+            {/* Rotas de Governança Legadas / Suporte */}
             <Route path="snapshots"         element={<S><SnapshotsPage /></S>} />
-            <Route path="tables"            element={<S><Tables /></S>} />
             <Route path="permissions"       element={<S><PermissionEditorPage /></S>} />
             <Route path="query-guard"       element={<S><QueryGuardPage /></S>} />
 
