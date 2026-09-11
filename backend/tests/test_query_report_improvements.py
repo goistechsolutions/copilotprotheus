@@ -280,3 +280,52 @@ def test_dictionary_prompt_marks_sx3_fields_as_exhaustive_and_omits_x3_relation(
     assert "FIELD_PHYSICAL: F1_VALBRUT" in rendered
     assert "qualquer identificador ausente não existe" in rendered
     assert "X3_RELACAO_NAO_DEVE_IR_AO_PROMPT" not in rendered
+
+
+def test_query_guard_allows_select_alias_in_group_by_and_order_by():
+    sql = (
+        "SELECT SUBSTR(SF2.F2_EMISSAO, 1, 6) AS MES_ANO, SUM(SD2.D2_TOTAL) AS VALOR_TOTAL "
+        "FROM SF2010 SF2 "
+        "INNER JOIN SD2010 SD2 ON SD2.D2_FILIAL = SF2.F2_FILIAL AND SD2.D2_DOC = SF2.F2_DOC AND SD2.D2_SERIE = SF2.F2_SERIE "
+        "WHERE SF2.D_E_L_E_T_ <> '*' AND SD2.D_E_L_E_T_ <> '*' "
+        "GROUP BY MES_ANO "
+        "ORDER BY MES_ANO DESC"
+    )
+    allowed_tables = {"SF2010", "SD2010"}
+    fields_by_table = {
+        "SF2010": {"F2_FILIAL", "F2_DOC", "F2_SERIE", "F2_EMISSAO"},
+        "SD2010": {"D2_FILIAL", "D2_DOC", "D2_SERIE", "D2_TOTAL"},
+    }
+    # MES_ANO and VALOR_TOTAL are aliases in SELECT, not physical SX3 fields.
+    # validate_query_security should NOT raise RBAC exception for MES_ANO in GROUP BY or ORDER BY.
+    assert validate_query_security(
+        sql=sql,
+        allowed_tables=allowed_tables,
+        filial="0101",
+        allowed_fields_by_table=fields_by_table,
+        filter_fields_by_table=fields_by_table,
+    ) is True
+
+
+def test_domain_validation_blocks_purchases_when_domain_is_inherited_as_sales():
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_query_domain(
+            prompt="Comparar com periodo anterior",
+            sql="SELECT A2_NOME FROM SA2010 SA2 JOIN SF1010 SF1 ON SF1.F1_FORNECE = SA2.A2_COD",
+            domain="sales",
+        )
+    assert exc_info.value.status_code == 422
+    assert "entrada/fornecedor" in str(exc_info.value.detail)
+
+
+def test_domain_context_block_triggers_with_inherited_domain():
+    context = [{
+        "table": {"table_code": "SF1", "table_name": "SF1010", "module_code": "2"},
+        "fields": [{"field_name": "F1_DOC"}],
+    }]
+    # Prompt has no explicit sales words, but domain is passed as "sales"
+    diag = _domain_context_block("Comparar com periodo anterior", context, domain="sales")
+    assert diag is not None
+    assert diag["intent"] == "sales_billing"
+    assert "SF2" in diag["required_tables"]
+

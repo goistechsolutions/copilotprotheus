@@ -277,6 +277,7 @@ async def real_llm_sql_generator(
     environment_code: str,
     image: str = None,
     history: list[dict[str, str]] | None = None,
+    domain: str | None = None,
 ) -> str:
     """
     Aciona o provedor Gemini configurado no backend (Gemini 2.5 Flash)
@@ -310,9 +311,19 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 17. CONSULTAS GERENCIAIS AGRUPADAS: Se o pedido contiver "agrupado", "agrupando", "por vendedor", "por produto", "por subgrupo", "mensal", "por mês" ou combinação equivalente, a resposta DEVE ser uma agregação SQL real. Selecione cada dimensão solicitada, uma métrica física financeira/quantitativa autorizada usando SUM/COUNT/AVG e inclua no GROUP BY todas as dimensões não agregadas. Nunca trate campos de mês, ano, data, código, filial, empresa, identificador ou número como métrica financeira. Não retorne linhas transacionais detalhadas quando a solicitação exigir consolidação. Se não existir no snapshot um campo físico autorizado para a métrica ou uma dimensão solicitada, não substitua por outro campo: informe que a análise não pode ser construída com o catálogo disponível.
 18. COERÊNCIA DO RESULTADO: Para análise mensal do ano, a consulta deve retornar uma coluna de período/mês e uma métrica agregada por mês; para vendedor e subgrupo, deve retornar as respectivas dimensões e a métrica agregada. O alias da métrica deve ser explícito, por exemplo SUM(campo_físico) AS VALOR_TOTAL, sem reutilizar alias ou códigos como valor.
 16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão a conversão falhará e o banco retornará erro 500 no QueryRest. Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\'). Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'.
-19. PROIBIÇÃO DE CAMPOS DE DATA INVENTADOS (ANO_EMISSAO, MES_EMISSAO, ETC.): NUNCA use ou invente identificadores como ANO_EMISSAO, MES_EMISSAO, DATA_EMISSAO ou DT_EMISSAO no SELECT, WHERE ou GROUP BY. Não existem tais campos no Protheus; o uso deles causa bloqueio imediato pelo RBAC (ENTITLEMENT_DENIED). Para agrupar ou filtrar por mês/ano, use SEMPRE SUBSTR(alias.CAMPO_DATA, 1, 6) AS MES_ANO e use essa mesma expressão SUBSTR(...) no GROUP BY. Para comparar mês atual com anterior, use SUBSTR(alias.CAMPO_DATA, 1, 6) IN (TO_CHAR(ADD_MONTHS(SYSDATE, -1), \'YYYYMM\'), TO_CHAR(SYSDATE, \'YYYYMM\'))."""
+19. PROIBIÇÃO DE CAMPOS DE DATA INVENTADOS (ANO_EMISSAO, MES_EMISSAO, ETC.): NUNCA use ou invente identificadores como ANO_EMISSAO, MES_EMISSAO, DATA_EMISSAO ou DT_EMISSAO no SELECT, WHERE ou GROUP BY. Não existem tais campos no Protheus; o uso deles causa bloqueio imediato pelo RBAC (ENTITLEMENT_DENIED). Para agrupar ou filtrar por mês/ano, use SEMPRE SUBSTR(alias.CAMPO_DATA, 1, 6) AS MES_ANO e use essa mesma expressão SUBSTR(...) no GROUP BY. Para comparar mês atual com anterior, use SUBSTR(alias.CAMPO_DATA, 1, 6) IN (TO_CHAR(ADD_MONTHS(SYSDATE, -1), \'YYYYMM\'), TO_CHAR(SYSDATE, \'YYYYMM\')).
+20. SINTAXE GROUP BY NO ORACLE: O banco Oracle NÃO aceita aliases da cláusula SELECT na cláusula GROUP BY. Qualquer expressão projetada (como SUBSTR(...) ou cálculo) DEVE ser repetida de forma idêntica no GROUP BY. Exemplo correto: SELECT SUBSTR(SF2.F2_EMISSAO, 1, 6) AS MES_ANO, SUM(SD2.D2_TOTAL) AS TOTAL ... GROUP BY SUBSTR(SF2.F2_EMISSAO, 1, 6). NUNCA faça 'GROUP BY MES_ANO'."""
 
-    domain = _infer_query_domain(prompt)
+    if not domain:
+        domain = _infer_query_domain(prompt)
+    if not domain and history:
+        for turn in reversed(history):
+            if turn.get("role") == "user":
+                past_prompt = turn.get("content") or turn.get("text") or ""
+                past_domain = _infer_query_domain(str(past_prompt))
+                if past_domain:
+                    domain = past_domain
+                    break
     domain_instruction = ""
     if domain == "sales":
         domain_instruction = (
@@ -539,9 +550,13 @@ def _domain_catalog_diagnostic(
     })
 
 
-def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _domain_context_block(
+    prompt: str,
+    context: list[dict[str, Any]],
+    domain: str | None = None,
+) -> dict[str, Any] | None:
     """Retorna dict diagnóstico se o domínio da pergunta não encontrar tabelas no snapshot, ou None."""
-    domain = _infer_query_domain(prompt)
+    domain = domain or _infer_query_domain(prompt)
     if not domain:
         return None
     families = _table_families_from_context(context)
@@ -552,8 +567,8 @@ def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> dict[st
 
 
 
-def _validate_query_domain(prompt: str, sql: str) -> None:
-    domain = _infer_query_domain(prompt)
+def _validate_query_domain(prompt: str, sql: str, domain: str | None = None) -> None:
+    domain = domain or _infer_query_domain(prompt)
     if not domain:
         return
     families = _table_families_from_sql(sql)
@@ -973,7 +988,21 @@ async def process_agent_task(task_id: str, payload: dict):
                     }
                     return
 
-            domain_block = _domain_context_block(str(prompt), context)
+            query_domain = _infer_query_domain(str(prompt))
+            if not query_domain and conversation_history:
+                for turn in reversed(conversation_history):
+                    if turn.get("role") == "user":
+                        past_prompt = turn.get("content") or turn.get("text") or ""
+                        past_domain = _infer_query_domain(str(past_prompt))
+                        if past_domain:
+                            query_domain = past_domain
+                            logger.info(
+                                "query_domain_inherited_from_history task_id=%s domain=%s past_prompt=%s",
+                                task_id, query_domain, str(past_prompt)[:50]
+                            )
+                            break
+
+            domain_block = _domain_context_block(str(prompt), context, domain=query_domain)
             if domain_block:
                 try:
                     from app.services.business import evaluate_tenant_business_health
@@ -994,7 +1023,6 @@ async def process_agent_task(task_id: str, payload: dict):
                 }
                 return
 
-            query_domain = _infer_query_domain(str(prompt))
             if query_domain:
                 domain_families = _DOMAIN_TABLE_FAMILIES[query_domain]
                 focused_context = [
@@ -1064,9 +1092,9 @@ async def process_agent_task(task_id: str, payload: dict):
                 environment_code=environment_code,
                 image=image_b64,
                 history=conversation_history,
-
+                domain=query_domain,
             )
-            _validate_query_domain(str(prompt), sql)
+            _validate_query_domain(str(prompt), sql, domain=query_domain)
 
             # 5. Segurança. Um campo ausente do SX3 nunca é liberado. Quando a
             # primeira geração inventar um identificador, o LLM recebe uma única
@@ -1097,8 +1125,9 @@ async def process_agent_task(task_id: str, payload: dict):
                     environment_code=environment_code,
                     image=image_b64,
                     history=conversation_history,
+                    domain=query_domain,
                 )
-                _validate_query_domain(str(prompt), sql)
+                _validate_query_domain(str(prompt), sql, domain=query_domain)
                 validate_query_security(sql=sql, **validation_args)
 
             context_tables = [

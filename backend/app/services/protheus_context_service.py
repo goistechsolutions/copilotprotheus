@@ -167,6 +167,38 @@ def _remove_select_aliases(body: str) -> str:
     return ", ".join(cleaned_items)
 
 
+def _extract_select_aliases(sql: str) -> set[str]:
+    """Extrai aliases definidos na cláusula SELECT (ex: SUBSTR(...) AS MES_ANO)."""
+    match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return set()
+    aliases: set[str] = set()
+    for raw_item in _split_select_items(match.group("body")):
+        item = raw_item.strip()
+        if not item:
+            continue
+        as_match = re.search(
+            r"\s+AS\s+([A-Z][A-Z0-9_$#]*|\"(?:\"\"|[^\"])+\")\s*$",
+            item,
+            flags=re.IGNORECASE,
+        )
+        if as_match:
+            alias = as_match.group(1).strip().strip('"').upper()
+            aliases.add(alias)
+            continue
+        implicit = re.match(
+            r"^(?P<expression>.+\S)\s+(?P<alias>[A-Z][A-Z0-9_$#]*|\"(?:\"\"|[^\"])+\")$",
+            item,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if implicit:
+            expression = implicit.group("expression").rstrip()
+            if re.search(r"[().+*/|'\"]|\bCASE\b", expression, re.IGNORECASE):
+                alias = implicit.group("alias").strip().strip('"').upper()
+                aliases.add(alias)
+    return aliases
+
+
 def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
     match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
     if not match:
@@ -365,9 +397,12 @@ def validate_query_security(
             alias_to_table[table_name] = table_name
 
         filter_refs = _extract_filter_field_refs(upper_sql)
+        select_aliases = _extract_select_aliases(upper_sql)
         unauthorized_filter_refs: list[str] = []
         for qualifier, field_name in filter_refs:
             if field_name == "D_E_L_E_T_":
+                continue
+            if not qualifier and field_name in select_aliases:
                 continue
             if qualifier:
                 resolved_table = alias_to_table.get(qualifier, qualifier)
