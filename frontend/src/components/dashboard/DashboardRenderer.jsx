@@ -113,11 +113,11 @@ export default function DashboardRenderer({ payload }) {
         <BarChartCard title="Vendas por Filial" data={mockChartData} color="#f59e0b" />
       </div>
 
-      {/* Fase 8: React Table */}
-      <div className="mt-4">
-        <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Detalhamento</h3>
-        <DataGrid data={mockTableData} columns={mockColumns} />
-      </div>
+    {/* Fase 8: React Table */}
+    <div className="mt-4">
+      <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Detalhamento</h3>
+      <DataGrid data={mockTableData} columns={mockColumns} />
     </div>
-  );
+  </motion.div>
+);
 }
