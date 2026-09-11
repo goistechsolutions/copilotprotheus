@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, User, AlertTriangle, Database, ArrowRight } from 'lucide-react';
+import { Bot, User, AlertTriangle, Database, ArrowRight, LayoutDashboard } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 
 const TABLE_LABELS = {
@@ -60,7 +60,7 @@ function DomainMismatchCard({ diag }) {
 
 
 export function CopilotConversation() {
-  const { chat } = useDashboardStore();
+  const { chat, currentDashboard, setDashboard } = useDashboardStore();
   const scrollRef = useRef(null);
 
   // Auto-scroll para a última mensagem
@@ -101,7 +101,7 @@ export function CopilotConversation() {
               {msg.domainDiagnostic ? (
                 <DomainMismatchCard diag={msg.domainDiagnostic} />
               ) : (
-                <div className={`rounded-2xl px-4 py-2.5 text-sm ${
+                <div className={`rounded-2xl px-4 py-2.5 text-sm whitespace-pre-line ${
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white rounded-tr-sm'
                     : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
@@ -109,6 +109,25 @@ export function CopilotConversation() {
                   {msg.content}
                 </div>
               )}
+
+              {/* Botão de Ação para Abrir / Reabrir Dashboard */}
+              {msg.dashboard && (
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => setDashboard(msg.dashboard)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all border shadow-sm ${
+                      currentDashboard === msg.dashboard
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-blue-500/20'
+                        : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 dark:border-blue-800'
+                    }`}
+                  >
+                    <LayoutDashboard size={13} />
+                    <span>{currentDashboard === msg.dashboard ? 'Dashboard em exibição' : 'Abrir Dashboard'}</span>
+                    <ArrowRight size={11} />
+                  </button>
+                </div>
+              )}
+
               <span className="mt-1 text-[10px] text-slate-400">
                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>

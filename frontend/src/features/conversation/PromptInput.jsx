@@ -7,7 +7,7 @@ import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 
 export function PromptInput() {
   const [input, setInput] = useState('');
-  const { addChatMessage, setIsGenerating, setDashboard, isGenerating, session } = useDashboardStore();
+  const { addChatMessage, setIsGenerating, setDashboard, addToHistory, isGenerating, session } = useDashboardStore();
   const controllerRef = useRef(null);
 
   useEffect(() => {
@@ -30,7 +30,6 @@ export function PromptInput() {
     });
     
     setIsGenerating(true);
-    setDashboard(null); // Clear previous dashboard when starting a new query
     controllerRef.current = new AbortController();
     
     try {
@@ -66,34 +65,57 @@ export function PromptInput() {
       } else {
         const result = normalized.result;
         
-        // Se a resposta contiver um markdown explicativo, enviamos pro chat
-        if (normalized.message) {
-          addChatMessage({
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: normalized.message,
-            timestamp: new Date().toISOString()
-          });
-        } else {
-          addChatMessage({
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: 'Dashboard gerado com sucesso.',
-            timestamp: new Date().toISOString()
-          });
-        }
-        
-        // Renderização adaptativa em 3 camadas (Schema Analyzer -> Classifier -> Component Factory)
+        let adaptive = null;
         if (result && Array.isArray(result.rows) && result.rows.length > 0) {
-          const adaptive = buildAdaptiveDashboard(result.rows, result.columns || []);
-          setDashboard(adaptive || {
-            screenType: 'ranking',
-            data: result,
-          });
+          adaptive = buildAdaptiveDashboard(result.rows, result.columns || []);
+          if (adaptive) {
+            adaptive.originPrompt = text;
+            setDashboard(adaptive);
+          }
         } else if (result && (result.columns || result.sql_query)) {
           setDashboard({
             screenType: 'custom',
             data: result,
+            originPrompt: text,
+          });
+        }
+
+        // Construção do sumário executivo integrado com o motor de análise
+        let alignedMessage = normalized.message || 'Consulta concluída com sucesso.';
+        if (adaptive && adaptive.data) {
+          const primaryKpi = adaptive.data.kpis?.find(k => k.type === 'sum');
+          const avgKpi = adaptive.data.kpis?.find(k => k.type === 'avg');
+          const topInsight = adaptive.data.insights?.[0];
+          const abcInsight = adaptive.data.insights?.find(i => i.title.includes('ABC'));
+
+          alignedMessage = `A consulta ao Protheus retornou ${result.rows.length} registros.`;
+          if (primaryKpi) {
+            alignedMessage += ` Total acumulado de R$ ${primaryKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (média de R$ ${avgKpi?.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por registro).`;
+          }
+          if (topInsight) {
+            alignedMessage += `\n\n📌 **${topInsight.title}**: ${topInsight.description}`;
+          }
+          if (abcInsight) {
+            alignedMessage += `\n📊 **${abcInsight.title}**: ${abcInsight.description}`;
+          }
+        }
+
+        addChatMessage({
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: alignedMessage,
+          dashboard: adaptive,
+          originPrompt: text,
+          timestamp: new Date().toISOString()
+        });
+
+        // Registrar no histórico unificado de dashboards
+        if (adaptive) {
+          addToHistory({
+            prompt: text,
+            title: text,
+            dashboard: adaptive,
+            timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           });
         }
       }

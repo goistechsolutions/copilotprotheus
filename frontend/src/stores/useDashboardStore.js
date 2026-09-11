@@ -34,8 +34,25 @@ export const useDashboardStore = create((set) => ({
     chat: { ...state.chat, isOpen: !state.chat.isOpen }
   })),
 
-  // Histórico e Favoritos (Mock inicial)
+  // Histórico e Favoritos
   history: [],
+  addToHistory: (entry) => set((state) => {
+    const newEntry = {
+      id: entry.id || Date.now().toString(),
+      prompt: entry.prompt || '',
+      title: entry.title || entry.prompt || 'Análise Executiva',
+      timestamp: entry.timestamp || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      date: entry.date || 'Hoje',
+      type: entry.dashboard ? 'Dashboard' : 'Consulta',
+      screenType: entry.dashboard?.screenType || 'ranking',
+      dashboard: entry.dashboard || null,
+    };
+    return {
+      history: [newEntry, ...state.history.filter(h => h.prompt !== entry.prompt)].slice(0, 30)
+    };
+  }),
+  restoreDashboard: (dashboard) => set({ currentDashboard: dashboard }),
+  closeDashboard: () => set({ currentDashboard: null }),
   favorites: [],
 
   // Configurações

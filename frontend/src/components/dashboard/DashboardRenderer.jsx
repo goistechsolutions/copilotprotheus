@@ -9,7 +9,7 @@ import { MetricCard } from '../kpis/MetricCard';
 import { MetricsRow } from '../kpis/MetricsRow';
 import { InsightCard } from '../insights/InsightCard';
 import { InsightsGrid } from '../insights/InsightsGrid';
-import { DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, Sparkles } from 'lucide-react';
+import { DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, Sparkles, ArrowLeft } from 'lucide-react';
 import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 
@@ -143,6 +143,23 @@ export default function DashboardRenderer({ payload }) {
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="flex h-full flex-col gap-6 p-4 sm:p-6 pb-20"
     >
+      {/* Contexto da Origem e Ação de Retorno */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 min-w-0">
+          <span className="font-semibold text-slate-500 dark:text-slate-400 shrink-0">Origem:</span>
+          <span className="italic font-medium text-slate-800 dark:text-slate-200 truncate">
+            "{payload.originPrompt || 'Consulta no Protheus'}"
+          </span>
+        </div>
+        <button
+          onClick={() => setDashboard(null)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm shrink-0"
+        >
+          <ArrowLeft size={13} />
+          <span>Voltar ao Chat</span>
+        </button>
+      </div>
+
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">

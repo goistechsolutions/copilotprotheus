@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sun, ArrowLeft, X } from 'lucide-react';
 import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { CopilotSidebar } from '../conversation/CopilotSidebar';
@@ -9,7 +9,7 @@ import { CopilotSidebar } from '../conversation/CopilotSidebar';
  * Contém o painel central de execução e a sidebar do copiloto.
  */
 export default function ExecutiveWorkspace() {
-  const { currentDashboard, chat, toggleChat, config, setConfig } = useDashboardStore();
+  const { currentDashboard, setDashboard, chat, toggleChat, config, setConfig } = useDashboardStore();
 
   // Dark Mode Toggle Effect (Fase 13)
   useEffect(() => {
@@ -42,9 +42,28 @@ export default function ExecutiveWorkspace() {
         } ${chat.isOpen && isDashboardActive ? 'md:w-[calc(100%-24rem)] lg:w-[75%]' : ''}`}
       >
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded bg-blue-600 text-xs font-bold text-white shadow-sm shadow-blue-500/20">CE</span>
-            <h1 className="text-sm font-semibold tracking-wide hidden sm:block">Copiloto Executivo</h1>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setDashboard(null)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 transition-colors"
+              title="Fechar dashboard e voltar para o chat"
+            >
+              <ArrowLeft size={14} />
+              <span>Voltar ao Chat</span>
+            </button>
+
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded bg-blue-600 text-xs font-bold text-white shadow-sm shadow-blue-500/20">CE</span>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="hidden sm:inline">Copiloto</span>
+                <span className="hidden sm:inline">›</span>
+                <span className="text-slate-700 dark:text-slate-200 font-medium truncate max-w-[200px] sm:max-w-[340px]">
+                  {currentDashboard?.originPrompt || 'Dashboard'}
+                </span>
+              </div>
+            </div>
           </div>
           
           {/* Header Actions */}
@@ -55,6 +74,14 @@ export default function ExecutiveWorkspace() {
               title="Alternar Tema"
             >
               {config.theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            <button
+              onClick={() => setDashboard(null)}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+              title="Fechar Dashboard"
+            >
+              <X size={18} />
             </button>
 
             {!chat.isOpen && (

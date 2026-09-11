@@ -260,8 +260,7 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
     return (
         f"A consulta ao Protheus retornou {len(rows)} registros. "
         f"Considerando somente o campo numérico autorizado {metric}, o total dos registros retornados é R$ {total:,.2f} "
-        f"e a média por registro é R$ {average:,.2f}.{dimension_text} "
-        "Nenhuma comparação, projeção ou atribuição de vendedor/produto foi inferida além das colunas retornadas."
+        f"e a média por registro é R$ {average:,.2f}.{dimension_text}"
     )
 
 # Gerenciador em memória para polling de tarefas do agente
