@@ -40,7 +40,7 @@ export const useDashboardStore = create((set) => ({
 
   // Configurações
   config: {
-    theme: 'system', // 'light', 'dark', 'system'
+    theme: typeof window !== 'undefined' ? (localStorage.getItem('theme') || 'system') : 'system', 
   },
   setConfig: (configData) => set((state) => ({
     config: { ...state.config, ...configData }

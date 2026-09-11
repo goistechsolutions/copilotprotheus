@@ -1,9 +1,15 @@
 import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { BarChartCard } from '../charts/BarChartCard';
 import { LineChartCard } from '../charts/LineChartCard';
 import { DonutChartCard } from '../charts/DonutChartCard';
 import { DataGrid } from '../ui/DataGrid';
+import { MetricCard } from '../kpis/MetricCard';
+import { MetricsRow } from '../kpis/MetricsRow';
+import { InsightCard } from '../insights/InsightCard';
+import { InsightsGrid } from '../insights/InsightsGrid';
+import { DollarSign, Users, ShoppingCart, Percent } from 'lucide-react';
 
 /**
  * Dashboard Engine Renderer
@@ -43,7 +49,7 @@ export default function DashboardRenderer({ payload }) {
         {/* Renderiza mock apenas para visualização da fase */}
         <button 
           onClick={() => window.dispatchEvent(new CustomEvent('render-mock-dashboard'))}
-          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400"
+          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 transition-colors"
         >
           Visualizar Mock Design System
         </button>
@@ -55,7 +61,12 @@ export default function DashboardRenderer({ payload }) {
 
   // Renderização genérica baseada nos novos componentes
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="flex h-full flex-col gap-6 p-4 sm:p-6 pb-20"
+    >
       <header>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">
           {screenType ? screenType.replace('-', ' ') : 'Dashboard Analytics'}
@@ -63,25 +74,29 @@ export default function DashboardRenderer({ payload }) {
         <p className="text-slate-500 mt-1">Renderizado via Dashboard Engine & UI Enterprise</p>
       </header>
       
-      {/* Fase 2: Componentes Base / KPIs (Mockados) */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="flex flex-col justify-center">
-          <p className="text-sm font-medium text-slate-500 uppercase">Receita Total</p>
-          <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">R$ 124.500</p>
-        </Card>
-        <Card className="flex flex-col justify-center border-l-4 border-l-blue-500">
-          <p className="text-sm font-medium text-slate-500 uppercase">Novos Clientes</p>
-          <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">342</p>
-        </Card>
-        <Card className="flex flex-col justify-center">
-          <p className="text-sm font-medium text-slate-500 uppercase">Ticket Médio</p>
-          <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">R$ 364,00</p>
-        </Card>
-        <Card className="flex flex-col justify-center">
-          <p className="text-sm font-medium text-slate-500 uppercase">Conversão</p>
-          <p className="text-3xl font-bold text-emerald-600 mt-1">+14.5%</p>
-        </Card>
-      </div>
+      {/* Fase 5: Componentes Base / KPIs */}
+      <MetricsRow>
+        <MetricCard title="Receita Total" value="R$ 124.500" trend="up" trendValue="+14%" icon={DollarSign} color="emerald" />
+        <MetricCard title="Novos Clientes" value="342" trend="up" trendValue="+5%" icon={Users} color="blue" />
+        <MetricCard title="Ticket Médio" value="R$ 364,00" trend="down" trendValue="-2%" icon={ShoppingCart} color="amber" />
+        <MetricCard title="Conversão" value="14.5%" trend="up" trendValue="+1.2%" icon={Percent} color="purple" />
+      </MetricsRow>
+
+      {/* Fase 6: Insights Inteligentes */}
+      <InsightsGrid>
+        <InsightCard 
+          title="Atenção" 
+          description="Aumento de inadimplência na Filial 0101 nos últimos 15 dias." 
+          value="R$ 45.200 retidos"
+          type="critical"
+        />
+        <InsightCard 
+          title="Oportunidade" 
+          description="Produtos parados da categoria 'Monitores' com alta busca." 
+          value="+12% de margem sugerida"
+          type="opportunity"
+        />
+      </InsightsGrid>
       
       {/* Fase 7: Recharts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
