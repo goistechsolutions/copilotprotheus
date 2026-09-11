@@ -1,4 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
+import { BarChartCard } from '../charts/BarChartCard';
+import { LineChartCard } from '../charts/LineChartCard';
+import { DonutChartCard } from '../charts/DonutChartCard';
+import { DataGrid } from '../ui/DataGrid';
 
 /**
  * Dashboard Engine Renderer
@@ -6,55 +11,98 @@ import React from 'react';
  * para as camadas de visualização correspondentes dependendo do screenType.
  */
 export default function DashboardRenderer({ payload }) {
+  // Mock data para demonstrar a camada visual funcionando
+  const mockChartData = useMemo(() => [
+    { name: 'Jan', value: 4000, secondary: 2400 },
+    { name: 'Fev', value: 3000, secondary: 1398 },
+    { name: 'Mar', value: 2000, secondary: 9800 },
+    { name: 'Abr', value: 2780, secondary: 3908 },
+    { name: 'Mai', value: 1890, secondary: 4800 },
+    { name: 'Jun', value: 2390, secondary: 3800 },
+  ], []);
+
+  const mockTableData = useMemo(() => [
+    { id: 1, filial: '0101', produto: 'Notebook', valor: 4500.00, status: 'Ativo' },
+    { id: 2, filial: '0101', produto: 'Monitor 27', valor: 1200.00, status: 'Ativo' },
+    { id: 3, filial: '0102', produto: 'Teclado', valor: 250.00, status: 'Inativo' },
+    { id: 4, filial: '0102', produto: 'Mouse', valor: 150.00, status: 'Ativo' },
+    { id: 5, filial: '0103', produto: 'Cadeira', valor: 1800.00, status: 'Ativo' },
+  ], []);
+
+  const mockColumns = useMemo(() => [
+    { header: 'Filial', accessorKey: 'filial' },
+    { header: 'Produto', accessorKey: 'produto' },
+    { header: 'Valor (R$)', accessorKey: 'valor', cell: info => `R$ ${info.getValue().toFixed(2)}` },
+    { header: 'Status', accessorKey: 'status' },
+  ], []);
+
   if (!payload) {
     return (
-      <div className="flex h-full items-center justify-center text-slate-400">
-        <p>Nenhum dado recebido. Peça algo ao Copiloto.</p>
+      <div className="flex h-full flex-col items-center justify-center text-slate-400 p-8 text-center">
+        <p className="mb-4">O Dashboard Engine aguarda instruções do Copiloto.</p>
+        {/* Renderiza mock apenas para visualização da fase */}
+        <button 
+          onClick={() => window.dispatchEvent(new CustomEvent('render-mock-dashboard'))}
+          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400"
+        >
+          Visualizar Mock Design System
+        </button>
       </div>
     );
   }
 
   const { screenType, data } = payload;
 
-  // No futuro, os componentes especializados serão carregados aqui
-  // ex: const FinancialDashboard = lazy(() => import('./types/FinancialDashboard'));
-  
-  switch (screenType) {
-    case 'financial-dashboard':
-    case 'commercial-dashboard':
-    case 'inventory-dashboard':
-    case 'comparison-dashboard':
-    case 'forecast-dashboard':
-    case 'executive-dashboard':
-    default:
-      // Fallback genérico para a camada de apresentação provisória
-      return (
-        <div className="flex h-full flex-col gap-6 p-6">
-          <header>
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">
-              {screenType ? screenType.replace('-', ' ') : 'Dashboard Genérico'}
-            </h1>
-            <p className="text-slate-500">Renderizado através do Dashboard Engine</p>
-          </header>
-          
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Espaço reservado para KPIs */}
-            <div className="h-24 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800/30">KPIs (Em breve)</div>
-            <div className="h-24 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800/30">KPIs (Em breve)</div>
-            <div className="h-24 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800/30">KPIs (Em breve)</div>
-            <div className="h-24 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800/30">KPIs (Em breve)</div>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-             {/* Espaço reservado para Charts */}
-             <div className="h-64 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800/30">Charts Area</div>
-             <div className="h-64 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800/30">Insights Area</div>
-          </div>
+  // Renderização genérica baseada nos novos componentes
+  return (
+    <div className="flex h-full flex-col gap-6 p-6">
+      <header>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">
+          {screenType ? screenType.replace('-', ' ') : 'Dashboard Analytics'}
+        </h1>
+        <p className="text-slate-500 mt-1">Renderizado via Dashboard Engine & UI Enterprise</p>
+      </header>
+      
+      {/* Fase 2: Componentes Base / KPIs (Mockados) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="flex flex-col justify-center">
+          <p className="text-sm font-medium text-slate-500 uppercase">Receita Total</p>
+          <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">R$ 124.500</p>
+        </Card>
+        <Card className="flex flex-col justify-center border-l-4 border-l-blue-500">
+          <p className="text-sm font-medium text-slate-500 uppercase">Novos Clientes</p>
+          <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">342</p>
+        </Card>
+        <Card className="flex flex-col justify-center">
+          <p className="text-sm font-medium text-slate-500 uppercase">Ticket Médio</p>
+          <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">R$ 364,00</p>
+        </Card>
+        <Card className="flex flex-col justify-center">
+          <p className="text-sm font-medium text-slate-500 uppercase">Conversão</p>
+          <p className="text-3xl font-bold text-emerald-600 mt-1">+14.5%</p>
+        </Card>
+      </div>
+      
+      {/* Fase 7: Recharts */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+         <div className="col-span-1 lg:col-span-2">
+            <LineChartCard title="Evolução de Vendas" data={mockChartData} />
+         </div>
+         <div className="col-span-1">
+            <DonutChartCard title="Distribuição" data={mockChartData} />
+         </div>
+      </div>
+      
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <BarChartCard title="Comparativo Mensal" data={mockChartData} />
+        <BarChartCard title="Vendas por Filial" data={mockChartData} color="#f59e0b" />
+      </div>
 
-          <div className="h-96 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800/30">
-            Tabela de Dados (DataGrid)
-          </div>
-        </div>
-      );
-  }
+      {/* Fase 8: React Table */}
+      <div className="mt-4">
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Detalhamento</h3>
+        <DataGrid data={mockTableData} columns={mockColumns} />
+      </div>
+    </div>
+  );
 }
