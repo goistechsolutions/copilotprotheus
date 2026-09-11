@@ -53,7 +53,7 @@
       branch: "0101",
       user: currentConfig?.username || "admin",
       environment_code: currentConfig?.environmentCode || "c8te0u_prod",
-      module: "SIGAFAT",
+      module: "SIGAFIN",
       session_id: "protheus-" + Date.now()
     };
 
