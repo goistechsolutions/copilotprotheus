@@ -62,12 +62,18 @@ export function normalizeAgentResult(raw) {
   const payload = root.result && typeof root.result === 'object' ? root.result : null;
   const status = normalizeStatus(root.status || payload?.status);
   const errorCode = root.error_code || payload?.error_code || null;
-  const message = root.message || root.error || payload?.message || '';
+  const summary = root.summary || payload?.summary || '';
+  const message = root.message || root.error || payload?.message || summary || '';
   const correlationId = root.correlation_id || payload?.correlation_id || null;
 
   const hasExplicitError = Boolean(root.error || payload?.error || errorCode);
   if (ERROR_STATUSES.has(status) || hasExplicitError) {
     return emptyResult('error', message, errorCode, correlationId);
+  }
+
+  // Se o backend retornou apenas um summary/message sem payload (ex: recusa por falta de contexto)
+  if (!payload && summary) {
+    return emptyResult('error', summary, 'MISSING_CONTEXT', correlationId);
   }
 
   if (!SUCCESS_STATUSES.has(status) || !payload) {
