@@ -961,6 +961,11 @@ async def process_agent_task(task_id: str, payload: dict):
 
             domain_block = _domain_context_block(str(prompt), context)
             if domain_block:
+                try:
+                    from app.services.business import evaluate_tenant_business_health
+                    evaluate_tenant_business_health(db, ctx.schema_name, domain_block.get("intent", "unknown"), context)
+                except Exception:
+                    pass
                 AGENT_TASKS[task_id] = {
                     "status": "error",
                     "error": domain_block["message"],
@@ -993,6 +998,11 @@ async def process_agent_task(task_id: str, payload: dict):
                     # (causaria timeout de 120s+ sem resultado útil).
                     families_now = _table_families_from_context(context)
                     diag = _domain_catalog_diagnostic(query_domain, families_now, context)
+                    try:
+                        from app.services.business import evaluate_tenant_business_health
+                        evaluate_tenant_business_health(db, ctx.schema_name, diag.get("intent", "unknown"), context)
+                    except Exception:
+                        pass
                     logger.warning(
                         "agent_domain_mismatch_early_exit task_id=%s domain=%s",
                         task_id, query_domain,

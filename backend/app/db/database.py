@@ -84,7 +84,7 @@ TenantBase = declarative_base()
 # BOOTSTRAP GLOBAL (schema public) — IDEMPOTENTE
 # ─────────────────────────────────────────────────────────────
 
-PUBLIC_BOOTSTRAP_FLAG = "public_schema_v5"
+PUBLIC_BOOTSTRAP_FLAG = "public_schema_v6_bkl"
 PUBLIC_BOOTSTRAP_DONE = False
 
 PUBLIC_REQUIRED_TABLES = {
@@ -106,6 +106,10 @@ PUBLIC_REQUIRED_TABLES = {
     "audit_logs",
     "platform_audit_log",
     "protheus_rest_connections",
+    "business_domains",
+    "business_intents",
+    "business_intent_tables",
+    "business_dashboard_templates",
 }
 
 
@@ -552,6 +556,60 @@ def ensure_public_tables(db, force: bool = False):
             created_at  TIMESTAMP DEFAULT NOW()
         );
         """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_domains (
+            id          BIGSERIAL PRIMARY KEY,
+            domain_code VARCHAR(50) NOT NULL,
+            name        VARCHAR(120) NOT NULL,
+            description TEXT,
+            active      BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_business_domains_code ON public.business_domains (domain_code);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_intents (
+            id          BIGSERIAL PRIMARY KEY,
+            domain_id   BIGINT NOT NULL,
+            intent_code VARCHAR(100) NOT NULL,
+            name        VARCHAR(200) NOT NULL,
+            description TEXT,
+            active      BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_business_intents_domain FOREIGN KEY (domain_id) REFERENCES public.business_domains(id) ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_business_intents_code ON public.business_intents (intent_code);
+        CREATE INDEX IF NOT EXISTS idx_business_intents_domain ON public.business_intents (domain_id);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_intent_tables (
+            id             BIGSERIAL PRIMARY KEY,
+            intent_id      BIGINT NOT NULL,
+            table_code     VARCHAR(20) NOT NULL,
+            required       BOOLEAN NOT NULL DEFAULT TRUE,
+            priority_order INTEGER NOT NULL DEFAULT 1,
+            created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_business_intent_tables_intent FOREIGN KEY (intent_id) REFERENCES public.business_intents(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_intent_tables_intent ON public.business_intent_tables (intent_id);
+        CREATE INDEX IF NOT EXISTS idx_business_intent_tables_table ON public.business_intent_tables (table_code);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_dashboard_templates (
+            id             BIGSERIAL PRIMARY KEY,
+            intent_id      BIGINT NOT NULL,
+            dashboard_code VARCHAR(100) NOT NULL,
+            layout_json    JSONB NOT NULL,
+            created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_business_dashboard_templates_intent FOREIGN KEY (intent_id) REFERENCES public.business_intents(id) ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_business_dashboard_templates_code ON public.business_dashboard_templates (dashboard_code);
+        CREATE INDEX IF NOT EXISTS idx_business_dashboard_templates_intent ON public.business_dashboard_templates (intent_id);
+        """,
     ]
 
     try:
@@ -589,6 +647,9 @@ def ensure_public_tables(db, force: bool = False):
             except Exception:
                 pass  # constraint pode já existir em race condition
 
+        # Seed inicial da Business Knowledge Layer (BKL)
+        _seed_bkl_initial_data(db)
+
         _mark_public_bootstrap_done(db)
         _safe_commit(db)
         PUBLIC_BOOTSTRAP_DONE = True
@@ -596,6 +657,91 @@ def ensure_public_tables(db, force: bool = False):
         _safe_rollback(db)
         PUBLIC_BOOTSTRAP_DONE = False
         print(f"[DB] Erro ao garantir tabelas globais em public: {e}")
+
+
+def _seed_bkl_initial_data(db):
+    """Seed inicial dos domínios, intenções e mapeamentos oficiais do ERP Protheus."""
+    try:
+        # 1. Domínios ERP Globais
+        domains = [
+            ("FINANCEIRO", "Financeiro", "Contas a Receber, Contas a Pagar, Tesouraria e Fluxo de Caixa"),
+            ("VENDAS", "Vendas e Faturamento", "Pedidos de Venda, Notas de Saída e Clientes"),
+            ("COMPRAS", "Compras e Suprimentos", "Pedidos de Compra, Notas de Entrada e Fornecedores"),
+            ("ESTOQUE", "Estoque e Custos", "Saldos, Movimentações e Produtos"),
+            ("FISCAL", "Livros Fiscais", "Tributação, Apurações e Obrigações"),
+            ("CONTROLADORIA", "Controladoria e Contabilidade", "Plano de Contas e Lançamentos Contábeis"),
+        ]
+        for code, name, desc in domains:
+            db.execute(text("""
+                INSERT INTO public.business_domains (domain_code, name, description, active)
+                VALUES (:code, :name, :desc, TRUE)
+                ON CONFLICT (domain_code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
+            """), {"code": code, "name": name, "desc": desc})
+
+        # 2. Intenções Oficiais
+        # (intent_code, domain_code, name, description)
+        intents = [
+            ("cash_flow", "FINANCEIRO", "Fluxo de Caixa", "Projeção e acompanhamento de entradas e saídas"),
+            ("receivables", "FINANCEIRO", "Contas a Receber", "Títulos abertos, liquidados e inadimplência de clientes"),
+            ("payables", "FINANCEIRO", "Contas a Pagar", "Obrigações financeiras e pagamentos a fornecedores"),
+            ("billing", "VENDAS", "Faturamento", "Notas fiscais faturadas e receitas de vendas"),
+            ("sales_orders", "VENDAS", "Pedidos de Venda", "Carteira de pedidos, status de liberação e entrega"),
+            ("inventory_balance", "ESTOQUE", "Saldo de Estoque", "Posição atual de saldos em armazém"),
+            ("purchase_orders", "COMPRAS", "Pedidos de Compra", "Acompanhamento de compras e cotações"),
+            ("purchases_entry", "COMPRAS", "Entrada de Notas", "Recebimento de materiais e notas de entrada"),
+        ]
+        for intent_code, domain_code, name, desc in intents:
+            dom_id = db.execute(text("SELECT id FROM public.business_domains WHERE domain_code = :dc"), {"dc": domain_code}).scalar()
+            if dom_id:
+                db.execute(text("""
+                    INSERT INTO public.business_intents (domain_id, intent_code, name, description, active)
+                    VALUES (:dom_id, :code, :name, :desc, TRUE)
+                    ON CONFLICT (intent_code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
+                """), {"dom_id": dom_id, "code": intent_code, "name": name, "desc": desc})
+
+        # 3. Mapeamento de Tabelas Obrigatórias/Prioritárias (business_intent_tables)
+        # (intent_code, table_code, required, priority)
+        intent_tables = [
+            # Fluxo de Caixa: SE1 (Receber), SE2 (Pagar), SE5 (Movimentação)
+            ("cash_flow", "SE1", True, 1),
+            ("cash_flow", "SE2", True, 2),
+            ("cash_flow", "SE5", False, 3),
+            # Recebíveis
+            ("receivables", "SE1", True, 1),
+            ("receivables", "SA1", False, 2),
+            # Pagáveis
+            ("payables", "SE2", True, 1),
+            ("payables", "SA2", False, 2),
+            # Faturamento
+            ("billing", "SF2", True, 1),
+            ("billing", "SD2", True, 2),
+            ("billing", "SA1", False, 3),
+            # Pedidos de Venda
+            ("sales_orders", "SC5", True, 1),
+            ("sales_orders", "SC6", True, 2),
+            ("sales_orders", "SA1", False, 3),
+            # Saldo de Estoque
+            ("inventory_balance", "SB2", True, 1),
+            ("inventory_balance", "SB1", False, 2),
+            # Compras
+            ("purchases_entry", "SF1", True, 1),
+            ("purchases_entry", "SD1", True, 2),
+            ("purchases_entry", "SA2", False, 3),
+        ]
+        for intent_code, table_code, required, priority in intent_tables:
+            int_id = db.execute(text("SELECT id FROM public.business_intents WHERE intent_code = :ic"), {"ic": intent_code}).scalar()
+            if int_id:
+                exists = db.execute(text("""
+                    SELECT 1 FROM public.business_intent_tables
+                    WHERE intent_id = :int_id AND table_code = :table_code
+                """), {"int_id": int_id, "table_code": table_code}).first()
+                if not exists:
+                    db.execute(text("""
+                        INSERT INTO public.business_intent_tables (intent_id, table_code, required, priority_order)
+                        VALUES (:int_id, :table_code, :required, :priority)
+                    """), {"int_id": int_id, "table_code": table_code, "required": required, "priority": priority})
+    except Exception as exc:
+        print(f"[DB] Aviso ao semear BKL inicial: {exc}")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -664,6 +810,7 @@ TENANT_REQUIRED_TABLES = {
     "dictionary_tables", "dictionary_fields", "dictionary_indexes", "dictionary_groups",
     "tenant_dictionary_sources", "tenant_table_permissions", "tenant_field_permissions",
     "memories", "documents", "document_chunks", "agent_query_audit",
+    "business_field_aliases", "business_rules", "business_metrics", "tenant_business_health",
 }
 
 TENANT_REQUIRED_COLUMNS = {
@@ -1117,6 +1264,44 @@ def ensure_tenant_tables(db, clean_tenant: str):
                 response_time_ms INT,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_field_aliases (
+                id                BIGSERIAL PRIMARY KEY,
+                field_name        VARCHAR(120) NOT NULL,
+                business_name     VARCHAR(200) NOT NULL,
+                field_format      VARCHAR(50),
+                field_description TEXT,
+                created_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_bfa_field_name ON "{clean_tenant}".business_field_aliases (field_name);
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_rules (
+                id          BIGSERIAL PRIMARY KEY,
+                intent_code VARCHAR(100) NOT NULL,
+                rule_type   VARCHAR(100) NOT NULL,
+                rule_json   JSONB NOT NULL,
+                created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_br_intent_code ON "{clean_tenant}".business_rules (intent_code);
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_metrics (
+                id             BIGSERIAL PRIMARY KEY,
+                metric_code    VARCHAR(100) NOT NULL,
+                metric_name    VARCHAR(200) NOT NULL,
+                metric_formula TEXT NOT NULL,
+                metric_type    VARCHAR(50) DEFAULT 'currency',
+                created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_bm_metric_code ON "{clean_tenant}".business_metrics (metric_code);
+
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".tenant_business_health (
+                id              BIGSERIAL PRIMARY KEY,
+                intent_code     VARCHAR(100) NOT NULL,
+                status          VARCHAR(20) NOT NULL,
+                validation_json JSONB NOT NULL,
+                validated_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_tbh_intent_code ON "{clean_tenant}".tenant_business_health (intent_code);
         """))
 
         db.commit()
