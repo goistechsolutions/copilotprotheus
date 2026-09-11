@@ -105,7 +105,9 @@ def _read_tenant_schemas(
              WHERE {' AND '.join(conditions)}
              ORDER BY dt.module_code, dt.table_code
         '''), params).mappings().all()
+        result_rows = []
         for row in rows:
+            row_dict = dict(row)
             fields = db.execute(text(f'''
                 SELECT field_name AS campo, COALESCE(title, '') AS descricao,
                        COALESCE(field_type, '') AS tipo, length_num AS tamanho
@@ -116,11 +118,12 @@ def _read_tenant_schemas(
                  ORDER BY field_name
             '''), {
                 "tenant_id": clean_tenant,
-                "table_code": row["chave"],
-                "company_id": row["company_id"],
+                "table_code": row_dict["chave"],
+                "company_id": row_dict["company_id"],
             }).mappings().all()
-            row["schema_json"] = {"campos": [dict(field) for field in fields], "compartilhamento": {}}
-        return [dict(row) for row in rows]
+            row_dict["schema_json"] = {"campos": [dict(field) for field in fields], "compartilhamento": {}}
+            result_rows.append(row_dict)
+        return result_rows
     except Exception:
         logger.exception("Erro ao ler catálogo normalizado de %s", clean_tenant)
         raise HTTPException(status_code=502, detail="Não foi possível ler o catálogo estrutural do tenant.")
