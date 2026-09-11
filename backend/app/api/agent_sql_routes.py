@@ -185,8 +185,34 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
             
         kpis.append(kpi)
         
+        # Build Real Insights based on actual data
+        fmt_total = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if primary_measure["format"] == "currency" else f"{total_val:,.2f}"
+        fmt_avg = f"R$ {(total_val / len(rows) if rows else 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if primary_measure["format"] == "currency" else f"{(total_val / len(rows) if rows else 0):,.2f}"
+        
+        insights = [
+            {
+                "title": "Análise de Volume",
+                "description": f"A consulta encontrou {len(rows)} registros na base do Protheus.",
+                "value": f"{len(rows)} documentos",
+                "type": "info"
+            },
+            {
+                "title": "Consolidação Numérica",
+                "description": f"O total agregado nas colunas de métrica foi de {fmt_total}. O valor médio por registro é de {fmt_avg}.",
+                "value": fmt_total,
+                "type": "opportunity" if total_val > 0 else "info"
+            },
+            {
+                "title": "Validação de Tendência",
+                "description": "Não foram identificadas comparações históricas suficientes nas colunas retornadas para prever tendências.",
+                "value": "Análise Restrita",
+                "type": "info"
+            }
+        ]
+        
     return {
         "columns": columns,
+        "insights": insights if measures else [],
         "rows": rows,
         "metadata": {
             "row_count": len(rows),
