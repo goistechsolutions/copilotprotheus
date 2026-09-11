@@ -16,7 +16,7 @@ const SEMANTIC_PATTERNS = {
     'PRODUTO', 'ITEM', 'CODPROD', 'B1_COD', 'B1_DESC', 'DESCRICAO_PRODUTO', 'SERVICO'
   ],
   seller: [
-    'VENDEDOR', 'REPRESENTANTE', 'A3_COD', 'A3_NOME', 'COD_VENDEDOR', 'NOME_VENDEDOR'
+    'VENDEDOR', 'REPRESENTANTE', 'A3_COD', 'A3_NOME', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'NOME_VENDEDOR'
   ],
   branch: [
     'FILIAL', 'LOJA', 'FIL', 'F2_FILIAL', 'D2_FILIAL', 'E1_FILIAL', 'E2_FILIAL'
@@ -28,9 +28,29 @@ const SEMANTIC_PATTERNS = {
     'UF', 'ESTADO', 'REGIAO', 'CIDADE', 'MUNICIPIO', 'A1_EST', 'A1_MUN', 'PAIS'
   ],
   measure: [
-    'VALOR', 'FATURAMENTO', 'TOTAL', 'SALDO', 'RECEITA', 'QUANTIDADE', 'QTDE', 'PRECO', 'CUSTO', 'LUCRO', 'VALBRUT'
+    'VALOR', 'FATURAMENTO', 'TOTAL', 'SALDO', 'RECEITA', 'QUANTIDADE', 'QTDE', 'PRECO', 'CUSTO', 'LUCRO', 'VALBRUT', 'VENDAS'
   ]
 };
+
+const IDENTIFIER_PATTERNS = [
+  'COD', 'CODIGO', 'ID', 'NUM', 'NUMERO', 'DOC', 'SERIE', 'MAT', 'PREFIXO', 'PARCELA', 
+  'CGC', 'CNPJ', 'CPF', 'CEP', 'FILIAL', 'LOJA', 'CHAVE'
+];
+
+function isIdentifierColumn(colName) {
+  const upper = String(colName).toUpperCase();
+  // Se contiver palavras explícitas de métrica financeira (ex: VALOR_TOTAL_VENDAS), não é puro identificador
+  if (upper.includes('VALOR') || upper.includes('FATUR') || upper.includes('SALDO') || upper.includes('RECEITA')) {
+    return false;
+  }
+  return IDENTIFIER_PATTERNS.some(p => {
+    return upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`);
+  });
+}
+
+function hasLeadingZeroCodes(sampleValues) {
+  return sampleValues.some(v => typeof v === 'string' && /^0\d+$/.test(v.trim()));
+}
 
 // ─── 2. Detecção de Tipo de Coluna ───────────────────────────────────────────
 function isDateValue(val) {
@@ -77,8 +97,31 @@ export function analyzeSchema(rows, columns = []) {
       else if (isNumericValue(v)) numericCount++;
     });
 
-    const isDate = dateCount / (values.length || 1) > 0.6 || SEMANTIC_PATTERNS.date.some(p => colUpper.includes(p));
-    const isMeasure = !isDate && (numericCount / (values.length || 1) > 0.6 || SEMANTIC_PATTERNS.measure.some(p => colUpper.includes(p)));
+    const hasLeadingZeros = hasLeadingZeroCodes(values);
+    const isIdCol = isIdentifierColumn(col);
+    const hasMeasureKeyword = SEMANTIC_PATTERNS.measure.some(p => colUpper.includes(p));
+
+    // Data só é válida se tiver formato ou padrão de data e NÃO for identificador
+    const isDate = !isIdCol && (
+      dateCount / (values.length || 1) > 0.6 || 
+      (SEMANTIC_PATTERNS.date.some(p => colUpper.includes(p)) && !hasLeadingZeros)
+    );
+
+    // Dimensão semântica (cliente, vendedor, produto, filial, etc.)
+    const isSemanticDimension = SEMANTIC_PATTERNS.customer.some(p => colUpper.includes(p)) ||
+                                SEMANTIC_PATTERNS.seller.some(p => colUpper.includes(p)) ||
+                                SEMANTIC_PATTERNS.product.some(p => colUpper.includes(p)) ||
+                                SEMANTIC_PATTERNS.branch.some(p => colUpper.includes(p)) ||
+                                SEMANTIC_PATTERNS.geographic.some(p => colUpper.includes(p));
+
+    // Medida:
+    // 1. Tem palavra-chave de medida (ex: VALOR_TOTAL_VENDAS) e não tem zeros à esquerda de código
+    // 2. OU mais de 60% numérico, não é identificador, não tem zeros à esquerda, e não é dimensão
+    const isMeasure = !isDate && (
+      (hasMeasureKeyword && !hasLeadingZeros) ||
+      (!isIdCol && !hasLeadingZeros && !isSemanticDimension && numericCount / (values.length || 1) > 0.6)
+    );
+
     const type = isDate ? 'date' : (isMeasure ? 'measure' : 'dimension');
 
     return {
@@ -104,6 +147,21 @@ export function analyzeSchema(rows, columns = []) {
   const measureCols = columnProfiles.filter(c => c.type === 'measure');
   const dimCols = columnProfiles.filter(c => c.type === 'dimension');
 
+  // Ordenação de medidas dando prioridade máxima para valores financeiros
+  const sortedMeasures = [...measureCols].sort((a, b) => {
+    const aUpper = a.name.toUpperCase();
+    const bUpper = b.name.toUpperCase();
+    
+    const getWeight = (name) => {
+      if (name.includes('VALOR') || name.includes('FATUR') || name.includes('RECEITA')) return 4;
+      if (name.includes('TOTAL') || name.includes('SALDO') || name.includes('VENDAS')) return 3;
+      if (name.includes('QUANT') || name.includes('QTDE')) return 2;
+      return 1;
+    };
+
+    return getWeight(bUpper) - getWeight(aUpper);
+  });
+
   return {
     rowCount: rows.length,
     columns: columnProfiles,
@@ -114,8 +172,8 @@ export function analyzeSchema(rows, columns = []) {
     hasSeller: !!semantics.seller,
     hasBranch: !!semantics.branch,
     hasGeographic: !!semantics.geographic,
-    primaryMeasure: measureCols[0]?.name || null,
-    measures: measureCols.map(c => c.name),
+    primaryMeasure: sortedMeasures[0]?.name || null,
+    measures: sortedMeasures.map(c => c.name),
     dimensions: dimCols.map(c => c.name),
     dateColumns: dateCols.map(c => c.name),
   };
@@ -124,31 +182,42 @@ export function analyzeSchema(rows, columns = []) {
 // ─── 3. Classificador de Dataset com Sistema de Pontuação (Score) ─────────────
 export function classifyDataset(schema) {
   const scores = {
-    time_series: 0,
     ranking: 0,
     product_analysis: 0,
     geographic: 0,
     composition: 0,
+    time_series: 0,
   };
 
-  if (schema.hasDate) scores.time_series += 80;
-  if (schema.hasCustomer) scores.ranking += 70;
-  if (schema.hasProduct) scores.product_analysis += 70;
+  // Se houver data REAL, pontua time_series
+  if (schema.hasDate) {
+    scores.time_series += 80;
+  }
+  
+  // Vendedor ou Cliente -> Ranking
+  if (schema.hasSeller) scores.ranking += 85;
+  if (schema.hasCustomer) scores.ranking += 80;
+  if (schema.hasProduct) scores.product_analysis += 80;
   if (schema.hasGeographic) scores.geographic += 80;
 
   // Cardinalidade para composição
   const singleDim = schema.columns.find(c => c.type === 'dimension');
-  if (singleDim && singleDim.distinct > 1 && singleDim.distinct <= 7 && !schema.hasDate) {
-    scores.composition += 60;
+  if (singleDim && singleDim.distinct > 1 && singleDim.distinct <= 6 && !schema.hasDate) {
+    scores.composition += 70;
   }
 
-  // Desempate
-  if (schema.hasDate && (schema.hasCustomer || schema.hasProduct)) {
-    scores.time_series += 20; // Prefere time_series se houver data
+  // Se houver data E entidade (cliente/produto/vendedor), prefere time_series
+  if (schema.hasDate && (schema.hasCustomer || schema.hasProduct || schema.hasSeller)) {
+    scores.time_series += 20;
+  }
+
+  // Se NÃO houver data, zera time_series (impossível ser time_series sem data)
+  if (!schema.hasDate) {
+    scores.time_series = 0;
   }
 
   let bestType = 'ranking';
-  let maxScore = -1;
+  let maxScore = 0;
 
   for (const [type, score] of Object.entries(scores)) {
     if (score > maxScore) {
@@ -157,7 +226,13 @@ export function classifyDataset(schema) {
     }
   }
 
-  const confidence = Math.min(0.99, Math.max(0.60, maxScore / 100));
+  // Fallback seguro
+  if (maxScore === 0) {
+    bestType = schema.hasDate ? 'time_series' : 'ranking';
+    maxScore = 75;
+  }
+
+  const confidence = Math.min(0.99, Math.max(0.70, maxScore / 100));
 
   return {
     datasetType: bestType,
@@ -223,7 +298,7 @@ export function buildInsights(schema, rows) {
   if (!rows || rows.length === 0 || !schema.primaryMeasure) return [];
 
   const measure = schema.primaryMeasure;
-  const dim = schema.semantics.customer || schema.semantics.product || schema.dimensions[0];
+  const dim = schema.semantics.seller || schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
   const insights = [];
 
   if (dim) {
@@ -244,9 +319,13 @@ export function buildInsights(schema, rows) {
       const [topKey, topVal] = sorted[0];
       const share = (topVal / grandTotal) * 100;
 
+      const dimLabel = schema.semantics.seller === dim ? 'vendedor' :
+                       schema.semantics.customer === dim ? 'cliente' :
+                       schema.semantics.product === dim ? 'produto' : 'registro';
+
       insights.push({
         title: 'Concentração Principal',
-        description: `O líder (${topKey}) representa ${share.toFixed(1)}% do montante total.`,
+        description: `O principal ${dimLabel} (${topKey}) representa ${share.toFixed(1)}% do total acumulado.`,
         value: `${share.toFixed(1)}%`,
         type: share > 30 ? 'critical' : 'information',
       });
@@ -300,7 +379,7 @@ export function buildCharts(schema, rows) {
   }
 
   // Gráficos por dimensão
-  const dimCol = schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
+  const dimCol = schema.semantics.seller || schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
   if (dimCol) {
     const dimProfile = schema.columns.find(c => c.name === dimCol);
     const distinctCount = dimProfile?.distinct || 10;
@@ -317,13 +396,18 @@ export function buildCharts(schema, rows) {
       .sort((a, b) => b[1] - a[1])
       .map(([label, value]) => ({ label, value }));
 
+    const dimLabel = schema.semantics.seller === dimCol ? 'Vendedor' :
+                     schema.semantics.customer === dimCol ? 'Cliente' :
+                     schema.semantics.product === dimCol ? 'Produto' :
+                     schema.semantics.geographic === dimCol ? 'Região' : dimCol;
+
     // Regra da Cardinalidade:
     // Poucos valores (<= 6) -> Donut / Pizza / Composição
     // Muitos valores (> 6) -> Top 10 Bar Chart (Nunca pizza!)
     if (distinctCount <= 6 && !schema.hasDate) {
       charts.push({
         chartType: 'donut',
-        title: `Distribuição por ${dimCol}`,
+        title: `Distribuição por ${dimLabel}`,
         data: sortedPoints.map(p => ({ ...p, name: p.label })),
         dataKey: 'value',
         nameKey: 'name',
@@ -331,7 +415,7 @@ export function buildCharts(schema, rows) {
     } else {
       charts.push({
         chartType: 'bar',
-        title: `Top 10 por ${dimCol}`,
+        title: `Top 10 por ${dimLabel}`,
         xAxisKey: 'label',
         dataKey: 'value',
         data: sortedPoints.slice(0, 10),
