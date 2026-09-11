@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import AgentWorkspace from './pages/AgentWorkspace';
-import ExecutiveDashboard from './pages/ExecutiveDashboard';
+import React, { useEffect, useRef } from 'react';
+import ExecutiveWorkspace from './features/executive-dashboard/ExecutiveWorkspace';
 import AuthGate from './components/AuthGate';
+import { useDashboardStore } from './stores/useDashboardStore';
 
 const TRUSTED_PARENT_SUFFIXES = [
   '.protheus.cloudtotvs.com.br',
@@ -27,95 +27,30 @@ function isTrustedParentOrigin(origin) {
 
 export default function App() {
   const trustedParentOriginRef = useRef(null);
+  const { setSession, chat } = useDashboardStore();
 
-  const [currentPage, setCurrentPage] = useState(() => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const pageParam = urlParams.get('page');
-      if (pageParam === 'dashboard' || pageParam === 'executivo') return 'dashboard';
-    } catch {}
-    return 'workspace';
-  });
-
-  const [selectedArea, setSelectedArea] = useState(() => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('area') || 'vendas';
-    } catch {
-      return 'vendas';
-    }
-  });
-
+  // Sempre notifica o parent sobre expansão/recolhimento baseado na sidebar
+  // Mantemos isso para caso a extensão precise expandir a tela do TOTVS quando fecha a sidebar
   useEffect(() => {
-    const handlePopState = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const pageParam = urlParams.get('page');
-      const areaParam = urlParams.get('area');
-      if (areaParam) setSelectedArea(areaParam);
-      if (pageParam === 'dashboard' || pageParam === 'executivo') {
-        setCurrentPage('dashboard');
-        notifyLayoutChange(true);
-      } else {
-        setCurrentPage('workspace');
-        notifyLayoutChange(false);
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const [dashboardData, setDashboardData] = useState(null);
-
-  const notifyLayoutChange = (open) => {
     if (window.parent !== window && trustedParentOriginRef.current) {
       try {
-        window.parent.postMessage({ type: 'cprot-result-state', open }, trustedParentOriginRef.current);
+        window.parent.postMessage({ type: 'cprot-result-state', open: !chat.isOpen }, trustedParentOriginRef.current);
       } catch {}
     }
-  };
-
-  const navigateToDashboard = (targetArea, data = null) => {
-    const area = targetArea || 'financeiro';
-    setSelectedArea(area);
-    if (data) setDashboardData(data);
-    setCurrentPage('dashboard');
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('page', 'dashboard');
-      url.searchParams.set('area', area);
-      window.history.pushState({}, '', url.toString());
-      notifyLayoutChange(true);
-    } catch {}
-  };
-
-  const navigateToWorkspace = () => {
-    setCurrentPage('workspace');
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('page');
-      url.searchParams.delete('area');
-      window.history.pushState({}, '', url.toString());
-      notifyLayoutChange(false);
-    } catch {}
-  };
-
-  const [context, setContext] = useState(() => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      return {
-        tenant_id: '',
-        company: urlParams.get('company') || '',
-        branch: urlParams.get('branch') || '',
-        user: '',
-        environment: urlParams.get('environment') || '',
-        module: urlParams.get('module') || '',
-      };
-    } catch {
-      return {};
-    }
-  });
+  }, [chat.isOpen]);
 
   useEffect(() => {
+    // Config inicial via URL
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      setSession({
+        company: urlParams.get('company') || '',
+        branch: urlParams.get('branch') || '',
+        environment: urlParams.get('environment') || '',
+        module: urlParams.get('module') || '',
+      });
+    } catch {}
+
     const handleMessage = (event) => {
       if (window.parent !== window && event.source !== window.parent) return;
       if (!isTrustedParentOrigin(event.origin) && import.meta.env.VITE_ALLOW_LOCAL_POSTMESSAGE !== 'true') return;
@@ -128,50 +63,39 @@ export default function App() {
       
       const incoming = event.data.payload || event.data.context || {};
       
-      setContext((prev) => {
-        const newCompany = incoming.company_code || incoming.company;
-        const newBranch = incoming.branch;
-        const newEnvironment = incoming.environment_code || incoming.environment;
-        const newModule = incoming.module;
-        
-        return {
-          ...prev,
-          company: newCompany !== undefined ? newCompany : prev.company,
-          branch: newBranch !== undefined ? newBranch : prev.branch,
-          environment: newEnvironment !== undefined ? newEnvironment : prev.environment,
-          module: newModule !== undefined ? newModule : prev.module,
-        };
+      const newCompany = incoming.company_code || incoming.company;
+      const newBranch = incoming.branch;
+      const newEnvironment = incoming.environment_code || incoming.environment;
+      const newModule = incoming.module;
+      
+      setSession({
+        company: newCompany,
+        branch: newBranch,
+        environment: newEnvironment,
+        module: newModule,
       });
     };
+
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  }, [setSession]);
 
   const handleAuthContext = (authData) => {
-    setContext(prev => ({
-      ...prev,
-      tenant_id: authData.tenant_id,
-      user: authData.user_id,
-      role: authData.role
-    }));
-  };
-
-  const renderContent = () => {
-    if (currentPage === 'dashboard') {
-      return (
-        <ExecutiveDashboard
-          onNavigateToWorkspace={navigateToWorkspace}
-          context={context}
-          result={dashboardData}
-        />
-      );
-    }
-    return <AgentWorkspace onNavigateToDashboard={navigateToDashboard} externalContext={context} />;
+    setSession({
+      tenantId: authData.tenant_id,
+      userId: authData.user_id,
+      role: authData.role,
+      isAuthenticated: true
+    });
   };
 
   return (
     <AuthGate onContextAvailable={handleAuthContext}>
-      {renderContent()}
+      {/* 
+        Frontend Enterprise v3.0 
+        Substitui o antigo roteamento por uma única plataforma combinada.
+      */}
+      <ExecutiveWorkspace />
     </AuthGate>
   );
 }

@@ -1,26 +1,26 @@
 import React, { useState } from 'react';
 import {
   flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  createCoreRowModel,
+  createPaginatedRowModel,
+  createSortedRowModel,
+  useTable,
 } from '@tanstack/react-table';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function DataGrid({ data, columns, pagination = true }) {
   const [sorting, setSorting] = useState([]);
 
-  const table = useReactTable({
+  const table = useTable({
     data,
     columns,
     state: {
       sorting,
     },
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: pagination ? getPaginationRowModel() : undefined,
+    getCoreRowModel: createCoreRowModel(),
+    getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: pagination ? createPaginatedRowModel() : undefined,
   });
 
   return (
