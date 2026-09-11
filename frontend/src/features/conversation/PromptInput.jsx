@@ -39,6 +39,7 @@ export function PromptInput() {
         branch: session?.branch || '',
         user: session?.userId || session?.user || '',
         environment: session?.environment || '',
+        environment_code: session?.environment || '', // Backend validation expects environment_code
         module: session?.module || '',
         session_id: Date.now().toString(), // Podemo usar ID de conversação persistente se houver no futuro
         prompt: text,
