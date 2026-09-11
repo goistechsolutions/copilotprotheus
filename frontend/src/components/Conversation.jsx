@@ -1,8 +1,68 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Bot, User, Sparkles, Copy, Check, Terminal } from 'lucide-react';
+import { Bot, User, Sparkles, Copy, Check, Terminal, AlertTriangle, Database, ArrowRight } from 'lucide-react';
 import InlineChatDashboard from './InlineChatDashboard';
 import { ErrorBoundary } from './ErrorBoundary';
+
+const TABLE_LABELS = {
+  SE1: 'Contas a Receber',
+  SE2: 'Contas a Pagar',
+  SE5: 'Movimentação Financeira',
+  SF2: 'Notas Fiscais de Saída',
+  SD2: 'Itens de Saída',
+  SA1: 'Clientes',
+  SF1: 'Notas Fiscais de Entrada',
+  SD1: 'Itens de Entrada',
+  SA2: 'Fornecedores',
+  SB1: 'Cadastro de Produtos',
+  SB2: 'Saldos de Estoque',
+  SC5: 'Pedidos de Venda',
+  SC6: 'Itens de Pedidos de Venda',
+};
+
+function DomainMismatchCard({ diag }) {
+  if (!diag) return null;
+  const missingTables = diag.missing_tables || [];
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm w-full max-w-md my-2">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle size={17} className="text-amber-500 shrink-0" />
+        <span className="font-semibold text-amber-500">
+          Dados indisponíveis no snapshot
+        </span>
+      </div>
+
+      {missingTables.length > 0 && (
+        <div className="mb-3">
+          <p className="text-xs text-amber-300/80 mb-2 font-medium">
+            Tabelas necessárias não sincronizadas:
+          </p>
+          <ul className="space-y-1.5">
+            {missingTables.map(({ code, description }) => (
+              <li key={code} className="flex items-center gap-2">
+                <Database size={13} className="text-amber-400 shrink-0" />
+                <span className="font-mono text-xs text-amber-300 font-bold">{code}</span>
+                <span className="text-xs text-amber-400/90">
+                  — {description || TABLE_LABELS[code] || ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {diag.suggested_action && (
+        <div className="flex items-start gap-2 pt-2 border-t border-amber-500/20">
+          <ArrowRight size={13} className="text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-300/90">
+            <span className="font-semibold text-amber-300">Ação recomendada: </span>
+            {diag.suggested_action}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CodeBlock({ children, className }) {
   const [copied, setCopied] = useState(false);
@@ -75,30 +135,34 @@ export default function Conversation({ messages, context, onNavigateToDashboard 
                 </div>
               )}
 
-              <div
-                className={`prose max-w-none text-[13px] leading-relaxed ${
-                  isUser
-                    ? 'prose-invert prose-p:text-white prose-strong:text-white prose-code:text-white prose-a:text-blue-100'
-                    : 'prose-slate dark:prose-invert prose-p:text-[#162D52] dark:prose-p:text-slate-200 prose-headings:text-[#162D52] dark:prose-headings:text-white prose-strong:text-[#162D52] dark:prose-strong:text-white prose-code:text-[#0F66FF] dark:prose-code:text-blue-300 prose-code:bg-blue-50/70 dark:prose-code:bg-blue-950/60 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[12px]'
-                } prose-p:my-1 prose-headings:mb-1.5 prose-headings:mt-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-table:my-2 prose-code:before:content-none prose-code:after:content-none`}
-              >
-                <ReactMarkdown
-                  components={{
-                    code({ node, inline, className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      return !inline ? (
-                        <CodeBlock className={className}>{children}</CodeBlock>
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      );
-                    },
-                  }}
+              {message.domainDiagnostic || message.errorCode === 'DOMAIN_CATALOG_MISMATCH' ? (
+                <DomainMismatchCard diag={message.domainDiagnostic} />
+              ) : (
+                <div
+                  className={`prose max-w-none text-[13px] leading-relaxed ${
+                    isUser
+                      ? 'prose-invert prose-p:text-white prose-strong:text-white prose-code:text-white prose-a:text-blue-100'
+                      : 'prose-slate dark:prose-invert prose-p:text-[#162D52] dark:prose-p:text-slate-200 prose-headings:text-[#162D52] dark:prose-headings:text-white prose-strong:text-[#162D52] dark:prose-strong:text-white prose-code:text-[#0F66FF] dark:prose-code:text-blue-300 prose-code:bg-blue-50/70 dark:prose-code:bg-blue-950/60 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[12px]'
+                  } prose-p:my-1 prose-headings:mb-1.5 prose-headings:mt-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-table:my-2 prose-code:before:content-none prose-code:after:content-none`}
                 >
-                  {message.text}
-                </ReactMarkdown>
-              </div>
+                  <ReactMarkdown
+                    components={{
+                      code({ node, inline, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        return !inline ? (
+                          <CodeBlock className={className}>{children}</CodeBlock>
+                        ) : (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                    }}
+                  >
+                    {message.text}
+                  </ReactMarkdown>
+                </div>
+              )}
 
               {/* Renderização do Dashboard Inline para Respostas com Dados */}
               {!isUser && !['failed', 'error', 'execution_failed', 'validation_failed', 'forbidden'].includes(message.status) && message.result && message.result.status !== 'error' && Array.isArray(message.result.rows) && (

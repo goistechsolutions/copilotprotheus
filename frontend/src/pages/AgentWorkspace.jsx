@@ -295,6 +295,8 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
           role: 'assistant',
           text: normalized.message,
           status: 'error',
+          errorCode: normalized.errorCode,
+          domainDiagnostic: normalized.domainDiagnostic,
           result: null,
           correlationId: normalized.correlationId,
           userPrompt: text,

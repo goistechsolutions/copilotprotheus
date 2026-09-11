@@ -1542,7 +1542,8 @@ async def ask_v2_status(task_id: str, current_user: dict = Depends(require_curre
     if task_tenant and task_tenant != authenticated_tenant:
         raise HTTPException(status_code=403, detail="Contexto da solicitação não autorizado.")
     
-    # Mantém os campos error/error_code e também summary por compatibilidade com clientes antigos.
+    # Mantém os campos error/error_code e também summary por compatibilidade com clientes antigos,
+    # além dos novos campos diagnósticos da BKL (intent, missing_tables, etc.).
     if AGENT_TASKS[task_id].get("status") == "error":
         task = AGENT_TASKS[task_id]
         return {
@@ -1552,6 +1553,11 @@ async def ask_v2_status(task_id: str, current_user: dict = Depends(require_curre
             "summary": task.get("error") or task.get("summary"),
             "conversation_id": task.get("conversation_id"),
             "correlation_id": task.get("correlation_id"),
+            "intent": task.get("intent"),
+            "required_tables": task.get("required_tables"),
+            "missing_tables": task.get("missing_tables"),
+            "available_tables": task.get("available_tables"),
+            "suggested_action": task.get("suggested_action"),
         }
 
     return AGENT_TASKS[task_id]

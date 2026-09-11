@@ -268,7 +268,7 @@
     url.searchParams.set("company", context.company || "01");
     url.searchParams.set("branch", context.branch || "0101");
     url.searchParams.set("user", context.user || config.username || "admin");
-    url.searchParams.set("module", context.module || "SIGAFAT");
+    url.searchParams.set("module", context.module || "SIGAFIN");
     url.searchParams.set("session_id", context.session_id || "");
     return url.toString();
   }
@@ -283,7 +283,7 @@
       company: context.company || "01",
       branch: context.branch || "0101",
       user: context.user || currentConfig?.username || "admin",
-      module: context.module || "SIGAFAT",
+      module: context.module || "SIGAFIN",
       session_id: context.session_id || ""
     };
 
