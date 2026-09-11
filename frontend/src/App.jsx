@@ -69,12 +69,15 @@ export default function App() {
       const newEnvironment = incoming.environment_code || incoming.environment;
       const newModule = incoming.module;
       
-      setSession({
-        company: newCompany,
-        branch: newBranch,
-        environment: newEnvironment,
-        module: newModule,
-      });
+      const update = {};
+      if (newCompany !== undefined) update.company = newCompany;
+      if (newBranch !== undefined) update.branch = newBranch;
+      if (newEnvironment !== undefined) update.environment = newEnvironment;
+      if (newModule !== undefined) update.module = newModule;
+      
+      if (Object.keys(update).length > 0) {
+        setSession(update);
+      }
     };
 
     window.addEventListener('message', handleMessage);
