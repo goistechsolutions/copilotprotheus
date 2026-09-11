@@ -11,15 +11,10 @@ const ACTIONS = [
 ];
 
 export function QuickActions() {
-  const { addChatMessage } = useDashboardStore();
+  const { triggerPrompt } = useDashboardStore();
 
   const handleAction = (text) => {
-    addChatMessage({
-      id: Date.now().toString(),
-      role: 'user',
-      content: text,
-      timestamp: new Date().toISOString()
-    });
+    triggerPrompt(text);
   };
 
   return (

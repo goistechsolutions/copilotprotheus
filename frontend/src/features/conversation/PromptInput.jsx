@@ -96,14 +96,13 @@ export function PromptInput() {
           if (adaptive) {
             adaptive.originPrompt = text;
             setProcessingStep(6); // 6. Montando dashboard
-            setDashboard(adaptive);
           }
         } else if (result && (result.columns || result.sql_query)) {
-          setDashboard({
+          adaptive = {
             screenType: 'custom',
             data: result,
             originPrompt: text,
-          });
+          };
         }
 
         // Utiliza o sumário executivo gerado pelo motor analítico (AnalysisContext)

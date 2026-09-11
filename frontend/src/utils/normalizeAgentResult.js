@@ -69,6 +69,11 @@ export function normalizeAgentResult(raw) {
 
   const hasExplicitError = Boolean(root.error || payload?.error || errorCode);
   if (ERROR_STATUSES.has(status) || hasExplicitError) {
+    let friendlyMessage = message;
+    if (errorCode === 'ENTITLEMENT_DENIED' || message.includes('Bloqueio de Segurança RBAC')) {
+      friendlyMessage = `⚠️ Não foi possível processar a consulta solicitada devido a restrições de permissão ou campos não autorizados no seu perfil de acesso (RBAC).\n\nDetalhe: ${message}\n\n💡 Dica: Tente reformular a consulta usando apenas as dimensões e métricas já autorizadas.`;
+    }
+
     // Carry diagnostic fields for DOMAIN_CATALOG_MISMATCH to enable friendly UI card
     const domainDiagnostic = errorCode === 'DOMAIN_CATALOG_MISMATCH' ? {
       intent: root.intent || null,
@@ -77,7 +82,7 @@ export function normalizeAgentResult(raw) {
       available_tables: root.available_tables || [],
       suggested_action: root.suggested_action || null,
     } : null;
-    return emptyResult('error', message, errorCode, correlationId, domainDiagnostic);
+    return emptyResult('error', friendlyMessage, errorCode, correlationId, domainDiagnostic);
   }
 
   // Se o backend retornou apenas um summary/message sem payload (ex: recusa por falta de contexto)

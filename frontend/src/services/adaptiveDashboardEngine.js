@@ -468,7 +468,7 @@ export function generateContextualSuggestions(schema, data = {}) {
   return suggestions.slice(0, 4);
 }
 
-// ─── 7. Chat Response Builder (Texto Executivo sem Jargões) ───────────────────
+// ─── 7. Chat Response Builder (Resumo Executivo Conciso) ───────────────────
 export function buildExecutiveChatSummary(context) {
   if (!context || !context.data) return 'Análise concluída com sucesso.';
 
@@ -476,31 +476,38 @@ export function buildExecutiveChatSummary(context) {
   const rows = data.rows || [];
   const count = rows.length;
   const totalKpi = data.kpis?.find(k => k.type === 'sum');
-  const topInsight = data.insights?.find(i => i.title.includes('Principal') || i.title.includes('Concentração'));
-  const abcInsight = data.insights?.find(i => i.title.includes('ABC'));
 
-  const entityName = schema.hasSeller ? 'vendedores' :
-                     schema.hasCustomer ? 'clientes' :
-                     schema.hasProduct ? 'produtos' :
-                     schema.hasGeographic ? 'regiões' : 'registros';
+  // Identifica o líder a partir do primeiro gráfico ou dos dados agrupados
+  const barChart = data.charts?.find(c => c.chartType === 'bar' || c.chartType === 'donut');
+  const leaderItem = barChart?.data?.[0];
+  const leaderLabel = leaderItem?.label || leaderItem?.name;
+  const leaderValue = leaderItem?.value;
 
-  const parts = ['**Análise concluída.**\n'];
+  const entitySingular = schema.hasSeller ? 'Vendedor líder' :
+                         schema.hasCustomer ? 'Cliente líder' :
+                         schema.hasProduct ? 'Produto líder' :
+                         schema.hasGeographic ? 'Região líder' : 'Destaque';
+
+  const entityPlural = schema.hasSeller ? 'vendedores' :
+                       schema.hasCustomer ? 'clientes' :
+                       schema.hasProduct ? 'produtos' :
+                       schema.hasGeographic ? 'regiões' : 'registros';
+
+  const parts = ['**Resumo da Análise:**\n'];
 
   if (totalKpi) {
-    parts.push(`💰 **Faturamento total:**\nR$ ${totalKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`);
+    const formattedTotal = totalKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    parts.push(`• **Faturamento total:** R$ ${formattedTotal}`);
   }
 
-  parts.push(`📊 Foram identificados **${count} ${entityName}**.\n`);
-
-  if (topInsight) {
-    parts.push(`📌 ${topInsight.description}\n`);
+  if (leaderLabel && leaderValue != null) {
+    const formattedLeaderVal = typeof leaderValue === 'number'
+      ? leaderValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : leaderValue;
+    parts.push(`• **${entitySingular}:** ${leaderLabel} (R$ ${formattedLeaderVal})`);
   }
 
-  if (abcInsight) {
-    parts.push(`📈 ${abcInsight.description}\n`);
-  }
-
-  parts.push(`✨ **Dashboard disponível.**`);
+  parts.push(`• **Volume:** ${count} ${entityPlural} analisados`);
 
   return parts.join('\n');
 }

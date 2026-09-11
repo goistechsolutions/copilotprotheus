@@ -309,7 +309,8 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 15. PROIBIÇÃO ABSOLUTA DE ALUCINAÇÃO DE CAMPOS: Você está INVENTANDO campos que não existem no dicionário. NUNCA crie colunas começando com "X" (ex: F2_XCLIENT, F2_X_COND, C5_XNOME, C5_XVEND, C6_XDESC) tentando trazer descrições. Se o usuário pedir o nome do cliente ou fornecedor, mas a tabela de clientes/fornecedores não estiver no snapshot, USE APENAS O CÓDIGO (ex: C5_VEND1, F2_CLIENTE). A invenção de campos inexistentes quebra o AppServer do Protheus. Use a sintaxe INNER JOIN ao invés de apenas JOIN para maior clareza.
 17. CONSULTAS GERENCIAIS AGRUPADAS: Se o pedido contiver "agrupado", "agrupando", "por vendedor", "por produto", "por subgrupo", "mensal", "por mês" ou combinação equivalente, a resposta DEVE ser uma agregação SQL real. Selecione cada dimensão solicitada, uma métrica física financeira/quantitativa autorizada usando SUM/COUNT/AVG e inclua no GROUP BY todas as dimensões não agregadas. Nunca trate campos de mês, ano, data, código, filial, empresa, identificador ou número como métrica financeira. Não retorne linhas transacionais detalhadas quando a solicitação exigir consolidação. Se não existir no snapshot um campo físico autorizado para a métrica ou uma dimensão solicitada, não substitua por outro campo: informe que a análise não pode ser construída com o catálogo disponível.
 18. COERÊNCIA DO RESULTADO: Para análise mensal do ano, a consulta deve retornar uma coluna de período/mês e uma métrica agregada por mês; para vendedor e subgrupo, deve retornar as respectivas dimensões e a métrica agregada. O alias da métrica deve ser explícito, por exemplo SUM(campo_físico) AS VALOR_TOTAL, sem reutilizar alias ou códigos como valor.
-16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão a conversão falhará e o banco retornará erro 500 no QueryRest. Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\'). Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'."""
+16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão a conversão falhará e o banco retornará erro 500 no QueryRest. Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\'). Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'.
+19. PROIBIÇÃO DE CAMPOS DE DATA INVENTADOS (ANO_EMISSAO, MES_EMISSAO, ETC.): NUNCA use ou invente identificadores como ANO_EMISSAO, MES_EMISSAO, DATA_EMISSAO ou DT_EMISSAO no SELECT, WHERE ou GROUP BY. Não existem tais campos no Protheus; o uso deles causa bloqueio imediato pelo RBAC (ENTITLEMENT_DENIED). Para agrupar ou filtrar por mês/ano, use SEMPRE SUBSTR(alias.CAMPO_DATA, 1, 6) AS MES_ANO e use essa mesma expressão SUBSTR(...) no GROUP BY. Para comparar mês atual com anterior, use SUBSTR(alias.CAMPO_DATA, 1, 6) IN (TO_CHAR(ADD_MONTHS(SYSDATE, -1), \'YYYYMM\'), TO_CHAR(SYSDATE, \'YYYYMM\'))."""
 
     domain = _infer_query_domain(prompt)
     domain_instruction = ""
@@ -693,7 +694,10 @@ async def process_agent_task(task_id: str, payload: dict):
     started = time.time()
     task_state = AGENT_TASKS.get(task_id) or {}
     correlation_id = task_state.get("correlation_id") or get_correlation_id()
+    task_tenant = task_state.get("tenant_id") or payload.get("tenant_id")
     task_state["correlation_id"] = correlation_id
+    if task_tenant:
+        task_state["tenant_id"] = task_tenant
     AGENT_TASKS[task_id] = task_state
     logger.info("agent_task_started task_id=%s", task_id)
     try:
@@ -1256,6 +1260,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 "error": str(e.detail),
                 "error_code": e.code,
                 "correlation_id": correlation_id,
+                "tenant_id": task_tenant,
             }
         elif e.status_code == 403:
             AGENT_TASKS[task_id] = {
@@ -1263,11 +1268,13 @@ async def process_agent_task(task_id: str, payload: dict):
                 "error": e.detail,
                 "error_code": "ENTITLEMENT_DENIED",
                 "correlation_id": correlation_id,
+                "tenant_id": task_tenant,
             }
         else:
             AGENT_TASKS[task_id] = {
                 "status": "error",
                 "error": error_info["message"],
+                "tenant_id": task_tenant,
                 **error_info,
             }
         logger.warning(
@@ -1543,12 +1550,13 @@ async def ask_v2_status(task_id: str, current_user: dict = Depends(require_curre
     
     # Mantém os campos error/error_code e também summary por compatibilidade com clientes antigos,
     # além dos novos campos diagnósticos da BKL (intent, missing_tables, etc.).
-    if AGENT_TASKS[task_id].get("status") == "error":
+    task_status = AGENT_TASKS[task_id].get("status")
+    if task_status in ("error", "forbidden", "validation_failed"):
         task = AGENT_TASKS[task_id]
         return {
-            "status": "error",
+            "status": "error" if task_status in ("error", "forbidden", "validation_failed") else task_status,
             "error": task.get("error") or task.get("summary"),
-            "error_code": task.get("error_code"),
+            "error_code": task.get("error_code") or ("ENTITLEMENT_DENIED" if task_status == "forbidden" else "TASK_ERROR"),
             "summary": task.get("error") or task.get("summary"),
             "conversation_id": task.get("conversation_id"),
             "correlation_id": task.get("correlation_id"),

@@ -33,6 +33,9 @@ const STATUS_ALIASES = Object.freeze({
   error: TASK_STATUS.FAILED,
   execution_failed: TASK_STATUS.FAILED,
   execution_error: TASK_STATUS.FAILED,
+  forbidden: TASK_STATUS.FAILED,
+  validation_failed: TASK_STATUS.FAILED,
+  unauthorized: TASK_STATUS.FAILED,
 
   cancelled: TASK_STATUS.CANCELLED,
   canceled: TASK_STATUS.CANCELLED,

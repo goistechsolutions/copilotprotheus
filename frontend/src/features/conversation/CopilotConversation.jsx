@@ -120,18 +120,14 @@ export function CopilotConversation() {
 
               {/* Botão de Ação para Abrir / Reabrir Dashboard */}
               {msg.dashboard && (
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-3 flex items-center gap-2">
                   <button
                     onClick={() => setDashboard(msg.dashboard)}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all border shadow-sm ${
-                      currentDashboard === msg.dashboard
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-blue-500/20'
-                        : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 dark:border-blue-800'
-                    }`}
+                    className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all border shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-blue-500/20 active:scale-95 cursor-pointer"
                   >
-                    <LayoutDashboard size={13} />
-                    <span>{currentDashboard === msg.dashboard ? 'Dashboard em exibição' : 'Abrir Dashboard'}</span>
-                    <ArrowRight size={11} />
+                    <LayoutDashboard size={14} />
+                    <span>📊 Abrir Dashboard</span>
+                    <ArrowRight size={13} />
                   </button>
                 </div>
               )}
