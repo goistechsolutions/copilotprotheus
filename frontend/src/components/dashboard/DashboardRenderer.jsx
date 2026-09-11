@@ -9,14 +9,46 @@ import { MetricCard } from '../kpis/MetricCard';
 import { MetricsRow } from '../kpis/MetricsRow';
 import { InsightCard } from '../insights/InsightCard';
 import { InsightsGrid } from '../insights/InsightsGrid';
-import { DollarSign, Users, ShoppingCart, Percent } from 'lucide-react';
+import { DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, Sparkles } from 'lucide-react';
+import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
+import { useDashboardStore } from '../../stores/useDashboardStore';
 
-/**
- * Dashboard Engine Renderer
- * Contrato universal de renderização da IA. Recebe o payload e delega
- * para as camadas de visualização correspondentes dependendo do screenType.
- */
+const SCREEN_CONFIGS = {
+  time_series: {
+    title: 'Análise Temporal & Evolução',
+    badge: 'Série Temporal',
+    description: 'Tendência cronológica e evolução de valores e movimentações.',
+  },
+  ranking: {
+    title: 'Ranking & Concentração',
+    badge: 'Ranking',
+    description: 'Classificação por representatividade e análise de concentração de clientes/entidades.',
+  },
+  product_analysis: {
+    title: 'Performance de Produtos & Itens',
+    badge: 'Produtos',
+    description: 'Volume, faturamento e dispersão por item ou linha de produtos.',
+  },
+  geographic: {
+    title: 'Distribuição Regional',
+    badge: 'Geográfico',
+    description: 'Dispersão de receitas e faturamento por estado/região.',
+  },
+  composition: {
+    title: 'Composição & Proporção',
+    badge: 'Composição',
+    description: 'Distribuição proporcional entre categorias com baixa cardinalidade.',
+  },
+  'financial-dashboard': {
+    title: 'Painel Executivo Financeiro',
+    badge: 'Executivo',
+    description: 'Visão consolidada de receitas, despesas e fluxo de caixa.',
+  }
+};
+
 export default function DashboardRenderer({ payload }) {
+  const { setDashboard } = useDashboardStore();
+
   const formatLabel = (key) => {
     if (!key) return '';
     return key
@@ -35,22 +67,60 @@ export default function DashboardRenderer({ payload }) {
     return str;
   };
 
+  const getKpiIcon = (type) => {
+    switch (type) {
+      case 'sum': return DollarSign;
+      case 'avg': return TrendingUp;
+      case 'max': return Award;
+      case 'count': return Users;
+      default: return BarChart3;
+    }
+  };
+
+  const getKpiColor = (type) => {
+    switch (type) {
+      case 'sum': return 'blue';
+      case 'avg': return 'emerald';
+      case 'max': return 'amber';
+      case 'count': return 'purple';
+      default: return 'blue';
+    }
+  };
+
+  const handleRenderMock = () => {
+    const sampleRows = [
+      { F2_CLIENTE: 'ATACADAO S.A.', VALOR_FATURADO: 450000.00, F2_EMISSAO: '20260301', ESTADO: 'SP' },
+      { F2_CLIENTE: 'CARREFOUR COMERCIO', VALOR_FATURADO: 320000.00, F2_EMISSAO: '20260302', ESTADO: 'SP' },
+      { F2_CLIENTE: 'PAO DE ACUCAR', VALOR_FATURADO: 280000.00, F2_EMISSAO: '20260303', ESTADO: 'RJ' },
+      { F2_CLIENTE: 'ASSAI ATACADISTA', VALOR_FATURADO: 210000.00, F2_EMISSAO: '20260304', ESTADO: 'MG' },
+      { F2_CLIENTE: 'MERCADO LIVRE', VALOR_FATURADO: 180000.00, F2_EMISSAO: '20260305', ESTADO: 'PR' },
+      { F2_CLIENTE: 'MAGAZINE LUIZA', VALOR_FATURADO: 140000.00, F2_EMISSAO: '20260306', ESTADO: 'SP' },
+      { F2_CLIENTE: 'CASAS BAHIA', VALOR_FATURADO: 95000.00, F2_EMISSAO: '20260307', ESTADO: 'RS' },
+    ];
+    const sample = buildAdaptiveDashboard(sampleRows, ['F2_CLIENTE', 'VALOR_FATURADO', 'F2_EMISSAO', 'ESTADO']);
+    if (sample) setDashboard(sample);
+  };
+
   if (!payload) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-slate-400 p-8 text-center">
         <p className="mb-4">O Dashboard Engine aguarda instruções do Copiloto.</p>
-        {/* Renderiza mock apenas para visualização da fase */}
         <button 
-          onClick={() => window.dispatchEvent(new CustomEvent('render-mock-dashboard'))}
-          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 transition-colors"
+          onClick={handleRenderMock}
+          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 transition-colors font-medium text-sm"
         >
-          Visualizar Mock Design System
+          Visualizar Demonstração Adaptativa
         </button>
       </div>
     );
   }
 
-  const { screenType, data } = payload;
+  const { screenType, confidence, data } = payload;
+  const screenConfig = SCREEN_CONFIGS[screenType] || {
+    title: screenType ? screenType.replace('-', ' ') : 'Dashboard Analytics',
+    badge: 'Adaptativo',
+    description: 'Painel gerado dinamicamente a partir dos dados retornados pelo Protheus.'
+  };
   
   if (!data || !data.rows || data.rows.length === 0) {
     return (
@@ -66,7 +136,6 @@ export default function DashboardRenderer({ payload }) {
     );
   }
 
-  // Renderização genérica baseada nos novos componentes
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -74,31 +143,46 @@ export default function DashboardRenderer({ payload }) {
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="flex h-full flex-col gap-6 p-4 sm:p-6 pb-20"
     >
-      <header>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">
-          {screenType ? screenType.replace('-', ' ') : 'Dashboard Analytics'}
-        </h1>
-        <p className="text-slate-500 mt-1">Renderizado via Dashboard Engine & UI Enterprise</p>
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800/80 pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">
+              {screenConfig.title}
+            </h1>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+              <Sparkles size={12} />
+              {screenConfig.badge}
+            </span>
+            {confidence && (
+              <span className="text-xs text-slate-400 font-medium">
+                ({Math.round(confidence * 100)}% aderência)
+              </span>
+            )}
+          </div>
+          <p className="text-slate-500 text-sm mt-1">{screenConfig.description}</p>
+        </div>
       </header>
       
-      {/* Fase 5: Componentes Base / KPIs */}
+      {/* Camada 3: KPIs Dinâmicos Baseados no Schema */}
       {data?.kpis?.length > 0 && (
         <MetricsRow>
           {data.kpis.map((kpi, idx) => (
             <MetricCard 
               key={idx}
               title={formatLabel(kpi.label)} 
-              value={kpi.format === 'currency' ? `R$ ${kpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : kpi.value} 
-              trend="up" 
-              trendValue="0%" 
-              icon={DollarSign} 
-              color="blue" 
+              value={kpi.format === 'currency' 
+                ? `R$ ${kpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                : kpi.format === 'percent'
+                ? `${kpi.value.toFixed(1)}%`
+                : kpi.value.toLocaleString('pt-BR')} 
+              icon={getKpiIcon(kpi.type)} 
+              color={getKpiColor(kpi.type)} 
             />
           ))}
         </MetricsRow>
       )}
 
-      {/* Fase 6: Insights Inteligentes */}
+      {/* Camada 3: Insights Automatizados (Concentração, Curva ABC, Pareto) */}
       {data?.insights?.length > 0 && (
         <InsightsGrid>
           {data.insights.map((insight, idx) => (
@@ -107,41 +191,92 @@ export default function DashboardRenderer({ payload }) {
               title={insight.title || "Insight"} 
               description={insight.description} 
               value={insight.value}
-              type={insight.type || "info"}
+              type={insight.type || "information"}
             />
           ))}
         </InsightsGrid>
       )}
       
-      {/* Fase 7: Recharts */}
-      {data?.series?.length > 0 && (
-        <div className={`grid grid-cols-1 gap-6 ${data.series.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
-          {data.series.map((s, idx) => {
-            const formattedPoints = s.points.map(p => ({ ...p, label: formatDateTick(p.label) }));
+      {/* Camada 3: Gráficos com Regras de Cardinalidade (Donut <= 6, Top 10 Bar > 6, Line para Datas) */}
+      {data?.charts?.length > 0 ? (
+        <div className={`grid grid-cols-1 gap-6 ${data.charts.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
+          {data.charts.map((chart, idx) => {
+            if (chart.chartType === 'line') {
+              const formattedPoints = chart.data.map(p => ({ ...p, label: formatDateTick(p.label) }));
+              return (
+                <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
+                  <LineChartCard 
+                    title={chart.title} 
+                    data={formattedPoints} 
+                    xAxisKey={chart.xAxisKey || 'label'} 
+                    dataKey={chart.dataKey || 'value'} 
+                    color="#10b981" 
+                  />
+                </div>
+              );
+            }
+            if (chart.chartType === 'donut') {
+              return (
+                <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
+                  <DonutChartCard 
+                    title={chart.title} 
+                    data={chart.data} 
+                    dataKey={chart.dataKey || 'value'} 
+                    nameKey={chart.nameKey || 'name'} 
+                  />
+                </div>
+              );
+            }
+            // Bar chart (default)
             return (
-              <div key={idx} className={data.series.length === 1 ? "col-span-1" : ""}>
+              <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
                 <BarChartCard 
-                  title={formatLabel(s.label)} 
-                  data={formattedPoints} 
-                  xAxisKey="label" 
+                  title={chart.title} 
+                  data={chart.data} 
+                  xAxisKey={chart.xAxisKey || 'label'} 
+                  dataKey={chart.dataKey || 'value'} 
                   color="#3b82f6" 
                 />
               </div>
             );
           })}
         </div>
+      ) : (
+        // Fallback compatibilidade retroativa para data.series
+        data?.series?.length > 0 && (
+          <div className={`grid grid-cols-1 gap-6 ${data.series.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
+            {data.series.map((s, idx) => {
+              const formattedPoints = s.points.map(p => ({ ...p, label: formatDateTick(p.label) }));
+              return (
+                <div key={idx} className={data.series.length === 1 ? "col-span-1" : ""}>
+                  <BarChartCard 
+                    title={formatLabel(s.label)} 
+                    data={formattedPoints} 
+                    xAxisKey="label" 
+                    color="#3b82f6" 
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
 
-    {/* Fase 8: React Table */}
-    {data?.rows?.length > 0 && (
-      <div className="mt-4">
-        <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Detalhamento</h3>
-        <DataGrid 
-          data={data.rows} 
-          columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: col, accessorKey: col })) : []} 
-        />
-      </div>
-    )}
-  </motion.div>
-);
+      {/* Camada 3: Tabela Detalhada com Paginação */}
+      {data?.rows?.length > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Detalhamento dos Dados</h3>
+            <span className="text-xs text-slate-500 font-medium">
+              {data.rows.length} {data.rows.length === 1 ? 'registro' : 'registros'}
+            </span>
+          </div>
+          <DataGrid 
+            data={data.rows} 
+            columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: col, accessorKey: col })) : []} 
+          />
+        </div>
+      )}
+    </motion.div>
+  );
 }

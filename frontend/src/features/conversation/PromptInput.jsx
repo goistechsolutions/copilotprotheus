@@ -3,6 +3,7 @@ import { Send, Loader2 } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { askAgent, waitForAgentTask } from '../../services/api';
 import { normalizeAgentResult } from '../../utils/normalizeAgentResult';
+import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 
 export function PromptInput() {
   const [input, setInput] = useState('');
@@ -82,13 +83,18 @@ export function PromptInput() {
           });
         }
         
-        // Se houver grid/charts renderizamos no dashboard (agora vamos mapear o JSON real do Protheus)
-        // O Protheus retorna um SQL_QUERY ou DATA. Vamos montar o payload do DashboardEngine:
-        if (result && (result.columns || result.sql_query)) {
-           setDashboard({
-             screenType: 'financial-dashboard', // Default genérico por enquanto
-             data: result,
-           });
+        // Renderização adaptativa em 3 camadas (Schema Analyzer -> Classifier -> Component Factory)
+        if (result && Array.isArray(result.rows) && result.rows.length > 0) {
+          const adaptive = buildAdaptiveDashboard(result.rows, result.columns || []);
+          setDashboard(adaptive || {
+            screenType: 'ranking',
+            data: result,
+          });
+        } else if (result && (result.columns || result.sql_query)) {
+          setDashboard({
+            screenType: 'custom',
+            data: result,
+          });
         }
       }
     } catch (error) {
