@@ -8,6 +8,10 @@ import {
   FileSpreadsheet,
   Layers,
   TrendingUp,
+  DollarSign,
+  Package,
+  Users,
+  Activity
 } from 'lucide-react';
 import { downloadStructuredReport, exportStructuredReport } from '../services/api';
 
@@ -74,14 +78,70 @@ function normalizeDashboardPayload(result) {
   };
 }
 
-function MetricCard({ label, value, format = 'number', icon: Icon }) {
+const COLOR_VARIANTS = ['emerald', 'blue', 'violet', 'amber', 'pink', 'cyan'];
+
+function getKpiIconAndColor(label, index) {
+  const upper = (label || '').toUpperCase();
+  let icon = Activity;
+  let color = COLOR_VARIANTS[index % COLOR_VARIANTS.length];
+  
+  if (upper.includes('VALOR') || upper.includes('TOTAL') || upper.includes('FINANCEIRO') || upper.includes('R$') || upper.includes('FATURADO') || upper.includes('RECEITA')) {
+    icon = DollarSign;
+    color = 'emerald';
+  } else if (upper.includes('QTD') || upper.includes('QUANTIDADE') || upper.includes('PRODUTO') || upper.includes('ITEM') || upper.includes('ESTOQUE')) {
+    icon = Package;
+    color = 'blue';
+  } else if (upper.includes('CLIENTE') || upper.includes('VENDEDOR') || upper.includes('USUARIO') || upper.includes('PESSOA')) {
+    icon = Users;
+    color = 'violet';
+  } else if (upper.includes('PERCENTUAL') || upper.includes('TAXA') || upper.includes('MARGEM') || upper.includes('JUROS')) {
+    icon = TrendingUp;
+    color = 'amber';
+  }
+  
+  return { icon, color };
+}
+
+function MetricCard({ label, value, format = 'number', index = 0 }) {
+  const { icon: Icon, color } = getKpiIconAndColor(label, index);
+  
+  const gradients = {
+    blue: 'from-blue-500/20 via-blue-500/5 to-transparent text-blue-600 dark:text-blue-400 border-blue-200/50 dark:border-blue-500/20',
+    emerald: 'from-emerald-500/20 via-emerald-500/5 to-transparent text-emerald-600 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-500/20',
+    violet: 'from-violet-500/20 via-violet-500/5 to-transparent text-violet-600 dark:text-violet-400 border-violet-200/50 dark:border-violet-500/20',
+    amber: 'from-amber-500/20 via-amber-500/5 to-transparent text-amber-600 dark:text-amber-400 border-amber-200/50 dark:border-amber-500/20',
+    pink: 'from-pink-500/20 via-pink-500/5 to-transparent text-pink-600 dark:text-pink-400 border-pink-200/50 dark:border-pink-500/20',
+    cyan: 'from-cyan-500/20 via-cyan-500/5 to-transparent text-cyan-600 dark:text-cyan-400 border-cyan-200/50 dark:border-cyan-500/20',
+  };
+  
+  const iconBgs = {
+    blue: 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400',
+    emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400',
+    violet: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400',
+    amber: 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400',
+    pink: 'bg-pink-100 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400',
+    cyan: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400',
+  };
+
+  const bgGradient = gradients[color].split(' ').slice(0, 3).join(' ');
+  const borderClass = gradients[color].split(' ').slice(5).join(' ');
+
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
-        {Icon ? <Icon size={18} className="text-blue-600" /> : null}
+    <article className={`relative overflow-hidden rounded-2xl border bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:bg-slate-900/60 ${borderClass}`}>
+      <div className={`absolute -right-6 -top-6 h-32 w-32 rounded-full bg-gradient-to-br ${bgGradient} opacity-60 blur-3xl`} />
+      <div className={`absolute -bottom-6 -left-6 h-24 w-24 rounded-full bg-gradient-to-tr ${bgGradient} opacity-40 blur-2xl`} />
+      
+      <div className="relative flex items-center justify-between gap-3">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</span>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBgs[color]}`}>
+          <Icon size={20} strokeWidth={2.5} />
+        </div>
       </div>
-      <p className="mt-3 text-2xl font-bold text-slate-900 dark:text-white">{formatKpiValue(value, format)}</p>
+      <div className="relative mt-4 flex items-baseline gap-2">
+        <p className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          {formatKpiValue(value, format)}
+        </p>
+      </div>
     </article>
   );
 }
@@ -196,16 +256,16 @@ export default function ExecutiveDashboard({ context, result }) {
 
       {series.length > 0 ? <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Visualizações disponíveis para {series.length} série(s) retornada(s) pelo Protheus.</div> : null}
 
-      <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+      <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-slate-900/40">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-            <thead className="bg-slate-50 dark:bg-slate-800"><tr>{columns.map(column => <th key={column} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">{column}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{paginatedRows.map((row, index) => <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">{columns.map(column => <td key={column} className="whitespace-nowrap px-4 py-3 text-slate-700 dark:text-slate-200">{displayValue(row?.[column])}</td>)}</tr>)}</tbody>
+          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700/60">
+            <thead className="bg-slate-50/50 dark:bg-slate-800/40"><tr>{columns.map(column => <th key={column} className="whitespace-nowrap px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{column.replace(/_/g, ' ')}</th>)}</tr></thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">{paginatedRows.map((row, index) => <tr key={index} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40">{columns.map(column => <td key={column} className="whitespace-nowrap px-5 py-3.5 text-slate-700 dark:text-slate-300 font-medium">{displayValue(row?.[column])}</td>)}</tr>)}</tbody>
           </table>
         </div>
-        <footer className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm dark:border-slate-700">
-          <span className="text-slate-500">Página {page} de {totalPages} · {rows.length} linha(s)</span>
-          <div className="flex gap-2"><button type="button" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1} className="rounded border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40 dark:border-slate-700"><ChevronLeft size={16} /></button><button type="button" onClick={() => setPage(current => Math.min(totalPages, current + 1))} disabled={page === totalPages} className="rounded border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40 dark:border-slate-700"><ChevronRight size={16} /></button></div>
+        <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/30 px-5 py-3 text-sm dark:border-slate-700/60 dark:bg-slate-800/20">
+          <span className="text-slate-500 dark:text-slate-400">Página {page} de {totalPages} • {rows.length} linha(s)</span>
+          <div className="flex gap-2"><button type="button" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1} className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"><ChevronLeft size={16} /></button><button type="button" onClick={() => setPage(current => Math.min(totalPages, current + 1))} disabled={page === totalPages} className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"><ChevronRight size={16} /></button></div>
         </footer>
       </div>
     </section>
