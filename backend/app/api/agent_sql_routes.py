@@ -852,10 +852,29 @@ async def process_agent_task(task_id: str, payload: dict):
             op_context["filial"] = ctx.branch
 
             # 4. Carregar dicionário SEGURO (usando o filter novo)
+            # Inclui o módulo contextual e todos os módulos contratados ativos do tenant para suportar consultas multi-módulo
+            allowed_modules = {str(ctx.module_code)}
+            try:
+                contracted_rows = db.execute(
+                    text("""
+                        SELECT DISTINCT pm.mod_code::text
+                        FROM public.tenant_module_contracts tmc
+                        JOIN public.protheus_modules_master pm ON pm.id::text = tmc.module_id::text
+                        WHERE lower(btrim(tmc.tenant_id)) = :tenant_id
+                          AND lower(btrim(tmc.status)) IN ('active', 'enabled', 'allowed')
+                          AND pm.active = TRUE
+                    """),
+                    {"tenant_id": str(ctx.tenant_id).lower()},
+                ).scalars().all()
+                if contracted_rows:
+                    allowed_modules.update(str(code) for code in contracted_rows if code)
+            except Exception:
+                pass
+
             tables = filter_allowed_dictionary_tables(
                 db=db,
                 tenant_schema=ctx.schema_name,
-                module_codes=[ctx.module_code],
+                module_codes=list(allowed_modules),
                 company_id=ctx.company_id,
             )
 

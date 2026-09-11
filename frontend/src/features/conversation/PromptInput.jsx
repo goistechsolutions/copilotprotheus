@@ -14,6 +14,7 @@ export function PromptInput() {
     addToHistory, 
     isGenerating, 
     session,
+    setSession,
     setProcessingStep,
     pendingPrompt,
     clearPendingPrompt,
@@ -39,6 +40,7 @@ export function PromptInput() {
     if (!promptText || isGenerating) return;
     
     const text = promptText.trim();
+    if (!text) return;
     setInput('');
     
     addChatMessage({
@@ -53,7 +55,24 @@ export function PromptInput() {
     controllerRef.current = new AbortController();
     
     try {
-      const currentMod = session?.module || session?.currentModule || 'SIGAFAT';
+      let currentMod = session?.module || session?.currentModule;
+      const lower = (text || '').toLowerCase();
+      if (/fluxo de caixa|contas a pagar|contas a receber|inadimpl|vencimento|boleto|t[ií]tulo|se1|se2|se5|saldo banc|movimento banc/i.test(lower)) {
+        currentMod = 'SIGAFIN';
+      } else if (/compra|fornecedor|pedido de compra|sc7|recebimento/i.test(lower)) {
+        currentMod = 'SIGACOM';
+      } else if (/estoque|saldo de estoque|sb1|sb2|armaz[eé]m/i.test(lower)) {
+        currentMod = 'SIGAEST';
+      } else if (/venda|fatur|pedido de venda|cliente|sf2|sd2|sc5/i.test(lower)) {
+        currentMod = 'SIGAFAT';
+      } else if (!currentMod) {
+        currentMod = 'SIGAFAT';
+      }
+
+      if (setSession && currentMod !== session?.module) {
+        setSession({ module: currentMod, currentModule: currentMod });
+      }
+
       const payload = {
         tenant_id: session?.tenantId || '',
         company: session?.company || '',

@@ -7,7 +7,7 @@ export function CopilotHeader() {
 
   const tenant = session?.tenantId || 'Padrão';
   const environment = session?.environment || 'PROD';
-  const moduleName = session?.currentModule || 'SIGAFAT';
+  const moduleName = session?.module || session?.currentModule || 'SIGAFAT';
 
   return (
     <header className="flex flex-col border-b border-slate-100 dark:border-slate-800/60 shrink-0">

@@ -131,6 +131,48 @@ def resolve_context(
     schema_name = resolve_tenant_schema(db, tenant_id)
 
     module = raw_context.get("module") or payload.get("module")
+
+    # Inspeciona a pergunta (prompt ou histórico) para direcionamento semântico de módulo
+    prompt = (
+        payload.get("prompt")
+        or payload.get("query")
+        or raw_context.get("prompt")
+        or raw_context.get("query")
+    )
+    if not prompt:
+        history = payload.get("history") or raw_context.get("history")
+        if isinstance(history, list):
+            for turn in reversed(history):
+                if isinstance(turn, dict) and turn.get("role") == "user":
+                    past_text = turn.get("content") or turn.get("text")
+                    if past_text:
+                        prompt = past_text
+                        break
+
+    if prompt:
+        try:
+            from app.services.business import infer_query_domain
+            domain = infer_query_domain(str(prompt))
+            domain_to_module = {
+                "finance": "SIGAFIN",
+                "sales": "SIGAFAT",
+                "purchases": "SIGACOM",
+                "stock": "SIGAEST",
+                "inventory": "SIGAEST",
+                "fiscal": "SIGAFIS",
+                "accounting": "SIGACTB",
+            }
+            mapped_module = domain_to_module.get(domain) if domain else None
+            if mapped_module:
+                try:
+                    candidate = require_tenant_module(db, schema_name, mapped_module)
+                    if candidate:
+                        module = mapped_module
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     if not module or not str(module).strip():
         raise ValueError("module é obrigatório para execução no Protheus.")
 
