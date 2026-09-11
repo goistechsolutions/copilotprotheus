@@ -175,7 +175,16 @@ def _parse_protheus_json(response: httpx.Response) -> Any:
         raw,
     )
 
+def _parse_queryrest_json(response: httpx.Response) -> Any:
+    """
+    Alias de compatibilidade para testes e consumidores que ainda usam
+    o nome legado do parser QueryRest.
 
+    A integração atual pode usar GenericQuery, mas o parser continua
+    responsável por sanitizar BOM e escapes inválidos vindos do AppServer.
+    """
+return _parse_protheus_json(response)
+    
 def require_bearer_headers(headers: dict[str, str]) -> dict[str, str]:
     authorization = headers.get("Authorization", "")
 
