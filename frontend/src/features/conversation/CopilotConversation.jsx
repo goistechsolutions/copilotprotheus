@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, User, AlertTriangle, Database, ArrowRight, LayoutDashboard } from 'lucide-react';
+import { Bot, User, AlertTriangle, Database, ArrowRight, LayoutDashboard, Sparkles } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
+import { ProcessingTracker } from '../../components/chat/ProcessingTracker';
 
 const TABLE_LABELS = {
   SE1: 'Contas a Receber',
@@ -60,15 +61,22 @@ function DomainMismatchCard({ diag }) {
 
 
 export function CopilotConversation() {
-  const { chat, currentDashboard, setDashboard } = useDashboardStore();
+  const { 
+    chat, 
+    currentDashboard, 
+    setDashboard, 
+    isGenerating, 
+    processingStep, 
+    triggerPrompt 
+  } = useDashboardStore();
   const scrollRef = useRef(null);
 
-  // Auto-scroll para a última mensagem
+  // Auto-scroll para a última mensagem ou progresso
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [chat.messages]);
+  }, [chat.messages, isGenerating, processingStep]);
 
   return (
     <div className="flex-1 overflow-y-auto p-5" ref={scrollRef}>
@@ -128,12 +136,46 @@ export function CopilotConversation() {
                 </div>
               )}
 
+              {/* Sugestões Automáticas Contextuais (Perguntas Relacionadas) */}
+              {msg.suggestions?.length > 0 && (
+                <div className="mt-3 w-full">
+                  <p className="text-[11px] font-semibold text-slate-400 mb-1.5 flex items-center gap-1">
+                    <Sparkles size={11} className="text-blue-500" />
+                    Perguntas relacionadas:
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {msg.suggestions.map((sug, sIdx) => (
+                      <button
+                        key={sIdx}
+                        onClick={() => triggerPrompt(sug)}
+                        className="inline-flex items-center justify-between px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/40 dark:hover:text-blue-300 transition-colors border border-slate-200/60 dark:border-slate-700/60 text-left group"
+                      >
+                        <span>• {sug}</span>
+                        <ArrowRight size={11} className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-500 shrink-0 ml-1" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <span className="mt-1 text-[10px] text-slate-400">
                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
         ))}
+
+        {/* Indicador de Processamento em 6 Etapas */}
+        {isGenerating && (
+          <div className="flex gap-3 flex-row">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+              <Bot size={16} />
+            </div>
+            <div className="flex-1">
+              <ProcessingTracker currentStep={processingStep} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

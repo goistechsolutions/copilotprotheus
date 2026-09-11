@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export function DataGrid({ data, columns, pagination = true }) {
+export function DataGrid({ data, columns, pagination = true, onRowClick }) {
   const [page, setPage] = useState(0);
   const pageSize = 10;
   
@@ -25,7 +25,15 @@ export function DataGrid({ data, columns, pagination = true }) {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {currentData.length > 0 ? (
               currentData.map((row, rowIdx) => (
-                <tr key={rowIdx} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                <tr 
+                  key={rowIdx} 
+                  onClick={() => onRowClick && onRowClick(row)}
+                  className={`transition-colors ${
+                    onRowClick 
+                      ? 'cursor-pointer hover:bg-blue-50/60 dark:hover:bg-blue-900/20' 
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                  }`}
+                >
                   {columns?.map((col, colIdx) => (
                     <td key={colIdx} className="px-6 py-3.5 text-slate-700 dark:text-slate-300">
                       {col.cell ? col.cell({ getValue: () => row[col.accessorKey] }) : row[col.accessorKey]}

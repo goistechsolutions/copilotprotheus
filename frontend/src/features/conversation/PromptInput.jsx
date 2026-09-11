@@ -7,7 +7,17 @@ import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 
 export function PromptInput() {
   const [input, setInput] = useState('');
-  const { addChatMessage, setIsGenerating, setDashboard, addToHistory, isGenerating, session } = useDashboardStore();
+  const { 
+    addChatMessage, 
+    setIsGenerating, 
+    setDashboard, 
+    addToHistory, 
+    isGenerating, 
+    session,
+    setProcessingStep,
+    pendingPrompt,
+    clearPendingPrompt,
+  } = useDashboardStore();
   const controllerRef = useRef(null);
 
   useEffect(() => {
@@ -16,10 +26,19 @@ export function PromptInput() {
     };
   }, []);
 
-  const handleSend = async () => {
-    if (!input.trim() || isGenerating) return;
+  // Monitora solicitações programáticas de prompt (drill-down e cliques em sugestões)
+  useEffect(() => {
+    if (pendingPrompt && !isGenerating) {
+      const text = pendingPrompt;
+      clearPendingPrompt();
+      executePrompt(text);
+    }
+  }, [pendingPrompt, isGenerating]);
+
+  const executePrompt = async (promptText) => {
+    if (!promptText || isGenerating) return;
     
-    const text = input.trim();
+    const text = promptText.trim();
     setInput('');
     
     addChatMessage({
@@ -30,6 +49,7 @@ export function PromptInput() {
     });
     
     setIsGenerating(true);
+    setProcessingStep(1); // 1. Entendendo pergunta
     controllerRef.current = new AbortController();
     
     try {
@@ -39,18 +59,22 @@ export function PromptInput() {
         branch: session?.branch || '',
         user: session?.userId || session?.user || '',
         environment: session?.environment || '',
-        environment_code: session?.environment || '', // Backend validation expects environment_code
+        environment_code: session?.environment || '',
         module: session?.module || '',
-        session_id: Date.now().toString(), // Podemo usar ID de conversação persistente se houver no futuro
+        session_id: Date.now().toString(),
         prompt: text,
         execute: true,
       };
 
+      setProcessingStep(2); // 2. Gerando consulta
       const accepted = await askAgent(payload, { signal: controllerRef.current.signal });
+      
+      setProcessingStep(3); // 3. Consultando Protheus
       const response = accepted.task_id 
         ? await waitForAgentTask(accepted.task_id, { signal: controllerRef.current.signal }) 
         : accepted;
         
+      setProcessingStep(4); // 4. Analisando dados
       const normalized = normalizeAgentResult(response);
 
       if (normalized.status === 'error') {
@@ -65,11 +89,13 @@ export function PromptInput() {
       } else {
         const result = normalized.result;
         
+        setProcessingStep(5); // 5. Gerando insights
         let adaptive = null;
         if (result && Array.isArray(result.rows) && result.rows.length > 0) {
           adaptive = buildAdaptiveDashboard(result.rows, result.columns || []);
           if (adaptive) {
             adaptive.originPrompt = text;
+            setProcessingStep(6); // 6. Montando dashboard
             setDashboard(adaptive);
           }
         } else if (result && (result.columns || result.sql_query)) {
@@ -80,31 +106,15 @@ export function PromptInput() {
           });
         }
 
-        // Construção do sumário executivo integrado com o motor de análise
-        let alignedMessage = normalized.message || 'Consulta concluída com sucesso.';
-        if (adaptive && adaptive.data) {
-          const primaryKpi = adaptive.data.kpis?.find(k => k.type === 'sum');
-          const avgKpi = adaptive.data.kpis?.find(k => k.type === 'avg');
-          const topInsight = adaptive.data.insights?.[0];
-          const abcInsight = adaptive.data.insights?.find(i => i.title.includes('ABC'));
-
-          alignedMessage = `A consulta ao Protheus retornou ${result.rows.length} registros.`;
-          if (primaryKpi) {
-            alignedMessage += ` Total acumulado de R$ ${primaryKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (média de R$ ${avgKpi?.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por registro).`;
-          }
-          if (topInsight) {
-            alignedMessage += `\n\n📌 **${topInsight.title}**: ${topInsight.description}`;
-          }
-          if (abcInsight) {
-            alignedMessage += `\n📊 **${abcInsight.title}**: ${abcInsight.description}`;
-          }
-        }
+        // Utiliza o sumário executivo gerado pelo motor analítico (AnalysisContext)
+        const finalMessage = adaptive?.executiveSummary || normalized.message || 'Análise concluída com sucesso.';
 
         addChatMessage({
           id: Date.now().toString(),
           role: 'assistant',
-          content: alignedMessage,
+          content: finalMessage,
           dashboard: adaptive,
+          suggestions: adaptive?.suggestions || [],
           originPrompt: text,
           timestamp: new Date().toISOString()
         });
@@ -130,7 +140,14 @@ export function PromptInput() {
       });
     } finally {
       setIsGenerating(false);
+      setProcessingStep(1);
       controllerRef.current = null;
+    }
+  };
+
+  const handleSend = () => {
+    if (input.trim()) {
+      executePrompt(input);
     }
   };
 

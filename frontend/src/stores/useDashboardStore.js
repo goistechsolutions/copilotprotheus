@@ -34,6 +34,15 @@ export const useDashboardStore = create((set) => ({
     chat: { ...state.chat, isOpen: !state.chat.isOpen }
   })),
 
+  // Estado de Processamento Progressivo (6 etapas)
+  processingStep: 1,
+  setProcessingStep: (step) => set({ processingStep: step }),
+
+  // Disparo de Prompt Programático (Drill-down e Sugestões)
+  pendingPrompt: null,
+  triggerPrompt: (promptText) => set({ pendingPrompt: promptText }),
+  clearPendingPrompt: () => set({ pendingPrompt: null }),
+
   // Histórico e Favoritos
   history: [],
   addToHistory: (entry) => set((state) => {
@@ -53,7 +62,25 @@ export const useDashboardStore = create((set) => ({
   }),
   restoreDashboard: (dashboard) => set({ currentDashboard: dashboard }),
   closeDashboard: () => set({ currentDashboard: null }),
+  
   favorites: [],
+  toggleFavorite: (dashboard) => set((state) => {
+    if (!dashboard) return state;
+    const exists = state.favorites.some(f => f.originPrompt === dashboard.originPrompt || (f.id && f.id === dashboard.id));
+    if (exists) {
+      return {
+        favorites: state.favorites.filter(f => f.originPrompt !== dashboard.originPrompt && f.id !== dashboard.id)
+      };
+    } else {
+      const fav = {
+        id: dashboard.id || Date.now().toString(),
+        title: dashboard.originPrompt || 'Painel Salvo',
+        date: new Date().toLocaleDateString('pt-BR'),
+        dashboard: dashboard,
+      };
+      return { favorites: [fav, ...state.favorites] };
+    }
+  }),
 
   // Configurações
   config: {

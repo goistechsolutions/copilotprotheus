@@ -182,9 +182,10 @@ export function analyzeSchema(rows, columns = []) {
 // ─── 3. Classificador de Dataset com Sistema de Pontuação (Score) ─────────────
 export function classifyDataset(schema) {
   const scores = {
-    ranking: 0,
+    seller_ranking: 0,
+    customer_ranking: 0,
     product_analysis: 0,
-    geographic: 0,
+    geographic_distribution: 0,
     composition: 0,
     time_series: 0,
   };
@@ -195,10 +196,10 @@ export function classifyDataset(schema) {
   }
   
   // Vendedor ou Cliente -> Ranking
-  if (schema.hasSeller) scores.ranking += 85;
-  if (schema.hasCustomer) scores.ranking += 80;
-  if (schema.hasProduct) scores.product_analysis += 80;
-  if (schema.hasGeographic) scores.geographic += 80;
+  if (schema.hasSeller) scores.seller_ranking += 90;
+  if (schema.hasCustomer) scores.customer_ranking += 85;
+  if (schema.hasProduct) scores.product_analysis += 85;
+  if (schema.hasGeographic) scores.geographic_distribution += 85;
 
   // Cardinalidade para composição
   const singleDim = schema.columns.find(c => c.type === 'dimension');
@@ -206,17 +207,17 @@ export function classifyDataset(schema) {
     scores.composition += 70;
   }
 
-  // Se houver data E entidade (cliente/produto/vendedor), prefere time_series
+  // Se houver data E entidade, time_series ganha bônus
   if (schema.hasDate && (schema.hasCustomer || schema.hasProduct || schema.hasSeller)) {
     scores.time_series += 20;
   }
 
-  // Se NÃO houver data, zera time_series (impossível ser time_series sem data)
+  // Se NÃO houver data, zera time_series
   if (!schema.hasDate) {
     scores.time_series = 0;
   }
 
-  let bestType = 'ranking';
+  let bestType = 'seller_ranking';
   let maxScore = 0;
 
   for (const [type, score] of Object.entries(scores)) {
@@ -228,7 +229,7 @@ export function classifyDataset(schema) {
 
   // Fallback seguro
   if (maxScore === 0) {
-    bestType = schema.hasDate ? 'time_series' : 'ranking';
+    bestType = schema.hasDate ? 'time_series' : (schema.hasCustomer ? 'customer_ranking' : 'seller_ranking');
     maxScore = 75;
   }
 
@@ -426,7 +427,85 @@ export function buildCharts(schema, rows) {
   return charts;
 }
 
-// ─── 6. Pipeline Orquestrador Adaptativo ──────────────────────────────────────
+// ─── 6. Motor de Sugestões Automáticas Contextuais ────────────────────────────
+export function generateContextualSuggestions(schema, data = {}) {
+  const suggestions = [];
+  const charts = data.charts || [];
+  const topItem = charts[0]?.data?.[0]?.label;
+
+  if (schema.hasSeller) {
+    suggestions.push('Mostrar Top 20 vendedores');
+    suggestions.push('Comparar com mês anterior');
+    suggestions.push('Analisar tendência');
+    if (topItem) {
+      suggestions.push(`Clientes do vendedor ${topItem}`);
+    }
+  } else if (schema.hasCustomer) {
+    suggestions.push('Histórico de compras do cliente líder');
+    suggestions.push('Produtos mais comprados por clientes');
+    suggestions.push('Clientes sem compras recentes');
+    if (topItem) {
+      suggestions.push(`Detalhamento do cliente ${topItem}`);
+    }
+  } else if (schema.hasProduct) {
+    suggestions.push('Curva ABC completa de produtos');
+    suggestions.push('Produtos com maior volume');
+    suggestions.push('Vendas por linha de produto');
+    if (topItem) {
+      suggestions.push(`Clientes que compram o produto ${topItem}`);
+    }
+  } else if (schema.hasDate) {
+    suggestions.push('Comparar ano atual vs ano anterior');
+    suggestions.push('Identificar período de pico');
+    suggestions.push('Projeção para os próximos 30 dias');
+    suggestions.push('Detalhamento semanal');
+  } else {
+    suggestions.push('Filtrar pelos 10 maiores');
+    suggestions.push('Comparar com período anterior');
+    suggestions.push('Analisar tendência');
+  }
+
+  return suggestions.slice(0, 4);
+}
+
+// ─── 7. Chat Response Builder (Texto Executivo sem Jargões) ───────────────────
+export function buildExecutiveChatSummary(context) {
+  if (!context || !context.data) return 'Análise concluída com sucesso.';
+
+  const { data, schema } = context;
+  const rows = data.rows || [];
+  const count = rows.length;
+  const totalKpi = data.kpis?.find(k => k.type === 'sum');
+  const topInsight = data.insights?.find(i => i.title.includes('Principal') || i.title.includes('Concentração'));
+  const abcInsight = data.insights?.find(i => i.title.includes('ABC'));
+
+  const entityName = schema.hasSeller ? 'vendedores' :
+                     schema.hasCustomer ? 'clientes' :
+                     schema.hasProduct ? 'produtos' :
+                     schema.hasGeographic ? 'regiões' : 'registros';
+
+  const parts = ['**Análise concluída.**\n'];
+
+  if (totalKpi) {
+    parts.push(`💰 **Faturamento total:**\nR$ ${totalKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`);
+  }
+
+  parts.push(`📊 Foram identificados **${count} ${entityName}**.\n`);
+
+  if (topInsight) {
+    parts.push(`📌 ${topInsight.description}\n`);
+  }
+
+  if (abcInsight) {
+    parts.push(`📈 ${abcInsight.description}\n`);
+  }
+
+  parts.push(`✨ **Dashboard disponível.**`);
+
+  return parts.join('\n');
+}
+
+// ─── 8. Pipeline Orquestrador Adaptativo ──────────────────────────────────────
 export function buildAdaptiveDashboard(rows, columns = []) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return null;
@@ -438,20 +517,29 @@ export function buildAdaptiveDashboard(rows, columns = []) {
   const insights = buildInsights(schema, rows);
   const charts = buildCharts(schema, rows);
 
-  return {
+  const contextData = {
+    rows,
+    columns: columns.length > 0 ? columns : Object.keys(rows[0] || {}),
+    kpis,
+    insights,
+    charts,
+    series: charts.filter(c => c.chartType === 'bar' || c.chartType === 'line').map(c => ({
+      label: c.title,
+      points: c.data,
+    })),
+  };
+
+  const suggestions = generateContextualSuggestions(schema, contextData);
+
+  const analysisContext = {
     screenType: classification.datasetType,
     confidence: classification.confidence,
     schema,
-    data: {
-      rows,
-      columns: columns.length > 0 ? columns : Object.keys(rows[0] || {}),
-      kpis,
-      insights,
-      charts,
-      series: charts.filter(c => c.chartType === 'bar' || c.chartType === 'line').map(c => ({
-        label: c.title,
-        points: c.data,
-      })),
-    }
+    suggestions,
+    data: contextData,
   };
+
+  analysisContext.executiveSummary = buildExecutiveChatSummary(analysisContext);
+
+  return analysisContext;
 }

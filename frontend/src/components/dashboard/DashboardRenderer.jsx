@@ -9,7 +9,10 @@ import { MetricCard } from '../kpis/MetricCard';
 import { MetricsRow } from '../kpis/MetricsRow';
 import { InsightCard } from '../insights/InsightCard';
 import { InsightsGrid } from '../insights/InsightsGrid';
-import { DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, Sparkles, ArrowLeft } from 'lucide-react';
+import { 
+  DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, 
+  Sparkles, ArrowLeft, RefreshCw, FileSpreadsheet, Printer, Bookmark, BookmarkCheck, MessageSquare 
+} from 'lucide-react';
 import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 
@@ -24,6 +27,16 @@ const SCREEN_CONFIGS = {
     badge: 'Ranking',
     description: 'Classificação por representatividade e análise de concentração de clientes/entidades.',
   },
+  customer_ranking: {
+    title: 'Ranking de Clientes & Concentração',
+    badge: 'Clientes',
+    description: 'Classificação por faturamento e representatividade de clientes na carteira.',
+  },
+  seller_ranking: {
+    title: 'Ranking de Vendedores & Performance Comercial',
+    badge: 'Comercial',
+    description: 'Volume faturado e atingimento por vendedor/representante.',
+  },
   product_analysis: {
     title: 'Performance de Produtos & Itens',
     badge: 'Produtos',
@@ -33,6 +46,11 @@ const SCREEN_CONFIGS = {
     title: 'Distribuição Regional',
     badge: 'Geográfico',
     description: 'Dispersão de receitas e faturamento por estado/região.',
+  },
+  geographic_distribution: {
+    title: 'Distribuição Regional & Estados',
+    badge: 'Geográfico',
+    description: 'Dispersão de receitas e faturamento por UF/região.',
   },
   composition: {
     title: 'Composição & Proporção',
@@ -47,7 +65,83 @@ const SCREEN_CONFIGS = {
 };
 
 export default function DashboardRenderer({ payload }) {
-  const { setDashboard } = useDashboardStore();
+  const { 
+    setDashboard, 
+    triggerPrompt, 
+    toggleFavorite, 
+    favorites, 
+    chat, 
+    toggleChat 
+  } = useDashboardStore();
+
+  const isFavorited = useMemo(() => {
+    if (!payload || !favorites) return false;
+    return favorites.some(f => f.originPrompt === payload.originPrompt || (f.id && f.id === payload.id));
+  }, [payload, favorites]);
+
+  const handleExportExcel = () => {
+    if (!payload?.data?.rows || payload.data.rows.length === 0) return;
+    const rows = payload.data.rows;
+    const headers = payload.data.columns || Object.keys(rows[0]);
+    
+    // Gerar CSV com separador ; e BOM UTF-8 para Excel abrir nativamente com acentos corretos
+    const csvRows = [];
+    csvRows.push(headers.join(';'));
+    
+    for (const row of rows) {
+      const values = headers.map(header => {
+        let val = row[header];
+        if (val === null || val === undefined) return '';
+        val = String(val).replace(/"/g, '""');
+        return `"${val}"`;
+      });
+      csvRows.push(values.join(';'));
+    }
+    
+    const csvContent = '\uFEFF' + csvRows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `copilot_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
+  const handleRefresh = () => {
+    if (payload?.originPrompt) {
+      triggerPrompt(payload.originPrompt);
+    }
+  };
+
+  const handleContinueConversation = () => {
+    if (!chat.isOpen) {
+      toggleChat();
+    }
+  };
+
+  // Drill-down dinâmico baseado na entidade clicada
+  const handleDrillDown = (itemOrVal) => {
+    if (!itemOrVal) return;
+    const label = typeof itemOrVal === 'string' ? itemOrVal : (itemOrVal.label || itemOrVal.name || Object.values(itemOrVal)[0]);
+    if (!label) return;
+
+    const screenType = payload?.screenType || '';
+    if (screenType.includes('seller') || payload?.originPrompt?.toLowerCase().includes('vendedor')) {
+      triggerPrompt(`Clientes atendidos pelo vendedor ${label}`);
+    } else if (screenType.includes('customer') || payload?.originPrompt?.toLowerCase().includes('cliente')) {
+      triggerPrompt(`Produtos mais comprados pelo cliente ${label}`);
+    } else if (screenType.includes('product') || payload?.originPrompt?.toLowerCase().includes('produto')) {
+      triggerPrompt(`Clientes que compraram o produto ${label}`);
+    } else {
+      triggerPrompt(`Detalhamento de ${label}`);
+    }
+  };
 
   const formatLabel = (key) => {
     if (!key) return '';
@@ -143,7 +237,7 @@ export default function DashboardRenderer({ payload }) {
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="flex h-full flex-col gap-6 p-4 sm:p-6 pb-20"
     >
-      {/* Contexto da Origem e Ação de Retorno */}
+      {/* Barra de Ações e Contexto Unificado (Página 9 da Especificação) */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
         <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 min-w-0">
           <span className="font-semibold text-slate-500 dark:text-slate-400 shrink-0">Origem:</span>
@@ -151,13 +245,73 @@ export default function DashboardRenderer({ payload }) {
             "{payload.originPrompt || 'Consulta no Protheus'}"
           </span>
         </div>
-        <button
-          onClick={() => setDashboard(null)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm shrink-0"
-        >
-          <ArrowLeft size={13} />
-          <span>Voltar ao Chat</span>
-        </button>
+
+        {/* Action Bar Completa */}
+        <div className="flex items-center flex-wrap gap-2">
+          {/* Voltar ao Chat */}
+          <button
+            onClick={() => setDashboard(null)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm shrink-0"
+            title="Fechar Dashboard e voltar ao fluxo de chat"
+          >
+            <ArrowLeft size={13} />
+            <span>Voltar ao Chat</span>
+          </button>
+
+          {/* Atualizar Dados */}
+          <button
+            onClick={handleRefresh}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm shrink-0"
+            title="Recalcular e atualizar dados da consulta"
+          >
+            <RefreshCw size={13} />
+            <span className="hidden sm:inline">Atualizar</span>
+          </button>
+
+          {/* Exportar Excel */}
+          <button
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm shrink-0"
+            title="Baixar planilha formatada para Excel"
+          >
+            <FileSpreadsheet size={13} className="text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden sm:inline">Excel</span>
+          </button>
+
+          {/* Exportar PDF */}
+          <button
+            onClick={handlePrintPDF}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm shrink-0"
+            title="Imprimir ou salvar em PDF"
+          >
+            <Printer size={13} />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+
+          {/* Salvar Painel (Favoritos) */}
+          <button
+            onClick={() => toggleFavorite(payload)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-sm shrink-0 ${
+              isFavorited
+                ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 font-semibold'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+            title={isFavorited ? 'Remover dos favoritos' : 'Salvar nos favoritos'}
+          >
+            {isFavorited ? <BookmarkCheck size={13} className="text-amber-500 fill-amber-500" /> : <Bookmark size={13} />}
+            <span className="hidden sm:inline">{isFavorited ? 'Salvo' : 'Salvar Painel'}</span>
+          </button>
+
+          {/* Continuar Conversa */}
+          <button
+            onClick={handleContinueConversation}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-sm shrink-0"
+            title="Retomar a conversa no Copiloto"
+          >
+            <MessageSquare size={13} />
+            <span>Continuar Conversa</span>
+          </button>
+        </div>
       </div>
 
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800/80 pb-4">
@@ -214,7 +368,7 @@ export default function DashboardRenderer({ payload }) {
         </InsightsGrid>
       )}
       
-      {/* Camada 3: Gráficos com Regras de Cardinalidade (Donut <= 6, Top 10 Bar > 6, Line para Datas) */}
+      {/* Camada 3: Gráficos com Regras de Cardinalidade e Drill-Down Interativo */}
       {data?.charts?.length > 0 ? (
         <div className={`grid grid-cols-1 gap-6 ${data.charts.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
           {data.charts.map((chart, idx) => {
@@ -244,7 +398,7 @@ export default function DashboardRenderer({ payload }) {
                 </div>
               );
             }
-            // Bar chart (default)
+            // Bar chart (default) com suporte a onBarClick para drill-down
             return (
               <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
                 <BarChartCard 
@@ -253,6 +407,7 @@ export default function DashboardRenderer({ payload }) {
                   xAxisKey={chart.xAxisKey || 'label'} 
                   dataKey={chart.dataKey || 'value'} 
                   color="#3b82f6" 
+                  onBarClick={handleDrillDown}
                 />
               </div>
             );
@@ -271,6 +426,7 @@ export default function DashboardRenderer({ payload }) {
                     data={formattedPoints} 
                     xAxisKey="label" 
                     color="#3b82f6" 
+                    onBarClick={handleDrillDown}
                   />
                 </div>
               );
@@ -279,11 +435,14 @@ export default function DashboardRenderer({ payload }) {
         )
       )}
 
-      {/* Camada 3: Tabela Detalhada com Paginação */}
+      {/* Camada 3: Tabela Detalhada com Drill-Down ao Clicar na Linha */}
       {data?.rows?.length > 0 && (
         <div className="mt-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Detalhamento dos Dados</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Detalhamento dos Dados</h3>
+              <p className="text-xs text-slate-500">Clique em qualquer linha da tabela para detalhar a entidade no Copiloto.</p>
+            </div>
             <span className="text-xs text-slate-500 font-medium">
               {data.rows.length} {data.rows.length === 1 ? 'registro' : 'registros'}
             </span>
@@ -291,6 +450,7 @@ export default function DashboardRenderer({ payload }) {
           <DataGrid 
             data={data.rows} 
             columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: col, accessorKey: col })) : []} 
+            onRowClick={(row) => handleDrillDown(row)}
           />
         </div>
       )}
