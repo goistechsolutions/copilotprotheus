@@ -16,7 +16,7 @@ from app.services.protheus_token_service import (
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT_SECONDS = 60
-QUERYREST_ENDPOINT = "/queryrest/QueryRest"
+QUERYREST_ENDPOINT = "/queryrest"
 
 
 def _tls_verify_setting() -> bool | str:
@@ -131,7 +131,7 @@ def require_bearer_headers(headers: dict[str, str]) -> dict[str, str]:
 
 
 class ProtheusQueryRestClient:
-    """Cliente da API customizada compilada no Protheus em /queryrest/QueryRest."""
+    """Cliente da API customizada compilada no Protheus em /queryrest."""
 
     def __init__(self, db: Any, tenant_code: str, environment_code: str) -> None:
         self.db = db
