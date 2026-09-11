@@ -776,6 +776,30 @@ def _seed_bkl_initial_data(db):
                 ON CONFLICT (domain_code, mod_sigla) DO UPDATE
                 SET mod_code = EXCLUDED.mod_code, is_primary = EXCLUDED.is_primary
             """), {"dc": dc, "sigla": sigla, "mcode": mcode, "is_prim": is_prim})
+
+        # 5. Saneamento do Catálogo Oficial Protheus (protheus_modules_master)
+        # Garante que mod_code 5 seja sempre SIGAFAT e mod_code 2 seja SIGACOM
+        canonical_master = [
+            (1, "SIGAATF", "Ativo Fixo"),
+            (2, "SIGACOM", "Compras"),
+            (4, "SIGAEST", "Estoque e Custos"),
+            (5, "SIGAFAT", "Faturamento"),
+            (6, "SIGAFIN", "Financeiro"),
+            (7, "SIGAGPE", "Gestão de Pessoal"),
+            (9, "SIGAFIS", "Livros Fiscais"),
+            (10, "SIGAPCP", "Planejamento e Controle da Produção"),
+            (34, "SIGACTB", "Contabilidade Gerencial"),
+        ]
+        for mc, ms, mn in canonical_master:
+            db.execute(text("""
+                INSERT INTO public.protheus_modules_master (mod_code, mod_sigla, mod_name, active, updated_at)
+                VALUES (:mc, :ms, :mn, TRUE, CURRENT_TIMESTAMP)
+                ON CONFLICT (mod_code) DO UPDATE
+                SET mod_sigla = EXCLUDED.mod_sigla,
+                    mod_name = EXCLUDED.mod_name,
+                    active = TRUE,
+                    updated_at = CURRENT_TIMESTAMP
+            """), {"mc": mc, "ms": ms, "mn": mn})
     except Exception as exc:
         print(f"[DB] Aviso ao semear BKL inicial: {exc}")
 

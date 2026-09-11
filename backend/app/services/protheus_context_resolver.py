@@ -164,14 +164,24 @@ def resolve_context(
             }
             mapped_module = domain_to_module.get(domain) if domain else None
             if mapped_module:
-                try:
-                    candidate = require_tenant_module(db, schema_name, mapped_module)
-                    if candidate:
-                        module = mapped_module
-                except Exception:
-                    pass
+                module = mapped_module
         except Exception:
             pass
+
+    # Normaliza domínios semânticos passados diretamente no campo module
+    mod_str = str(module or "").strip().lower()
+    if mod_str in ("sales", "vendas", "faturamento"):
+        module = "SIGAFAT"
+    elif mod_str in ("finance", "financeiro"):
+        module = "SIGAFIN"
+    elif mod_str in ("purchases", "compras"):
+        module = "SIGACOM"
+    elif mod_str in ("stock", "inventory", "estoque"):
+        module = "SIGAEST"
+    elif mod_str in ("fiscal",):
+        module = "SIGAFIS"
+    elif mod_str in ("accounting", "controladoria", "contabilidade"):
+        module = "SIGACTB"
 
     if not module or not str(module).strip():
         raise ValueError("module é obrigatório para execução no Protheus.")

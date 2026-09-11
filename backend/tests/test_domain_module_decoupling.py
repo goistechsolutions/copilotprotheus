@@ -127,3 +127,15 @@ def test_numeric_tokens_always_resolve_to_protheus_master_mod_codes():
     assert m6 is not None
     assert m6["mod_sigla"] == "SIGAFIN"
     assert m6["mod_code"] == 6
+
+
+def test_sales_tokens_never_resolve_to_mod_code_2():
+    db = FakeModuleDB()
+
+    for token in ["SIGAFAT", "FAT", "VENDAS", "SALES", "FATURAMENTO"]:
+        res = resolve_global_module(db, token)
+        assert res is not None, f"Token {token} should resolve"
+        assert res["mod_sigla"] == "SIGAFAT"
+        assert res["mod_code"] == 5
+        assert res["mod_code"] != 2, f"Token {token} resolved to mod_code 2!"
+

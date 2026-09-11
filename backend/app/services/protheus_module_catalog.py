@@ -44,15 +44,45 @@ def normalize_module_token(value: str | int | None) -> str | None:
 _SEMANTIC_DOMAIN_FALLBACK = {
     "FINANCEIRO": "SIGAFIN",
     "FINANCE": "SIGAFIN",
+    "FIN": "SIGAFIN",
     "VENDAS": "SIGAFAT",
     "FATURAMENTO": "SIGAFAT",
     "SALES": "SIGAFAT",
+    "FAT": "SIGAFAT",
     "COMPRAS": "SIGACOM",
     "PURCHASES": "SIGACOM",
+    "COM": "SIGACOM",
     "ESTOQUE": "SIGAEST",
     "INVENTORY": "SIGAEST",
+    "STOCK": "SIGAEST",
+    "EST": "SIGAEST",
     "FISCAL": "SIGAFIS",
+    "FIS": "SIGAFIS",
     "CONTROLADORIA": "SIGACTB",
+    "CONTABILIDADE": "SIGACTB",
+    "ACCOUNTING": "SIGACTB",
+    "CTB": "SIGACTB",
+}
+
+CANONICAL_MODULES_BY_SIGLA: dict[str, dict[str, Any]] = {
+    "SIGAFAT": {"mod_code": 5, "mod_sigla": "SIGAFAT", "mod_name": "Faturamento"},
+    "FAT": {"mod_code": 5, "mod_sigla": "SIGAFAT", "mod_name": "Faturamento"},
+    "SIGAFIN": {"mod_code": 6, "mod_sigla": "SIGAFIN", "mod_name": "Financeiro"},
+    "FIN": {"mod_code": 6, "mod_sigla": "SIGAFIN", "mod_name": "Financeiro"},
+    "SIGACOM": {"mod_code": 2, "mod_sigla": "SIGACOM", "mod_name": "Compras"},
+    "COM": {"mod_code": 2, "mod_sigla": "SIGACOM", "mod_name": "Compras"},
+    "SIGAEST": {"mod_code": 4, "mod_sigla": "SIGAEST", "mod_name": "Estoque e Custos"},
+    "EST": {"mod_code": 4, "mod_sigla": "SIGAEST", "mod_name": "Estoque e Custos"},
+    "SIGAFIS": {"mod_code": 9, "mod_sigla": "SIGAFIS", "mod_name": "Livros Fiscais"},
+    "FIS": {"mod_code": 9, "mod_sigla": "SIGAFIS", "mod_name": "Livros Fiscais"},
+    "SIGACTB": {"mod_code": 34, "mod_sigla": "SIGACTB", "mod_name": "Contabilidade Gerencial"},
+    "CTB": {"mod_code": 34, "mod_sigla": "SIGACTB", "mod_name": "Contabilidade Gerencial"},
+    "SIGAATF": {"mod_code": 1, "mod_sigla": "SIGAATF", "mod_name": "Ativo Fixo"},
+    "ATF": {"mod_code": 1, "mod_sigla": "SIGAATF", "mod_name": "Ativo Fixo"},
+    "SIGAGPE": {"mod_code": 7, "mod_sigla": "SIGAGPE", "mod_name": "Gestão de Pessoal"},
+    "GPE": {"mod_code": 7, "mod_sigla": "SIGAGPE", "mod_name": "Gestão de Pessoal"},
+    "SIGAPCP": {"mod_code": 10, "mod_sigla": "SIGAPCP", "mod_name": "Planejamento e Controle da Produção"},
+    "PCP": {"mod_code": 10, "mod_sigla": "SIGAPCP", "mod_name": "Planejamento e Controle da Produção"},
 }
 
 
@@ -84,44 +114,71 @@ def resolve_global_module(
 
         return dict(row) if row else None
 
-    # 2. Se for um Domínio de Negócio semântico (ex: "FINANCEIRO", "VENDAS"),
+    # Identifica a sigla canônica oficial (ex: VENDAS -> SIGAFAT, FINANCEIRO -> SIGAFIN)
+    canonical_sigla = (
+        _SEMANTIC_DOMAIN_FALLBACK.get(token)
+        or (f"SIGA{token}" if f"SIGA{token}" in CANONICAL_MODULES_BY_SIGLA else None)
+        or (token if token in CANONICAL_MODULES_BY_SIGLA else None)
+    )
+
+    # 2. Se for um Domínio de Negócio semântico (ex: "FINANCEIRO", "VENDAS", "SALES"),
     # consulta a tabela de mapeamento semântico business_domain_modules
     try:
         domain_row = db.execute(
             text("""
                 SELECT
-                    pm.mod_code,
-                    pm.mod_sigla,
-                    pm.mod_name
+                    bdm.mod_code,
+                    bdm.mod_sigla,
+                    COALESCE(pm.mod_name, bdm.domain_code) AS mod_name
                 FROM public.business_domain_modules bdm
-                JOIN public.protheus_modules_master pm ON pm.mod_sigla = bdm.mod_sigla
-                WHERE UPPER(TRIM(bdm.domain_code)) = :token
+                LEFT JOIN public.protheus_modules_master pm ON pm.mod_code = bdm.mod_code
+                WHERE (
+                    UPPER(TRIM(bdm.domain_code)) = :token
+                    OR UPPER(TRIM(bdm.mod_sigla)) = :token
+                    OR (:sigla IS NOT NULL AND (
+                        UPPER(TRIM(bdm.domain_code)) = :sigla
+                        OR UPPER(TRIM(bdm.mod_sigla)) = :sigla
+                    ))
+                )
                   AND bdm.is_primary = TRUE
-                  AND pm.active = TRUE
                 LIMIT 1
             """),
-            {"token": token},
+            {"token": token, "sigla": canonical_sigla},
         ).mappings().first()
         if domain_row:
-            return dict(domain_row)
+            res = dict(domain_row)
+            if canonical_sigla == "SIGAFAT" and res.get("mod_code") == 2:
+                res["mod_code"] = 5
+            return res
     except Exception:
-        # Fallback resiliente se a tabela ainda não tiver sido criada em ambiente SQLite/testes
-        fallback_sigla = _SEMANTIC_DOMAIN_FALLBACK.get(token)
-        if fallback_sigla:
+        pass
+
+    if canonical_sigla:
+        try:
             fallback_row = db.execute(
                 text("""
                     SELECT mod_code, mod_sigla, mod_name
                     FROM public.protheus_modules_master
                     WHERE UPPER(TRIM(mod_sigla)) = :sigla
                       AND active = TRUE
+                    ORDER BY mod_code ASC
                     LIMIT 1
                 """),
-                {"sigla": fallback_sigla},
+                {"sigla": canonical_sigla},
             ).mappings().first()
             if fallback_row:
-                return dict(fallback_row)
+                res = dict(fallback_row)
+                if canonical_sigla == "SIGAFAT" and res.get("mod_code") == 2:
+                    res["mod_code"] = 5
+                return res
+        except Exception:
+            pass
+
+        if canonical_sigla in CANONICAL_MODULES_BY_SIGLA:
+            return dict(CANONICAL_MODULES_BY_SIGLA[canonical_sigla])
 
     # 3. Busca direta por mod_sigla ou mod_name em protheus_modules_master
+    target_sigla = canonical_sigla or f"SIGA{token}"
     row = db.execute(
         text("""
             SELECT
@@ -131,17 +188,34 @@ def resolve_global_module(
             FROM public.protheus_modules_master
             WHERE active = TRUE
               AND (
-                    UPPER(TRIM(mod_sigla)) = :token
+                    UPPER(TRIM(mod_sigla)) = :sigla
+                 OR UPPER(TRIM(mod_sigla)) = :token
                  OR UPPER(TRIM(mod_sigla)) = 'SIGA' || :token
                  OR UPPER(COALESCE(mod_name, '')) LIKE '%' || :token || '%'
               )
-            ORDER BY mod_code
+            ORDER BY
+              CASE
+                WHEN UPPER(TRIM(mod_sigla)) = :sigla THEN 1
+                WHEN UPPER(TRIM(mod_sigla)) = 'SIGA' || :token THEN 2
+                WHEN UPPER(TRIM(mod_sigla)) = :token THEN 3
+                ELSE 4
+              END,
+              mod_code ASC
             LIMIT 1
         """),
-        {"token": token},
+        {"token": token, "sigla": target_sigla},
     ).mappings().first()
 
-    return dict(row) if row else None
+    if row:
+        res = dict(row)
+        if target_sigla == "SIGAFAT" and res.get("mod_code") == 2:
+            res["mod_code"] = 5
+        return res
+
+    if target_sigla in CANONICAL_MODULES_BY_SIGLA:
+        return dict(CANONICAL_MODULES_BY_SIGLA[target_sigla])
+
+    return None
 
 
 def resolve_tenant_module_codes(
@@ -162,13 +236,22 @@ def resolve_tenant_module_codes(
                 module_code::text AS module_code
             FROM {schema}.dictionary_tables
             WHERE tenant_id = :tenant_id
-              AND module_code::text = CAST(:mod_code AS text)
+              AND (
+                    module_code::text = CAST(:mod_code AS text)
+                 OR module_code::text = CAST(:mod_sigla AS text)
+                 OR module_code::text = '0' || CAST(:mod_code AS text)
+              )
               AND COALESCE(active_flag, TRUE) = TRUE
         """),
-        {"tenant_id": str(tenant_schema), "mod_code": str(resolved["mod_code"])},
+        {
+            "tenant_id": str(tenant_schema),
+            "mod_code": str(resolved["mod_code"]),
+            "mod_sigla": str(resolved["mod_sigla"]),
+        },
     ).mappings().all()
 
     return [str(row["module_code"]) for row in rows]
+
 
 
 def require_tenant_module(

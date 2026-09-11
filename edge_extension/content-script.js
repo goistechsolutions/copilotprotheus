@@ -53,7 +53,7 @@
       branch: "0101",
       user: currentConfig?.username || "admin",
       environment_code: currentConfig?.environmentCode || "c8te0u_prod",
-      module: "SIGAFIN",
+      module: "SIGAFAT",
       session_id: "protheus-" + Date.now()
     };
 
@@ -268,7 +268,7 @@
     url.searchParams.set("company", context.company || "01");
     url.searchParams.set("branch", context.branch || "0101");
     url.searchParams.set("user", context.user || config.username || "admin");
-    url.searchParams.set("module", context.module || "SIGAFIN");
+    url.searchParams.set("module", context.module || "SIGAFAT");
     url.searchParams.set("session_id", context.session_id || "");
     return url.toString();
   }
@@ -283,7 +283,7 @@
       company: context.company || "01",
       branch: context.branch || "0101",
       user: context.user || currentConfig?.username || "admin",
-      module: context.module || "SIGAFIN",
+      module: context.module || "SIGAFAT",
       session_id: context.session_id || ""
     };
 
