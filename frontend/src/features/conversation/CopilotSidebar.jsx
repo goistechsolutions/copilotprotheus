@@ -24,7 +24,7 @@ export function CopilotSidebar() {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 300, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="absolute right-0 top-0 bottom-0 z-50 flex w-full max-w-[320px] sm:max-w-md md:w-96 shrink-0 flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:relative md:z-10 md:shadow-xl"
+          className="pointer-events-auto absolute right-0 top-0 bottom-0 z-50 flex w-full max-w-[320px] sm:max-w-md md:w-96 shrink-0 flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:relative md:z-10 md:shadow-xl"
         >
           <CopilotHeader />
           

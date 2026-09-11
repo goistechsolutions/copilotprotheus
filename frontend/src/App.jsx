@@ -27,17 +27,18 @@ function isTrustedParentOrigin(origin) {
 
 export default function App() {
   const trustedParentOriginRef = useRef(null);
-  const { setSession, chat } = useDashboardStore();
+  const { setSession, chat, currentDashboard } = useDashboardStore();
 
-  // Sempre notifica o parent sobre expansão/recolhimento baseado na sidebar
-  // Mantemos isso para caso a extensão precise expandir a tela do TOTVS quando fecha a sidebar
+  // Sempre notifica o parent sobre expansão/recolhimento baseado na existência do Dashboard
+  // Se não houver dashboard, o iframe no Protheus deve recolher e mostrar apenas o chat (overlay)
   useEffect(() => {
     if (window.parent !== window && trustedParentOriginRef.current) {
       try {
-        window.parent.postMessage({ type: 'cprot-result-state', open: !chat.isOpen }, trustedParentOriginRef.current);
+        const isDashboardActive = !!currentDashboard;
+        window.parent.postMessage({ type: 'cprot-result-state', open: isDashboardActive }, trustedParentOriginRef.current);
       } catch {}
     }
-  }, [chat.isOpen]);
+  }, [currentDashboard]);
 
   useEffect(() => {
     // Config inicial via URL

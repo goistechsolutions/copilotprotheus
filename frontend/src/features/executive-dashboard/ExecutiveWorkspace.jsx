@@ -26,11 +26,21 @@ export default function ExecutiveWorkspace() {
     setConfig({ theme: config.theme === 'dark' ? 'light' : 'dark' });
   };
 
+  const isDashboardActive = !!currentDashboard;
+
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className={`flex h-screen w-full overflow-hidden ${
+      isDashboardActive 
+        ? 'bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100' 
+        : 'bg-transparent pointer-events-none'
+    }`}>
       
       {/* 75% - Executive Panel (Responsivo) */}
-      <main className={`flex-1 flex flex-col transition-all duration-300 w-full ${chat.isOpen ? 'md:w-[calc(100%-24rem)] lg:w-[75%]' : ''}`}>
+      <main 
+        className={`flex-1 flex flex-col transition-all duration-300 pointer-events-auto ${
+          !isDashboardActive ? 'hidden' : 'w-full'
+        } ${chat.isOpen && isDashboardActive ? 'md:w-[calc(100%-24rem)] lg:w-[75%]' : ''}`}
+      >
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded bg-blue-600 text-xs font-bold text-white shadow-sm shadow-blue-500/20">CE</span>
