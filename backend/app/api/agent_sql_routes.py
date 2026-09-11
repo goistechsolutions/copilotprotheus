@@ -464,32 +464,81 @@ def _table_families_from_sql(sql: str) -> set[str]:
     return families
 
 
-def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> str | None:
+
+_DOMAIN_INTENT_LABEL = {
+    "finance":   "cash_flow",
+    "sales":     "sales_billing",
+    "purchases": "purchases_entry",
+}
+
+_DOMAIN_REQUIRED_TABLES = {
+    "finance":   [("SE1", "Contas a Receber"), ("SE2", "Contas a Pagar"), ("SE5", "Movimentação Financeira")],
+    "sales":     [("SF2", "Notas de Saída"), ("SD2", "Itens de Saída"), ("SA1", "Clientes")],
+    "purchases": [("SF1", "Notas de Entrada"), ("SD1", "Itens de Entrada"), ("SA2", "Fornecedores")],
+}
+
+_DOMAIN_SUGGESTED_ACTION = {
+    "finance":   "Sincronizar o módulo SIGAFIN (Financeiro) no painel de administração e recarregar o copiloto.",
+    "sales":     "Sincronizar o módulo SIGAFAT (Faturamento) no painel de administração e recarregar o copiloto.",
+    "purchases": "Sincronizar o módulo SIGACOM (Compras) no painel de administração e recarregar o copiloto.",
+}
+
+
+def _domain_catalog_diagnostic(
+    domain: str, families_available: set[str], context: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Retorna payload diagnóstico estruturado para DOMAIN_CATALOG_MISMATCH."""
+    required_list = _DOMAIN_REQUIRED_TABLES.get(domain, [])
+    required_codes = [t[0] for t in required_list]
+    available_tables = sorted(
+        {
+            str(item["table"].get("table_code") or item["table"].get("table_name") or "").strip().upper()
+            for item in context
+            if (item.get("table") or {}).get("table_code") or (item.get("table") or {}).get("table_name")
+        }
+    )
+    missing_tables = [
+        {"code": code, "description": desc}
+        for code, desc in required_list
+        if not any(avail.startswith(code) for avail in families_available)
+    ]
+
+    human_messages = {
+        "finance":   (
+            "A pergunta é financeira (fluxo de caixa/contas a receber/pagar), mas o módulo e o snapshot ativos "
+            "não contêm SE1/SE2/SE5. Selecione um módulo financeiro autorizado e sincronize o dicionário antes de consultar."
+        ),
+        "sales":     (
+            "A pergunta é de vendas/faturamento, mas o módulo e o snapshot ativos "
+            "não contêm SF2/SD2/SA1. Selecione um módulo de vendas autorizado e sincronize o dicionário antes de consultar."
+        ),
+        "purchases": (
+            "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos "
+            "não contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e sincronize o dicionário antes de consultar."
+        ),
+    }
+
+    return {
+        "message": human_messages.get(domain, "Domínio não disponível no snapshot ativo."),
+        "intent": _DOMAIN_INTENT_LABEL.get(domain, domain),
+        "required_tables": required_codes,
+        "missing_tables": missing_tables,
+        "available_tables": available_tables[:30],  # limitar tamanho
+        "suggested_action": _DOMAIN_SUGGESTED_ACTION.get(domain, "Sincronize o dicionário para o módulo ativo."),
+    }
+
+
+def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Retorna dict diagnóstico se o domínio da pergunta não encontrar tabelas no snapshot, ou None."""
     domain = _infer_query_domain(prompt)
     if not domain:
         return None
     families = _table_families_from_context(context)
     required = _DOMAIN_TABLE_FAMILIES[domain]
     if families.isdisjoint(required):
-        if domain == "sales":
-            return (
-                "A pergunta é de vendas/faturamento, mas o módulo e o snapshot ativos "
-                "não contêm SF2/SD2/SA1. Selecione um módulo de vendas autorizado e "
-                "sincronize o dicionário antes de consultar."
-            )
-        elif domain == "purchases":
-            return (
-                "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos não "
-                "contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e "
-                "sincronize o dicionário antes de consultar."
-            )
-        elif domain == "finance":
-            return (
-                "A pergunta é financeira (fluxo de caixa/contas a receber/pagar), mas o módulo e o snapshot ativos "
-                "não contêm SE1/SE2/SE5. Selecione um módulo financeiro autorizado e "
-                "sincronize o dicionário antes de consultar."
-            )
+        return _domain_catalog_diagnostic(domain, families, context)
     return None
+
 
 
 def _validate_query_domain(prompt: str, sql: str) -> None:
@@ -914,8 +963,13 @@ async def process_agent_task(task_id: str, payload: dict):
             if domain_block:
                 AGENT_TASKS[task_id] = {
                     "status": "error",
-                    "error": domain_block,
+                    "error": domain_block["message"],
                     "error_code": "DOMAIN_CATALOG_MISMATCH",
+                    "intent": domain_block.get("intent"),
+                    "required_tables": domain_block.get("required_tables"),
+                    "missing_tables": domain_block.get("missing_tables"),
+                    "available_tables": domain_block.get("available_tables"),
+                    "suggested_action": domain_block.get("suggested_action"),
                     "conversation_id": conversation_id,
                     "correlation_id": correlation_id,
                 }
@@ -937,19 +991,21 @@ async def process_agent_task(task_id: str, payload: dict):
                     # Nenhuma tabela do domínio está no snapshot ativo.
                     # Retornar erro imediato evita enviar centenas de tabelas ao LLM
                     # (causaria timeout de 120s+ sem resultado útil).
-                    domain_msg = _domain_context_block(str(prompt), context) or (
-                        f"O snapshot do módulo ativo não contém as tabelas do domínio "
-                        f"'{query_domain}' ({', '.join(sorted(domain_families))}). "
-                        "Sincronize o dicionário ou selecione um módulo adequado."
-                    )
+                    families_now = _table_families_from_context(context)
+                    diag = _domain_catalog_diagnostic(query_domain, families_now, context)
                     logger.warning(
                         "agent_domain_mismatch_early_exit task_id=%s domain=%s",
                         task_id, query_domain,
                     )
                     AGENT_TASKS[task_id] = {
                         "status": "error",
-                        "error": domain_msg,
+                        "error": diag["message"],
                         "error_code": "DOMAIN_CATALOG_MISMATCH",
+                        "intent": diag.get("intent"),
+                        "required_tables": diag.get("required_tables"),
+                        "missing_tables": diag.get("missing_tables"),
+                        "available_tables": diag.get("available_tables"),
+                        "suggested_action": diag.get("suggested_action"),
                         "conversation_id": conversation_id,
                         "correlation_id": correlation_id,
                     }

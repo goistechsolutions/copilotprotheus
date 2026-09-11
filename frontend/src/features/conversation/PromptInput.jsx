@@ -54,12 +54,14 @@ export function PromptInput() {
       const normalized = normalizeAgentResult(response);
 
       if (normalized.status === 'error') {
-        addChatMessage({
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: normalized.message || 'Ocorreu um erro ao processar sua requisição.',
-          timestamp: new Date().toISOString()
-        });
+          addChatMessage({
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: normalized.message || 'Ocorreu um erro ao processar sua requisição.',
+            errorCode: normalized.errorCode,
+            domainDiagnostic: normalized.domainDiagnostic || null,
+            timestamp: new Date().toISOString()
+          });
       } else {
         const result = normalized.result;
         

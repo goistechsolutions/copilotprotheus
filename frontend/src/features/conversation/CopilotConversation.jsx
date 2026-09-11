@@ -1,6 +1,63 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, User } from 'lucide-react';
+import { Bot, User, AlertTriangle, Database, ArrowRight } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
+
+const TABLE_LABELS = {
+  SE1: 'Contas a Receber',
+  SE2: 'Contas a Pagar',
+  SE5: 'Movimentação Financeira',
+  SF2: 'Notas Fiscais de Saída',
+  SD2: 'Itens de Saída',
+  SA1: 'Clientes',
+  SF1: 'Notas Fiscais de Entrada',
+  SD1: 'Itens de Entrada',
+  SA2: 'Fornecedores',
+};
+
+function DomainMismatchCard({ diag }) {
+  if (!diag) return null;
+  const missingTables = diag.missing_tables || [];
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-800/40 dark:bg-amber-900/10 w-full max-w-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+        <span className="font-semibold text-amber-800 dark:text-amber-300">
+          Dados indisponíveis no snapshot
+        </span>
+      </div>
+
+      {missingTables.length > 0 && (
+        <div className="mb-3">
+          <p className="text-xs text-amber-700 dark:text-amber-400 mb-2 font-medium">
+            Tabelas necessárias não sincronizadas:
+          </p>
+          <ul className="space-y-1">
+            {missingTables.map(({ code, description }) => (
+              <li key={code} className="flex items-center gap-2">
+                <Database size={12} className="text-amber-500 shrink-0" />
+                <span className="font-mono text-xs text-amber-800 dark:text-amber-300 font-semibold">{code}</span>
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  — {description || TABLE_LABELS[code] || ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {diag.suggested_action && (
+        <div className="flex items-start gap-2 pt-2 border-t border-amber-200 dark:border-amber-800/30">
+          <ArrowRight size={12} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            <span className="font-medium">Ação recomendada: </span>
+            {diag.suggested_action}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export function CopilotConversation() {
   const { chat } = useDashboardStore();
@@ -38,15 +95,20 @@ export function CopilotConversation() {
               {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
             </div>
             
-            {/* Balão de Mensagem */}
+            {/* Balloon de Mensagem */}
             <div className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-              <div className={`rounded-2xl px-4 py-2.5 text-sm ${
-                msg.role === 'user'
-                  ? 'bg-blue-600 text-white rounded-tr-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
-              }`}>
-                {msg.content}
-              </div>
+              {/* Card especial para DOMAIN_CATALOG_MISMATCH */}
+              {msg.domainDiagnostic ? (
+                <DomainMismatchCard diag={msg.domainDiagnostic} />
+              ) : (
+                <div className={`rounded-2xl px-4 py-2.5 text-sm ${
+                  msg.role === 'user'
+                    ? 'bg-blue-600 text-white rounded-tr-sm'
+                    : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
+                }`}>
+                  {msg.content}
+                </div>
+              )}
               <span className="mt-1 text-[10px] text-slate-400">
                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>

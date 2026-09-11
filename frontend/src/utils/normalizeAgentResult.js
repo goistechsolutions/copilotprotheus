@@ -40,12 +40,13 @@ function hasDimension(dimensions, matcher) {
   return dimensions.some((dimension) => matcher(String(dimension?.key || '').toUpperCase(), dimension));
 }
 
-function emptyResult(status, message, errorCode, correlationId) {
+function emptyResult(status, message, errorCode, correlationId, domainDiagnostic = null) {
   return {
     status,
     message: message || 'Consulta não concluída.',
     errorCode: errorCode || null,
     correlationId: correlationId || null,
+    domainDiagnostic,
     result: null,
     hasData: false,
     hasTypedKpis: false,
@@ -68,7 +69,15 @@ export function normalizeAgentResult(raw) {
 
   const hasExplicitError = Boolean(root.error || payload?.error || errorCode);
   if (ERROR_STATUSES.has(status) || hasExplicitError) {
-    return emptyResult('error', message, errorCode, correlationId);
+    // Carry diagnostic fields for DOMAIN_CATALOG_MISMATCH to enable friendly UI card
+    const domainDiagnostic = errorCode === 'DOMAIN_CATALOG_MISMATCH' ? {
+      intent: root.intent || null,
+      required_tables: root.required_tables || [],
+      missing_tables: root.missing_tables || [],
+      available_tables: root.available_tables || [],
+      suggested_action: root.suggested_action || null,
+    } : null;
+    return emptyResult('error', message, errorCode, correlationId, domainDiagnostic);
   }
 
   // Se o backend retornou apenas um summary/message sem payload (ex: recusa por falta de contexto)
