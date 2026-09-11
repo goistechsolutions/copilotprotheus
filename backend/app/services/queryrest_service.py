@@ -91,7 +91,7 @@ async def queryrest_exec_tenant(
         )
     except (ProtheusQueryRestError, ProtheusAuthError) as e:
         logger.error(
-            "[QueryRest Tenant] Falha tenant=%s ambiente=%s status=%s body=%s",
+            "[GenericQuery Tenant] Falha tenant=%s ambiente=%s status=%s body=%s",
             tenant_id,
             environment_code,
             e.status_code,
@@ -100,13 +100,24 @@ async def queryrest_exec_tenant(
         status_code = e.status_code if e.status_code and e.status_code >= 400 else 502
         detail = {
             401: "Token OAuth2 do Protheus inválido ou expirado.",
-            403: "Usuário REST do Protheus sem autorização para QueryRest.",
-            404: "Endpoint QueryRest do Protheus não localizado.",
+            403: "Usuário REST do Protheus sem autorização para GenericQuery.",
+            404: "Endpoint GenericQuery do Protheus não localizado.",
             408: "Timeout na comunicação com o Protheus.",
-        }.get(status_code, "Falha na execução do QueryRest do Protheus.")
+        }.get(status_code, "Falha na execução da GenericQuery do Protheus.")
         if status_code == 500 and e.response_body:
             detail = f"{detail} Detalhes do banco: {e.response_body[:300]}"
         raise HTTPException(status_code=status_code, detail=detail)
+    except ValueError as e:
+        logger.warning(
+            "[GenericQuery Tenant] Consulta incompatível tenant=%s ambiente=%s tipo=%s",
+            tenant_id,
+            environment_code,
+            type(e).__name__,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail="Consulta incompatível com o contrato GenericQuery: SQL livre com JOIN/GROUP BY exige plano explícito com Tables, Fields e FromQry/Where.",
+        ) from e
     except Exception as e:
         logger.exception("[QueryRest Tenant] Erro inesperado tenant=%s ambiente=%s: %s", tenant_id, environment_code, str(e))
         raise HTTPException(
