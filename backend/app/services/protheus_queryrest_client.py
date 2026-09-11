@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any, Mapping
 
@@ -17,6 +18,14 @@ from app.services.protheus_token_service import (
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT_SECONDS = 60
 GENERIC_QUERY_ENDPOINT = "/api/framework/v1/genericQuery"
+
+
+def _tls_verify_setting() -> bool | str:
+    """Mantém TLS verificado; CA corporativa só por configuração explícita."""
+    ca_bundle = os.getenv("PROTHEUS_CA_BUNDLE", "").strip()
+    if ca_bundle:
+        return ca_bundle
+    return os.getenv("PROTHEUS_VERIFY_TLS", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 
 class ProtheusQueryRestError(RuntimeError):
@@ -244,7 +253,7 @@ class ProtheusQueryRestClient:
             len(str(params.get("Fields", "")).split(",")),
         )
 
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=False, verify=False) as client:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=False, verify=_tls_verify_setting()) as client:
             try:
                 return await client.get(url, headers=headers, params=params)
             except httpx.RequestError as exc:
