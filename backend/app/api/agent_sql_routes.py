@@ -318,6 +318,14 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
             "e SA2 para fornecedores quando essas famílias estiverem no catálogo; "
             "não trate tabelas de saída como tabelas de entrada."
         )
+    elif domain == "finance":
+        domain_instruction = (
+            " A intenção é FINANCEIRO (Contas a Receber/Pagar/Fluxo de Caixa). "
+            "Para contas a receber ou receitas use SE1; para contas a pagar ou despesas use SE2; "
+            "movimentação bancária use SE5. Para fluxo de caixa, relacione recebimentos (SE1) e pagamentos (SE2) "
+            "ou construa a visão solicitada usando essas tabelas financeiras caso estejam autorizadas. NUNCA use "
+            "tabelas aleatórias como AID."
+        )
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
 
     backend_mode = "gemini"
@@ -387,6 +395,7 @@ def _is_catalog_field_validation_error(exc: HTTPException) -> bool:
 _DOMAIN_TABLE_FAMILIES = {
     "sales": {"SF2", "SD2", "SC5", "SC6", "SA1", "SE1", "SB1", "SB2", "SF4", "SCJ", "SCK", "DA0", "DA1"},
     "purchases": {"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2", "SF4", "SC1"},
+    "finance": {"SE1", "SE2", "SE5", "SA1", "SA2", "SA6"}
 }
 
 
@@ -403,6 +412,15 @@ def _infer_query_domain(prompt: str) -> str | None:
         "compra", "compras", "comprado", "entrada", "entradas", "fornecedor", "fornecedores",
         "nota de entrada", "notas de entrada", "recebimento", "pedido de compra",
     )
+    finance_terms = (
+        "financeiro", "fluxo de caixa", "receber", "pagar", "contas a receber", "contas a pagar", "inadimplencia", "inadimplência",
+        "vencimento", "vencido", "vencidos", "boleto", "boletos", "titulo", "titulos", "se1", "se2", "se5",
+        "saldo", "saldo bancario", "movimento bancario"
+    )
+    
+    if any(term in normalized for term in finance_terms):
+        return "finance"
+    
     has_sales = any(term in normalized for term in sales_terms)
     has_purchases = any(term in normalized for term in purchase_terms)
     if has_sales and not has_purchases:
@@ -451,11 +469,18 @@ def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> str | N
                 "não contêm SF2/SD2/SA1. Selecione um módulo de vendas autorizado e "
                 "sincronize o dicionário antes de consultar."
             )
-        return (
-            "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos não "
-            "contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e "
-            "sincronize o dicionário antes de consultar."
-        )
+        elif domain == "purchases":
+            return (
+                "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos não "
+                "contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e "
+                "sincronize o dicionário antes de consultar."
+            )
+        elif domain == "finance":
+            return (
+                "A pergunta é financeira (fluxo de caixa/contas a receber/pagar), mas o módulo e o snapshot ativos "
+                "não contêm SE1/SE2/SE5. Selecione um módulo financeiro autorizado e "
+                "sincronize o dicionário antes de consultar."
+            )
     return None
 
 
@@ -474,7 +499,13 @@ def _validate_query_domain(prompt: str, sql: str) -> None:
         if families.intersection({"SF2", "SD2", "SA1"}) and not families.intersection({"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2"}):
             raise HTTPException(
                 status_code=422,
-                detail="Consulta de compras/entrada gerou tabela de saída/cliente; SQL bloqueado.",
+                detail="Consulta de compras gerou tabela de saída/cliente (SF2, SD2 ou SA1); SQL bloqueado.",
+            )
+    elif domain == "finance":
+        if not families.intersection({"SE1", "SE2", "SE5", "SA1", "SA2"}):
+            raise HTTPException(
+                status_code=422,
+                detail="Consulta financeira gerou SQL sem tabelas financeiras adequadas (SE1, SE2, SE5); SQL bloqueado.",
             )
 
 
