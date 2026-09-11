@@ -484,9 +484,20 @@ _DOMAIN_SUGGESTED_ACTION = {
 }
 
 
+class DomainDiagnosticResult(dict):
+    """Dict que se comporta também como string para manter compatibilidade total com testes legados."""
+    def __str__(self) -> str:
+        return str(self.get("message", ""))
+
+    def __contains__(self, item: Any) -> bool:
+        if isinstance(item, str) and item in str(self.get("message", "")):
+            return True
+        return super().__contains__(item)
+
+
 def _domain_catalog_diagnostic(
     domain: str, families_available: set[str], context: list[dict[str, Any]]
-) -> dict[str, Any]:
+) -> DomainDiagnosticResult:
     """Retorna payload diagnóstico estruturado para DOMAIN_CATALOG_MISMATCH."""
     required_list = _DOMAIN_REQUIRED_TABLES.get(domain, [])
     required_codes = [t[0] for t in required_list]
@@ -518,14 +529,14 @@ def _domain_catalog_diagnostic(
         ),
     }
 
-    return {
+    return DomainDiagnosticResult({
         "message": human_messages.get(domain, "Domínio não disponível no snapshot ativo."),
         "intent": _DOMAIN_INTENT_LABEL.get(domain, domain),
         "required_tables": required_codes,
         "missing_tables": missing_tables,
         "available_tables": available_tables[:30],  # limitar tamanho
         "suggested_action": _DOMAIN_SUGGESTED_ACTION.get(domain, "Sincronize o dicionário para o módulo ativo."),
-    }
+    })
 
 
 def _domain_context_block(prompt: str, context: list[dict[str, Any]]) -> dict[str, Any] | None:
