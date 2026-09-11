@@ -107,6 +107,7 @@ PUBLIC_REQUIRED_TABLES = {
     "platform_audit_log",
     "protheus_rest_connections",
     "business_domains",
+    "business_domain_modules",
     "business_intents",
     "business_intent_tables",
     "business_dashboard_templates",
@@ -570,6 +571,22 @@ def ensure_public_tables(db, force: bool = False):
         """,
 
         """
+        CREATE TABLE IF NOT EXISTS public.business_domain_modules (
+            id          BIGSERIAL PRIMARY KEY,
+            domain_code VARCHAR(50) NOT NULL,
+            mod_sigla   VARCHAR(30) NOT NULL,
+            mod_code    INTEGER NOT NULL,
+            is_primary  BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_bdm_domain FOREIGN KEY (domain_code) REFERENCES public.business_domains(domain_code) ON DELETE CASCADE,
+            CONSTRAINT uq_domain_module UNIQUE (domain_code, mod_sigla)
+        );
+        CREATE INDEX IF NOT EXISTS idx_bdm_domain_code ON public.business_domain_modules(domain_code);
+        CREATE INDEX IF NOT EXISTS idx_bdm_mod_sigla ON public.business_domain_modules(mod_sigla);
+        CREATE INDEX IF NOT EXISTS idx_bdm_mod_code ON public.business_domain_modules(mod_code);
+        """,
+
+        """
         CREATE TABLE IF NOT EXISTS public.business_intents (
             id          BIGSERIAL PRIMARY KEY,
             domain_id   BIGINT NOT NULL,
@@ -740,6 +757,25 @@ def _seed_bkl_initial_data(db):
                         INSERT INTO public.business_intent_tables (intent_id, table_code, required, priority_order)
                         VALUES (:int_id, :table_code, :required, :priority)
                     """), {"int_id": int_id, "table_code": table_code, "required": required, "priority": priority})
+
+        # 4. Mapeamento Semântico: Domínios de Negócio x Módulos Protheus Oficiais
+        # (domain_code, mod_sigla, mod_code, is_primary)
+        # protheus_modules_master é o master data oficial; business_domains é a camada semântica.
+        domain_modules = [
+            ("FINANCEIRO", "SIGAFIN", 6, True),
+            ("VENDAS", "SIGAFAT", 5, True),
+            ("COMPRAS", "SIGACOM", 2, True),
+            ("ESTOQUE", "SIGAEST", 4, True),
+            ("FISCAL", "SIGAFIS", 9, True),
+            ("CONTROLADORIA", "SIGACTB", 34, True),
+        ]
+        for dc, sigla, mcode, is_prim in domain_modules:
+            db.execute(text("""
+                INSERT INTO public.business_domain_modules (domain_code, mod_sigla, mod_code, is_primary)
+                VALUES (:dc, :sigla, :mcode, :is_prim)
+                ON CONFLICT (domain_code, mod_sigla) DO UPDATE
+                SET mod_code = EXCLUDED.mod_code, is_primary = EXCLUDED.is_primary
+            """), {"dc": dc, "sigla": sigla, "mcode": mcode, "is_prim": is_prim})
     except Exception as exc:
         print(f"[DB] Aviso ao semear BKL inicial: {exc}")
 

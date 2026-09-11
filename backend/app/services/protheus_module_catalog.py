@@ -41,6 +41,21 @@ def normalize_module_token(value: str | int | None) -> str | None:
     return token
 
 
+_SEMANTIC_DOMAIN_FALLBACK = {
+    "FINANCEIRO": "SIGAFIN",
+    "FINANCE": "SIGAFIN",
+    "VENDAS": "SIGAFAT",
+    "FATURAMENTO": "SIGAFAT",
+    "SALES": "SIGAFAT",
+    "COMPRAS": "SIGACOM",
+    "PURCHASES": "SIGACOM",
+    "ESTOQUE": "SIGAEST",
+    "INVENTORY": "SIGAEST",
+    "FISCAL": "SIGAFIS",
+    "CONTROLADORIA": "SIGACTB",
+}
+
+
 def resolve_global_module(
     db: Any,
     module: str | int | None,
@@ -50,6 +65,8 @@ def resolve_global_module(
     if not token:
         return None
 
+    # 1. Se for numérico, interpreta EXCLUSIVAMENTE como mod_code de protheus_modules_master.
+    # NUNCA interprete números como business_domains.id para evitar colisão entre tabelas!
     if token.isdigit():
         row = db.execute(
             text("""
@@ -67,6 +84,44 @@ def resolve_global_module(
 
         return dict(row) if row else None
 
+    # 2. Se for um Domínio de Negócio semântico (ex: "FINANCEIRO", "VENDAS"),
+    # consulta a tabela de mapeamento semântico business_domain_modules
+    try:
+        domain_row = db.execute(
+            text("""
+                SELECT
+                    pm.mod_code,
+                    pm.mod_sigla,
+                    pm.mod_name
+                FROM public.business_domain_modules bdm
+                JOIN public.protheus_modules_master pm ON pm.mod_sigla = bdm.mod_sigla
+                WHERE UPPER(TRIM(bdm.domain_code)) = :token
+                  AND bdm.is_primary = TRUE
+                  AND pm.active = TRUE
+                LIMIT 1
+            """),
+            {"token": token},
+        ).mappings().first()
+        if domain_row:
+            return dict(domain_row)
+    except Exception:
+        # Fallback resiliente se a tabela ainda não tiver sido criada em ambiente SQLite/testes
+        fallback_sigla = _SEMANTIC_DOMAIN_FALLBACK.get(token)
+        if fallback_sigla:
+            fallback_row = db.execute(
+                text("""
+                    SELECT mod_code, mod_sigla, mod_name
+                    FROM public.protheus_modules_master
+                    WHERE UPPER(TRIM(mod_sigla)) = :sigla
+                      AND active = TRUE
+                    LIMIT 1
+                """),
+                {"sigla": fallback_sigla},
+            ).mappings().first()
+            if fallback_row:
+                return dict(fallback_row)
+
+    # 3. Busca direta por mod_sigla ou mod_name em protheus_modules_master
     row = db.execute(
         text("""
             SELECT

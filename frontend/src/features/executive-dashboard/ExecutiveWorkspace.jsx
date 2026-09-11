@@ -113,7 +113,7 @@ export default function ExecutiveWorkspace() {
   // ──────────────────────────────────────────────────────────────────────────
   const tenant = session?.tenantId || 'Padrão';
   const environment = session?.environment || 'PROD';
-  const moduleName = session?.currentModule || 'SIGAFAT';
+  const moduleName = session?.module || session?.currentModule || 'SIGAFAT';
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">

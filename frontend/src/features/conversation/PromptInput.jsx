@@ -53,6 +53,7 @@ export function PromptInput() {
     controllerRef.current = new AbortController();
     
     try {
+      const currentMod = session?.module || session?.currentModule || 'SIGAFAT';
       const payload = {
         tenant_id: session?.tenantId || '',
         company: session?.company || '',
@@ -60,7 +61,8 @@ export function PromptInput() {
         user: session?.userId || session?.user || '',
         environment: session?.environment || '',
         environment_code: session?.environment || '',
-        module: session?.module || '',
+        module: currentMod,
+        module_sigla: currentMod,
         session_id: Date.now().toString(),
         prompt: text,
         execute: true,
