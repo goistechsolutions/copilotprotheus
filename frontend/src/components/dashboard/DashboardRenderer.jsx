@@ -76,10 +76,26 @@ export default function DashboardRenderer({ payload }) {
       
       {/* Fase 5: Componentes Base / KPIs */}
       <MetricsRow>
-        <MetricCard title="Receita Total" value="R$ 124.500" trend="up" trendValue="+14%" icon={DollarSign} color="emerald" />
-        <MetricCard title="Novos Clientes" value="342" trend="up" trendValue="+5%" icon={Users} color="blue" />
-        <MetricCard title="Ticket Médio" value="R$ 364,00" trend="down" trendValue="-2%" icon={ShoppingCart} color="amber" />
-        <MetricCard title="Conversão" value="14.5%" trend="up" trendValue="+1.2%" icon={Percent} color="purple" />
+        {data?.kpis?.length > 0 ? (
+          data.kpis.map((kpi, idx) => (
+            <MetricCard 
+              key={idx}
+              title={kpi.label} 
+              value={kpi.format === 'currency' ? `R$ ${kpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : kpi.value} 
+              trend="up" 
+              trendValue="0%" 
+              icon={DollarSign} 
+              color="blue" 
+            />
+          ))
+        ) : (
+          <>
+            <MetricCard title="Receita Total" value="R$ 124.500" trend="up" trendValue="+14%" icon={DollarSign} color="emerald" />
+            <MetricCard title="Novos Clientes" value="342" trend="up" trendValue="+5%" icon={Users} color="blue" />
+            <MetricCard title="Ticket Médio" value="R$ 364,00" trend="down" trendValue="-2%" icon={ShoppingCart} color="amber" />
+            <MetricCard title="Conversão" value="14.5%" trend="up" trendValue="+1.2%" icon={Percent} color="purple" />
+          </>
+        )}
       </MetricsRow>
 
       {/* Fase 6: Insights Inteligentes */}
@@ -99,24 +115,37 @@ export default function DashboardRenderer({ payload }) {
       </InsightsGrid>
       
       {/* Fase 7: Recharts */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-         <div className="col-span-1 lg:col-span-2">
-            <LineChartCard title="Evolução de Vendas" data={mockChartData} />
-         </div>
-         <div className="col-span-1">
-            <DonutChartCard title="Distribuição" data={mockChartData} />
-         </div>
-      </div>
-      
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <BarChartCard title="Comparativo Mensal" data={mockChartData} />
-        <BarChartCard title="Vendas por Filial" data={mockChartData} color="#f59e0b" />
-      </div>
+      {data?.series?.length > 0 ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {data.series.map((s, idx) => (
+            <BarChartCard key={idx} title={s.label} data={s.points} xAxisKey="label" color="#3b82f6" />
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+             <div className="col-span-1 lg:col-span-2">
+                <LineChartCard title="Evolução de Vendas" data={mockChartData} />
+             </div>
+             <div className="col-span-1">
+                <DonutChartCard title="Distribuição" data={mockChartData} />
+             </div>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <BarChartCard title="Comparativo Mensal" data={mockChartData} />
+            <BarChartCard title="Vendas por Filial" data={mockChartData} color="#f59e0b" />
+          </div>
+        </>
+      )}
 
     {/* Fase 8: React Table */}
     <div className="mt-4">
       <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Detalhamento</h3>
-      <DataGrid data={mockTableData} columns={mockColumns} />
+      <DataGrid 
+        data={data?.rows?.length > 0 ? data.rows : mockTableData} 
+        columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: col, accessorKey: col })) : mockColumns} 
+      />
     </div>
   </motion.div>
 );

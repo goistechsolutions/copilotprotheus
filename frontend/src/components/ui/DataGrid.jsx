@@ -4,14 +4,14 @@ import {
   createCoreRowModel,
   createPaginatedRowModel,
   createSortedRowModel,
-  useTable,
+  useReactTable,
 } from '@tanstack/react-table';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function DataGrid({ data, columns, pagination = true }) {
   const [sorting, setSorting] = useState([]);
 
-  const table = useTable({
+  const table = useReactTable({
     data,
     columns,
     state: {
