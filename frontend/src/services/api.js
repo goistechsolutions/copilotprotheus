@@ -132,7 +132,7 @@ export async function downloadStructuredReport(downloadUrl) {
 export async function waitForAgentTask(
   taskId,
   {
-    timeoutMs = 120000,
+    timeoutMs = 180000,
     intervalMs = 800,
     onUpdate,
     signal,

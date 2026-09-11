@@ -933,6 +933,27 @@ async def process_agent_task(task_id: str, payload: dict):
                     # autorização já foi calculada sobre o snapshot completo e os
                     # nomes/fields abaixo continuam sendo derivados do catálogo real.
                     context = focused_context
+                else:
+                    # Nenhuma tabela do domínio está no snapshot ativo.
+                    # Retornar erro imediato evita enviar centenas de tabelas ao LLM
+                    # (causaria timeout de 120s+ sem resultado útil).
+                    domain_msg = _domain_context_block(str(prompt), context) or (
+                        f"O snapshot do módulo ativo não contém as tabelas do domínio "
+                        f"'{query_domain}' ({', '.join(sorted(domain_families))}). "
+                        "Sincronize o dicionário ou selecione um módulo adequado."
+                    )
+                    logger.warning(
+                        "agent_domain_mismatch_early_exit task_id=%s domain=%s",
+                        task_id, query_domain,
+                    )
+                    AGENT_TASKS[task_id] = {
+                        "status": "error",
+                        "error": domain_msg,
+                        "error_code": "DOMAIN_CATALOG_MISMATCH",
+                        "conversation_id": conversation_id,
+                        "correlation_id": correlation_id,
+                    }
+                    return
 
             context_text = render_context_for_prompt(context)
             allowed_table_names = {
