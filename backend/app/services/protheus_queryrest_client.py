@@ -213,15 +213,14 @@ class ProtheusQueryRestClient:
                         params={"cquery": query},
                     )
 
-                form_data = dict(payload or {})
-                form_data.pop("query", None)
-                form_data.pop("cQuery", None)
-                form_data["_queryparam"] = query
-                headers["Content-Type"] = "application/x-www-form-urlencoded"
+                json_payload = dict(payload or {})
+                json_payload["cQuery"] = query
+                json_payload["query"] = query
+                headers["Content-Type"] = "application/json"
                 return await client.post(
                     url,
                     headers=headers,
-                    data=form_data,
+                    json=json_payload,
                 )
             except httpx.RequestError as exc:
                 logger.exception("Falha de rede ao acessar QueryRest: %s", type(exc).__name__)
