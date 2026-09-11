@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from typing import Any, Mapping
 
 import httpx
@@ -17,11 +16,11 @@ from app.services.protheus_token_service import (
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT_SECONDS = 60
-GENERIC_QUERY_ENDPOINT = "/api/framework/v1/genericQuery"
+QUERYREST_ENDPOINT = "/queryrest/QueryRest"
 
 
 def _tls_verify_setting() -> bool | str:
-    """Mantém TLS verificado; CA corporativa só por configuração explícita."""
+    """Mantém TLS verificado; permite CA corporativa por configuração explícita."""
     ca_bundle = os.getenv("PROTHEUS_CA_BUNDLE", "").strip()
     if ca_bundle:
         return ca_bundle
@@ -97,7 +96,6 @@ def _extract_remote_error(response: httpx.Response) -> str:
 
 
 def _parse_queryrest_json(response: httpx.Response) -> Any:
-    """Parser compatível com respostas JSON do AppServer Protheus."""
     try:
         return response.json()
     except ValueError:
@@ -112,9 +110,9 @@ def _parse_queryrest_json(response: httpx.Response) -> Any:
             continue
 
     content_type = response.headers.get("content-type", "unknown").split(";", 1)[0].strip()
-    logger.error("GenericQuery retornou resposta não JSON status=%s content_type=%s body_length=%s", response.status_code, content_type, len(raw))
+    logger.error("QueryRest retornou resposta não JSON status=%s content_type=%s body_length=%s", response.status_code, content_type, len(raw))
     raise ProtheusQueryRestError(
-        f"GenericQuery retornou conteúdo não JSON (content-type={content_type}, tamanho={len(raw)}).",
+        f"QueryRest retornou conteúdo não JSON (content-type={content_type}, tamanho={len(raw)}).",
         response.status_code,
         raw,
     )
@@ -123,118 +121,67 @@ def _parse_queryrest_json(response: httpx.Response) -> Any:
 _parse_protheus_json = _parse_queryrest_json
 
 
-def _split_fields(value: str) -> list[str]:
-    result: list[str] = []
-    current: list[str] = []
-    depth = 0
-    for char in value:
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth = max(0, depth - 1)
-        if char == "," and depth == 0:
-            if current:
-                result.append("".join(current).strip())
-            current = []
-        else:
-            current.append(char)
-    if current:
-        result.append("".join(current).strip())
-    return result
-
-
-def _field_name(expression: str) -> str:
-    match = re.match(r"^\s*(?:[A-Za-z][A-Za-z0-9_]*\.)?([A-Za-z][A-Za-z0-9_]*)(?:\s+AS\s+[A-Za-z][A-Za-z0-9_]*)?\s*$", expression, re.IGNORECASE)
-    if not match:
-        raise ValueError(f"Campo não suportado pela GenericQuery: {expression!r}")
-    return match.group(1).upper()
-
-
-def _generic_query_params(query: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    explicit = dict(payload or {})
-    if explicit.get("Tables") or explicit.get("tables"):
-        params = {key: value for key, value in explicit.items() if value is not None}
-        params.setdefault("FilialFilter", True)
-        params.setdefault("DeletedFilter", True)
-        return params
-
-    clean = re.sub(r"\s+", " ", str(query or "")).strip().rstrip(";")
-    match = re.match(r"^SELECT\s+(.+?)\s+FROM\s+(.+)$", clean, re.IGNORECASE)
-    if not match:
-        raise ValueError("GenericQuery requer SELECT com Tables/Fields válidos.")
-
-    fields_text, remainder = match.groups()
-    clause_match = re.search(r"\s+(WHERE|GROUP BY|ORDER BY|HAVING|FETCH|OFFSET)\s+", remainder, re.IGNORECASE)
-    from_text = remainder[:clause_match.start()].strip() if clause_match else remainder.strip()
-    tail = remainder[clause_match.start():].strip() if clause_match else ""
-
-    if re.search(r"\bJOIN\b|,", from_text, re.IGNORECASE):
-        raise ValueError("JOINs devem informar Tables, Fields e FromQry explicitamente.")
-
-    table_match = re.match(r"^([A-Za-z][A-Za-z0-9_]*)(?:\s+(?:AS\s+)?([A-Za-z][A-Za-z0-9_]*))?$", from_text, re.IGNORECASE)
-    if not table_match:
-        raise ValueError(f"Tabela inválida para GenericQuery: {from_text!r}")
-
-    physical, alias = table_match.groups()
-    alias = (alias or physical).upper()
-    params: dict[str, Any] = {
-        "Tables": alias,
-        "Fields": ",".join(_field_name(item) for item in _split_fields(fields_text)),
-        "FilialFilter": True,
-        "DeletedFilter": True,
-    }
-
-    if tail.upper().startswith("WHERE "):
-        where = tail[6:].strip()
-        where = re.sub(r"^\s*(?:AND\s+)?[A-Za-z][A-Za-z0-9_]*\.D_E_L_E_T_\s*<>\s*'\*'\s*", "", where, flags=re.IGNORECASE)
-        params["Where"] = re.sub(r"^\s*AND\s+", "", where, flags=re.IGNORECASE).strip()
-    elif tail:
-        raise ValueError("GROUP BY, ORDER BY e FETCH exigem parâmetros GenericQuery explícitos.")
-
-    logger.info("genericquery_request_built table_alias=%s physical_table=%s field_count=%s has_where=%s", alias, physical.upper(), len(params["Fields"].split(",")), bool(params.get("Where")))
-    return params
+def require_bearer_headers(headers: dict[str, str]) -> dict[str, str]:
+    authorization = headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        raise RuntimeError("Requisição Protheus sem Authorization Bearer.")
+    if not authorization.removeprefix("Bearer ").strip():
+        raise RuntimeError("Requisição Protheus com Bearer vazio.")
+    return headers
 
 
 class ProtheusQueryRestClient:
-    """Cliente legado com execução na API padrão TOTVS GenericQuery."""
+    """Cliente da API customizada compilada no Protheus em /queryrest/QueryRest."""
 
     def __init__(self, db: Any, tenant_code: str, environment_code: str) -> None:
         self.db = db
         self.tenant_code = str(tenant_code or "").strip()
         self.environment_code = str(environment_code or "").strip()
         if not self.tenant_code:
-            raise ValueError("tenant_code é obrigatório para GenericQuery.")
+            raise ValueError("tenant_code é obrigatório para QueryRest.")
         if not self.environment_code or self.environment_code.lower() in {"default", "none", "null"}:
             raise ValueError("environment_code Protheus é obrigatório e deve ser real.")
 
-    async def execute(self, query: str, *, method: str = "GET", payload: Mapping[str, Any] | None = None) -> Any:
+    async def execute(
+        self,
+        query: str,
+        *,
+        method: str = "POST",
+        payload: Mapping[str, Any] | None = None,
+    ) -> Any:
         connection = load_connection(self.db, self.tenant_code, self.environment_code)
         base_url = str(connection["base_rest_url"]).rstrip("/")
-        url = f"{base_url}{GENERIC_QUERY_ENDPOINT}"
+        url = f"{base_url}{QUERYREST_ENDPOINT}"
         token = await get_valid_access_token(self.db, self.tenant_code, self.environment_code)
         if not token:
             raise ProtheusQueryRestError("Access token Protheus vazio após resolução.", 401)
 
-        params = _generic_query_params(query, payload)
-        response = await self._send(url, token, params)
+        response = await self._send(url, token, query, method=method, payload=payload)
         if response.status_code == 401:
+            logger.warning("QueryRest retornou 401; renovando token tenant=%s ambiente=%s", self.tenant_code, self.environment_code)
             invalidate_access_token(self.db, self.tenant_code, self.environment_code)
             token = await get_valid_access_token(self.db, self.tenant_code, self.environment_code)
             if not token:
                 raise ProtheusQueryRestError("Access token Protheus vazio após renovação.", 401)
-            response = await self._send(url, token, params)
+            response = await self._send(url, token, query, method=method, payload=payload)
 
-        if response.status_code == 403:
-            raise ProtheusQueryRestError("Protheus recusou a autorização para GenericQuery (HTTP 403).", 403)
         if response.status_code >= 400:
             remote_error = _extract_remote_error(response)
-            detail = f"Falha na execução da GenericQuery Protheus (HTTP {response.status_code})."
+            detail = f"Falha na execução do QueryRest Protheus (HTTP {response.status_code})."
             if remote_error:
                 detail = f"{detail} Mensagem do AppServer: {remote_error}"
-            raise ProtheusQueryRestError(detail, response.status_code, response.text)
+            raise ProtheusQueryRestError(detail, response.status_code, response.text[:500])
         return _parse_queryrest_json(response)
 
-    async def _send(self, url: str, access_token: str, params: Mapping[str, Any]) -> httpx.Response:
+    async def _send(
+        self,
+        url: str,
+        access_token: str,
+        query: str,
+        *,
+        method: str,
+        payload: Mapping[str, Any] | None,
+    ) -> httpx.Response:
         headers = require_bearer_headers({
             "Accept": "application/json",
             "Authorization": f"Bearer {access_token}",
@@ -244,18 +191,38 @@ class ProtheusQueryRestClient:
             headers["X-Correlation-ID"] = correlation_id
 
         logger.info(
-            "genericquery_auth_context tenant=%s environment=%s auth_header_present=%s correlation_id=%s tables=%s field_count=%s",
+            "queryrest_auth_context tenant=%s environment=%s auth_header_present=%s auth_scheme=Bearer correlation_id=%s method=%s",
             self.tenant_code,
             self.environment_code,
-            bool(headers.get("Authorization")),
+            True,
             correlation_id,
-            params.get("Tables"),
-            len(str(params.get("Fields", "")).split(",")),
+            method.upper(),
         )
 
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=False, verify=_tls_verify_setting()) as client:
+        request_method = method.upper()
+        async with httpx.AsyncClient(
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            follow_redirects=False,
+            verify=_tls_verify_setting(),
+        ) as client:
             try:
-                return await client.get(url, headers=headers, params=params)
+                if request_method == "GET":
+                    return await client.get(
+                        url,
+                        headers=headers,
+                        params={"cquery": query},
+                    )
+
+                form_data = dict(payload or {})
+                form_data.pop("query", None)
+                form_data.pop("cQuery", None)
+                form_data["_queryparam"] = query
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
+                return await client.post(
+                    url,
+                    headers=headers,
+                    data=form_data,
+                )
             except httpx.RequestError as exc:
-                logger.exception("Falha de rede ao acessar GenericQuery: %s", type(exc).__name__)
-                raise ProtheusQueryRestError("Erro de comunicação com o Protheus na execução da GenericQuery.", 502) from exc
+                logger.exception("Falha de rede ao acessar QueryRest: %s", type(exc).__name__)
+                raise ProtheusQueryRestError("Erro de comunicação com o Protheus na execução do QueryRest.", 502) from exc
