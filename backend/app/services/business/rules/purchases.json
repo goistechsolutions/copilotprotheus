@@ -1,0 +1,37 @@
+{
+  "domain": "purchases",
+  "keywords": [
+    "compra",
+    "compras",
+    "comprado",
+    "entrada",
+    "entradas",
+    "fornecedor",
+    "fornecedores",
+    "nota de entrada",
+    "notas de entrada",
+    "recebimento",
+    "pedido de compra"
+  ],
+  "allowed_families": [
+    "SF1",
+    "SD1",
+    "SC7",
+    "SA2",
+    "SE2",
+    "SB1",
+    "SB2",
+    "SF4",
+    "SC1"
+  ],
+  "blocked_families": [
+    "SF2",
+    "SD2",
+    "SA1"
+  ],
+  "domain_instruction": "A intenção é COMPRAS/ENTRADA. Use SF1/SD1 para notas de entrada e SA2 para fornecedores quando essas famílias estiverem no catálogo; não trate tabelas de saída como tabelas de entrada.",
+  "error_messages": {
+    "missing_required": "A pergunta é de compras/entrada, mas o módulo e o snapshot ativos não contêm SF1/SD1/SA2. Selecione um módulo de compras autorizado e sincronize o dicionário antes de consultar.",
+    "blocked_used": "Consulta de compras gerou tabela de saída/cliente (SF2, SD2 ou SA1); SQL bloqueado."
+  }
+}
