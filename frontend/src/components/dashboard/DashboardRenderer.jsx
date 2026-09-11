@@ -35,31 +35,6 @@ export default function DashboardRenderer({ payload }) {
     return str;
   };
 
-  // Mock data para demonstrar a camada visual funcionando
-  const mockChartData = useMemo(() => [
-    { name: 'Jan', value: 4000, secondary: 2400 },
-    { name: 'Fev', value: 3000, secondary: 1398 },
-    { name: 'Mar', value: 2000, secondary: 9800 },
-    { name: 'Abr', value: 2780, secondary: 3908 },
-    { name: 'Mai', value: 1890, secondary: 4800 },
-    { name: 'Jun', value: 2390, secondary: 3800 },
-  ], []);
-
-  const mockTableData = useMemo(() => [
-    { id: 1, filial: '0101', produto: 'Notebook', valor: 4500.00, status: 'Ativo' },
-    { id: 2, filial: '0101', produto: 'Monitor 27', valor: 1200.00, status: 'Ativo' },
-    { id: 3, filial: '0102', produto: 'Teclado', valor: 250.00, status: 'Inativo' },
-    { id: 4, filial: '0102', produto: 'Mouse', valor: 150.00, status: 'Ativo' },
-    { id: 5, filial: '0103', produto: 'Cadeira', valor: 1800.00, status: 'Ativo' },
-  ], []);
-
-  const mockColumns = useMemo(() => [
-    { header: 'Filial', accessorKey: 'filial' },
-    { header: 'Produto', accessorKey: 'produto' },
-    { header: 'Valor (R$)', accessorKey: 'valor', cell: info => `R$ ${info.getValue().toFixed(2)}` },
-    { header: 'Status', accessorKey: 'status' },
-  ], []);
-
   if (!payload) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-slate-400 p-8 text-center">
@@ -76,6 +51,20 @@ export default function DashboardRenderer({ payload }) {
   }
 
   const { screenType, data } = payload;
+  
+  if (!data || !data.rows || data.rows.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center text-slate-500 p-8 text-center bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+          <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">Nenhum registro encontrado</h2>
+        <p className="text-sm max-w-md">A consulta foi concluída, mas não retornou dados para o período e filtros solicitados.</p>
+      </div>
+    );
+  }
 
   // Renderização genérica baseada nos novos componentes
   return (
@@ -93,9 +82,9 @@ export default function DashboardRenderer({ payload }) {
       </header>
       
       {/* Fase 5: Componentes Base / KPIs */}
-      <MetricsRow>
-        {data?.kpis?.length > 0 ? (
-          data.kpis.map((kpi, idx) => (
+      {data?.kpis?.length > 0 && (
+        <MetricsRow>
+          {data.kpis.map((kpi, idx) => (
             <MetricCard 
               key={idx}
               title={formatLabel(kpi.label)} 
@@ -105,16 +94,9 @@ export default function DashboardRenderer({ payload }) {
               icon={DollarSign} 
               color="blue" 
             />
-          ))
-        ) : (
-          <>
-            <MetricCard title="Receita Total" value="R$ 124.500" trend="up" trendValue="+14%" icon={DollarSign} color="emerald" />
-            <MetricCard title="Novos Clientes" value="342" trend="up" trendValue="+5%" icon={Users} color="blue" />
-            <MetricCard title="Ticket Médio" value="R$ 364,00" trend="down" trendValue="-2%" icon={ShoppingCart} color="amber" />
-            <MetricCard title="Conversão" value="14.5%" trend="up" trendValue="+1.2%" icon={Percent} color="purple" />
-          </>
-        )}
-      </MetricsRow>
+          ))}
+        </MetricsRow>
+      )}
 
       {/* Fase 6: Insights Inteligentes */}
       {data?.insights?.length > 0 && (
@@ -132,7 +114,7 @@ export default function DashboardRenderer({ payload }) {
       )}
       
       {/* Fase 7: Recharts */}
-      {data?.series?.length > 0 ? (
+      {data?.series?.length > 0 && (
         <div className={`grid grid-cols-1 gap-6 ${data.series.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
           {data.series.map((s, idx) => {
             const formattedPoints = s.points.map(p => ({ ...p, label: formatDateTick(p.label) }));
@@ -148,32 +130,18 @@ export default function DashboardRenderer({ payload }) {
             );
           })}
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-             <div className="col-span-1 lg:col-span-2">
-                <LineChartCard title="Evolução de Vendas" data={mockChartData} />
-             </div>
-             <div className="col-span-1">
-                <DonutChartCard title="Distribuição" data={mockChartData} />
-             </div>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <BarChartCard title="Comparativo Mensal" data={mockChartData} />
-            <BarChartCard title="Vendas por Filial" data={mockChartData} color="#f59e0b" />
-          </div>
-        </>
       )}
 
     {/* Fase 8: React Table */}
-    <div className="mt-4">
-      <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Detalhamento</h3>
-      <DataGrid 
-        data={data?.rows?.length > 0 ? data.rows : mockTableData} 
-        columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: col, accessorKey: col })) : mockColumns} 
-      />
-    </div>
+    {data?.rows?.length > 0 && (
+      <div className="mt-4">
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Detalhamento</h3>
+        <DataGrid 
+          data={data.rows} 
+          columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: col, accessorKey: col })) : []} 
+        />
+      </div>
+    )}
   </motion.div>
 );
 }
