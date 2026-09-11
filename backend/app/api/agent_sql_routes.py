@@ -726,6 +726,8 @@ async def process_agent_task(task_id: str, payload: dict):
                     table_code=table_data.get("table_code"),
                     table_name=table_data.get("table_name"),
                 )
+                blocked_virtuals = {"C5_XNOME", "C5_XVEND", "C6_XDESC", "F2_XCLIENT", "F2_X_COND", "A1_XNOME", "A2_XNOME", "A3_XNOME"}
+                fields = [f for f in fields if str(f.get("field_name") or "").strip().upper() not in blocked_virtuals]
                 indexes = load_dictionary_indexes(
                     db=db,
                     tenant_schema=ctx.schema_name,
