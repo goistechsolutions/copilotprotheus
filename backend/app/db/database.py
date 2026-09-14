@@ -560,14 +560,12 @@ def ensure_public_tables(db, force: bool = False):
 
         """
         CREATE TABLE IF NOT EXISTS public.business_domains (
-            id          BIGSERIAL PRIMARY KEY,
-            domain_code VARCHAR(50) NOT NULL,
+            domain_code VARCHAR(50) PRIMARY KEY,
             name        VARCHAR(120) NOT NULL,
             description TEXT,
             active      BOOLEAN NOT NULL DEFAULT TRUE,
             created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_business_domains_code ON public.business_domains (domain_code);
         """,
 
         """
@@ -589,16 +587,16 @@ def ensure_public_tables(db, force: bool = False):
         """
         CREATE TABLE IF NOT EXISTS public.business_intents (
             id          BIGSERIAL PRIMARY KEY,
-            domain_id   BIGINT NOT NULL,
+            domain_code VARCHAR(50) NOT NULL,
             intent_code VARCHAR(100) NOT NULL,
             name        VARCHAR(200) NOT NULL,
             description TEXT,
             active      BOOLEAN NOT NULL DEFAULT TRUE,
             created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT fk_business_intents_domain FOREIGN KEY (domain_id) REFERENCES public.business_domains(id) ON DELETE CASCADE
+            CONSTRAINT fk_business_intents_domain FOREIGN KEY (domain_code) REFERENCES public.business_domains(domain_code) ON DELETE CASCADE
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_business_intents_code ON public.business_intents (intent_code);
-        CREATE INDEX IF NOT EXISTS idx_business_intents_domain ON public.business_intents (domain_id);
+        CREATE INDEX IF NOT EXISTS idx_business_intents_domain ON public.business_intents (domain_code);
         """,
 
         """
@@ -708,13 +706,11 @@ def _seed_bkl_initial_data(db):
             ("purchases_entry", "COMPRAS", "Entrada de Notas", "Recebimento de materiais e notas de entrada"),
         ]
         for intent_code, domain_code, name, desc in intents:
-            dom_id = db.execute(text("SELECT id FROM public.business_domains WHERE domain_code = :dc"), {"dc": domain_code}).scalar()
-            if dom_id:
-                db.execute(text("""
-                    INSERT INTO public.business_intents (domain_id, intent_code, name, description, active)
-                    VALUES (:dom_id, :code, :name, :desc, TRUE)
-                    ON CONFLICT (intent_code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
-                """), {"dom_id": dom_id, "code": intent_code, "name": name, "desc": desc})
+            db.execute(text("""
+                INSERT INTO public.business_intents (domain_code, intent_code, name, description, active)
+                VALUES (:dc, :code, :name, :desc, TRUE)
+                ON CONFLICT (intent_code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
+            """), {"dc": domain_code, "code": intent_code, "name": name, "desc": desc})
 
         # 3. Mapeamento de Tabelas Obrigatórias/Prioritárias (business_intent_tables)
         # (intent_code, table_code, required, priority)

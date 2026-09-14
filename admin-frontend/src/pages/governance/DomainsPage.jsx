@@ -43,7 +43,7 @@ export default function DomainsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {domains.map(d => (
-          <div key={d.id} className="rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm">
+          <div key={d.domain_code} className="rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm">
             <div className="flex items-start justify-between">
               <div>
                 <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 mb-2">

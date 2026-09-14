@@ -97,7 +97,7 @@ def list_business_domains(
     admin: str = Depends(require_admin),
 ):
     try:
-        domains = db.query(BusinessDomain).order_by(BusinessDomain.id.asc()).all()
+        domains = db.query(BusinessDomain).order_by(BusinessDomain.domain_code.asc()).all()
         modules = db.query(BusinessDomainModule).order_by(BusinessDomainModule.domain_code, BusinessDomainModule.is_primary.desc()).all()
         
         mods_by_domain: Dict[str, List[Dict[str, Any]]] = {}
@@ -111,7 +111,6 @@ def list_business_domains(
             
         return [
             {
-                "id": d.id,
                 "domain_code": d.domain_code,
                 "name": d.name,
                 "description": d.description,
@@ -162,14 +161,14 @@ def create_business_domain(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.put("/domains/{domain_id}")
+@router.put("/domains/{domain_code}")
 def update_business_domain(
-    domain_id: int,
+    domain_code: str,
     payload: DomainCreateUpdate,
     db: Session = Depends(get_db),
     admin: str = Depends(require_admin),
 ):
-    domain = db.query(BusinessDomain).filter(BusinessDomain.id == domain_id).first()
+    domain = db.query(BusinessDomain).filter(BusinessDomain.domain_code == domain_code).first()
     if not domain:
         raise HTTPException(status_code=404, detail="Domínio não encontrado.")
         
@@ -194,13 +193,13 @@ def update_business_domain(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.delete("/domains/{domain_id}")
+@router.delete("/domains/{domain_code}")
 def delete_business_domain(
-    domain_id: int,
+    domain_code: str,
     db: Session = Depends(get_db),
     admin: str = Depends(require_admin),
 ):
-    domain = db.query(BusinessDomain).filter(BusinessDomain.id == domain_id).first()
+    domain = db.query(BusinessDomain).filter(BusinessDomain.domain_code == domain_code).first()
     if not domain:
         raise HTTPException(status_code=404, detail="Domínio não encontrado.")
     try:
@@ -221,7 +220,7 @@ def list_business_intents(
 ):
     try:
         query = db.query(BusinessIntent, BusinessDomain).join(
-            BusinessDomain, BusinessIntent.domain_id == BusinessDomain.id
+            BusinessDomain, BusinessIntent.domain_code == BusinessDomain.domain_code
         )
         if domain_code:
             query = query.filter(BusinessDomain.domain_code == domain_code.strip().upper())
@@ -249,7 +248,6 @@ def list_business_intents(
                 "name": intent.name,
                 "description": intent.description,
                 "active": intent.active,
-                "domain_id": domain.id,
                 "domain_code": domain.domain_code,
                 "domain_name": domain.name,
                 "created_at": intent.created_at,
@@ -280,7 +278,7 @@ def create_business_intent(
         
     try:
         intent = BusinessIntent(
-            domain_id=domain.id,
+            domain_code=domain.domain_code,
             intent_code=icode,
             name=payload.name.strip(),
             description=payload.description,
@@ -322,7 +320,7 @@ def update_business_intent(
         raise HTTPException(status_code=404, detail=f"Domínio '{payload.domain_code}' não existe.")
         
     try:
-        intent.domain_id = domain.id
+        intent.domain_code = domain.domain_code
         intent.name = payload.name.strip()
         intent.description = payload.description
         intent.active = payload.active
@@ -646,7 +644,7 @@ def get_business_knowledge_health(
         ensure_tenant_tables(db, clean_tenant)
         
         intents = db.query(BusinessIntent, BusinessDomain).join(
-            BusinessDomain, BusinessIntent.domain_id == BusinessDomain.id
+            BusinessDomain, BusinessIntent.domain_code == BusinessDomain.domain_code
         ).filter(BusinessIntent.active == True).all()
         
         intent_tables = db.query(BusinessIntentTable).all()

@@ -24,8 +24,7 @@ class BusinessDomain(GlobalBase):
     __tablename__ = "business_domains"
     __table_args__ = {"schema": "public", "extend_existing": True}
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    domain_code = Column(String(50), unique=True, nullable=False, index=True)
+    domain_code = Column(String(50), primary_key=True)
     name = Column(String(120), nullable=False)
     description = Column(Text)
     active = Column(Boolean, default=True, nullable=False)
@@ -51,7 +50,7 @@ class BusinessIntent(GlobalBase):
     __table_args__ = {"schema": "public", "extend_existing": True}
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    domain_id = Column(BigInteger, ForeignKey("public.business_domains.id", ondelete="CASCADE"), nullable=False, index=True)
+    domain_code = Column(String(50), ForeignKey("public.business_domains.domain_code", ondelete="CASCADE"), nullable=False, index=True)
     intent_code = Column(String(100), unique=True, nullable=False, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text)
