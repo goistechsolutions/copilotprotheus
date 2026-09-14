@@ -10,7 +10,7 @@ import { MetricsRow } from '../kpis/MetricsRow';
 import { InsightCard } from '../insights/InsightCard';
 import { InsightsGrid } from '../insights/InsightsGrid';
 import { 
-  DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, 
+  DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, Package,
   Sparkles, ArrowLeft, RefreshCw, FileSpreadsheet, Printer, Bookmark, BookmarkCheck, MessageSquare 
 } from 'lucide-react';
 import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
@@ -36,6 +36,11 @@ const SCREEN_CONFIGS = {
     title: 'Ranking de Vendedores & Performance Comercial',
     badge: 'Comercial',
     description: 'Volume faturado e atingimento por vendedor/representante.',
+  },
+  supplier_ranking: {
+    title: 'Ranking de Fornecedores & Compras',
+    badge: 'Fornecedores',
+    description: 'Volume de compras e representatividade por fornecedor.',
   },
   product_analysis: {
     title: 'Performance de Produtos & Itens',
@@ -199,7 +204,7 @@ export default function DashboardRenderer({ payload }) {
       case 'sum': return DollarSign;
       case 'avg': return TrendingUp;
       case 'max': return Award;
-      case 'count': return (l.includes('vendedor') || l.includes('cliente') || l.includes('fornecedor')) ? Users : ShoppingCart;
+      case 'count': return (l.includes('vendedor') || l.includes('cliente') || l.includes('fornecedor')) ? Users : ((l.includes('produto') || l.includes('item')) ? Package : ShoppingCart);
       case 'percent': return Percent;
       default: return BarChart3;
     }

@@ -8,6 +8,14 @@
  */
 
 // ─── 1. Padrões Semânticos Protheus ──────────────────────────────────────────
+// Aliases exatos de entidades (ambíguos entre código e nome, dependem de isLikelyTextName)
+export const SEMANTIC_EXACT_ALIASES = {
+  customer: ['CLIENTE', 'CLIENT'],
+  supplier: ['FORNECEDOR', 'FORNEC'],
+  seller: ['VENDEDOR', 'REPRESENTANTE'],
+  product: ['PRODUTO', 'ITEM'],
+};
+
 // Padrões específicos para nomes/descrições (prioridade máxima para exibição em gráficos e eixos)
 const SEMANTIC_NAME_PATTERNS = {
   customer: [
@@ -17,17 +25,17 @@ const SEMANTIC_NAME_PATTERNS = {
     'NOMFOR', 'E2_NOMFOR', 'NOME_FORNECEDOR', 'A2_NOME', 'A2_NREDUZ', 'FORNECEDOR_NOME', 'NOM_FORNECEDOR', 'RAZAO_SOCIAL', 'NOME_FORN'
   ],
   seller: [
-    'NOME_VENDEDOR', 'A3_NOME', 'A3_NREDUZ', 'VENDEDOR_NOME', 'NOM_VENDEDOR', 'REPRESENTANTE_NOME', 'NOME_VEND', 'VENDEDOR', 'REPRESENTANTE'
+    'NOME_VENDEDOR', 'A3_NOME', 'A3_NREDUZ', 'VENDEDOR_NOME', 'NOM_VENDEDOR', 'REPRESENTANTE_NOME', 'NOME_VEND'
   ],
   product: [
-    'B1_DESC', 'DESCRICAO', 'DESCR', 'DESC_PRODUTO', 'NOME_PRODUTO', 'PRODUTO_DESC', 'DESC', 'PRODUTO'
+    'B1_DESC', 'DESCRICAO', 'DESCR', 'DESC_PRODUTO', 'NOME_PRODUTO', 'PRODUTO_DESC'
   ],
 };
 
 // Padrões de códigos/identificadores (usados como fallback quando não há coluna de nome)
 const SEMANTIC_CODE_PATTERNS = {
   customer: [
-    'E1_CLIENTE', 'A1_COD', 'COD_CLIENTE', 'COD_CLI', 'CODIGO_CLIENTE', 'F2_CLIENTE', 'COD_CLI'
+    'E1_CLIENTE', 'A1_COD', 'COD_CLIENTE', 'COD_CLI', 'CODIGO_CLIENTE', 'F2_CLIENTE'
   ],
   supplier: [
     'E2_FORNECE', 'A2_COD', 'COD_FORNECEDOR', 'COD_FORN', 'CODIGO_FORNECEDOR', 'F1_FORNECE', 'FORNECE'
@@ -36,7 +44,7 @@ const SEMANTIC_CODE_PATTERNS = {
     'A3_COD', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'COD_VEND', 'F2_VEND1', 'F2_VEND', 'C5_VEND1', 'C5_VEND', 'D2_VENDEDOR', 'COD_REPR'
   ],
   product: [
-    'B1_COD', 'D2_COD', 'D1_COD', 'COD_PRODUTO', 'COD_PROD', 'CODIGO_PRODUTO', 'ITEM'
+    'B1_COD', 'D2_COD', 'D1_COD', 'COD_PRODUTO', 'COD_PROD', 'CODIGO_PRODUTO'
   ],
 };
 
@@ -44,18 +52,22 @@ const SEMANTIC_PATTERNS = {
   customer: [
     ...SEMANTIC_NAME_PATTERNS.customer,
     ...SEMANTIC_CODE_PATTERNS.customer,
+    ...SEMANTIC_EXACT_ALIASES.customer,
   ],
   supplier: [
     ...SEMANTIC_NAME_PATTERNS.supplier,
     ...SEMANTIC_CODE_PATTERNS.supplier,
+    ...SEMANTIC_EXACT_ALIASES.supplier,
   ],
   seller: [
     ...SEMANTIC_NAME_PATTERNS.seller,
     ...SEMANTIC_CODE_PATTERNS.seller,
+    ...SEMANTIC_EXACT_ALIASES.seller,
   ],
   product: [
     ...SEMANTIC_NAME_PATTERNS.product,
     ...SEMANTIC_CODE_PATTERNS.product,
+    ...SEMANTIC_EXACT_ALIASES.product,
   ],
   branch: [
     'FILIAL', 'LOJA', 'FIL', 'F2_FILIAL', 'D2_FILIAL', 'E1_FILIAL', 'E2_FILIAL'
@@ -272,21 +284,32 @@ export function analyzeSchema(rows, columns = []) {
     const codePatterns = SEMANTIC_CODE_PATTERNS[semKey] || SEMANTIC_PATTERNS[semKey] || [];
 
     if (namePatterns) {
-      // 1. Procura primeiro coluna com nome/descrição da entidade (ex: E1_NOMCLI, A1_NOME, NOME_CLIENTE, SA3.A3_NOME)
+      const ambNames = SEMANTIC_EXACT_ALIASES[semKey] || [];
+      const otherEntityAliases = Object.entries(SEMANTIC_EXACT_ALIASES)
+        .filter(([k]) => k !== semKey)
+        .flatMap(([, v]) => v);
+
+      // 1. Procura primeiro coluna com nome/descrição da entidade (ex: E1_NOMCLI, A1_NOME, NOME_CLIENTE, SA3.A3_NOME, B1_DESC, PRODUTO)
       const matchedNameCol = columnProfiles.find(c => {
         const upper = c.name.toUpperCase();
-        if (['VENDEDOR', 'CLIENTE', 'FORNECEDOR', 'PRODUTO'].includes(upper)) {
+        if (otherEntityAliases.includes(upper)) {
+          return false;
+        }
+        if (ambNames.includes(upper)) {
           return isLikelyTextName(c.sampleValues);
         }
-        return namePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`) || upper.includes(p));
+        return namePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`));
       });
       // 2. Procura coluna com código/ID da entidade
       const matchedCodeCol = columnProfiles.find(c => {
         const upper = c.name.toUpperCase();
-        if (['VENDEDOR', 'CLIENTE', 'FORNECEDOR', 'PRODUTO'].includes(upper)) {
+        if (otherEntityAliases.includes(upper)) {
+          return false;
+        }
+        if (ambNames.includes(upper)) {
           return !isLikelyTextName(c.sampleValues);
         }
-        return codePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`) || upper.includes(p));
+        return codePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`));
       });
 
       if (matchedNameCol) {
@@ -369,41 +392,45 @@ export function classifyDataset(schema, context = {}) {
   const scores = {
     seller_ranking: 0,
     customer_ranking: 0,
+    supplier_ranking: 0,
     product_analysis: 0,
     geographic_distribution: 0,
     composition: 0,
     time_series: 0,
   };
 
-  // Se houver data REAL, pontua time_series
-  if (schema?.hasDate) {
+  // Se houver data REAL com mais de 1 data distinta (série temporal real), pontua time_series
+  const dateColProfile = cols.find(c => c?.type === 'date');
+  const hasMultipleDates = schema?.hasDate && (dateColProfile?.distinct > 1);
+
+  if (hasMultipleDates) {
     scores.time_series += 80;
   }
   
-  // Vendedor ou Cliente -> Ranking
+  // Entidades com pesos consistentes
   if (schema?.hasSeller) scores.seller_ranking += 90;
-  if (schema?.hasCustomer) scores.customer_ranking += 85;
-  if (schema?.hasSupplier) scores.customer_ranking += 85;
-  if (schema?.hasProduct) scores.product_analysis += 85;
+  if (schema?.hasCustomer) scores.customer_ranking += 90;
+  if (schema?.hasSupplier) scores.supplier_ranking += 90;
+  if (schema?.hasProduct) scores.product_analysis += 90;
   if (schema?.hasGeographic) scores.geographic_distribution += 85;
 
   // Cardinalidade para composição
   const singleDim = cols.find(c => c?.type === 'dimension');
-  if (singleDim && singleDim.distinct > 1 && singleDim.distinct <= 6 && !schema?.hasDate) {
+  if (singleDim && singleDim.distinct > 1 && singleDim.distinct <= 6 && !hasMultipleDates) {
     scores.composition += 70;
   }
 
-  // Se houver data E entidade, time_series ganha bônus
-  if (schema?.hasDate && (schema?.hasCustomer || schema?.hasSupplier || schema?.hasProduct || schema?.hasSeller)) {
+  // Se houver data E entidade, time_series ganha bônus APENAS se houver múltiplas datas
+  if (hasMultipleDates && (schema?.hasCustomer || schema?.hasSupplier || schema?.hasProduct || schema?.hasSeller)) {
     scores.time_series += 20;
   }
 
-  // Se NÃO houver data, zera time_series
-  if (!schema?.hasDate) {
+  // Se NÃO houver múltiplas datas distintas, zera time_series
+  if (!hasMultipleDates) {
     scores.time_series = 0;
   }
 
-  let bestType = 'seller_ranking';
+  let bestType = 'product_analysis';
   let maxScore = 0;
 
   for (const [type, score] of Object.entries(scores)) {
@@ -415,7 +442,7 @@ export function classifyDataset(schema, context = {}) {
 
   // Fallback seguro
   if (maxScore === 0) {
-    bestType = schema.hasDate ? 'time_series' : (schema.hasCustomer ? 'customer_ranking' : 'seller_ranking');
+    bestType = hasMultipleDates ? 'time_series' : (schema.hasProduct ? 'product_analysis' : (schema.hasCustomer ? 'customer_ranking' : (schema.hasSupplier ? 'supplier_ranking' : 'seller_ranking')));
     maxScore = 75;
   }
 
@@ -458,6 +485,8 @@ function normalizePresentationContext(context = {}) {
 }
 
 function humanizeMeasureName(measure) {
+  const m = String(measure || 'medida').toUpperCase();
+  if (m === 'VALOR_TOTAL' || m === 'VALOR' || m === 'TOTAL') return 'Faturamento';
   return String(measure || 'medida')
     .replace(/^(TOTAL_|VALOR_|SUM_|AVG_)/i, '')
     .replace(/_/g, ' ')
@@ -472,8 +501,8 @@ function inferPresentationDomain(schema) {
     /^(E1|E2|E5)(_|$)/.test(column) || /(RECEB|A_RECEBER|PAGAR|A_PAGAR|SALDO_FINANCEIRO)/.test(column)
   );
   const hasSalesEvidence = columns.some(column =>
-    /^(F2|D2|C5|C6)(_|$)/.test(column) || /FATURAMENTO|VALOR_FATURADO/.test(column)
-  );
+    /^(F2|D2|C5|C6)(_|$)/.test(column) || /FATURAMENTO|VALOR_FATURADO|QTD_PEDIDOS|VALOR_TOTAL/.test(column)
+  ) || schema?.hasSeller || schema?.hasProduct;
 
   if (hasFinanceEvidence && !hasSalesEvidence) return 'finance';
   if (hasSalesEvidence && !hasFinanceEvidence) return 'sales';
@@ -565,12 +594,28 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
     totalOrders = distinctDocs.size;
   }
 
-  // 2. Identificar a entidade da Maior Ocorrência (Vendedor, Cliente, Fornecedor, Produto, etc.)
-  const entityDim = schema.semantics?.seller || schema.semantics?.customer || schema.semantics?.supplier || schema.semantics?.product || schema.dimensions?.[0];
-  const entityType = schema.semantics?.seller === entityDim ? 'seller' :
-                     schema.semantics?.customer === entityDim ? 'customer' :
-                     schema.semantics?.supplier === entityDim ? 'supplier' :
-                     schema.semantics?.product === entityDim ? 'product' : null;
+  // 2. Identificar a entidade da Maior Ocorrência (Produto, Vendedor, Cliente, Fornecedor, etc.)
+  let entityDim = null;
+  let entityType = null;
+
+  if (schema.hasProduct && schema.semantics?.product) {
+    entityDim = schema.semantics.product;
+    entityType = 'product';
+  } else if (schema.hasSeller && schema.semantics?.seller) {
+    entityDim = schema.semantics.seller;
+    entityType = 'seller';
+  } else if (schema.hasCustomer && schema.semantics?.customer) {
+    entityDim = schema.semantics.customer;
+    entityType = 'customer';
+  } else if (schema.hasSupplier && schema.semantics?.supplier) {
+    entityDim = schema.semantics.supplier;
+    entityType = 'supplier';
+  } else if (schema.hasGeographic && schema.semantics?.geographic) {
+    entityDim = schema.semantics.geographic;
+    entityType = 'geographic';
+  } else {
+    entityDim = schema.dimensions?.[0];
+  }
 
   const nameCol = entityType ? (schema.semantics?.[`${entityType}Name`] || entityDim) : entityDim;
   const codeCol = entityType ? schema.semantics?.[`${entityType}Code`] : null;
@@ -580,10 +625,10 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
     const rawName = String(maxRow[nameCol] || '').trim();
     const rawCode = codeCol ? String(maxRow[codeCol] || '').trim() : '';
     const hasExplicitName = entityType ? !!schema.semantics?.[`${entityType}Name`] : false;
-    if ((entityType === 'seller' || schema.hasSeller) && (!hasExplicitName || !isLikelyTextName([rawName]))) {
+    if (entityType === 'seller' && (!hasExplicitName || !isLikelyTextName([rawName]))) {
       const c = rawCode || rawName;
       topEntityName = c ? (c.toLowerCase().startsWith('vendedor') ? c : `Vendedor ${c}`) : '';
-    } else if ((entityType === 'customer' || schema.hasCustomer) && (!hasExplicitName || !isLikelyTextName([rawName]))) {
+    } else if (entityType === 'customer' && (!hasExplicitName || !isLikelyTextName([rawName]))) {
       const c = rawCode || rawName;
       topEntityName = c ? (/^\d+$/.test(c) ? `Cliente ${c}` : c) : '';
     } else {
@@ -594,18 +639,18 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
   // Definição da rotulagem da Maior Ocorrência informando qual entidade gerou a ocorrência
   let maxLabel = 'Maior Ocorrência';
   let maxSubtitle = '';
-  if (schema.hasSeller || entityType === 'seller') {
+  if (entityType === 'seller') {
     const shortCode = topEntityName.replace(/^Vendedor\s+/i, '');
     maxLabel = topEntityName ? (topEntityName.toLowerCase().startsWith('vendedor') ? `Maior Vendedor (${shortCode})` : `Maior Vendedor (${topEntityName})`) : 'Maior Vendedor';
     maxSubtitle = topEntityName ? (topEntityName.toLowerCase().startsWith('vendedor') ? topEntityName : `Vendedor: ${topEntityName}`) : '';
-  } else if (schema.hasCustomer || entityType === 'customer') {
+  } else if (entityType === 'customer') {
     maxLabel = topEntityName ? `Maior Cliente (${topEntityName})` : 'Maior Cliente';
     maxSubtitle = topEntityName ? `Cliente: ${topEntityName}` : '';
-  } else if (schema.hasSupplier || entityType === 'supplier') {
+  } else if (entityType === 'supplier') {
     maxLabel = topEntityName ? `Maior Fornecedor (${topEntityName})` : 'Maior Fornecedor';
     maxSubtitle = topEntityName ? `Fornecedor: ${topEntityName}` : '';
-  } else if (schema.hasProduct || entityType === 'product') {
-    maxLabel = topEntityName ? `Item Líder (${topEntityName})` : 'Item Líder';
+  } else if (entityType === 'product') {
+    maxLabel = topEntityName ? `Produto Líder (${topEntityName})` : 'Produto Líder';
     maxSubtitle = topEntityName ? `Produto: ${topEntityName}` : '';
   } else if (topEntityName) {
     maxLabel = `Maior Ocorrência (${topEntityName})`;
@@ -631,7 +676,13 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
       value: Math.round(totalOrders),
       format: 'number',
       type: 'count',
-      subtitle: count > 1 && schema.hasSeller ? `${count} vendedores ativos` : '',
+      subtitle: count > 1 ? (
+        entityType === 'seller' ? `${count} vendedores ativos` :
+        entityType === 'product' ? `${count} produtos movimentados` :
+        entityType === 'customer' ? `${count} clientes atendidos` :
+        entityType === 'supplier' ? `${count} fornecedores` :
+        `${count} registros`
+      ) : '',
     };
   } else if (isSalesContext) {
     const leaderShare = total > 0 && max > 0 ? (max / total) * 100 : 0;
@@ -643,7 +694,10 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
       subtitle: topEntityName ? `Representatividade de ${topEntityName}` : 'Concentração no 1º lugar',
     };
     kpiCount = {
-      label: schema.hasSeller ? 'Vendedores Ativos' : (schema.hasCustomer ? 'Clientes Ativos' : 'Total de Registros'),
+      label: entityType === 'seller' ? 'Vendedores Ativos' :
+             entityType === 'customer' ? 'Clientes Ativos' :
+             entityType === 'product' ? 'Produtos Movimentados' :
+             entityType === 'supplier' ? 'Fornecedores Ativos' : 'Total de Registros',
       value: count,
       format: 'number',
       type: 'count',
@@ -693,10 +747,17 @@ export function buildInsights(schema, rows, backendKpis = null) {
     const insights = [];
     const top = backendKpis.top_items[0];
     const conc = backendKpis.concentration;
-    const dim = schema.semantics.seller || schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
-    const dimLabel = schema.semantics.seller === dim ? 'vendedor' :
-                     schema.semantics.customer === dim ? 'cliente' :
-                     schema.semantics.product === dim ? 'produto' : 'registro';
+    const dim = (schema.hasProduct && schema.semantics.product) ||
+                (schema.hasSeller && schema.semantics.seller) ||
+                (schema.hasCustomer && schema.semantics.customer) ||
+                (schema.hasSupplier && schema.semantics.supplier) ||
+                (schema.hasGeographic && schema.semantics.geographic) ||
+                schema.dimensions[0];
+    const dimLabel = (schema.hasProduct && schema.semantics.product === dim) ? 'produto' :
+                     (schema.hasSeller && schema.semantics.seller === dim) ? 'vendedor' :
+                     (schema.hasCustomer && schema.semantics.customer === dim) ? 'cliente' :
+                     (schema.hasSupplier && schema.semantics.supplier === dim) ? 'fornecedor' :
+                     (schema.hasGeographic && schema.semantics.geographic === dim) ? 'região' : 'registro';
 
     if (conc != null) {
       insights.push({
@@ -720,14 +781,19 @@ export function buildInsights(schema, rows, backendKpis = null) {
   }
 
   const measure = schema.primaryMeasure;
-  const dim = schema.semantics.seller || schema.semantics.customer || schema.semantics.supplier || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
+  const dim = (schema.hasProduct && schema.semantics.product) ||
+              (schema.hasSeller && schema.semantics.seller) ||
+              (schema.hasCustomer && schema.semantics.customer) ||
+              (schema.hasSupplier && schema.semantics.supplier) ||
+              (schema.hasGeographic && schema.semantics.geographic) ||
+              schema.dimensions[0];
   const insights = [];
 
   if (dim) {
-    const entityKey = schema.semantics.seller === dim ? 'seller' :
-                      schema.semantics.customer === dim ? 'customer' :
-                      schema.semantics.supplier === dim ? 'supplier' :
-                      schema.semantics.product === dim ? 'product' : null;
+    const entityKey = (schema.hasProduct && schema.semantics.product === dim) ? 'product' :
+                      (schema.hasSeller && schema.semantics.seller === dim) ? 'seller' :
+                      (schema.hasCustomer && schema.semantics.customer === dim) ? 'customer' :
+                      (schema.hasSupplier && schema.semantics.supplier === dim) ? 'supplier' : null;
     const codeCol = entityKey ? schema.semantics[`${entityKey}Code`] : null;
 
     // Passo 1: Agregar por dimensão primeiro
@@ -737,10 +803,10 @@ export function buildInsights(schema, rows, backendKpis = null) {
       const rawCode = codeCol ? String(r[codeCol] || '').trim() : '';
       const hasExplicitName = entityKey ? !!schema.semantics?.[`${entityKey}Name`] : false;
       let displayName = rawName || rawCode || 'Outros';
-      if ((entityKey === 'seller' || schema.hasSeller) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+      if (entityKey === 'seller' && (!hasExplicitName || !isLikelyTextName([displayName]))) {
         const c = rawCode || rawName;
         displayName = c ? (c.toLowerCase().startsWith('vendedor') ? c : `Vendedor ${c}`) : 'Outros';
-      } else if ((entityKey === 'customer' || schema.hasCustomer) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+      } else if (entityKey === 'customer' && (!hasExplicitName || !isLikelyTextName([displayName]))) {
         const c = rawCode || rawName;
         if (/^\d+$/.test(c)) {
           displayName = `Cliente ${c}`;
@@ -767,10 +833,11 @@ export function buildInsights(schema, rows, backendKpis = null) {
       const topItem = sorted[0];
       const share = (Math.abs(topItem.val) / absTotal) * 100;
 
-      const dimLabel = schema.semantics.seller === dim ? 'vendedor' :
-                       schema.semantics.customer === dim ? 'cliente' :
-                       schema.semantics.supplier === dim ? 'fornecedor' :
-                       schema.semantics.product === dim ? 'produto' : 'registro';
+      const dimLabel = entityKey === 'product' ? 'produto' :
+                       entityKey === 'seller' ? 'vendedor' :
+                       entityKey === 'customer' ? 'cliente' :
+                       entityKey === 'supplier' ? 'fornecedor' :
+                       (schema.hasGeographic && schema.semantics.geographic === dim) ? 'região' : 'registro';
 
       insights.push({
         title: 'Concentração Principal',
@@ -837,25 +904,32 @@ export function buildCharts(schema, rows) {
         value: p.value,
       }));
 
-    charts.push({
-      chartType: 'line',
-      title: 'Evolução Temporal',
-      xAxisKey: 'label',
-      dataKey: 'value',
-      data: points,
-    });
+    if (points.length > 1) {
+      charts.push({
+        chartType: 'line',
+        title: 'Evolução Temporal',
+        xAxisKey: 'label',
+        dataKey: 'value',
+        data: points,
+      });
+    }
   }
 
   // Gráficos por dimensão
-  const dimCol = schema.semantics.seller || schema.semantics.customer || schema.semantics.supplier || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
+  const dimCol = (schema.hasProduct && schema.semantics.product) ||
+                 (schema.hasSeller && schema.semantics.seller) ||
+                 (schema.hasCustomer && schema.semantics.customer) ||
+                 (schema.hasSupplier && schema.semantics.supplier) ||
+                 (schema.hasGeographic && schema.semantics.geographic) ||
+                 schema.dimensions[0];
   if (dimCol) {
     const dimProfile = (schema.columns || []).find(c => c.name === dimCol);
-    const distinctCount = dimProfile?.distinct || 10;
+    const distinctCount = dimProfile?.distinct || rows.length;
 
-    const entityKey = schema.semantics.seller === dimCol ? 'seller' :
-                      schema.semantics.customer === dimCol ? 'customer' :
-                      schema.semantics.supplier === dimCol ? 'supplier' :
-                      schema.semantics.product === dimCol ? 'product' : null;
+    const entityKey = (schema.hasProduct && schema.semantics.product === dimCol) ? 'product' :
+                      (schema.hasSeller && schema.semantics.seller === dimCol) ? 'seller' :
+                      (schema.hasCustomer && schema.semantics.customer === dimCol) ? 'customer' :
+                      (schema.hasSupplier && schema.semantics.supplier === dimCol) ? 'supplier' : null;
     const codeCol = entityKey ? schema.semantics[`${entityKey}Code`] : null;
 
     const aggMap = new Map();
@@ -864,10 +938,10 @@ export function buildCharts(schema, rows) {
       const rawCode = codeCol ? String(r[codeCol] || '').trim() : '';
       const hasExplicitName = entityKey ? !!schema.semantics?.[`${entityKey}Name`] : false;
       let displayName = rawName || rawCode || 'Outros';
-      if ((entityKey === 'seller' || schema.hasSeller) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+      if (entityKey === 'seller' && (!hasExplicitName || !isLikelyTextName([displayName]))) {
         const c = rawCode || rawName;
         displayName = c ? (c.toLowerCase().startsWith('vendedor') ? c : `Vendedor ${c}`) : 'Outros';
-      } else if ((entityKey === 'customer' || schema.hasCustomer) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+      } else if (entityKey === 'customer' && (!hasExplicitName || !isLikelyTextName([displayName]))) {
         const c = rawCode || rawName;
         if (/^\d+$/.test(c)) {
           displayName = `Cliente ${c}`;
@@ -895,16 +969,16 @@ export function buildCharts(schema, rows) {
       .sort((a, b) => b.value - a.value)
       .map(p => ({ label: p.label, name: p.label, code: p.code, value: p.value }));
 
-    const dimLabel = schema.semantics.seller === dimCol ? 'Vendedor' :
-                     schema.semantics.customer === dimCol ? 'Cliente' :
-                     schema.semantics.supplier === dimCol ? 'Fornecedor' :
-                     schema.semantics.product === dimCol ? 'Produto' :
-                     schema.semantics.geographic === dimCol ? 'Região' : dimCol;
+    const dimLabel = entityKey === 'product' ? 'Produto' :
+                     entityKey === 'seller' ? 'Vendedor' :
+                     entityKey === 'customer' ? 'Cliente' :
+                     entityKey === 'supplier' ? 'Fornecedor' :
+                     (schema.hasGeographic && schema.semantics.geographic === dimCol) ? 'Região' : dimCol;
 
     // Regra da Cardinalidade:
     // Poucos valores (<= 6) -> Donut / Pizza / Composição
-    // Muitos valores (> 6) -> Top 10 Bar Chart (Nunca pizza!)
-    if (distinctCount <= 6 && !schema.hasDate) {
+    // Muitos valores (> 6) -> Top 10 Bar Chart
+    if (distinctCount <= 6 && charts.length === 0) {
       charts.push({
         chartType: 'donut',
         title: `Distribuição por ${dimLabel}`,
@@ -920,6 +994,26 @@ export function buildCharts(schema, rows) {
         dataKey: 'value',
         data: sortedPoints.slice(0, 10),
       });
+
+      // Se não há gráfico de linha temporal e temos mais de 5 itens, inclui gráfico Donut complementar
+      if (charts.length === 1 && sortedPoints.length > 5) {
+        const top5 = sortedPoints.slice(0, 5).map(p => ({ ...p, name: p.label }));
+        const othersVal = sortedPoints.slice(5).reduce((acc, p) => acc + p.value, 0);
+        if (othersVal > 0) {
+          top5.push({
+            label: 'Outros',
+            name: 'Outros',
+            value: othersVal,
+          });
+        }
+        charts.push({
+          chartType: 'donut',
+          title: `Participação Top 5 ${dimLabel}s vs Outros`,
+          data: top5,
+          dataKey: 'value',
+          nameKey: 'name',
+        });
+      }
     }
   }
 
@@ -930,9 +1024,18 @@ export function buildCharts(schema, rows) {
 export function generateContextualSuggestions(schema, data = {}) {
   const suggestions = [];
   const charts = data.charts || [];
-  const topItem = charts[0]?.data?.[0]?.label;
+  // Procura gráfico de dimensão (bar ou donut) para extrair o líder real da entidade, evitando data temporal
+  const dimChart = charts.find(c => c.chartType === 'bar' || c.chartType === 'donut');
+  const topItem = dimChart?.data?.[0]?.label || dimChart?.data?.[0]?.name;
 
-  if (schema.hasSeller) {
+  if (schema.hasProduct) {
+    suggestions.push('Curva ABC completa de produtos');
+    suggestions.push('Produtos com maior volume');
+    suggestions.push('Vendas por linha de produto');
+    if (topItem) {
+      suggestions.push(`Clientes que compram o produto ${topItem}`);
+    }
+  } else if (schema.hasSeller) {
     suggestions.push('Mostrar Top 20 vendedores');
     suggestions.push('Comparar com mês anterior');
     suggestions.push('Analisar tendência');
@@ -945,13 +1048,6 @@ export function generateContextualSuggestions(schema, data = {}) {
     suggestions.push('Clientes sem compras recentes');
     if (topItem) {
       suggestions.push(`Detalhamento do cliente ${topItem}`);
-    }
-  } else if (schema.hasProduct) {
-    suggestions.push('Curva ABC completa de produtos');
-    suggestions.push('Produtos com maior volume');
-    suggestions.push('Vendas por linha de produto');
-    if (topItem) {
-      suggestions.push(`Clientes que compram o produto ${topItem}`);
     }
   } else if (schema.hasDate) {
     suggestions.push('Comparar ano atual vs ano anterior');
@@ -1303,17 +1399,17 @@ export function buildExecutiveChatSummary(context) {
   const leaderValue = leaderItem?.value;
   const presentation = resolveMeasurePresentation(schema, context);
 
-  const entitySingular = schema.hasSeller ? 'Vendedor líder' :
+  const entitySingular = schema.hasProduct ? 'Produto líder' :
+                         schema.hasSeller ? 'Vendedor líder' :
                          schema.hasCustomer ? 'Cliente líder' :
                          schema.hasSupplier ? 'Fornecedor líder' :
-                         schema.hasProduct ? 'Produto líder' :
                          schema.hasGeographic ? 'Região líder' :
                          schema.dimensions?.length ? 'Dimensão de maior valor' : 'Maior ocorrência';
 
-  const entityPlural = schema.hasSeller ? 'vendedores' :
+  const entityPlural = schema.hasProduct ? 'produtos' :
+                       schema.hasSeller ? 'vendedores' :
                        schema.hasCustomer ? 'clientes' :
                        schema.hasSupplier ? 'fornecedores' :
-                       schema.hasProduct ? 'produtos' :
                        schema.hasGeographic ? 'regiões' : 'registros';
 
   const parts = ['**Resumo da Análise:**\n'];
