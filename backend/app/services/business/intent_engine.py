@@ -7,7 +7,6 @@ RULES_DIR = os.path.join(os.path.dirname(__file__), 'rules')
 _rules_cache = {}
 
 def load_business_rules():
-    global _rules_cache
     if not _rules_cache:
         if os.path.exists(RULES_DIR):
             for file in os.listdir(RULES_DIR):

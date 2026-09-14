@@ -579,15 +579,25 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
   if (maxRow) {
     const rawName = String(maxRow[nameCol] || '').trim();
     const rawCode = codeCol ? String(maxRow[codeCol] || '').trim() : '';
-    topEntityName = rawName || rawCode;
+    const hasExplicitName = entityType ? !!schema.semantics?.[`${entityType}Name`] : false;
+    if ((entityType === 'seller' || schema.hasSeller) && (!hasExplicitName || !isLikelyTextName([rawName]))) {
+      const c = rawCode || rawName;
+      topEntityName = c ? (c.toLowerCase().startsWith('vendedor') ? c : `Vendedor ${c}`) : '';
+    } else if ((entityType === 'customer' || schema.hasCustomer) && (!hasExplicitName || !isLikelyTextName([rawName]))) {
+      const c = rawCode || rawName;
+      topEntityName = c ? (/^\d+$/.test(c) ? `Cliente ${c}` : c) : '';
+    } else {
+      topEntityName = rawName || rawCode;
+    }
   }
 
   // Definição da rotulagem da Maior Ocorrência informando qual entidade gerou a ocorrência
   let maxLabel = 'Maior Ocorrência';
   let maxSubtitle = '';
   if (schema.hasSeller || entityType === 'seller') {
-    maxLabel = topEntityName ? `Maior Vendedor (${topEntityName})` : 'Maior Vendedor';
-    maxSubtitle = topEntityName ? `Vendedor: ${topEntityName}` : '';
+    const shortCode = topEntityName.replace(/^Vendedor\s+/i, '');
+    maxLabel = topEntityName ? (topEntityName.toLowerCase().startsWith('vendedor') ? `Maior Vendedor (${shortCode})` : `Maior Vendedor (${topEntityName})`) : 'Maior Vendedor';
+    maxSubtitle = topEntityName ? (topEntityName.toLowerCase().startsWith('vendedor') ? topEntityName : `Vendedor: ${topEntityName}`) : '';
   } else if (schema.hasCustomer || entityType === 'customer') {
     maxLabel = topEntityName ? `Maior Cliente (${topEntityName})` : 'Maior Cliente';
     maxSubtitle = topEntityName ? `Cliente: ${topEntityName}` : '';
@@ -725,7 +735,17 @@ export function buildInsights(schema, rows, backendKpis = null) {
     rows.forEach(r => {
       const rawName = String(r[dim] || '').trim();
       const rawCode = codeCol ? String(r[codeCol] || '').trim() : '';
-      const displayName = rawName || rawCode || 'Outros';
+      const hasExplicitName = entityKey ? !!schema.semantics?.[`${entityKey}Name`] : false;
+      let displayName = rawName || rawCode || 'Outros';
+      if ((entityKey === 'seller' || schema.hasSeller) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+        const c = rawCode || rawName;
+        displayName = c ? (c.toLowerCase().startsWith('vendedor') ? c : `Vendedor ${c}`) : 'Outros';
+      } else if ((entityKey === 'customer' || schema.hasCustomer) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+        const c = rawCode || rawName;
+        if (/^\d+$/.test(c)) {
+          displayName = `Cliente ${c}`;
+        }
+      }
       const key = (rawName && rawCode) ? `${rawCode}___${rawName}` : displayName;
 
       const raw = r[measure];
@@ -842,7 +862,17 @@ export function buildCharts(schema, rows) {
     rows.forEach(r => {
       const rawName = String(r[dimCol] || '').trim();
       const rawCode = codeCol ? String(r[codeCol] || '').trim() : '';
-      const displayName = rawName || rawCode || 'Outros';
+      const hasExplicitName = entityKey ? !!schema.semantics?.[`${entityKey}Name`] : false;
+      let displayName = rawName || rawCode || 'Outros';
+      if ((entityKey === 'seller' || schema.hasSeller) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+        const c = rawCode || rawName;
+        displayName = c ? (c.toLowerCase().startsWith('vendedor') ? c : `Vendedor ${c}`) : 'Outros';
+      } else if ((entityKey === 'customer' || schema.hasCustomer) && (!hasExplicitName || !isLikelyTextName([displayName]))) {
+        const c = rawCode || rawName;
+        if (/^\d+$/.test(c)) {
+          displayName = `Cliente ${c}`;
+        }
+      }
       const key = (rawName && rawCode) ? `${rawCode}___${rawName}` : displayName;
 
       const raw = r[measure];

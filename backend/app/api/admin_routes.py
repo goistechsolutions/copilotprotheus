@@ -54,6 +54,7 @@ from app.schemas.dictionary_sync import (
     DictionarySyncDiff,
 )
 from app.services.module_sync_resolver import resolve_modules_to_numeric_codes
+from app.services.protheus_queryrest_client import ProtheusQueryRestError
 
 router = APIRouter()
 

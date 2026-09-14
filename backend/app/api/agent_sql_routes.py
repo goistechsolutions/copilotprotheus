@@ -371,15 +371,14 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão a conversão falhará e o banco retornará erro 500 no QueryRest. Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\'). Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'.
 19. PROIBIÇÃO DE CAMPOS DE DATA INVENTADOS (ANO_EMISSAO, MES_EMISSAO, ETC.): NUNCA use ou invente identificadores como ANO_EMISSAO, MES_EMISSAO, DATA_EMISSAO ou DT_EMISSAO no SELECT, WHERE ou GROUP BY. Não existem tais campos no Protheus; o uso deles causa bloqueio imediato pelo RBAC (ENTITLEMENT_DENIED). Para agrupar ou filtrar por mês/ano, use SEMPRE SUBSTR(alias.CAMPO_DATA, 1, 6) AS MES_ANO e use essa mesma expressão SUBSTR(...) no GROUP BY. Para comparar mês atual com anterior, use SUBSTR(alias.CAMPO_DATA, 1, 6) IN (TO_CHAR(ADD_MONTHS(SYSDATE, -1), \'YYYYMM\'), TO_CHAR(SYSDATE, \'YYYYMM\')).
 20. SINTAXE GROUP BY NO ORACLE: O banco Oracle NÃO aceita aliases da cláusula SELECT na cláusula GROUP BY. Qualquer expressão projetada (como SUBSTR(...) ou cálculo) DEVE ser repetida de forma idêntica no GROUP BY. Exemplo correto: SELECT SUBSTR(SF2.F2_EMISSAO, 1, 6) AS MES_ANO, SUM(SD2.D2_TOTAL) AS TOTAL ... GROUP BY SUBSTR(SF2.F2_EMISSAO, 1, 6). NUNCA faça 'GROUP BY MES_ANO'.
-21. PREFERÊNCIA ABSOLUTA DE NOMES E QUANTIDADE DE PEDIDOS EM AGRUPAMENTOS:
-Em qualquer consulta agrupada por entidade (vendedores, clientes, fornecedores, produtos):
-- NUNCA selecione apenas códigos numéricos nos agrupamentos (ex: F2_VEND1, F2_CLIENTE, E1_CLIENTE, E2_FORNECE, D2_COD).
-- SEMPRE faça JOIN com a tabela de cadastro correspondente para projetar o NOME/DESCRIÇÃO:
-  * Vendedores: JOIN SA3010 SA3 ON SF2.F2_VEND1 = SA3.A3_COD (ou SD2.D2_VENDEDOR = SA3.A3_COD) com SA3.D_E_L_E_T_ <> '*' -> projete SA3.A3_NOME AS VENDEDOR.
-  * Clientes: JOIN SA1010 SA1 ON SF2.F2_CLIENTE = SA1.A1_COD AND SF2.F2_LOJA = SA1.A1_LOJA com SA1.D_E_L_E_T_ <> '*' -> projete SA1.A1_NOME AS CLIENTE.
-  * Fornecedores: JOIN SA2010 SA2 ON SF1.F1_FORNECE = SA2.A2_COD AND SF1.F1_LOJA = SA2.A2_LOJA com SA2.D_E_L_E_T_ <> '*' -> projete SA2.A2_NOME AS FORNECEDOR.
-  * Produtos: JOIN SB1010 SB1 ON SD2.D2_COD = SB1.B1_COD com SB1.D_E_L_E_T_ <> '*' -> projete SB1.B1_DESC AS PRODUTO.
-- Em consultas de vendas agrupadas por vendedor ou cliente, selecione OBRIGATORIAMENTE também a quantidade de pedidos: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS (ou COUNT(DISTINCT SD2.D2_PEDIDO) AS QTD_PEDIDOS), além do valor total faturado SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. Isso é indispensável para o cálculo correto do Ticket Médio e do Total de Pedidos nos dashboards executivos."""
+21. PREFERÊNCIA DE NOMES E QUANTIDADE DE PEDIDOS EM AGRUPAMENTOS:
+- NUNCA invente tabelas que NÃO estejam listadas no snapshot autorizado acima! Se uma tabela de cadastro (como SA3 para vendedores, SA1 para clientes, SA2 para fornecedores ou SB1 para produtos) NÃO estiver explicitamente no snapshot autorizado, NUNCA faça JOIN com ela e NUNCA referencie seus campos (ex: NUNCA use A3_NOME se SA3 não estiver no snapshot). Nesses casos, use EXCLUSIVAMENTE os códigos disponíveis nas tabelas autorizadas (ex: SF2.F2_VEND1 AS VENDEDOR ou SF2.F2_CLIENTE AS CLIENTE).
+- SE e SOMENTE SE a tabela de cadastro ESTIVER presente no snapshot autorizado:
+  * Vendedores (se SA3 constar no snapshot): JOIN SA3010 SA3 ON SF2.F2_VEND1 = SA3.A3_COD (ou SD2.D2_VENDEDOR = SA3.A3_COD) com SA3.D_E_L_E_T_ <> '*' -> projete SA3.A3_NOME AS VENDEDOR.
+  * Clientes (se SA1 constar no snapshot): JOIN SA1010 SA1 ON SF2.F2_CLIENTE = SA1.A1_COD AND SF2.F2_LOJA = SA1.A1_LOJA com SA1.D_E_L_E_T_ <> '*' -> projete SA1.A1_NOME AS CLIENTE.
+  * Fornecedores (se SA2 constar no snapshot): JOIN SA2010 SA2 ON SF1.F1_FORNECE = SA2.A2_COD AND SF1.F1_LOJA = SA2.A2_LOJA com SA2.D_E_L_E_T_ <> '*' -> projete SA2.A2_NOME AS FORNECEDOR.
+  * Produtos (se SB1 constar no snapshot): JOIN SB1010 SB1 ON SD2.D2_COD = SB1.B1_COD com SB1.D_E_L_E_T_ <> '*' -> projete SB1.B1_DESC AS PRODUTO.
+- Em consultas de vendas agrupadas por vendedor ou cliente, selecione OBRIGATORIAMENTE a quantidade de pedidos: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS (ou COUNT(DISTINCT SD2.D2_PEDIDO) AS QTD_PEDIDOS), além do valor total faturado SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. Isso é indispensável para o cálculo correto do Ticket Médio e do Total de Pedidos nos dashboards executivos."""
 
     if not domain:
         domain = _infer_query_domain(prompt)
@@ -394,24 +393,23 @@ Em qualquer consulta agrupada por entidade (vendedores, clientes, fornecedores, 
     domain_instruction = ""
     if domain == "sales":
         domain_instruction = (
-            " A intenção é VENDAS/FATURAMENTO. Use SF2/SD2 para notas de saída, "
-            "SA1 para clientes e SA3 para vendedores/representantes quando essas famílias estiverem no catálogo; "
+            " A intenção é VENDAS/FATURAMENTO. Use SF2/SD2 para notas de saída "
+            "(e SA1/SA3 quando essas tabelas constarem explicitamente no snapshot autorizado acima); "
             "nunca use SF1/SD1/SA2, que são entrada/compras/fornecedores. "
-            "DIRETRIZES OBRIGATÓRIAS DE VENDAS: "
-            "1. ANÁLISE POR VENDEDOR/REPRESENTANTE: Quando a consulta for agrupada por vendedor ou representante: "
-            "- Faça INNER JOIN com a tabela de vendedores SA3 (SA3010 SA3) através de SF2.F2_VEND1 = SA3.A3_COD (ou SD2.D2_VENDEDOR = SA3.A3_COD) com SA3.D_E_L_E_T_ <> '*'. "
-            "- Selecione OBRIGATORIAMENTE o nome do vendedor: SA3.A3_NOME AS VENDEDOR (ou NOME_VENDEDOR). NUNCA retorne apenas o código do vendedor! "
-            "- Selecione também o código do vendedor: SF2.F2_VEND1 AS COD_VENDEDOR. "
-            "- Selecione OBRIGATORIAMENTE a quantidade de pedidos faturados: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS (ou COUNT(DISTINCT SD2.D2_PEDIDO) AS QTD_PEDIDOS). "
-            "- Selecione o valor total faturado: SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL (ou SUM(SD2.D2_TOTAL) AS VALOR_TOTAL). "
-            "- Agrupe por SF2.F2_VEND1, SA3.A3_NOME e ordene por VALOR_TOTAL DESC. "
-            "2. ANÁLISE POR CLIENTE: Quando a consulta for agrupada por cliente: "
-            "- Faça INNER JOIN com SA1 (SA1010 SA1) via SF2.F2_CLIENTE = SA1.A1_COD AND SF2.F2_LOJA = SA1.A1_LOJA com SA1.D_E_L_E_T_ <> '*'. "
-            "- Selecione OBRIGATORIAMENTE o nome do cliente: SA1.A1_NOME AS CLIENTE (ou NOME_CLIENTE). NUNCA selecione apenas o código sem o nome! "
-            "- Selecione a quantidade de pedidos: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS e o total faturado SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
-            "3. ANÁLISE POR PRODUTO: Quando a consulta for por produto, use SD2 e faça INNER JOIN com SB1 (SB1010 SB1) "
-            "via SD2.D2_COD = SB1.B1_COD com SB1.D_E_L_E_T_ <> '*'. Selecione SB1.B1_DESC AS PRODUTO e a quantidade vendida SUM(SD2.D2_QUANT) AS QUANTIDADE. "
-            "4. PREFERÊNCIA ABSOLUTA DE NOMES: Nos gráficos e dashboards, os nomes das entidades são INDISPENSÁVEIS. NUNCA agrupe apenas por códigos."
+            "DIRETRIZES DE VENDAS: "
+            "1. ANÁLISE POR VENDEDOR/REPRESENTANTE: "
+            "- Se a tabela SA3 constar explicitamente no snapshot autorizado acima, faça INNER JOIN com SA3010 SA3 (SF2.F2_VEND1 = SA3.A3_COD) para projetar SA3.A3_NOME AS VENDEDOR e SF2.F2_VEND1 AS COD_VENDEDOR. "
+            "- Se a tabela SA3 NÃO constar no snapshot autorizado acima, NUNCA use SA3 nem A3_NOME (causará bloqueio de segurança RBAC). Projete apenas SF2.F2_VEND1 AS VENDEDOR. "
+            "- Selecione OBRIGATORIAMENTE a quantidade de pedidos faturados: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS. "
+            "- Selecione o valor total faturado: SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
+            "- Agrupe pelas dimensões selecionadas e ordene por VALOR_TOTAL DESC. "
+            "2. ANÁLISE POR CLIENTE: "
+            "- Se SA1 constar no snapshot, faça INNER JOIN com SA1010 SA1 para trazer SA1.A1_NOME AS CLIENTE. Se não constar, projete apenas SF2.F2_CLIENTE AS CLIENTE. "
+            "- Selecione COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS e SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
+            "3. ANÁLISE POR PRODUTO: "
+            "- Se SB1 constar no snapshot, faça INNER JOIN com SB1010 SB1 via SD2.D2_COD = SB1.B1_COD para trazer SB1.B1_DESC AS PRODUTO. Se não constar, projete SD2.D2_COD AS PRODUTO. "
+            "- Selecione SUM(SD2.D2_TOTAL) AS VALOR_TOTAL e SUM(SD2.D2_QUANT) AS QUANTIDADE. "
+            "4. REGRA DE SEGURANÇA RBAC: NUNCA referencie tabelas ou campos que não estejam explicitamente presentes no snapshot autorizado acima."
         )
     elif domain == "purchases":
         domain_instruction = (

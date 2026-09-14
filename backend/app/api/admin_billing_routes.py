@@ -6,6 +6,7 @@ Nenhum dado operacional do Protheus é persistido neste módulo.
 from __future__ import annotations
 
 from datetime import date
+import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +17,8 @@ from sqlalchemy.orm import Session
 from app.api.admin_routes import verify_admin
 from app.db.database import get_db
 from app.models.knowledge import LicensePlan, ProtheusModuleMaster, Tenant, TenantContract
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
