@@ -151,7 +151,7 @@ def create_contract(payload: ContractPayload, db: Session = Depends(get_db), _ad
     _plan_or_404(db, payload.plan_id)
     if db.query(TenantContract).filter(TenantContract.contract_code == payload.contract_code).first():
         raise HTTPException(status_code=409, detail="Código de contrato já cadastrado.")
-    contract = TenantContract(**payload.model_dump(), tenant_id=tenant.tenant_code)
+    contract = TenantContract(**payload.model_dump(exclude={"tenant_id"}), tenant_id=tenant.tenant_code)
     db.add(contract)
     db.commit()
     db.refresh(contract)
