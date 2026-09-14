@@ -81,14 +81,32 @@ export function inferTimeDimensionType(colName) {
   return { isTemporalDimension: false, granularity: null };
 }
 
+let _globalSemanticLabels = {};
+
+/**
+ * Define o dicionário semântico global vindo do backend/SX3.
+ * @param {Record<string, string>} labelsMap
+ */
+export function setGlobalSemanticLabels(labelsMap) {
+  _globalSemanticLabels = labelsMap || {};
+}
+
 /**
  * Humaniza o nome técnico de uma coluna para exibição ao usuário.
  * @param {string} colName
+ * @param {Record<string, string>|null} customLabels
  * @returns {string}
  */
-export function humanizeColumnName(colName) {
+export function humanizeColumnName(colName, customLabels = null) {
   if (!colName) return '';
-  const upper = String(colName).toUpperCase();
+  const cleanKey = String(colName).trim();
+  const upper = cleanKey.toUpperCase();
+
+  // 1. Prioridade absoluta: dicionário semântico explícito do Protheus / SX3
+  if (customLabels && customLabels[cleanKey]) return customLabels[cleanKey];
+  if (customLabels && customLabels[upper]) return customLabels[upper];
+  if (_globalSemanticLabels && _globalSemanticLabels[cleanKey]) return _globalSemanticLabels[cleanKey];
+  if (_globalSemanticLabels && _globalSemanticLabels[upper]) return _globalSemanticLabels[upper];
 
   for (const { pattern, label } of COLUMN_LABEL_MAP) {
     if (pattern.test(upper)) return label;
@@ -100,6 +118,8 @@ export function humanizeColumnName(colName) {
   }
   const strippedUpper = stripped.toUpperCase();
   if (strippedUpper !== upper) {
+    if (customLabels && customLabels[strippedUpper]) return customLabels[strippedUpper];
+    if (_globalSemanticLabels && _globalSemanticLabels[strippedUpper]) return _globalSemanticLabels[strippedUpper];
     for (const { pattern, label } of COLUMN_LABEL_MAP) {
       if (pattern.test(strippedUpper)) return label;
     }
@@ -238,26 +258,58 @@ function detectTrend(points) {
   return 'estável';
 }
 
-function _narrativeFinancial(kpis, charts, rows, totalLabel, leaderLabel, volumeLabel) {
-  const totalKpi = kpis.find(k => k.type === 'sum');
+function _narrativeFinancial(kpis, charts, rows, totalLabel, leaderLabel, volumeLabel, backendKpis, backendInsights) {
+  const totalKpi = kpis.find(k => k.type === 'sum' || k.type === 'receber' || k.type === 'pagar');
   const leaderChart = charts.find(c => c.chartType === 'bar' || c.chartType === 'donut');
   const leaderItem = leaderChart?.data?.[0];
   const parts = [];
-  if (totalKpi) {
-    parts.push(`**${totalLabel}:** ${formatExecutiveValue(totalKpi.value, 'currency')}.`);
+
+  const totalVal = backendKpis?.total || totalKpi?.value || 0;
+  const totalFormatted = formatExecutiveValue(totalVal, 'currency');
+  const count = rows.length;
+
+  if (totalLabel.toLowerCase().includes('vencido')) {
+    parts.push(`Clientes em atraso somam **${totalFormatted}**, totalizando ${count} ${volumeLabel} em aberto.`);
+  } else {
+    parts.push(`O ${totalLabel.toLowerCase()} totaliza **${totalFormatted}** com ${count} ${volumeLabel}.`);
   }
-  if (leaderItem) {
-    parts.push(`**${leaderLabel}:** ${leaderItem.label} (${formatExecutiveValue(leaderItem.value, 'currency')}).`);
+
+  const top1Share = backendKpis?.concentration || (totalVal > 0 && leaderItem ? ((leaderItem.value / totalVal) * 100) : null);
+  const top1Name = backendKpis?.maior_ocorrencia_nome || leaderItem?.label || leaderItem?.name;
+  if (top1Name && top1Share) {
+    parts.push(`O principal devedor (**${top1Name}**) representa **${top1Share.toFixed(1)}%** do total.`);
   }
-  parts.push(`Total: ${rows.length} ${volumeLabel} analisados.`);
+
+  const top3Share = backendKpis?.top3_share;
+  if (top3Share && top3Share > 0) {
+    parts.push(`Os três maiores clientes concentram **${top3Share.toFixed(1)}%** da exposição.`);
+  }
+
+  const aging = backendKpis?.aging;
+  if (aging && aging.pct_above_60 > 20) {
+    parts.push(`Atenção: **${aging.pct_above_60.toFixed(1)}%** dos títulos possuem mais de 60 dias de atraso.`);
+  }
+
+  const trend = backendKpis?.trend;
+  if (trend && trend.growth_pct > 5) {
+    parts.push(`Foi observado crescimento de inadimplência nas últimas semanas (+${trend.growth_pct.toFixed(1)}%).`);
+  }
+
+  // Alerta prioritário dos insights da IA
+  const topInsight = (backendInsights || []).find(i => i.severity === 'CRITICAL' || i.severity === 'WARNING');
+  if (topInsight && !parts.some(p => p.includes(topInsight.title))) {
+    parts.push(`*${topInsight.title}:* ${topInsight.description}`);
+  }
+
   return parts.join(' ');
 }
 
-function _narrativeTimeSeries(kpis, charts, rows, schema) {
+function _narrativeTimeSeries(kpis, charts, rows, schema, backendKpis) {
   const totalKpi = kpis.find(k => k.type === 'sum');
   const lineSeries = charts.find(c => c.chartType === 'line');
   const points = lineSeries?.data || [];
-  const trend = detectTrend(points);
+  const trend = backendKpis?.trend?.direction || detectTrend(points);
+  const growthPct = backendKpis?.trend?.growth_pct;
   const periodCount = points.length || rows.length;
 
   const totalFormatted = totalKpi ? formatExecutiveValue(totalKpi.value, 'currency') : null;
@@ -267,13 +319,14 @@ function _narrativeTimeSeries(kpis, charts, rows, schema) {
   const bestShare = (totalKpi && bestPoint && totalKpi.value > 0)
     ? ((bestPoint.value / totalKpi.value) * 100).toFixed(1) : null;
 
-  const top3 = [...points].sort((a, b) => b.value - a.value).slice(0, 3);
-  const top3Sum = top3.reduce((acc, p) => acc + p.value, 0);
-  const top3Share = (totalKpi && totalKpi.value > 0 && top3.length >= 3)
-    ? ((top3Sum / totalKpi.value) * 100).toFixed(1) : null;
+  const top3Share = backendKpis?.top3_share || (totalKpi && totalKpi.value > 0 && points.length >= 3
+    ? (([...points].sort((a, b) => b.value - a.value).slice(0, 3).reduce((acc, p) => acc + p.value, 0) / totalKpi.value) * 100).toFixed(1)
+    : null);
 
-  const trendText = trend === 'crescimento' ? 'tendência de crescimento ao longo do período'
-    : trend === 'queda' ? 'tendência de queda ao longo do período'
+  const trendText = trend === 'crescimento'
+    ? (growthPct ? `tendência de crescimento (+${growthPct.toFixed(1)}%) ao longo do período` : 'tendência de crescimento ao longo do período')
+    : trend === 'queda'
+    ? (growthPct ? `retração de ${growthPct.toFixed(1)}% no período` : 'tendência de queda ao longo do período')
     : trend === 'estável' ? 'valores relativamente estáveis no período'
     : null;
 
@@ -296,7 +349,7 @@ function _narrativeTimeSeries(kpis, charts, rows, schema) {
   return parts.join(' ');
 }
 
-function _narrativeRanking(kpis, charts, rows, schema) {
+function _narrativeRanking(kpis, charts, rows, schema, backendKpis) {
   const totalKpi = kpis.find(k => k.type === 'sum');
   const barChart = charts.find(c => c.chartType === 'bar' || c.chartType === 'donut');
   const topItem = barChart?.data?.[0];
@@ -314,15 +367,14 @@ function _narrativeRanking(kpis, charts, rows, schema) {
 
   const totalFormatted = totalKpi ? formatExecutiveValue(totalKpi.value, 'currency') : null;
   const entityCount = (barChart?.data || []).length || rows.length;
-  const topLabel = topItem?.label || topItem?.name || '';
+  const topLabel = backendKpis?.maior_ocorrencia_nome || topItem?.label || topItem?.name || '';
   const topValue = topItem ? formatExecutiveValue(topItem.value, 'currency') : null;
-  const topShare = (totalKpi && topItem && totalKpi.value > 0)
-    ? ((topItem.value / totalKpi.value) * 100).toFixed(1) : null;
+  const topShare = backendKpis?.concentration || ((totalKpi && topItem && totalKpi.value > 0)
+    ? ((topItem.value / totalKpi.value) * 100).toFixed(1) : null);
 
-  const top3Items = (barChart?.data || []).slice(0, 3);
-  const top3Sum = top3Items.reduce((acc, p) => acc + (p.value || 0), 0);
-  const top3Share = (totalKpi && totalKpi.value > 0 && top3Items.length >= 3)
-    ? ((top3Sum / totalKpi.value) * 100).toFixed(1) : null;
+  const top3Share = backendKpis?.top3_share || ((totalKpi && totalKpi.value > 0 && (barChart?.data || []).length >= 3)
+    ? (((barChart?.data || []).slice(0, 3).reduce((acc, p) => acc + (p.value || 0), 0) / totalKpi.value) * 100).toFixed(1)
+    : null);
 
   const parts = [];
   if (totalFormatted && entityCount > 0) {
@@ -331,7 +383,7 @@ function _narrativeRanking(kpis, charts, rows, schema) {
   if (topLabel && topValue) {
     parts.push(`O ${entitySingular} líder foi **${topLabel}** com ${topValue}${topShare ? ` (${topShare}% de participação)` : ''}.`);
   }
-  if (top3Share && top3Items.length >= 3) {
+  if (top3Share) {
     parts.push(`Os 3 primeiros concentram **${top3Share}%** do volume total.`);
   }
   if (parts.length === 0) {
@@ -353,6 +405,8 @@ export function buildExecutiveNarrative(analysisContext) {
   const rows = data.rows || [];
   const kpis = data.kpis || [];
   const charts = data.charts || [];
+  const backendKpis = data.backendKpis;
+  const backendInsights = data.backendInsights || [];
 
   if (data.cashFlowData?.isCashFlow) {
     const { totalReceber, totalPagar, saldoProjetado } = data.cashFlowData;
@@ -365,16 +419,16 @@ export function buildExecutiveNarrative(analysisContext) {
   }
 
   if (screenType === 'overdue_receivables') {
-    return _narrativeFinancial(kpis, charts, rows, 'Total Vencido em Aberto', 'Maior Devedor', 'títulos vencidos');
+    return _narrativeFinancial(kpis, charts, rows, 'Total Vencido em Aberto', 'Maior Devedor', 'títulos vencidos', backendKpis, backendInsights);
   }
   if (screenType === 'accounts_receivable') {
-    return _narrativeFinancial(kpis, charts, rows, 'Total a Receber', 'Cliente com Maior Saldo', 'títulos em aberto');
+    return _narrativeFinancial(kpis, charts, rows, 'Total a Receber', 'Cliente com Maior Saldo', 'títulos em aberto', backendKpis, backendInsights);
   }
   if (screenType === 'accounts_payable') {
-    return _narrativeFinancial(kpis, charts, rows, 'Total a Pagar', 'Fornecedor com Maior Saldo', 'títulos em aberto');
+    return _narrativeFinancial(kpis, charts, rows, 'Total a Pagar', 'Fornecedor com Maior Saldo', 'títulos em aberto', backendKpis, backendInsights);
   }
   if (screenType === 'time_series') {
-    return _narrativeTimeSeries(kpis, charts, rows, schema);
+    return _narrativeTimeSeries(kpis, charts, rows, schema, backendKpis);
   }
-  return _narrativeRanking(kpis, charts, rows, schema);
+  return _narrativeRanking(kpis, charts, rows, schema, backendKpis);
 }

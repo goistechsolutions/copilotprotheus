@@ -12,7 +12,13 @@ import {
   humanizeDimensionValue,
   humanizeColumnName,
   buildExecutiveNarrative,
+  setGlobalSemanticLabels,
 } from './presentationIntelligence.js';
+import {
+  buildReceivablesDashboard,
+  buildTimeSeriesDashboard,
+  buildInventoryDashboard,
+} from './dashboardFactory.js';
 
 // ─── 1. Padrões Semânticos Protheus ──────────────────────────────────────────
 // Aliases exatos de entidades (ambíguos entre código e nome, dependem de isLikelyTextName)
@@ -1478,9 +1484,14 @@ export function buildExecutiveChatSummary(context) {
 }
 
 // ─── 9. Pipeline Orquestrador Adaptativo ──────────────────────────────────────
-export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {}, backendKpis = null) {
+export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {}, backendKpis = null, backendInsights = null) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return null;
+  }
+
+  // Integração com dicionário semântico Protheus/SX3 caso fornecido
+  if (semanticContext.columnLabels) {
+    setGlobalSemanticLabels(semanticContext.columnLabels);
   }
 
   const schema = analyzeSchema(rows, columns);
@@ -1494,7 +1505,6 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
   if (cashFlowData) {
     // Caminho especializado: Fluxo de Caixa
     kpis = buildCashFlowKPIs(cashFlowData);
-    // Atualizar count de títulos
     kpis[3] = { ...kpis[3], value: rows.length };
     insights = buildCashFlowInsights(cashFlowData);
     charts = buildCashFlowCharts(cashFlowData);
@@ -1503,14 +1513,42 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
   } else {
     // Caminho genérico com classificações especializadas
     const classification = classifyDataset(schema, semanticContext);
-    kpis = buildKPIs(schema, rows, semanticContext);
-    // Priorizar KPIs do backend quando disponíveis para evitar divergência chat/dashboard
-    insights = buildInsights(schema, rows, backendKpis);
-    charts = buildCharts(schema, rows);
     screenType = classification.datasetType;
     confidence = classification.confidence;
-  }
 
+    // Se for Inadimplência / Títulos Vencidos, utiliza a fábrica especializada
+    if (screenType === 'overdue_receivables') {
+      const entityCol = (schema.hasCustomer && schema.semantics.customer) || schema.dimensions?.[0] || columns[0];
+      const recDashboard = buildReceivablesDashboard({
+        schema,
+        rows,
+        measure: schema.primaryMeasure,
+        entityCol,
+        entityType: 'customer',
+        backendKpis,
+        backendInsights,
+      });
+      kpis = recDashboard.kpis;
+      charts = recDashboard.charts;
+      insights = buildInsights(schema, rows, backendKpis);
+    } else if (screenType === 'time_series' && backendKpis?.trend) {
+      const tsDashboard = buildTimeSeriesDashboard({
+        schema,
+        rows,
+        measure: schema.primaryMeasure,
+        dateCol: schema.dateColumns?.[0] || 'DATA',
+        backendKpis,
+        backendInsights,
+      });
+      kpis = tsDashboard.kpis;
+      charts = buildCharts(schema, rows);
+      insights = buildInsights(schema, rows, backendKpis);
+    } else {
+      kpis = buildKPIs(schema, rows, semanticContext);
+      insights = buildInsights(schema, rows, backendKpis);
+      charts = buildCharts(schema, rows);
+    }
+  }
 
   const contextData = {
     rows,
@@ -1519,6 +1557,7 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
     insights,
     charts,
     backendKpis,
+    backendInsights,
     cashFlowData,
     series: charts.filter(c => c.chartType === 'bar' || c.chartType === 'line' || c.chartType === 'grouped_bar').map(c => ({
       label: c.title,
@@ -1526,14 +1565,31 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
     })),
   };
 
-  const suggestions = cashFlowData
-    ? [
-        'Fluxo de caixa dos próximos 15 dias',
-        'Títulos vencidos a receber',
-        'Clientes com maior volume a pagar',
-        'Comparar com semana anterior',
-      ]
-    : generateContextualSuggestions(schema, contextData);
+  let suggestions;
+  if (cashFlowData) {
+    suggestions = [
+      'Fluxo de caixa dos próximos 15 dias',
+      'Títulos vencidos a receber',
+      'Clientes com maior volume a pagar',
+      'Comparar com semana anterior',
+    ];
+  } else if (screenType === 'overdue_receivables') {
+    suggestions = [
+      'Mostrar títulos com mais de 60 dias de atraso',
+      'Extrato detalhado do maior devedor',
+      'Projeção de recebimentos das próximas semanas',
+      'Comparar evolução da inadimplência por mês',
+    ];
+  } else if (screenType === 'time_series') {
+    suggestions = [
+      'Comparar vendas com o mês anterior',
+      'Identificar líderes de crescimento no período',
+      'Exibir curva ABC dos itens comercializados',
+      'Projetar tendência para o próximo mês',
+    ];
+  } else {
+    suggestions = generateContextualSuggestions(schema, contextData);
+  }
 
   const analysisContext = {
     screenType,
@@ -1546,7 +1602,7 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
     domain: cashFlowData ? 'finance' : presentation.domain,
   };
 
-  // Ponto E: narrativa executiva gerada pelo Presentation Intelligence Engine
+  // Narrativa executiva gerada pelo Presentation Intelligence Engine
   analysisContext.executiveSummary = buildExecutiveNarrative(analysisContext);
 
   return analysisContext;

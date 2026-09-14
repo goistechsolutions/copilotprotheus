@@ -128,8 +128,15 @@ export function PromptInput() {
             intent: result.intent || result.metadata?.intent || null,
             domain: result.domain || result.metadata?.domain || promptDomain,
             measureFormat: result.metadata?.measureFormat || result.kpis?.[0]?.format || null,
+            columnLabels: result.column_labels || result.metadata?.column_labels || null,
           };
-          adaptive = buildAdaptiveDashboard(result.rows, result.columns || [], semanticContext);
+          adaptive = buildAdaptiveDashboard(
+            result.rows,
+            result.columns || [],
+            semanticContext,
+            result.backend_kpis || null,
+            result.backend_insights || null
+          );
           if (adaptive) {
             adaptive.originPrompt = text;
             setProcessingStep(6); // 6. Montando dashboard

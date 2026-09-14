@@ -82,7 +82,11 @@ export const useDashboardStore = create((set) => ({
     }
   }),
 
-  // Configurações
+  // Configurações e Modo Executivo / Analítico
+  executiveMode: false,
+  setExecutiveMode: (val) => set({ executiveMode: !!val }),
+  toggleExecutiveMode: () => set((state) => ({ executiveMode: !state.executiveMode })),
+
   config: {
     theme: typeof window !== 'undefined' ? (localStorage.getItem('theme') || 'system') : 'system', 
   },

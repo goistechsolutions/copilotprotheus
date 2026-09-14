@@ -11,10 +11,12 @@ import { InsightCard } from '../insights/InsightCard';
 import { InsightsGrid } from '../insights/InsightsGrid';
 import { 
   DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, Package,
-  Sparkles, ArrowLeft, RefreshCw, FileSpreadsheet, Printer, Bookmark, BookmarkCheck, MessageSquare 
+  Sparkles, ArrowLeft, RefreshCw, FileSpreadsheet, Printer, Bookmark, BookmarkCheck, MessageSquare,
+  Lightbulb, AlertCircle
 } from 'lucide-react';
 import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 import { useDashboardStore } from '../../stores/useDashboardStore';
+import { ExecutiveModeToggle } from './ExecutiveModeToggle';
 
 const SCREEN_CONFIGS = {
   time_series: {
@@ -98,7 +100,8 @@ export default function DashboardRenderer({ payload }) {
     toggleFavorite, 
     favorites, 
     chat, 
-    toggleChat 
+    toggleChat,
+    executiveMode,
   } = useDashboardStore();
 
   const isFavorited = useMemo(() => {
@@ -165,6 +168,8 @@ export default function DashboardRenderer({ payload }) {
       triggerPrompt(`Produtos mais comprados pelo cliente ${label}`);
     } else if (screenType.includes('product') || payload?.originPrompt?.toLowerCase().includes('produto')) {
       triggerPrompt(`Clientes que compraram o produto ${label}`);
+    } else if (screenType.includes('receivable') || payload?.originPrompt?.toLowerCase().includes('vencid') || payload?.originPrompt?.toLowerCase().includes('inadimpl')) {
+      triggerPrompt(`Títulos em aberto do cliente ${label}`);
     } else {
       triggerPrompt(`Detalhamento de ${label}`);
     }
@@ -260,6 +265,38 @@ export default function DashboardRenderer({ payload }) {
     description: 'Painel gerado dinamicamente a partir dos dados retornados pelo Protheus.'
   };
   
+  const combinedInsights = useMemo(() => {
+    const list = [];
+    if (Array.isArray(data?.backendInsights)) {
+      data.backendInsights.forEach(bi => {
+        const type = bi.severity === 'CRITICAL' ? 'critical'
+          : bi.severity === 'WARNING' ? 'information'
+          : bi.severity === 'SUCCESS' ? 'opportunity'
+          : 'information';
+        list.push({
+          title: bi.title,
+          description: bi.description,
+          value: bi.value,
+          type,
+          isAiInsight: true,
+        });
+      });
+    }
+    if (Array.isArray(data?.insights)) {
+      data.insights.forEach(i => {
+        if (!list.some(existing => existing.title === i.title)) {
+          list.push(i);
+        }
+      });
+    }
+    return list;
+  }, [data]);
+
+  const displayedKpis = executiveMode ? (data?.kpis || []).slice(0, 4) : (data?.kpis || []);
+  const displayedInsights = executiveMode ? combinedInsights.slice(0, 3) : combinedInsights;
+  const displayedCharts = executiveMode ? (data?.charts || []).slice(0, 1) : (data?.charts || []);
+  const suggestions = payload?.suggestions || data?.suggestions || [];
+
   if (!data || !data.rows || data.rows.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-slate-500 p-8 text-center bg-slate-50/50 dark:bg-slate-900/50">
@@ -301,6 +338,9 @@ export default function DashboardRenderer({ payload }) {
             <ArrowLeft size={13} />
             <span>Voltar ao Chat</span>
           </button>
+
+          {/* Alternador Modo Executivo / Analítico */}
+          <ExecutiveModeToggle />
 
           {/* Atualizar Dados */}
           <button
@@ -373,15 +413,20 @@ export default function DashboardRenderer({ payload }) {
                 ({Math.round(confidence * 100)}% aderência)
               </span>
             )}
+            {executiveMode && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
+                Modo Executivo
+              </span>
+            )}
           </div>
           <p className="text-slate-500 text-sm mt-1">{screenConfig.description}</p>
         </div>
       </header>
       
       {/* Camada 3: KPIs Dinâmicos Baseados no Schema */}
-      {data?.kpis?.length > 0 && (
+      {displayedKpis.length > 0 && (
         <MetricsRow>
-          {data.kpis.map((kpi, idx) => (
+          {displayedKpis.map((kpi, idx) => (
             <MetricCard 
               key={idx}
               title={formatLabel(kpi.label)} 
@@ -399,24 +444,30 @@ export default function DashboardRenderer({ payload }) {
       )}
 
       {/* Camada 3: Insights Automatizados (Concentração, Curva ABC, Pareto) */}
-      {data?.insights?.length > 0 && (
-        <InsightsGrid>
-          {data.insights.map((insight, idx) => (
-            <InsightCard 
-              key={idx}
-              title={insight.title || "Insight"} 
-              description={insight.description} 
-              value={insight.value}
-              type={insight.type || "information"}
-            />
-          ))}
-        </InsightsGrid>
+      {displayedInsights.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={16} className="text-blue-600 dark:text-blue-400" />
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Insights da IA</h3>
+          </div>
+          <InsightsGrid>
+            {displayedInsights.map((insight, idx) => (
+              <InsightCard 
+                key={idx}
+                title={insight.title || "Insight"} 
+                description={insight.description} 
+                value={insight.value}
+                type={insight.type || "information"}
+              />
+            ))}
+          </InsightsGrid>
+        </div>
       )}
       
       {/* Camada 3: Gráficos com Regras de Cardinalidade e Drill-Down Interativo */}
-      {data?.charts?.length > 0 ? (
-        <div className={`grid grid-cols-1 gap-6 ${data.charts.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
-          {data.charts.map((chart, idx) => {
+      {displayedCharts.length > 0 ? (
+        <div className={`grid grid-cols-1 gap-6 ${displayedCharts.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
+          {displayedCharts.map((chart, idx) => {
             if (chart.chartType === 'grouped_bar') {
               const formattedData = (chart.data || []).map(p => ({
                 ...p,
@@ -424,7 +475,7 @@ export default function DashboardRenderer({ payload }) {
                 fullDate: p.fullLabel || p.date,
               }));
               return (
-                <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
+                <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
                   <BarChartCard 
                     title={chart.title} 
                     data={formattedData} 
@@ -442,7 +493,7 @@ export default function DashboardRenderer({ payload }) {
                 fullLabel: p.fullLabel || (typeof p.label === 'string' && p.label.length === 8 ? `${p.label.substring(6, 8)}/${p.label.substring(4, 6)}/${p.label.substring(0, 4)}` : p.label),
               }));
               return (
-                <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
+                <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
                   <LineChartCard 
                     title={chart.title} 
                     data={formattedPoints} 
@@ -456,7 +507,7 @@ export default function DashboardRenderer({ payload }) {
             }
             if (chart.chartType === 'donut') {
               return (
-                <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
+                <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
                   <DonutChartCard 
                     title={chart.title} 
                     data={chart.data} 
@@ -468,7 +519,7 @@ export default function DashboardRenderer({ payload }) {
             }
             // Bar chart (default) com suporte a onBarClick para drill-down
             return (
-              <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
+              <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
                 <BarChartCard 
                   title={chart.title} 
                   data={chart.data} 
@@ -480,7 +531,6 @@ export default function DashboardRenderer({ payload }) {
               </div>
             );
           })}
-
         </div>
       ) : (
         // Fallback compatibilidade retroativa para data.series
@@ -504,8 +554,31 @@ export default function DashboardRenderer({ payload }) {
         )
       )}
 
-      {/* Camada 3: Tabela Detalhada com Drill-Down ao Clicar na Linha */}
-      {data?.rows?.length > 0 && (
+      {/* Modo Executivo: Bloco de Recomendações e Sugestões */}
+      {executiveMode && suggestions.length > 0 && (
+        <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/80 shadow-xs">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Lightbulb size={16} className="text-amber-500" />
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+              Recomendações Executivas & Ações Sugeridas
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((sug, sIdx) => (
+              <button
+                key={sIdx}
+                onClick={() => triggerPrompt(sug)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white transition-all shadow-2xs"
+              >
+                <span>{sug}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modo Analítico: Tabela Detalhada com Drill-Down ao Clicar na Linha */}
+      {!executiveMode && data?.rows?.length > 0 && (
         <div className="mt-4">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -518,7 +591,7 @@ export default function DashboardRenderer({ payload }) {
           </div>
           <DataGrid 
             data={data.rows} 
-            columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: col, accessorKey: col })) : []} 
+            columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: humanizeColumnName(col), accessorKey: col })) : []} 
             onRowClick={(row) => handleDrillDown(row)}
           />
         </div>
