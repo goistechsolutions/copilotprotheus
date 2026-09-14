@@ -553,6 +553,9 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     if raw_response.startswith("Erro na API do Gemini:") or raw_response.startswith("Erro de conexão com a API do Gemini:") or raw_response.startswith("A inteligência artificial do Google"):
         raise HTTPException(status_code=502, detail=raw_response)
 
+    if "**LLM offline**" in raw_response or "**LLM Local inacessível" in raw_response:
+        raise HTTPException(status_code=503, detail=raw_response)
+
     # Sanitiza blocos de markdown ou comentários ao redor da query
     clean_sql = re.sub(r'```(?:sql)?|```', '', raw_response, flags=re.IGNORECASE).strip()
     

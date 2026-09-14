@@ -28,13 +28,33 @@ OLLAMA_URL   = get_ollama_url()
 OLLAMA_MODEL = get_ollama_model()
 LLM_BACKEND  = settings.llm_backend
 
+def _detect_docker_gateway() -> Optional[str]:
+    """Detecta o IP do gateway da bridge do Docker lendo a tabela de rotas do Linux."""
+    try:
+        if os.path.exists("/proc/net/route"):
+            with open("/proc/net/route", "r") as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 3 and parts[1] == "00000000":
+                        gw_hex = parts[2]
+                        if len(gw_hex) == 8:
+                            octets = [str(int(gw_hex[i:i+2], 16)) for i in (6, 4, 2, 0)]
+                            return ".".join(octets)
+    except Exception:
+        pass
+    return None
+
 async def _get_active_ollama_url() -> str:
-    candidates = [
-        get_ollama_url(),
-        "http://host.docker.internal:11434",
+    candidates = [get_ollama_url(), "http://host.docker.internal:11434"]
+    gw = _detect_docker_gateway()
+    if gw:
+        candidates.append(f"http://{gw}:11434")
+    candidates.extend([
+        "http://172.18.0.1:11434",
+        "http://172.17.0.1:11434",
         "http://127.0.0.1:11434",
         "http://localhost:11434",
-    ]
+    ])
     seen = set()
     cleaned = []
     for c in candidates:
@@ -46,7 +66,7 @@ async def _get_active_ollama_url() -> str:
 
     for url in cleaned:
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=1.5) as client:
                 r = await client.get(f"{url}/api/tags")
                 if r.status_code == 200:
                     return url
@@ -504,9 +524,17 @@ async def ask_llm(
         return f"Erro HTTP {e.response.status_code} ao chamar o LLM."
     except httpx.ConnectError:
         return (
-            "**LLM offline** — nao foi possivel conectar ao Ollama no servidor Hetzner.\n\n"
-            "Verifique se o serviço Ollama está ativo no host:\n"
-            "```\nsystemctl status ollama\n```"
+            "**LLM Local inacessível a partir do container Docker.**\n\n"
+            "O serviço Ollama está ativo no host Hetzner, porém no Linux o Ollama escuta por padrão apenas em `127.0.0.1:11434` (bloqueando conexões externas e de containers Docker).\n\n"
+            "**Como habilitar o acesso do Docker no host:**\n"
+            "Execute no terminal do servidor Hetzner (`root@copilot-protheus-vps`):\n"
+            "```bash\n"
+            "mkdir -p /etc/systemd/system/ollama.service.d\n"
+            "echo -e '[Service]\\nEnvironment=\"OLLAMA_HOST=0.0.0.0\"' > /etc/systemd/system/ollama.service.d/override.conf\n"
+            "systemctl daemon-reload\n"
+            "systemctl restart ollama\n"
+            "```\n\n"
+            "Após isso, o container do Copilot conseguirá se conectar imediatamente ao Ollama em `http://host.docker.internal:11434`."
         )
     except Exception as e:
         return f"Erro inesperado: {str(e)}"
@@ -608,7 +636,18 @@ async def stream_llm(
                     except Exception:
                         pass
     except httpx.ConnectError:
-        yield "**LLM offline** — nao foi possivel conectar ao Ollama no servidor Hetzner para streaming."
+        yield (
+            "**LLM Local inacessível a partir do container Docker.**\n\n"
+            "O serviço Ollama está ativo no host Hetzner, porém no Linux o Ollama escuta por padrão apenas em `127.0.0.1:11434` (bloqueando containers Docker).\n\n"
+            "**Como habilitar o acesso do Docker no host:**\n"
+            "Execute no terminal do servidor Hetzner (`root@copilot-protheus-vps`):\n"
+            "```bash\n"
+            "mkdir -p /etc/systemd/system/ollama.service.d\n"
+            "echo -e '[Service]\\nEnvironment=\"OLLAMA_HOST=0.0.0.0\"' > /etc/systemd/system/ollama.service.d/override.conf\n"
+            "systemctl daemon-reload\n"
+            "systemctl restart ollama\n"
+            "```"
+        )
     except Exception as e:
         yield f"Erro inesperado no stream: {str(e)}"
 
