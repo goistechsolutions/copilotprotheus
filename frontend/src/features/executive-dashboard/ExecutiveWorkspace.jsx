@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Moon, Sun, ArrowLeft, X, Bot, MessageSquare, History, Star } from 'lucide-react';
 import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { CopilotConversation } from '../conversation/CopilotConversation';
 import { PromptInput } from '../conversation/PromptInput';
@@ -101,7 +102,9 @@ export default function ExecutiveWorkspace() {
         {/* Conteúdo do Dashboard em Tela Cheia */}
         <section className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
-            <DashboardRenderer payload={currentDashboard} />
+            <ErrorBoundary>
+              <DashboardRenderer payload={currentDashboard} />
+            </ErrorBoundary>
           </div>
         </section>
       </div>

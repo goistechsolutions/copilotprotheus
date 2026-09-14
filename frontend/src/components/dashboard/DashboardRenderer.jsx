@@ -15,6 +15,7 @@ import {
   Lightbulb, AlertCircle
 } from 'lucide-react';
 import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
+import { humanizeColumnName } from '../../services/presentationIntelligence';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { ExecutiveModeToggle } from './ExecutiveModeToggle';
 
@@ -591,7 +592,11 @@ export default function DashboardRenderer({ payload }) {
           </div>
           <DataGrid 
             data={data.rows} 
-            columns={data?.columns?.length > 0 ? data.columns.map(col => ({ header: humanizeColumnName(col), accessorKey: col })) : []} 
+            columns={data?.columns?.length > 0 ? data.columns.map(col => {
+              const key = typeof col === 'string' ? col : (col.key || col.name || col.accessorKey || '');
+              const header = typeof col === 'string' ? humanizeColumnName(col) : (col.header || col.label || humanizeColumnName(key));
+              return { header, accessorKey: key };
+            }) : []} 
             onRowClick={(row) => handleDrillDown(row)}
           />
         </div>
