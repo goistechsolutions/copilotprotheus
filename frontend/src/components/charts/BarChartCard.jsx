@@ -40,11 +40,22 @@ export function BarChartCard({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey={xAxisKey} axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+            <XAxis 
+              dataKey={xAxisKey} 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: '#64748b', fontSize: 11 }} 
+              dy={10} 
+              tickFormatter={(val) => (typeof val === 'string' && val.length > 14 ? `${val.slice(0, 12)}…` : val)}
+            />
             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatYAxis} />
             <Tooltip 
               cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }}
               formatter={(value, name) => [formatValue(value), name]}
+              labelFormatter={(label, payload) => {
+                const item = payload?.[0]?.payload;
+                return item?.name || item?.label || label;
+              }}
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
             />
             {series && series.length > 0 ? (

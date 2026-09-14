@@ -8,19 +8,54 @@
  */
 
 // ─── 1. Padrões Semânticos Protheus ──────────────────────────────────────────
-const SEMANTIC_PATTERNS = {
+// Padrões específicos para nomes/descrições (prioridade máxima para exibição em gráficos e eixos)
+const SEMANTIC_NAME_PATTERNS = {
   customer: [
-    'CLIENTE', 'COD_CLIENTE', 'F2_CLIENTE', 'CLIENT', 'A1_COD', 'A1_NOME', 'NOMCLI', 'NOME_CLIENTE',
-    'E1_CLIENTE', 'E1_NOMCLI', 'COD_CLI'
+    'NOMCLI', 'E1_NOMCLI', 'NOME_CLIENTE', 'A1_NOME', 'A1_NREDUZ', 'CLIENTE_NOME', 'RAZAO_SOCIAL', 'NOME_CLI', 'CLIENT_NAME', 'NOM_CLIENTE'
   ],
   supplier: [
-    'FORNECEDOR', 'FORNECE', 'A2_COD', 'A2_NOME', 'NOMFOR', 'NOME_FORNECEDOR', 'E2_FORNECE', 'E2_NOMFOR'
+    'NOMFOR', 'E2_NOMFOR', 'NOME_FORNECEDOR', 'A2_NOME', 'A2_NREDUZ', 'FORNECEDOR_NOME', 'NOM_FORNECEDOR', 'RAZAO_SOCIAL', 'NOME_FORN'
   ],
   seller: [
-    'VENDEDOR', 'REPRESENTANTE', 'A3_COD', 'A3_NOME', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'NOME_VENDEDOR'
+    'NOME_VENDEDOR', 'A3_NOME', 'A3_NREDUZ', 'VENDEDOR_NOME', 'NOM_VENDEDOR', 'REPRESENTANTE_NOME', 'NOME_VEND'
   ],
   product: [
-    'PRODUTO', 'PROD', 'COD_PRODUTO', 'B1_COD', 'B1_DESC', 'DESCRICAO', 'DESCR', 'ITEM', 'D2_COD', 'D1_COD'
+    'B1_DESC', 'DESCRICAO', 'DESCR', 'DESC_PRODUTO', 'NOME_PRODUTO', 'PRODUTO_DESC', 'DESC'
+  ],
+};
+
+// Padrões de códigos/identificadores (usados como fallback quando não há coluna de nome)
+const SEMANTIC_CODE_PATTERNS = {
+  customer: [
+    'E1_CLIENTE', 'A1_COD', 'COD_CLIENTE', 'COD_CLI', 'CODIGO_CLIENTE', 'F2_CLIENTE', 'CLIENTE', 'CLIENT'
+  ],
+  supplier: [
+    'E2_FORNECE', 'A2_COD', 'COD_FORNECEDOR', 'COD_FORN', 'CODIGO_FORNECEDOR', 'FORNECEDOR', 'FORNECE'
+  ],
+  seller: [
+    'A3_COD', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'COD_VEND', 'VENDEDOR'
+  ],
+  product: [
+    'B1_COD', 'D2_COD', 'D1_COD', 'COD_PRODUTO', 'COD_PROD', 'CODIGO_PRODUTO', 'ITEM', 'PRODUTO', 'PROD'
+  ],
+};
+
+const SEMANTIC_PATTERNS = {
+  customer: [
+    ...SEMANTIC_NAME_PATTERNS.customer,
+    ...SEMANTIC_CODE_PATTERNS.customer,
+  ],
+  supplier: [
+    ...SEMANTIC_NAME_PATTERNS.supplier,
+    ...SEMANTIC_CODE_PATTERNS.supplier,
+  ],
+  seller: [
+    ...SEMANTIC_NAME_PATTERNS.seller,
+    ...SEMANTIC_CODE_PATTERNS.seller,
+  ],
+  product: [
+    ...SEMANTIC_NAME_PATTERNS.product,
+    ...SEMANTIC_CODE_PATTERNS.product,
   ],
   branch: [
     'FILIAL', 'LOJA', 'FIL', 'F2_FILIAL', 'D2_FILIAL', 'E1_FILIAL', 'E2_FILIAL'
@@ -40,6 +75,65 @@ const SEMANTIC_PATTERNS = {
     'TIPO_MOVIMENTO', 'TIPO_MOV', 'TIPO', 'NATUREZA', 'MOVIMENTO'
   ]
 };
+
+/**
+ * Normaliza e formata valores de datas do Protheus garantindo ordenação cronológica estrita.
+ */
+export function normalizeDateValue(rawDate) {
+  if (!rawDate) return { timestamp: 0, label: '', fullLabel: '', iso: '' };
+  const s = String(rawDate).trim();
+
+  // YYYYMMDD (Padrão Protheus Oracle/TOTVS Cloud)
+  if (/^\d{8}$/.test(s)) {
+    const y = s.slice(0, 4);
+    const m = s.slice(4, 6);
+    const d = s.slice(6, 8);
+    const ts = new Date(`${y}-${m}-${d}T00:00:00`).getTime();
+    return {
+      timestamp: isNaN(ts) ? 0 : ts,
+      label: `${d}/${m}/${y.slice(2, 4)}`, // DD/MM/AA
+      fullLabel: `${d}/${m}/${y}`,        // DD/MM/AAAA
+      iso: `${y}-${m}-${d}`,
+    };
+  }
+
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const y = s.slice(0, 4);
+    const m = s.slice(5, 7);
+    const d = s.slice(8, 10);
+    const ts = new Date(`${y}-${m}-${d}T00:00:00`).getTime();
+    return {
+      timestamp: isNaN(ts) ? 0 : ts,
+      label: `${d}/${m}/${y.slice(2, 4)}`,
+      fullLabel: `${d}/${m}/${y}`,
+      iso: `${y}-${m}-${d}`,
+    };
+  }
+
+  // DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) {
+    const parts = s.split('/');
+    const d = parts[0];
+    const m = parts[1];
+    const y = parts[2];
+    const ts = new Date(`${y}-${m}-${d}T00:00:00`).getTime();
+    return {
+      timestamp: isNaN(ts) ? 0 : ts,
+      label: `${d}/${m}/${y.slice(2, 4)}`,
+      fullLabel: `${d}/${m}/${y}`,
+      iso: `${y}-${m}-${d}`,
+    };
+  }
+
+  const ts = Date.parse(s);
+  return {
+    timestamp: isNaN(ts) ? 0 : ts,
+    label: s,
+    fullLabel: s,
+    iso: s,
+  };
+}
 
 
 // Valores que indicam estrutura de Fluxo de Caixa (RECEBIMENTO vs PAGAMENTO)
@@ -148,16 +242,44 @@ export function analyzeSchema(rows, columns = []) {
     };
   });
 
-  // Detectar semântica
+  // Detectar semântica com priorização de colunas de NOME sobre CÓDIGO
   const semantics = {};
-  for (const [semKey, patterns] of Object.entries(SEMANTIC_PATTERNS)) {
-    if (!Array.isArray(patterns)) continue;
-    const matchedCol = columnProfiles.find(c => {
-      const upper = c.name.toUpperCase();
-      return patterns.some(p => upper === p || upper.includes(p));
-    });
-    if (matchedCol) {
-      semantics[semKey] = matchedCol.name;
+  const semanticCategories = ['customer', 'supplier', 'seller', 'product', 'branch', 'date', 'geographic', 'measure', 'cashFlowType'];
+
+  for (const semKey of semanticCategories) {
+    const namePatterns = SEMANTIC_NAME_PATTERNS[semKey];
+    const codePatterns = SEMANTIC_CODE_PATTERNS[semKey] || SEMANTIC_PATTERNS[semKey] || [];
+
+    if (namePatterns) {
+      // 1. Procura primeiro coluna com nome/descrição da entidade (ex: E1_NOMCLI, A1_NOME, NOME_CLIENTE)
+      const matchedNameCol = columnProfiles.find(c => {
+        const upper = c.name.toUpperCase();
+        return namePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`) || upper.includes(p));
+      });
+      // 2. Procura coluna com código/ID da entidade
+      const matchedCodeCol = columnProfiles.find(c => {
+        const upper = c.name.toUpperCase();
+        return codePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`) || upper.includes(p));
+      });
+
+      if (matchedNameCol) {
+        semantics[semKey] = matchedNameCol.name;
+        semantics[`${semKey}Name`] = matchedNameCol.name;
+      } else if (matchedCodeCol) {
+        semantics[semKey] = matchedCodeCol.name;
+      }
+      if (matchedCodeCol) {
+        semantics[`${semKey}Code`] = matchedCodeCol.name;
+      }
+    } else {
+      // Padrões sem distinção nome/código (branch, date, geographic, measure, cashFlowType)
+      const matchedCol = columnProfiles.find(c => {
+        const upper = c.name.toUpperCase();
+        return codePatterns.some(p => upper === p || upper.includes(p));
+      });
+      if (matchedCol) {
+        semantics[semKey] = matchedCol.name;
+      }
     }
   }
 
@@ -454,44 +576,57 @@ export function buildInsights(schema, rows, backendKpis = null) {
   }
 
   const measure = schema.primaryMeasure;
-  const dim = schema.semantics.seller || schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
+  const dim = schema.semantics.seller || schema.semantics.customer || schema.semantics.supplier || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
   const insights = [];
 
   if (dim) {
+    const entityKey = schema.semantics.seller === dim ? 'seller' :
+                      schema.semantics.customer === dim ? 'customer' :
+                      schema.semantics.supplier === dim ? 'supplier' :
+                      schema.semantics.product === dim ? 'product' : null;
+    const codeCol = entityKey ? schema.semantics[`${entityKey}Code`] : null;
+
     // Passo 1: Agregar por dimensão primeiro
     const aggMap = new Map();
     rows.forEach(r => {
-      const key = String(r[dim] || 'Outros');
+      const rawName = String(r[dim] || '').trim();
+      const rawCode = codeCol ? String(r[codeCol] || '').trim() : '';
+      const displayName = rawName || rawCode || 'Outros';
+      const key = (rawName && rawCode) ? `${rawCode}___${rawName}` : displayName;
+
       const raw = r[measure];
       const val = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.')) || 0;
-      aggMap.set(key, (aggMap.get(key) || 0) + val);
+
+      const existing = aggMap.get(key);
+      if (existing) {
+        existing.val += val;
+      } else {
+        aggMap.set(key, { label: displayName, code: rawCode, val });
+      }
     });
 
     // Passo 2: Denominador é a SOMA DOS MÓDULOS dos grupos — nunca o saldo líquido
-    // Isso evita share > 100% quando há RECEITA (+) e DESPESA (-) misturados.
-    // Ex: RECEITA=15M, DESPESA=-14.4M → saldo=614k → share ERRADO = 15M/614k = 2444%
-    //                                  → abs_total=29.4M → share CORRETO = 15M/29.4M = 51%
-    const absTotal = [...aggMap.values()].reduce((acc, v) => acc + Math.abs(v), 0);
-
-    const sorted = [...aggMap.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const absTotal = [...aggMap.values()].reduce((acc, v) => acc + Math.abs(v.val), 0);
+    const sorted = [...aggMap.values()].sort((a, b) => Math.abs(b.val) - Math.abs(a.val));
 
     if (sorted.length > 0 && absTotal > 0) {
-      const [topKey, topVal] = sorted[0];
-      const share = (Math.abs(topVal) / absTotal) * 100;
+      const topItem = sorted[0];
+      const share = (Math.abs(topItem.val) / absTotal) * 100;
 
       const dimLabel = schema.semantics.seller === dim ? 'vendedor' :
                        schema.semantics.customer === dim ? 'cliente' :
+                       schema.semantics.supplier === dim ? 'fornecedor' :
                        schema.semantics.product === dim ? 'produto' : 'registro';
 
       insights.push({
         title: 'Concentração Principal',
-        description: `O principal ${dimLabel} (${topKey}) representa ${share.toFixed(1)}% do total movimentado.`,
+        description: `O principal ${dimLabel} (${topItem.label}) representa ${share.toFixed(1)}% do total movimentado.`,
         value: `${share.toFixed(1)}%`,
         type: share > 30 ? 'critical' : 'information',
       });
 
       if (sorted.length >= 3) {
-        const top3AbsVal = sorted.slice(0, 3).reduce((acc, [, v]) => acc + Math.abs(v), 0);
+        const top3AbsVal = sorted.slice(0, 3).reduce((acc, v) => acc + Math.abs(v.val), 0);
         const top3Share = (top3AbsVal / absTotal) * 100;
         insights.push({
           title: 'Curva ABC (Top 3)',
@@ -513,21 +648,40 @@ export function buildCharts(schema, rows) {
   const measure = schema.primaryMeasure;
   const charts = [];
 
-  // Se houver data: Gráfico de Linha / Tendência
+  // Se houver data: Gráfico de Linha / Tendência com ordenação cronológica estrita
   if (schema.hasDate) {
     const dateCol = schema.dateColumns[0];
     const dateAgg = new Map();
 
     rows.forEach(r => {
-      const d = String(r[dateCol] || '');
+      const rawDate = r[dateCol];
+      if (rawDate === null || rawDate === undefined || rawDate === '') return;
+      const normalized = normalizeDateValue(rawDate);
+      if (!normalized.iso) return;
+
       const raw = r[measure];
       const val = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.')) || 0;
-      dateAgg.set(d, (dateAgg.get(d) || 0) + val);
+
+      const existing = dateAgg.get(normalized.iso);
+      if (existing) {
+        existing.value += val;
+      } else {
+        dateAgg.set(normalized.iso, {
+          timestamp: normalized.timestamp,
+          label: normalized.label,
+          fullLabel: normalized.fullLabel,
+          value: val,
+        });
+      }
     });
 
-    const points = [...dateAgg.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([label, value]) => ({ label, value }));
+    const points = [...dateAgg.values()]
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map(p => ({
+        label: p.label,
+        fullLabel: p.fullLabel,
+        value: p.value,
+      }));
 
     charts.push({
       chartType: 'line',
@@ -544,17 +698,38 @@ export function buildCharts(schema, rows) {
     const dimProfile = (schema.columns || []).find(c => c.name === dimCol);
     const distinctCount = dimProfile?.distinct || 10;
 
+    const entityKey = schema.semantics.seller === dimCol ? 'seller' :
+                      schema.semantics.customer === dimCol ? 'customer' :
+                      schema.semantics.supplier === dimCol ? 'supplier' :
+                      schema.semantics.product === dimCol ? 'product' : null;
+    const codeCol = entityKey ? schema.semantics[`${entityKey}Code`] : null;
+
     const aggMap = new Map();
     rows.forEach(r => {
-      const k = String(r[dimCol] || 'Outros');
+      const rawName = String(r[dimCol] || '').trim();
+      const rawCode = codeCol ? String(r[codeCol] || '').trim() : '';
+      const displayName = rawName || rawCode || 'Outros';
+      const key = (rawName && rawCode) ? `${rawCode}___${rawName}` : displayName;
+
       const raw = r[measure];
       const val = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.')) || 0;
-      aggMap.set(k, (aggMap.get(k) || 0) + val);
+
+      const existing = aggMap.get(key);
+      if (existing) {
+        existing.value += val;
+      } else {
+        aggMap.set(key, {
+          label: displayName,
+          name: displayName,
+          code: rawCode,
+          value: val,
+        });
+      }
     });
 
-    const sortedPoints = [...aggMap.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, value]) => ({ label, value }));
+    const sortedPoints = [...aggMap.values()]
+      .sort((a, b) => b.value - a.value)
+      .map(p => ({ label: p.label, name: p.label, code: p.code, value: p.value }));
 
     const dimLabel = schema.semantics.seller === dimCol ? 'Vendedor' :
                      schema.semantics.customer === dimCol ? 'Cliente' :
@@ -711,8 +886,9 @@ export function detectCashFlow(schema, rows, semanticContext = {}) {
 
     if (dateCol) {
       const rawDate = String(r[dateCol] || '').trim();
-      const dateKey = formatDateLabel(rawDate) || 'Geral';
-      if (!byDate[dateKey]) byDate[dateKey] = { rawDate, RECEBIMENTO: 0, PAGAMENTO: 0 };
+      const norm = normalizeDateValue(rawDate);
+      const dateKey = norm.label || 'Geral';
+      if (!byDate[dateKey]) byDate[dateKey] = { rawDate, timestamp: norm.timestamp, fullLabel: norm.fullLabel, RECEBIMENTO: 0, PAGAMENTO: 0 };
       if (CASH_FLOW_POSITIVE_TYPES.has(tipo)) {
         byDate[dateKey].RECEBIMENTO += absVal;
       } else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) {
@@ -746,13 +922,14 @@ export function detectCashFlow(schema, rows, semanticContext = {}) {
 
   // Série temporal por data (para gráfico de barras agrupadas e linha de diferença)
   const dailySeries = Object.entries(byDate)
-    .sort(([, a], [, b]) => String(a.rawDate).localeCompare(String(b.rawDate)))
+    .sort(([, a], [, b]) => (a.timestamp || 0) - (b.timestamp || 0))
     .map(([date, vals]) => ({
       date,
       RECEBIMENTO: vals.RECEBIMENTO,
       PAGAMENTO: vals.PAGAMENTO,
       SALDO: vals.RECEBIMENTO - vals.PAGAMENTO,
       label: date,
+      fullLabel: vals.fullLabel || date,
       value: vals.RECEBIMENTO - vals.PAGAMENTO,
     }));
 
@@ -771,21 +948,8 @@ export function detectCashFlow(schema, rows, semanticContext = {}) {
 
 function formatDateLabel(dateStr) {
   if (!dateStr) return dateStr;
-  const s = String(dateStr).trim();
-  // Formato YYYYMMDD → DD/MM
-  if (/^\d{8}$/.test(s)) {
-    return `${s.slice(6, 8)}/${s.slice(4, 6)}`;
-  }
-  // Formato YYYY-MM-DD → DD/MM
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const parts = s.split('-');
-    return `${parts[2].slice(0, 2)}/${parts[1]}`;
-  }
-  // Formato DD/MM/YYYY → DD/MM
-  if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) {
-    return s.slice(0, 5);
-  }
-  return s;
+  const norm = normalizeDateValue(dateStr);
+  return norm.label || dateStr;
 }
 
 export function buildCashFlowKPIs(cashFlowData) {

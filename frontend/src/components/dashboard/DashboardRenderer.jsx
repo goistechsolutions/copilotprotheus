@@ -177,10 +177,16 @@ export default function DashboardRenderer({ payload }) {
   };
 
   const formatDateTick = (str) => {
-    if (typeof str === 'string' && str.length === 8 && !isNaN(str)) {
-      return str.substring(6, 8) + '/' + str.substring(4, 6);
+    if (!str) return '';
+    const s = String(str).trim();
+    if (s.length === 8 && !isNaN(s)) {
+      return `${s.substring(6, 8)}/${s.substring(4, 6)}/${s.substring(2, 4)}`;
     }
-    return str;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const parts = s.split('-');
+      return `${parts[2]}/${parts[1]}/${parts[0].slice(2, 4)}`;
+    }
+    return s;
   };
 
   const getKpiIcon = (type) => {
@@ -402,11 +408,16 @@ export default function DashboardRenderer({ payload }) {
         <div className={`grid grid-cols-1 gap-6 ${data.charts.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
           {data.charts.map((chart, idx) => {
             if (chart.chartType === 'grouped_bar') {
+              const formattedData = (chart.data || []).map(p => ({
+                ...p,
+                date: formatDateTick(p.date || p.label),
+                fullDate: p.fullLabel || p.date,
+              }));
               return (
                 <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
                   <BarChartCard 
                     title={chart.title} 
-                    data={chart.data} 
+                    data={formattedData} 
                     xAxisKey={chart.xAxisKey || 'date'} 
                     series={chart.series}
                     onBarClick={handleDrillDown}
@@ -415,7 +426,11 @@ export default function DashboardRenderer({ payload }) {
               );
             }
             if (chart.chartType === 'line') {
-              const formattedPoints = chart.data.map(p => ({ ...p, label: formatDateTick(p.label) }));
+              const formattedPoints = (chart.data || []).map(p => ({
+                ...p,
+                label: formatDateTick(p.label),
+                fullLabel: p.fullLabel || (typeof p.label === 'string' && p.label.length === 8 ? `${p.label.substring(6, 8)}/${p.label.substring(4, 6)}/${p.label.substring(0, 4)}` : p.label),
+              }));
               return (
                 <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
                   <LineChartCard 

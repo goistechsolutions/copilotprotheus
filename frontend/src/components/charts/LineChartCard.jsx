@@ -38,6 +38,10 @@ export function LineChartCard({
             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatYAxis} />
             <Tooltip 
               formatter={(value, name) => [formatValue(value), name]}
+              labelFormatter={(label, payload) => {
+                const item = payload?.[0]?.payload;
+                return item?.fullLabel || item?.fullDate || label;
+              }}
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
             />
             {referenceLineY !== undefined && (
