@@ -251,6 +251,42 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
     _, metric, values = candidates[0]
     total = sum(values)
     average = total / len(values)
+
+    # Detecção de fluxo de caixa (RECEBIMENTO / PAGAMENTO)
+    cash_types = {"RECEBIMENTO", "PAGAMENTO", "RECEBER", "PAGAR", "A RECEBER", "A PAGAR"}
+    type_col = None
+    for col in columns:
+        sample = {str(r.get(col, "")).upper().strip() for r in rows[:50] if isinstance(r, dict)}
+        if sample & cash_types:
+            type_col = col
+            break
+
+    if type_col:
+        total_receber = 0.0
+        total_pagar = 0.0
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            tipo = str(r.get(type_col, "")).upper().strip()
+            val = abs(_parse_summary_number(r.get(metric)) or 0.0)
+            if tipo in {"RECEBIMENTO", "RECEBER", "A RECEBER", "RECEITA", "ENTRADA", "CR", "C"}:
+                total_receber += val
+            elif tipo in {"PAGAMENTO", "PAGAR", "A PAGAR", "DESPESA", "SAIDA", "DR", "D"}:
+                total_pagar += val
+
+        saldo = total_receber - total_pagar
+        status_saldo = "Superávit projetado" if saldo >= 0 else "Déficit projetado"
+        fmt_rec = f"R$ {total_receber:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        fmt_pag = f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        fmt_sal = f"R$ {saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return (
+            f"**Resumo do Fluxo de Caixa (Próximos Dias):**\n\n"
+            f"• **Total em Aberto a Receber:** {fmt_rec}\n"
+            f"• **Total em Aberto a Pagar:** {fmt_pag}\n"
+            f"• **Saldo Projetado (Diferença):** {fmt_sal} ({status_saldo})\n"
+            f"• **Títulos em Aberto:** {len(rows)} registros analisados."
+        )
+
     dimensions = [
         column for column in columns
         if re.search(r"VENDEDOR|VEND|SUBGRUPO|PRODUTO|CLIENTE|MES|MÊS|PERIODO|PERÍODO", str(column).upper())
@@ -262,6 +298,7 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
         f"Considerando somente o campo numérico autorizado {metric}, o total dos registros retornados é R$ {total:,.2f} "
         f"e a média por registro é R$ {average:,.2f}.{dimension_text}"
     )
+
 
 # Gerenciador em memória para polling de tarefas do agente
 AGENT_TASKS = {}
@@ -339,12 +376,21 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
         )
     elif domain == "finance":
         domain_instruction = (
-            " A intenção é FINANCEIRO (Contas a Receber/Pagar/Fluxo de Caixa). "
-            "Para contas a receber ou receitas use SE1; para contas a pagar ou despesas use SE2; "
-            "movimentação bancária use SE5. Para fluxo de caixa, relacione recebimentos (SE1) e pagamentos (SE2) "
-            "ou construa a visão solicitada usando essas tabelas financeiras caso estejam autorizadas. NUNCA use "
-            "tabelas aleatórias como AID."
+            " A intenção é FINANCEIRO (Contas a Receber, Contas a Pagar e Fluxo de Caixa). "
+            "DIRETRIZES DE FLUXO DE CAIXA: "
+            "Para 'Fluxo de Caixa' (especialmente projeção dos próximos dias ou período futuro), consulte os TÍTULOS EM ABERTO "
+            "unificando SE1 (contas a receber com E1_SALDO > 0 e filtro em E1_VENCTO) e SE2 (contas a pagar com E2_SALDO > 0 e filtro em E2_VENCTO) "
+            "através de UNION ALL. "
+            "Projete obrigatoriamente as colunas: "
+            "'RECEBIMENTO' AS TIPO_MOVIMENTO para SE1 e 'PAGAMENTO' AS TIPO_MOVIMENTO para SE2, "
+            "SE1.E1_VENCTO AS DATA_VENCTO e SE2.E2_VENCTO AS DATA_VENCTO, "
+            "e o saldo em aberto como métrica: SE1.E1_SALDO AS VALOR e SE2.E2_SALDO AS VALOR. "
+            "Filtre os vencimentos usando comparação de datas Oracle em formato YYYYMMDD, ex: "
+            "SE1.E1_VENCTO BETWEEN TO_CHAR(SYSDATE, 'YYYYMMDD') AND TO_CHAR(SYSDATE + 5, 'YYYYMMDD'). "
+            "Mantenha os filtros obrigatórios de exclusão lógica D_E_L_E_T_ <> '*' e filial autorizada para ambas as tabelas. "
+            "NUNCA referencie SE5 caso a tabela SE5 não esteja listada explicitamente no snapshot autorizado!"
         )
+
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
 
     backend_mode = "gemini"
@@ -1153,23 +1199,54 @@ async def process_agent_task(task_id: str, payload: dict):
             try:
                 validate_query_security(sql=sql, **validation_args)
             except HTTPException as exc:
+                is_field_error = _is_catalog_field_validation_error(exc)
+                is_table_error = isinstance(exc, CatalogValidationError)
+
                 logger.warning({
                     "stage": "rbac_validation_failed",
                     "task_id": task_id,
                     "query_domain": query_domain,
                     "error": str(exc.detail),
+                    "error_type": "table_not_in_catalog" if is_table_error else "field_not_authorized",
                     "authorized_tables": sorted(str(t) for t in allowed_table_names),
                     "authorized_field_count": len(allowed_field_names),
                     "hint": "Verifique se as tabelas do domínio (SE1/SE2/SE5 para FINANCEIRO) estão importadas no dicionário SX3 do tenant.",
                 })
-                if not _is_catalog_field_validation_error(exc):
+
+                if not is_field_error and not is_table_error:
+                    # Erro de segurança não recuperável (ex: SELECT *, DML, etc.)
                     raise
-                logger.warning(
-                    "agent_sql_catalog_retry task_id=%s reason=physical_field_not_in_catalog",
-                    task_id,
-                )
+
+                if is_table_error:
+                    # LLM usou tabela fora do snapshot; fornecer lista exata das tabelas disponíveis
+                    available_sorted = sorted(
+                        t for t in allowed_table_names
+                        if not t.endswith("010") or t[:-3] not in allowed_table_names
+                    )
+                    retry_reason = (
+                        f"A consulta anterior foi rejeitada porque referenciou tabela(s) não disponível(is) "
+                        f"no dicionário autorizado deste tenant.\n"
+                        f"Tabelas autorizadas disponíveis: {', '.join(available_sorted)}.\n"
+                        f"Reescreva a consulta usando APENAS as tabelas listadas acima. "
+                        f"Para 'Fluxo de Caixa', use SE1 (contas a receber) e SE2 (contas a pagar) "
+                        f"com UNION ALL em vez de SE5.\n"
+                        f"Pergunta original: {prompt}"
+                    )
+                    logger.warning(
+                        "agent_sql_catalog_retry task_id=%s reason=table_not_in_catalog available=%s",
+                        task_id,
+                        available_sorted,
+                    )
+                else:
+                    # LLM usou campo fora do SX3; fornecer a mensagem de erro original
+                    retry_reason = _build_catalog_revision_prompt(str(prompt), sql, str(exc.detail))
+                    logger.warning(
+                        "agent_sql_catalog_retry task_id=%s reason=physical_field_not_in_catalog",
+                        task_id,
+                    )
+
                 sql = await real_llm_sql_generator(
-                    prompt=_build_catalog_revision_prompt(str(prompt), sql, str(exc.detail)),
+                    prompt=retry_reason,
                     context_text=context_text,
                     empresa=op_context["empresa"],
                     filial=op_context["filial"],

@@ -57,12 +57,18 @@ const SCREEN_CONFIGS = {
     badge: 'Composição',
     description: 'Distribuição proporcional entre categorias com baixa cardinalidade.',
   },
+  cash_flow: {
+    title: 'Fluxo de Caixa & Projeção Financeira',
+    badge: 'Fluxo de Caixa',
+    description: 'Comparativo diário de contas a receber e a pagar em aberto com análise de saldo projetado.',
+  },
   'financial-dashboard': {
     title: 'Painel Executivo Financeiro',
     badge: 'Executivo',
     description: 'Visão consolidada de receitas, despesas e fluxo de caixa.',
   }
 };
+
 
 export default function DashboardRenderer({ payload }) {
   const { 
@@ -163,6 +169,9 @@ export default function DashboardRenderer({ payload }) {
 
   const getKpiIcon = (type) => {
     switch (type) {
+      case 'receber': return DollarSign;
+      case 'pagar': return DollarSign;
+      case 'saldo': return TrendingUp;
       case 'sum': return DollarSign;
       case 'avg': return TrendingUp;
       case 'max': return Award;
@@ -173,6 +182,9 @@ export default function DashboardRenderer({ payload }) {
 
   const getKpiColor = (type) => {
     switch (type) {
+      case 'receber': return 'emerald';
+      case 'pagar': return 'red';
+      case 'saldo': return 'blue';
       case 'sum': return 'blue';
       case 'avg': return 'emerald';
       case 'max': return 'amber';
@@ -180,6 +192,7 @@ export default function DashboardRenderer({ payload }) {
       default: return 'blue';
     }
   };
+
 
   const handleRenderMock = () => {
     const sampleRows = [
@@ -372,6 +385,19 @@ export default function DashboardRenderer({ payload }) {
       {data?.charts?.length > 0 ? (
         <div className={`grid grid-cols-1 gap-6 ${data.charts.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
           {data.charts.map((chart, idx) => {
+            if (chart.chartType === 'grouped_bar') {
+              return (
+                <div key={idx} className={data.charts.length === 1 ? 'col-span-1' : ''}>
+                  <BarChartCard 
+                    title={chart.title} 
+                    data={chart.data} 
+                    xAxisKey={chart.xAxisKey || 'date'} 
+                    series={chart.series}
+                    onBarClick={handleDrillDown}
+                  />
+                </div>
+              );
+            }
             if (chart.chartType === 'line') {
               const formattedPoints = chart.data.map(p => ({ ...p, label: formatDateTick(p.label) }));
               return (
@@ -381,7 +407,8 @@ export default function DashboardRenderer({ payload }) {
                     data={formattedPoints} 
                     xAxisKey={chart.xAxisKey || 'label'} 
                     dataKey={chart.dataKey || 'value'} 
-                    color="#10b981" 
+                    referenceLineY={chart.referenceLineY}
+                    color={chart.color || "#10b981"} 
                   />
                 </div>
               );
@@ -406,12 +433,13 @@ export default function DashboardRenderer({ payload }) {
                   data={chart.data} 
                   xAxisKey={chart.xAxisKey || 'label'} 
                   dataKey={chart.dataKey || 'value'} 
-                  color="#3b82f6" 
+                  color={chart.color || "#3b82f6"} 
                   onBarClick={handleDrillDown}
                 />
               </div>
             );
           })}
+
         </div>
       ) : (
         // Fallback compatibilidade retroativa para data.series

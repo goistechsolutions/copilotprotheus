@@ -600,28 +600,58 @@ export function generateContextualSuggestions(schema, data = {}) {
 export function detectCashFlow(schema, rows) {
   if (!rows || rows.length === 0) return null;
 
-  // Procura uma coluna que pareça "tipo de movimento"
-  const typeCols = (schema.columns || []).filter(c => {
-    const upper = c.name.toUpperCase();
-    return SEMANTIC_PATTERNS.cashFlowType.some(p => upper === p || upper.includes(p));
-  });
+  const columns = schema.columns || Object.keys(rows[0] || {}).map(k => ({ name: k }));
+  let typeCol = null;
 
-  if (typeCols.length === 0) return null;
+  // 1. Procura por valores explícitos nas primeiras 50 linhas de cada coluna
+  for (const c of columns) {
+    const colName = typeof c === 'string' ? c : (c.name || c.key || '');
+    if (!colName) continue;
+    const sampleValues = [...new Set(rows.slice(0, 50).map(r => String(r[colName] || '').toUpperCase().trim()))];
+    const matchCount = sampleValues.filter(v => ALL_CASH_FLOW_TYPES.has(v)).length;
+    if (matchCount > 0) {
+      typeCol = colName;
+      break;
+    }
+  }
 
-  // Verifica se os valores desta coluna são RECEBIMENTO/PAGAMENTO
-  const typeCol = typeCols[0].name;
-  const sampleValues = [...new Set(rows.slice(0, 50).map(r => String(r[typeCol] || '').toUpperCase().trim()))];
-  const matchCount = sampleValues.filter(v => ALL_CASH_FLOW_TYPES.has(v)).length;
+  // 2. Fallback: Procura por nome de coluna
+  if (!typeCol) {
+    const typeCols = (schema.columns || []).filter(c => {
+      const upper = (c.name || '').toUpperCase();
+      return SEMANTIC_PATTERNS.cashFlowType.some(p => upper === p || upper.includes(p));
+    });
+    if (typeCols.length > 0) typeCol = typeCols[0].name;
+  }
 
-  if (matchCount === 0) return null;
+  if (!typeCol) return null;
 
-  // É fluxo de caixa! Identificar coluna de medida e data
-  const measure = schema.primaryMeasure;
+  // Coluna de valor/medida
+  let measure = schema.primaryMeasure;
+  if (!measure) {
+    for (const k of Object.keys(rows[0] || {})) {
+      const upper = k.toUpperCase();
+      if (upper.includes('VALOR') || upper.includes('SALDO') || upper.includes('TOTAL') || upper.includes('VALBRUT')) {
+        measure = k;
+        break;
+      }
+    }
+  }
   if (!measure) return null;
 
-  const dateCol = schema.dateColumns?.[0] || null;
+  // Coluna de data
+  let dateCol = schema.dateColumns?.[0] || null;
+  if (!dateCol) {
+    for (const k of Object.keys(rows[0] || {})) {
+      const upper = k.toUpperCase();
+      if (SEMANTIC_PATTERNS.date.some(p => upper.includes(p)) || isDateColumn(k, rows)) {
+        dateCol = k;
+        break;
+      }
+    }
+  }
 
-  // Agregar por tipo
+  // Agregar por tipo e por data
   const byType = {};
   const byDate = {};
 
@@ -636,18 +666,19 @@ export function detectCashFlow(schema, rows) {
     if (CASH_FLOW_POSITIVE_TYPES.has(tipo)) {
       byType[tipo] += absVal;
     } else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) {
-      byType[tipo] -= absVal;
+      byType[tipo] += absVal;
     } else {
       byType[tipo] += val;
     }
 
     if (dateCol) {
-      const date = String(r[dateCol] || '').trim();
-      if (!byDate[date]) byDate[date] = { RECEBIMENTO: 0, PAGAMENTO: 0 };
+      const rawDate = String(r[dateCol] || '').trim();
+      const dateKey = formatDateLabel(rawDate) || 'Geral';
+      if (!byDate[dateKey]) byDate[dateKey] = { rawDate, RECEBIMENTO: 0, PAGAMENTO: 0 };
       if (CASH_FLOW_POSITIVE_TYPES.has(tipo)) {
-        byDate[date].RECEBIMENTO += absVal;
+        byDate[dateKey].RECEBIMENTO += absVal;
       } else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) {
-        byDate[date].PAGAMENTO += absVal;
+        byDate[dateKey].PAGAMENTO += absVal;
       }
     }
   });
@@ -657,19 +688,21 @@ export function detectCashFlow(schema, rows) {
   let totalPagar = 0;
   Object.entries(byType).forEach(([tipo, val]) => {
     if (CASH_FLOW_POSITIVE_TYPES.has(tipo)) totalReceber += val;
-    else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) totalPagar += Math.abs(val);
+    else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) totalPagar += val;
   });
 
   const saldoProjetado = totalReceber - totalPagar;
 
-  // Série temporal por data (para gráfico de barras agrupadas)
+  // Série temporal por data (para gráfico de barras agrupadas e linha de diferença)
   const dailySeries = Object.entries(byDate)
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([, a], [, b]) => String(a.rawDate).localeCompare(String(b.rawDate)))
     .map(([date, vals]) => ({
-      date: formatDateLabel(date),
+      date,
       RECEBIMENTO: vals.RECEBIMENTO,
       PAGAMENTO: vals.PAGAMENTO,
       SALDO: vals.RECEBIMENTO - vals.PAGAMENTO,
+      label: date,
+      value: vals.RECEBIMENTO - vals.PAGAMENTO,
     }));
 
   return {
@@ -687,45 +720,47 @@ export function detectCashFlow(schema, rows) {
 
 function formatDateLabel(dateStr) {
   if (!dateStr) return dateStr;
+  const s = String(dateStr).trim();
   // Formato YYYYMMDD → DD/MM
-  if (/^\d{8}$/.test(dateStr)) {
-    return `${dateStr.slice(6, 8)}/${dateStr.slice(4, 6)}`;
+  if (/^\d{8}$/.test(s)) {
+    return `${s.slice(6, 8)}/${s.slice(4, 6)}`;
   }
   // Formato YYYY-MM-DD → DD/MM
-  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-    const parts = dateStr.split('-');
-    return `${parts[2]}/${parts[1]}`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const parts = s.split('-');
+    return `${parts[2].slice(0, 2)}/${parts[1]}`;
   }
-  return dateStr;
+  // Formato DD/MM/YYYY → DD/MM
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) {
+    return s.slice(0, 5);
+  }
+  return s;
 }
 
 export function buildCashFlowKPIs(cashFlowData) {
   const { totalReceber, totalPagar, saldoProjetado } = cashFlowData;
   return [
     {
-      label: 'Total a Receber',
+      label: 'Total em Aberto a Receber',
       value: totalReceber,
       format: 'currency',
       type: 'receber',
-      color: 'green',
     },
     {
-      label: 'Total a Pagar',
+      label: 'Total em Aberto a Pagar',
       value: totalPagar,
       format: 'currency',
       type: 'pagar',
-      color: 'red',
     },
     {
-      label: 'Saldo Projetado',
+      label: 'Saldo Projetado (Diferença)',
       value: saldoProjetado,
       format: 'currency',
       type: 'saldo',
-      color: saldoProjetado >= 0 ? 'green' : 'red',
     },
     {
-      label: 'Títulos Analisados',
-      value: cashFlowData.dailySeries.reduce((acc, d) => acc, 0) || 0,
+      label: 'Total de Títulos em Aberto',
+      value: 0,
       format: 'number',
       type: 'count',
     },
@@ -736,45 +771,49 @@ export function buildCashFlowCharts(cashFlowData) {
   const charts = [];
   const { dailySeries, byType } = cashFlowData;
 
-  // Gráfico 1: Barras agrupadas por dia (RECEBIMENTO vs PAGAMENTO)
+  // Gráfico 1: Barras agrupadas por dia (A Receber vs A Pagar)
   if (dailySeries.length > 0) {
     charts.push({
       chartType: 'grouped_bar',
-      title: 'Fluxo de Caixa por Dia',
+      title: 'Comparativo Diário: A Receber vs A Pagar',
       xAxisKey: 'date',
       series: [
-        { dataKey: 'RECEBIMENTO', label: 'A Receber', color: '#22c55e' },
+        { dataKey: 'RECEBIMENTO', label: 'A Receber', color: '#10b981' },
         { dataKey: 'PAGAMENTO', label: 'A Pagar', color: '#ef4444' },
       ],
       data: dailySeries,
     });
 
-    // Gráfico 2: Linha de saldo líquido diário
+    // Gráfico 2: Linha de análise de diferença (Saldo Líquido por Dia)
     charts.push({
       chartType: 'line',
-      title: 'Saldo Líquido Projetado por Dia',
+      title: 'Análise de Diferença Diária (Saldo Projetado)',
       xAxisKey: 'date',
       dataKey: 'SALDO',
-      data: dailySeries.map(d => ({ label: d.date, value: d.SALDO })),
+      data: dailySeries.map(d => ({ date: d.date, label: d.date, value: d.SALDO, SALDO: d.SALDO })),
       referenceLineY: 0,
+      color: '#3b82f6',
     });
   } else {
-    // Sem data: apenas barra comparativa RECEBIMENTO vs PAGAMENTO total
-    const comparisonData = Object.entries(byType)
-      .filter(([k]) => CASH_FLOW_POSITIVE_TYPES.has(k) || CASH_FLOW_NEGATIVE_TYPES.has(k))
-      .map(([label, value]) => ({ label, value: Math.abs(value) }));
+    // Sem data: apenas barra comparativa A Receber vs A Pagar total
+    const comparisonData = [
+      { label: 'A Receber', value: cashFlowData.totalReceber },
+      { label: 'A Pagar', value: cashFlowData.totalPagar },
+    ];
 
     charts.push({
       chartType: 'bar',
-      title: 'Comparativo Recebimentos vs Pagamentos',
+      title: 'Comparativo Geral: A Receber vs A Pagar',
       xAxisKey: 'label',
       dataKey: 'value',
+      color: '#3b82f6',
       data: comparisonData,
     });
   }
 
   return charts;
 }
+
 
 export function buildCashFlowInsights(cashFlowData) {
   const { totalReceber, totalPagar, saldoProjetado, dailySeries } = cashFlowData;
@@ -828,14 +867,15 @@ export function buildExecutiveChatSummary(context) {
   // Se for fluxo de caixa, usa formatação específica
   if (data.cashFlowData?.isCashFlow) {
     const { totalReceber, totalPagar, saldoProjetado } = data.cashFlowData;
-    const fmt = v => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const parts = ['**Resumo do Fluxo de Caixa:**\n'];
-    parts.push(`• **Total a Receber:** R$ ${fmt(totalReceber)}`);
-    parts.push(`• **Total a Pagar:** R$ ${fmt(totalPagar)}`);
-    parts.push(`• **Saldo Projetado:** R$ ${fmt(saldoProjetado)}${saldoProjetado < 0 ? ' ⚠' : ' ✓'}`);
-    parts.push(`• **Títulos Analisados:** ${count} registros`);
+    const statusSaldo = saldoProjetado >= 0 ? '✓ (Superávit projetado)' : '⚠ (Déficit projetado)';
+    const parts = ['**Resumo do Fluxo de Caixa (Próximos Dias):**\n'];
+    parts.push(`• **Total em Aberto a Receber:** R$ ${fmt(totalReceber)}`);
+    parts.push(`• **Total em Aberto a Pagar:** R$ ${fmt(totalPagar)}`);
+    parts.push(`• **Saldo Projetado (Diferença):** R$ ${fmt(saldoProjetado)} ${statusSaldo}`);
+    parts.push(`• **Títulos em Aberto:** ${count} registros analisados`);
     return parts.join('\n');
   }
+
 
   const totalKpi = data.kpis?.find(k => k.type === 'sum');
 
