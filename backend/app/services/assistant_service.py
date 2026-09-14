@@ -72,6 +72,18 @@ class AssistantService:
         ctx['document_context'] = doc_context
         ctx['memory_context'] = mem_context
 
+        # NOVO: Metric Engine + Validation Engine
+        from app.services.analytics_engine import AnalyticsEngine
+        kpis = {}
+        if protheus_data:
+            kpis = AnalyticsEngine.process(intent, protheus_data)
+            ctx['kpis'] = kpis
+            
+            # Adicionar regra rígida ao prompt de sistema
+            if not ctx.get('tenant_system_prompt'):
+                ctx['tenant_system_prompt'] = ""
+            ctx['tenant_system_prompt'] += "\n\nREGRA CRITICA DE ANALYTICS: Você é um analista executivo. Use SOMENTE os indicadores fornecidos em 'kpis' no contexto. NUNCA recalcule totais. NUNCA estime percentuais. NUNCA derive métricas inexistentes. Se uma métrica for inconsistente ou marcada com erro, sinalize erro de dados. Baseie sua resposta APENAS nos KPIs calculados pelo backend."
+
         # 5. Generate Answer with Timeout (reduzido para evitar 504 do Cloudflare)
         # Cloudflare tem hard limit de 100s. Vamos usar 75s para o principal e desistir se passar.
         timeout_sec = 75
@@ -139,7 +151,8 @@ class AssistantService:
             "backend": "gemini",
             "records_returned": records_returned,
             "response_time_ms": elapsed_ms,
-            "status": status_audit
+            "status": status_audit,
+            "kpis": kpis
         }
 
     async def answer_question_stream(self, payload, ctx: dict):
@@ -168,6 +181,21 @@ class AssistantService:
         # 4. Augment Context
         ctx['document_context'] = doc_context
         ctx['memory_context'] = mem_context
+
+        # NOVO: Metric Engine + Validation Engine
+        from app.services.analytics_engine import AnalyticsEngine
+        kpis = {}
+        if protheus_data:
+            kpis = AnalyticsEngine.process(intent, protheus_data)
+            ctx['kpis'] = kpis
+            
+            if not ctx.get('tenant_system_prompt'):
+                ctx['tenant_system_prompt'] = ""
+            ctx['tenant_system_prompt'] += "\n\nREGRA CRITICA DE ANALYTICS: Você é um analista executivo. Use SOMENTE os indicadores fornecidos em 'kpis' no contexto. NUNCA recalcule totais. NUNCA estime percentuais. NUNCA derive métricas inexistentes. Se uma métrica for inconsistente ou marcada com erro, sinalize erro de dados. Baseie sua resposta APENAS nos KPIs calculados pelo backend."
+
+        # Emitir o evento especial no inicio do stream contendo os KPIs para o Dashboard
+        import json
+        yield f"__META_KPIS__:{json.dumps(kpis)}\n"
 
         # 5. Generate Answer via stream generator
         full_answer = []
