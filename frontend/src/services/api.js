@@ -42,6 +42,7 @@ async function readErrorPayload(response) {
 
 async function fetchWithRetry(url, options = {}, retries = 2) {
   let lastError;
+  const token = localStorage.getItem('copilot_access_token');
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
       const response = await fetch(url, {
@@ -49,6 +50,7 @@ async function fetchWithRetry(url, options = {}, retries = 2) {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           ...(options.headers || {}),
         },
       });
@@ -78,9 +80,13 @@ export async function askAgent(payload) {
 
 export async function uploadAgentFile(formData) {
   const base = getApiBaseUrl();
+  const token = localStorage.getItem('copilot_access_token');
   const response = await fetch(`${base}/agent/ask/v2/upload`, {
     method: 'POST',
     credentials: 'include',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
     body: formData,
   });
   if (!response.ok) {
@@ -115,12 +121,18 @@ export async function exportStructuredReport(formatOrPayload, maybePayload = {})
 export async function downloadStructuredReport(downloadUrl) {
   if (!downloadUrl) throw new Error('URL de download do relatório não informada.');
   const base = getApiBaseUrl();
+  const token = localStorage.getItem('copilot_access_token');
   const url = downloadUrl.startsWith('http')
     ? downloadUrl
     : (downloadUrl.startsWith('/') && typeof window !== 'undefined'
       ? `${window.location.origin}${downloadUrl}`
       : `${base}/${String(downloadUrl).replace(/^\//, '')}`);
-  const response = await fetch(url, { credentials: 'include' });
+  const response = await fetch(url, { 
+    credentials: 'include',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    }
+  });
   if (!response.ok) {
     const payload = await readErrorPayload(response);
     throw new ApiRequestError(String(payload.message || payload.error || `HTTP ${response.status}`), payload, response.status);
@@ -194,10 +206,12 @@ export async function waitForAgentTask(
 
 export async function apiGetAuthMe() {
   const url = `${getApiBaseUrl()}/auth/me`;
+  const token = localStorage.getItem('copilot_access_token');
   const response = await fetch(url, {
     method: 'GET',
     headers: {
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     },
     credentials: 'include'
   });
@@ -222,5 +236,10 @@ export async function apiLogin(tenant_id, username, password) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || 'Falha no login');
   }
-  return response.json();
+  const data = await response.json();
+  if (data.access_token) {
+    localStorage.setItem('copilot_access_token', data.access_token);
+  }
+  return data;
 }
+
