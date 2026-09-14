@@ -99,7 +99,6 @@ class LoginRequest(BaseModel):
 @router.post("/login")
 def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(
-        User.tenant_id == req.tenant_id,
         User.email == req.username
     ).first()
 
@@ -107,6 +106,12 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciais inválidas",
+        )
+        
+    if not user.is_platform_admin and user.tenant_id != req.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuário não pertence a este tenant",
         )
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -123,7 +128,7 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
 
     to_encode = {
         "sub": user.email,
-        "tenant_id": str(user.tenant_id),
+        "tenant_id": req.tenant_id if user.is_platform_admin else str(user.tenant_id),
         "user_id": str(user.id),
         "role": primary_role,
         "exp": expire,
