@@ -871,12 +871,27 @@ async def process_agent_task(task_id: str, payload: dict):
             except Exception:
                 pass
 
+            logger.info({
+                "stage": "module_resolution",
+                "tenant": str(ctx.tenant_id),
+                "context_module_code": str(ctx.module_code),
+                "contracted_modules": sorted(list(allowed_modules)),
+            })
+
             tables = filter_allowed_dictionary_tables(
                 db=db,
                 tenant_schema=ctx.schema_name,
                 module_codes=list(allowed_modules),
                 company_id=ctx.company_id,
             )
+
+            table_names_in_snapshot = [dict(t).get("table_name") or dict(t).get("table_code") for t in tables]
+            logger.info({
+                "stage": "snapshot_tables_loaded",
+                "tenant": str(ctx.tenant_id),
+                "table_count": len(table_names_in_snapshot),
+                "tables": sorted(str(n) for n in table_names_in_snapshot if n),
+            })
 
             # O LLM recebe campos e índices por leitores compatíveis com snapshots legados.
             context = []
@@ -1125,9 +1140,28 @@ async def process_agent_task(task_id: str, payload: dict):
                 "filter_fields_by_table": allowed_filter_fields_by_table,
                 "filial": op_context["xfilial"],
             }
+
+            # Log de diagnóstico RBAC: mostra exatamente o que foi autorizado vs o que o LLM usou
+            logger.info({
+                "stage": "rbac_validation_start",
+                "task_id": task_id,
+                "query_domain": query_domain,
+                "authorized_tables": sorted(str(t) for t in allowed_table_names),
+                "authorized_field_count": len(allowed_field_names),
+            })
+
             try:
                 validate_query_security(sql=sql, **validation_args)
             except HTTPException as exc:
+                logger.warning({
+                    "stage": "rbac_validation_failed",
+                    "task_id": task_id,
+                    "query_domain": query_domain,
+                    "error": str(exc.detail),
+                    "authorized_tables": sorted(str(t) for t in allowed_table_names),
+                    "authorized_field_count": len(allowed_field_names),
+                    "hint": "Verifique se as tabelas do domínio (SE1/SE2/SE5 para FINANCEIRO) estão importadas no dicionário SX3 do tenant.",
+                })
                 if not _is_catalog_field_validation_error(exc):
                     raise
                 logger.warning(
@@ -1148,6 +1182,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 )
                 _validate_query_domain(str(prompt), sql, domain=query_domain)
                 validate_query_security(sql=sql, **validation_args)
+
 
             context_tables = [
                 {
