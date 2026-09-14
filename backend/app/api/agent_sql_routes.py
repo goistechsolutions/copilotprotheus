@@ -447,20 +447,32 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     # 1. Se configurado explicitamente para Ollama / local
     if str(backend_mode).lower() in ("ollama", "local"):
         logger.info("[SQL Generator] Provedor configurado: LLM Local (Ollama - Hetzner).")
-        from app.services.ollama_client import ask_llm
-        raw_response = await ask_llm(
-            question=user_query,
-            protheus_data=None,
-            intent="sql_generation",
-            context={
-                "tenant_system_prompt": system_instruction,
-                "tenant_id": tenant_id,
-                "environment_code": environment_code,
-            },
-            history=history or [],
-            image=image,
-            allow_tools=False,
-        )
+        try:
+            from app.services.ollama_client import ask_llm
+            raw_response = await ask_llm(
+                question=user_query,
+                protheus_data=None,
+                intent="sql_generation",
+                context={
+                    "tenant_system_prompt": system_instruction,
+                    "tenant_id": tenant_id,
+                    "environment_code": environment_code,
+                },
+                history=history or [],
+                image=image,
+                allow_tools=False,
+            )
+        except ProtheusServiceError as e:
+            status_code = e.status_code if e.status_code and 400 <= e.status_code <= 599 else 502
+            raise HTTPException(status_code=status_code, detail=str(e)) from e
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("[SQL Generator] Falha ao acionar provedor LLM provider=%s error_type=%s", backend_mode, type(e).__name__)
+            raise HTTPException(
+                status_code=503,
+                detail=f"O serviço do provedor de IA ({backend_mode}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
+            ) from e
     else:
         # 2. Modo Gemini com fallback automático para Ollama
         try:
@@ -478,6 +490,17 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                 image=image,
                 allow_tools=False,
             )
+        except ProtheusServiceError as e:
+            status_code = e.status_code if e.status_code and 400 <= e.status_code <= 599 else 502
+            logger.error(
+                "[SQL Generator] Falha durante a geração/integração status=%s error_type=%s provider=%s",
+                status_code,
+                type(e).__name__,
+                backend_mode,
+            )
+            raise HTTPException(status_code=status_code, detail=str(e)) from e
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning("[SQL Generator] Falha ao acionar Gemini: %s. Ativando fallback para LLM Local (Hetzner)...", e)
             from app.services.ollama_client import ask_llm
