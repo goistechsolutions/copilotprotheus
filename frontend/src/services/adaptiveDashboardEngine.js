@@ -29,8 +29,17 @@ const SEMANTIC_PATTERNS = {
   ],
   measure: [
     'VALOR', 'FATURAMENTO', 'TOTAL', 'SALDO', 'RECEITA', 'QUANTIDADE', 'QTDE', 'PRECO', 'CUSTO', 'LUCRO', 'VALBRUT', 'VENDAS'
+  ],
+  cashFlowType: [
+    'TIPO_MOVIMENTO', 'TIPO_MOV', 'TIPO', 'NATUREZA', 'MOVIMENTO'
   ]
 };
+
+// Valores que indicam estrutura de Fluxo de Caixa (RECEBIMENTO vs PAGAMENTO)
+const CASH_FLOW_POSITIVE_TYPES = new Set(['RECEBIMENTO', 'RECEBER', 'A RECEBER', 'RECEITA', 'ENTRADA', 'CR', 'C']);
+const CASH_FLOW_NEGATIVE_TYPES = new Set(['PAGAMENTO', 'PAGAR', 'A PAGAR', 'DESPESA', 'SAIDA', 'DR', 'D']);
+const ALL_CASH_FLOW_TYPES = new Set([...CASH_FLOW_POSITIVE_TYPES, ...CASH_FLOW_NEGATIVE_TYPES]);
+
 
 const IDENTIFIER_PATTERNS = [
   'COD', 'CODIGO', 'ID', 'NUM', 'NUMERO', 'DOC', 'SERIE', 'MAT', 'PREFIXO', 'PARCELA', 
@@ -583,13 +592,251 @@ export function generateContextualSuggestions(schema, data = {}) {
   return suggestions.slice(0, 4);
 }
 
-// ─── 7. Chat Response Builder (Resumo Executivo Conciso) ───────────────────
+// ─── 7. Detector e Motor de Fluxo de Caixa ──────────────────────────────────
+/**
+ * Detecta se os dados representam um Fluxo de Caixa (RECEBIMENTO vs PAGAMENTO)
+ * Retorna null se não for fluxo de caixa, ou um objeto cashFlowData com os dados processados.
+ */
+export function detectCashFlow(schema, rows) {
+  if (!rows || rows.length === 0) return null;
+
+  // Procura uma coluna que pareça "tipo de movimento"
+  const typeCols = (schema.columns || []).filter(c => {
+    const upper = c.name.toUpperCase();
+    return SEMANTIC_PATTERNS.cashFlowType.some(p => upper === p || upper.includes(p));
+  });
+
+  if (typeCols.length === 0) return null;
+
+  // Verifica se os valores desta coluna são RECEBIMENTO/PAGAMENTO
+  const typeCol = typeCols[0].name;
+  const sampleValues = [...new Set(rows.slice(0, 50).map(r => String(r[typeCol] || '').toUpperCase().trim()))];
+  const matchCount = sampleValues.filter(v => ALL_CASH_FLOW_TYPES.has(v)).length;
+
+  if (matchCount === 0) return null;
+
+  // É fluxo de caixa! Identificar coluna de medida e data
+  const measure = schema.primaryMeasure;
+  if (!measure) return null;
+
+  const dateCol = schema.dateColumns?.[0] || null;
+
+  // Agregar por tipo
+  const byType = {};
+  const byDate = {};
+
+  rows.forEach(r => {
+    const tipo = String(r[typeCol] || '').toUpperCase().trim();
+    const raw = r[measure];
+    const val = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.')) || 0;
+    const absVal = Math.abs(val);
+
+    if (!byType[tipo]) byType[tipo] = 0;
+
+    if (CASH_FLOW_POSITIVE_TYPES.has(tipo)) {
+      byType[tipo] += absVal;
+    } else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) {
+      byType[tipo] -= absVal;
+    } else {
+      byType[tipo] += val;
+    }
+
+    if (dateCol) {
+      const date = String(r[dateCol] || '').trim();
+      if (!byDate[date]) byDate[date] = { RECEBIMENTO: 0, PAGAMENTO: 0 };
+      if (CASH_FLOW_POSITIVE_TYPES.has(tipo)) {
+        byDate[date].RECEBIMENTO += absVal;
+      } else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) {
+        byDate[date].PAGAMENTO += absVal;
+      }
+    }
+  });
+
+  // Calcular totais
+  let totalReceber = 0;
+  let totalPagar = 0;
+  Object.entries(byType).forEach(([tipo, val]) => {
+    if (CASH_FLOW_POSITIVE_TYPES.has(tipo)) totalReceber += val;
+    else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) totalPagar += Math.abs(val);
+  });
+
+  const saldoProjetado = totalReceber - totalPagar;
+
+  // Série temporal por data (para gráfico de barras agrupadas)
+  const dailySeries = Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, vals]) => ({
+      date: formatDateLabel(date),
+      RECEBIMENTO: vals.RECEBIMENTO,
+      PAGAMENTO: vals.PAGAMENTO,
+      SALDO: vals.RECEBIMENTO - vals.PAGAMENTO,
+    }));
+
+  return {
+    isCashFlow: true,
+    typeCol,
+    dateCol,
+    measure,
+    totalReceber,
+    totalPagar,
+    saldoProjetado,
+    dailySeries,
+    byType,
+  };
+}
+
+function formatDateLabel(dateStr) {
+  if (!dateStr) return dateStr;
+  // Formato YYYYMMDD → DD/MM
+  if (/^\d{8}$/.test(dateStr)) {
+    return `${dateStr.slice(6, 8)}/${dateStr.slice(4, 6)}`;
+  }
+  // Formato YYYY-MM-DD → DD/MM
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    const parts = dateStr.split('-');
+    return `${parts[2]}/${parts[1]}`;
+  }
+  return dateStr;
+}
+
+export function buildCashFlowKPIs(cashFlowData) {
+  const { totalReceber, totalPagar, saldoProjetado } = cashFlowData;
+  return [
+    {
+      label: 'Total a Receber',
+      value: totalReceber,
+      format: 'currency',
+      type: 'receber',
+      color: 'green',
+    },
+    {
+      label: 'Total a Pagar',
+      value: totalPagar,
+      format: 'currency',
+      type: 'pagar',
+      color: 'red',
+    },
+    {
+      label: 'Saldo Projetado',
+      value: saldoProjetado,
+      format: 'currency',
+      type: 'saldo',
+      color: saldoProjetado >= 0 ? 'green' : 'red',
+    },
+    {
+      label: 'Títulos Analisados',
+      value: cashFlowData.dailySeries.reduce((acc, d) => acc, 0) || 0,
+      format: 'number',
+      type: 'count',
+    },
+  ];
+}
+
+export function buildCashFlowCharts(cashFlowData) {
+  const charts = [];
+  const { dailySeries, byType } = cashFlowData;
+
+  // Gráfico 1: Barras agrupadas por dia (RECEBIMENTO vs PAGAMENTO)
+  if (dailySeries.length > 0) {
+    charts.push({
+      chartType: 'grouped_bar',
+      title: 'Fluxo de Caixa por Dia',
+      xAxisKey: 'date',
+      series: [
+        { dataKey: 'RECEBIMENTO', label: 'A Receber', color: '#22c55e' },
+        { dataKey: 'PAGAMENTO', label: 'A Pagar', color: '#ef4444' },
+      ],
+      data: dailySeries,
+    });
+
+    // Gráfico 2: Linha de saldo líquido diário
+    charts.push({
+      chartType: 'line',
+      title: 'Saldo Líquido Projetado por Dia',
+      xAxisKey: 'date',
+      dataKey: 'SALDO',
+      data: dailySeries.map(d => ({ label: d.date, value: d.SALDO })),
+      referenceLineY: 0,
+    });
+  } else {
+    // Sem data: apenas barra comparativa RECEBIMENTO vs PAGAMENTO total
+    const comparisonData = Object.entries(byType)
+      .filter(([k]) => CASH_FLOW_POSITIVE_TYPES.has(k) || CASH_FLOW_NEGATIVE_TYPES.has(k))
+      .map(([label, value]) => ({ label, value: Math.abs(value) }));
+
+    charts.push({
+      chartType: 'bar',
+      title: 'Comparativo Recebimentos vs Pagamentos',
+      xAxisKey: 'label',
+      dataKey: 'value',
+      data: comparisonData,
+    });
+  }
+
+  return charts;
+}
+
+export function buildCashFlowInsights(cashFlowData) {
+  const { totalReceber, totalPagar, saldoProjetado, dailySeries } = cashFlowData;
+  const insights = [];
+  const absTotal = totalReceber + totalPagar;
+  if (absTotal === 0) return insights;
+
+  const shareReceber = (totalReceber / absTotal) * 100;
+  const sharePagar = (totalPagar / absTotal) * 100;
+
+  insights.push({
+    title: saldoProjetado >= 0 ? 'Saldo Positivo' : 'Atenção: Saldo Negativo',
+    description: saldoProjetado >= 0
+      ? `Os recebimentos superam os pagamentos em R$ ${Math.abs(saldoProjetado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
+      : `Os pagamentos superam os recebimentos em R$ ${Math.abs(saldoProjetado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Risco de caixa no período.`,
+    value: saldoProjetado >= 0 ? '✓ Positivo' : '⚠ Negativo',
+    type: saldoProjetado >= 0 ? 'success' : 'critical',
+  });
+
+  insights.push({
+    title: 'Composição do Fluxo',
+    description: `Recebimentos representam ${shareReceber.toFixed(1)}% e pagamentos ${sharePagar.toFixed(1)}% do volume bruto total.`,
+    value: `${shareReceber.toFixed(1)}% / ${sharePagar.toFixed(1)}%`,
+    type: 'information',
+  });
+
+  // Dia com maior diferença negativa (pico de caixa negativo)
+  if (dailySeries.length > 0) {
+    const worstDay = dailySeries.reduce((min, d) => d.SALDO < min.SALDO ? d : min, dailySeries[0]);
+    if (worstDay.SALDO < 0) {
+      insights.push({
+        title: 'Pico de Pressão de Caixa',
+        description: `O dia ${worstDay.date} possui o maior déficit: R$ ${Math.abs(worstDay.SALDO).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`,
+        value: worstDay.date,
+        type: 'critical',
+      });
+    }
+  }
+
+  return insights;
+}
+
+// ─── 8. Chat Response Builder (Resumo Executivo Conciso) ───────────────────
 export function buildExecutiveChatSummary(context) {
   if (!context || !context.data) return 'Análise concluída com sucesso.';
 
   const { data, schema } = context;
   const rows = data.rows || [];
   const count = rows.length;
+
+  // Se for fluxo de caixa, usa formatação específica
+  if (data.cashFlowData?.isCashFlow) {
+    const { totalReceber, totalPagar, saldoProjetado } = data.cashFlowData;
+    const fmt = v => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const parts = ['**Resumo do Fluxo de Caixa:**\n'];
+    parts.push(`• **Total a Receber:** R$ ${fmt(totalReceber)}`);
+    parts.push(`• **Total a Pagar:** R$ ${fmt(totalPagar)}`);
+    parts.push(`• **Saldo Projetado:** R$ ${fmt(saldoProjetado)}${saldoProjetado < 0 ? ' ⚠' : ' ✓'}`);
+    parts.push(`• **Títulos Analisados:** ${count} registros`);
+    return parts.join('\n');
+  }
+
   const totalKpi = data.kpis?.find(k => k.type === 'sum');
 
   // Identifica o líder a partir do primeiro gráfico ou dos dados agrupados
@@ -631,19 +878,39 @@ export function buildExecutiveChatSummary(context) {
   return parts.join('\n');
 }
 
-// ─── 8. Pipeline Orquestrador Adaptativo ──────────────────────────────────────
+// ─── 9. Pipeline Orquestrador Adaptativo ──────────────────────────────────────
 export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {}, backendKpis = null) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return null;
   }
 
   const schema = analyzeSchema(rows, columns);
-  const classification = classifyDataset(schema);
   const presentation = resolveMeasurePresentation(schema, semanticContext);
-  const kpis = buildKPIs(schema, rows, semanticContext);
-  // Priorizar KPIs do backend quando disponíveis para evitar divergência chat/dashboard
-  const insights = buildInsights(schema, rows, backendKpis);
-  const charts = buildCharts(schema, rows);
+
+  // Detecta padrão de Fluxo de Caixa antes de qualquer classificação genérica
+  const cashFlowData = detectCashFlow(schema, rows);
+
+  let kpis, insights, charts, screenType, confidence;
+
+  if (cashFlowData) {
+    // Caminho especializado: Fluxo de Caixa
+    kpis = buildCashFlowKPIs(cashFlowData);
+    // Atualizar count de títulos
+    kpis[3] = { ...kpis[3], value: rows.length };
+    insights = buildCashFlowInsights(cashFlowData);
+    charts = buildCashFlowCharts(cashFlowData);
+    screenType = 'cash_flow';
+    confidence = 0.99;
+  } else {
+    // Caminho genérico existente
+    const classification = classifyDataset(schema);
+    kpis = buildKPIs(schema, rows, semanticContext);
+    // Priorizar KPIs do backend quando disponíveis para evitar divergência chat/dashboard
+    insights = buildInsights(schema, rows, backendKpis);
+    charts = buildCharts(schema, rows);
+    screenType = classification.datasetType;
+    confidence = classification.confidence;
+  }
 
   const contextData = {
     rows,
@@ -652,23 +919,31 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
     insights,
     charts,
     backendKpis,
-    series: charts.filter(c => c.chartType === 'bar' || c.chartType === 'line').map(c => ({
+    cashFlowData,
+    series: charts.filter(c => c.chartType === 'bar' || c.chartType === 'line' || c.chartType === 'grouped_bar').map(c => ({
       label: c.title,
       points: c.data,
     })),
   };
 
-  const suggestions = generateContextualSuggestions(schema, contextData);
+  const suggestions = cashFlowData
+    ? [
+        'Fluxo de caixa dos próximos 15 dias',
+        'Títulos vencidos a receber',
+        'Clientes com maior volume a pagar',
+        'Comparar com semana anterior',
+      ]
+    : generateContextualSuggestions(schema, contextData);
 
   const analysisContext = {
-    screenType: classification.datasetType,
-    confidence: classification.confidence,
+    screenType,
+    confidence,
     schema,
     suggestions,
     data: contextData,
     presentation,
     intent: presentation.intent,
-    domain: presentation.domain,
+    domain: cashFlowData ? 'finance' : presentation.domain,
   };
 
   analysisContext.executiveSummary = buildExecutiveChatSummary(analysisContext);
