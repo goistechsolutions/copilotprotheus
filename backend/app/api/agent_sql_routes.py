@@ -46,6 +46,8 @@ from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.entitlement_guard import EntitlementDenied, EntitlementGuard
 from app.services.protheus_module_catalog import quote_tenant_schema
 from app.core.auth import get_current_user, require_current_user
+from app.services.analytics_engine import AnalyticsEngine
+from app.services.insight_rules import InsightEngine
 
 logger = logging.getLogger("app.api.agent_sql")
 router = APIRouter(prefix="/agent", tags=["agent-sql"], dependencies=[Depends(require_current_user)])
@@ -1478,6 +1480,17 @@ async def process_agent_task(task_id: str, payload: dict):
                             "domain": query_domain,
                             "intent": _DOMAIN_INTENT_LABEL.get(query_domain, query_domain) if query_domain else None,
                         }
+                        # Insight Engine 2.0 — calculo deterministico de metricas e inferencia de insights executivos
+                        try:
+                            schema_info = AnalyticsEngine._resolve_schema(query_domain or "")
+                            analytics_metrics = AnalyticsEngine.calculate_metrics(safe_rows, schema=schema_info)
+                            backend_insights = InsightEngine.evaluate(analytics_metrics, domain=query_domain)
+                            response["result"]["backend_kpis"] = analytics_metrics
+                            response["result"]["backend_insights"] = backend_insights
+                        except Exception as insight_err:
+                            logger.warning("insight_engine_eval_error task_id=%s error=%s", task_id, insight_err)
+                            response["result"]["backend_kpis"] = None
+                            response["result"]["backend_insights"] = []
                     else:
                         response["result"] = {
                             "columns": [],
