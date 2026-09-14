@@ -145,11 +145,11 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
             # Check if it's a measure
             values = [_parse_summary_number(row.get(col)) for row in rows if isinstance(row, dict)]
             numeric_values = [v for v in values if v is not None]
-            if numeric_values and re.search(r"VALOR|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name):
+            if numeric_values and re.search(r"VALOR|ORIGINAL|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name):
                 measures.append({
                     "key": col,
                     "label": col,
-                    "format": "currency" if re.search(r"VALOR|FATUR|RECEITA|SALDO|PRE[ÇC]O", name) else "number",
+                    "format": "currency" if re.search(r"VALOR|ORIGINAL|FATUR|RECEITA|SALDO|PRE[ÇC]O", name) else "number",
                     "aggregation": "sum"
                 })
 
@@ -243,7 +243,7 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
         if not numeric_values or _is_non_metric_field(column):
             continue
         name = str(column).upper()
-        semantic = bool(re.search(r"VALOR|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name))
+        semantic = bool(re.search(r"VALOR|ORIGINAL|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name))
         candidates.append((1 if semantic else 0, column, numeric_values))
     candidates.sort(key=lambda item: (item[0], len(item[2])), reverse=True)
     if not candidates:
@@ -1164,6 +1164,8 @@ async def process_agent_task(task_id: str, payload: dict):
                                     "correlation_id": correlation_id,
                     "conversation_id": conversation_id,
                     "tenant_id": str(ctx.tenant_id),
+                "domain": query_domain,
+                "intent": _DOMAIN_INTENT_LABEL.get(query_domain, query_domain) if query_domain else None,
 
                 "environment_code": environment_code,
                 "company_id": ctx.company_id,
@@ -1218,17 +1220,37 @@ async def process_agent_task(task_id: str, payload: dict):
                     response["data"] = safe_rows
                     if safe_rows and isinstance(safe_rows[0], dict):
                         response["result"] = _build_semantic_result(safe_rows)
+                        response["result"]["metadata"] = {
+                            **response["result"].get("metadata", {}),
+                            "domain": query_domain,
+                            "intent": _DOMAIN_INTENT_LABEL.get(query_domain, query_domain) if query_domain else None,
+                        }
                     else:
                         response["result"] = {
                             "columns": [],
                             "rows": safe_rows,
-                            "metadata": {"row_count": len(rows), "source": "queryrest"},
+                            "metadata": {
+                                "row_count": len(rows),
+                                "source": "queryrest",
+                                "domain": query_domain,
+                                "intent": _DOMAIN_INTENT_LABEL.get(query_domain, query_domain) if query_domain else None,
+                            },
                             "dimensions": [], "measures": [], "kpis": [], "series": []
                         }
 
                     if len(rows) == 0:
                         response["message"] = "Consulta concluída sem registros."
-                        response["result"] = {"columns": [], "rows": [], "metadata": {"row_count": 0, "source": "queryrest"}, "dimensions": [], "measures": [], "kpis": [], "series": []}
+                        response["result"] = {
+                            "columns": [],
+                            "rows": [],
+                            "metadata": {
+                                "row_count": 0,
+                                "source": "queryrest",
+                                "domain": query_domain,
+                                "intent": _DOMAIN_INTENT_LABEL.get(query_domain, query_domain) if query_domain else None,
+                            },
+                            "dimensions": [], "measures": [], "kpis": [], "series": []
+                        }
                         logger.info("agent_queryrest_success task_id=%s records=0", task_id)
                     elif safe_rows and isinstance(safe_rows[0], dict):
                         logger.info("agent_queryrest_success task_id=%s records=%s", task_id, len(rows))

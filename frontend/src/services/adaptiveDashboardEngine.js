@@ -567,7 +567,8 @@ export function buildExecutiveChatSummary(context) {
   const entitySingular = schema.hasSeller ? 'Vendedor líder' :
                          schema.hasCustomer ? 'Cliente líder' :
                          schema.hasProduct ? 'Produto líder' :
-                         schema.hasGeographic ? 'Região líder' : 'Destaque';
+                         schema.hasGeographic ? 'Região líder' :
+                         schema.dimensions?.length ? 'Dimensão de maior valor' : 'Maior ocorrência';
 
   const entityPlural = schema.hasSeller ? 'vendedores' :
                        schema.hasCustomer ? 'clientes' :

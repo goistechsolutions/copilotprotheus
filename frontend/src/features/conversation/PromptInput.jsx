@@ -113,7 +113,20 @@ export function PromptInput() {
         setProcessingStep(5); // 5. Gerando insights
         let adaptive = null;
         if (result && Array.isArray(result.rows) && result.rows.length > 0) {
-          adaptive = buildAdaptiveDashboard(result.rows, result.columns || []);
+          const promptDomain = /fluxo de caixa|contas a pagar|contas a receber|inadimpl|vencimento|boleto|t[ií]tulo|se1|se2|se5|saldo banc|movimento banc/i.test(text)
+            ? 'finance'
+            : /compra|fornecedor|pedido de compra|recebimento/i.test(text)
+              ? 'purchases'
+              : /venda|fatur|pedido de venda|sf2|sd2|sc5/i.test(text)
+                ? 'sales'
+                : null;
+          const semanticContext = {
+            ...(result.metadata || {}),
+            intent: result.intent || result.metadata?.intent || null,
+            domain: result.domain || result.metadata?.domain || promptDomain,
+            measureFormat: result.metadata?.measureFormat || result.kpis?.[0]?.format || null,
+          };
+          adaptive = buildAdaptiveDashboard(result.rows, result.columns || [], semanticContext);
           if (adaptive) {
             adaptive.originPrompt = text;
             setProcessingStep(6); // 6. Montando dashboard
