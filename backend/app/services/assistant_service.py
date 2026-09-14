@@ -73,16 +73,28 @@ class AssistantService:
         ctx['memory_context'] = mem_context
 
         # NOVO: Metric Engine + Validation Engine
-        from app.services.analytics_engine import AnalyticsEngine
+        from app.services.analytics_engine import AnalyticsEngine, ValidationError
         kpis = {}
         if protheus_data:
-            kpis = AnalyticsEngine.process(intent, protheus_data)
-            ctx['kpis'] = kpis
-            
-            # Adicionar regra rígida ao prompt de sistema
-            if not ctx.get('tenant_system_prompt'):
-                ctx['tenant_system_prompt'] = ""
-            ctx['tenant_system_prompt'] += "\n\nREGRA CRITICA DE ANALYTICS: Você é um analista executivo. Use SOMENTE os indicadores fornecidos em 'kpis' no contexto. NUNCA recalcule totais. NUNCA estime percentuais. NUNCA derive métricas inexistentes. Se uma métrica for inconsistente ou marcada com erro, sinalize erro de dados. Baseie sua resposta APENAS nos KPIs calculados pelo backend."
+            try:
+                kpis = AnalyticsEngine.process(intent, protheus_data)
+                ctx['kpis'] = kpis
+                
+                # Adicionar regra rígida ao prompt de sistema
+                if not ctx.get('tenant_system_prompt'):
+                    ctx['tenant_system_prompt'] = ""
+                ctx['tenant_system_prompt'] += "\n\nREGRA CRITICA DE ANALYTICS: Você é um analista executivo. Use SOMENTE os indicadores fornecidos em 'kpis' no contexto. NUNCA recalcule totais. NUNCA estime percentuais. NUNCA derive métricas inexistentes. Se uma métrica for inconsistente ou marcada com erro, sinalize erro de dados. Baseie sua resposta APENAS nos KPIs calculados pelo backend."
+            except ValidationError as e:
+                # Intercepta imediatamente, bloqueia Dashboard e Chat
+                return {
+                    "answer": f"Não foi possível gerar a análise.\n\nMotivo:\nIndicadores inconsistentes identificados durante o cálculo das métricas pelo motor analítico.\n\nDetalhes:\n{str(e)}\n\nA análise foi interrompida para evitar conclusões incorretas.",
+                    "intent": intent,
+                    "backend": "validation_engine",
+                    "records_returned": 0,
+                    "response_time_ms": int((time.time() - start_time) * 1000),
+                    "status": "E",
+                    "kpis": {"status": "rejected", "error": str(e)}
+                }
 
         # 5. Generate Answer with Timeout (reduzido para evitar 504 do Cloudflare)
         # Cloudflare tem hard limit de 100s. Vamos usar 75s para o principal e desistir se passar.
@@ -183,19 +195,26 @@ class AssistantService:
         ctx['memory_context'] = mem_context
 
         # NOVO: Metric Engine + Validation Engine
-        from app.services.analytics_engine import AnalyticsEngine
+        from app.services.analytics_engine import AnalyticsEngine, ValidationError
         kpis = {}
-        if protheus_data:
-            kpis = AnalyticsEngine.process(intent, protheus_data)
-            ctx['kpis'] = kpis
-            
-            if not ctx.get('tenant_system_prompt'):
-                ctx['tenant_system_prompt'] = ""
-            ctx['tenant_system_prompt'] += "\n\nREGRA CRITICA DE ANALYTICS: Você é um analista executivo. Use SOMENTE os indicadores fornecidos em 'kpis' no contexto. NUNCA recalcule totais. NUNCA estime percentuais. NUNCA derive métricas inexistentes. Se uma métrica for inconsistente ou marcada com erro, sinalize erro de dados. Baseie sua resposta APENAS nos KPIs calculados pelo backend."
-
-        # Emitir o evento especial no inicio do stream contendo os KPIs para o Dashboard
         import json
-        yield f"__META_KPIS__:{json.dumps(kpis)}\n"
+        if protheus_data:
+            try:
+                kpis = AnalyticsEngine.process(intent, protheus_data)
+                ctx['kpis'] = kpis
+                
+                if not ctx.get('tenant_system_prompt'):
+                    ctx['tenant_system_prompt'] = ""
+                ctx['tenant_system_prompt'] += "\n\nREGRA CRITICA DE ANALYTICS: Você é um analista executivo. Use SOMENTE os indicadores fornecidos em 'kpis' no contexto. NUNCA recalcule totais. NUNCA estime percentuais. NUNCA derive métricas inexistentes. Se uma métrica for inconsistente ou marcada com erro, sinalize erro de dados. Baseie sua resposta APENAS nos KPIs calculados pelo backend."
+                
+                # Emitir o evento especial no inicio do stream contendo os KPIs para o Dashboard
+                yield f"__META_KPIS__:{json.dumps(kpis)}\n"
+            except ValidationError as e:
+                # Intercepta imediatamente, bloqueia Dashboard e Chat
+                error_msg = f"Não foi possível gerar a análise.\n\nMotivo:\nIndicadores inconsistentes identificados durante o cálculo das métricas pelo motor analítico.\n\nDetalhes:\n{str(e)}\n\nA análise foi interrompida para evitar conclusões incorretas."
+                yield f"__META_KPIS__:{json.dumps({'status': 'rejected', 'error': str(e)})}\n"
+                yield error_msg
+                return
 
         # 5. Generate Answer via stream generator
         full_answer = []

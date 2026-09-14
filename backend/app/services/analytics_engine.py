@@ -8,6 +8,79 @@ class ValidationError(Exception):
     """Exceção levantada quando as métricas violam regras de consistência matemática."""
     pass
 
+class ValidationRule:
+    def validate(self, metrics: Dict[str, Any], schema: Dict[str, Any], domain: str) -> Optional[Dict[str, str]]:
+        raise NotImplementedError
+
+class MaxLessThanTotalRule(ValidationRule):
+    def validate(self, metrics: Dict[str, Any], schema: Dict[str, Any], domain: str) -> Optional[Dict[str, str]]:
+        total = metrics.get("total", 0.0)
+        max_val = metrics.get("max_value", 0.0)
+        # Apply only if total is positive (gross values). For net balances with negatives, this rule might be tricky,
+        # but for absolute sums it holds.
+        if total > 0 and max_val > total:
+            return {"code": "MAX_GT_TOTAL", "message": f"Maior valor ({max_val}) superior ao total ({total})"}
+        return None
+
+class PercentageRule(ValidationRule):
+    def validate(self, metrics: Dict[str, Any], schema: Dict[str, Any], domain: str) -> Optional[Dict[str, str]]:
+        if metrics.get("concentration", 0.0) > 100.0:
+            return {"code": "INVALID_PERCENTAGE", "message": "Concentração > 100%"}
+        
+        for item in metrics.get("top_items", []):
+            if item.get("share_percent", 0.0) > 100.0:
+                return {"code": "INVALID_PERCENTAGE", "message": f"Share do item {item.get('name')} excede 100%"}
+        return None
+
+class AverageRule(ValidationRule):
+    def validate(self, metrics: Dict[str, Any], schema: Dict[str, Any], domain: str) -> Optional[Dict[str, str]]:
+        total = metrics.get("total", 0.0)
+        avg = metrics.get("average", 0.0)
+        if total > 0 and avg > total:
+            return {"code": "AVG_GT_TOTAL", "message": f"Média ({avg}) maior que o total ({total})"}
+        return None
+
+class RowCountRule(ValidationRule):
+    def validate(self, metrics: Dict[str, Any], schema: Dict[str, Any], domain: str) -> Optional[Dict[str, str]]:
+        if metrics.get("count", 0) < 0:
+            return {"code": "NEGATIVE_COUNT", "message": "Quantidade de registros não pode ser negativa"}
+        return None
+
+class ValidationEngine:
+    def __init__(self):
+        self.rules = [
+            MaxLessThanTotalRule(),
+            PercentageRule(),
+            AverageRule(),
+            RowCountRule()
+        ]
+        
+    def validate(self, metrics: Dict[str, Any], schema: Dict[str, Any], domain: str) -> Dict[str, Any]:
+        """
+        Valida as métricas calculadas. Retorna um Quality Score e status.
+        """
+        score = 100
+        errors = []
+        
+        if metrics.get("count", 0) == 0:
+            return {"quality_score": 100, "status": "approved", "errors": []}
+
+        for rule in self.rules:
+            error = rule.validate(metrics, schema, domain)
+            if error:
+                errors.append(error)
+                if error["code"] in ["MAX_GT_TOTAL", "INVALID_PERCENTAGE"]:
+                    score -= 50
+                else:
+                    score -= 20
+                    
+        result = {
+            "quality_score": max(0, score),
+            "status": "approved" if score >= 70 else "rejected",
+            "errors": errors
+        }
+        return result
+
 class AnalyticsEngine:
     """
     Motor analítico determinístico.
@@ -48,7 +121,6 @@ class AnalyticsEngine:
         try:
             if isinstance(val, (int, float)):
                 return float(val)
-            # Limpeza basica se vier formatado do Protheus como R$ 1.000,00
             s = str(val).replace('R$', '').replace('.', '').replace(',', '.').strip()
             return float(s)
         except ValueError:
@@ -56,11 +128,10 @@ class AnalyticsEngine:
 
     @staticmethod
     def calculate_metrics(data_items: List[Dict[str, Any]], schema: Dict[str, Any]) -> Dict[str, Any]:
-        """Metric Engine: Processa métricas determinísticas baseadas no schema."""
+        """Layer 4: Recalcular KPIs deterministicamente das linhas cruas."""
         if not data_items:
             return {"total": 0.0, "average": 0.0, "max_value": 0.0, "count": 0, "concentration": 0.0, "top_items": []}
 
-        # Tentar identificar qual coluna é a principal "measure" (valor numérico)
         measure_key = None
         for key in data_items[0].keys():
             upper_key = key.upper()
@@ -68,7 +139,6 @@ class AnalyticsEngine:
                 measure_key = key
                 break
         
-        # Tentar identificar qual coluna é a principal "dimension" (categoria)
         dimension_key = None
         for key in data_items[0].keys():
             upper_key = key.upper()
@@ -77,14 +147,12 @@ class AnalyticsEngine:
                 break
         
         if not measure_key:
-            # Se não achou measure clara, fallback para a primeira coluna numérica
             for key, val in data_items[0].items():
                 if isinstance(val, (int, float)):
                     measure_key = key
                     break
 
         if not dimension_key:
-            # Fallback para a primeira coluna string não-data
             for key, val in data_items[0].items():
                 if isinstance(val, str) and not ("DATE" in key.upper() or "DATA" in key.upper()):
                     dimension_key = key
@@ -102,7 +170,6 @@ class AnalyticsEngine:
         if not measure_key:
             return metrics
 
-        # Agregação e totalização
         dim_aggregates = {}
         total = 0.0
         max_val = -math.inf
@@ -123,43 +190,22 @@ class AnalyticsEngine:
         metrics["max_value"] = round(max_val, 2) if max_val != -math.inf else 0.0
         metrics["average"] = round(total / metrics["count"], 2) if metrics["count"] > 0 else 0.0
 
-        # Sort agregados para obter ranking e concentração
         sorted_dims = sorted(dim_aggregates.items(), key=lambda x: x[1], reverse=True)
         
-        if sorted_dims and total > 0:
+        # Absolute total for share calculations to avoid negative share breaking logic
+        abs_total = abs(total)
+        
+        if sorted_dims and abs_total > 0:
             top_dim_val = sorted_dims[0][1]
-            metrics["concentration"] = round((top_dim_val / total) * 100, 2)
+            metrics["concentration"] = round((abs(top_dim_val) / abs_total) * 100, 2)
             
-            # Top 3
             metrics["top_items"] = [
-                {"name": k, "value": round(v, 2), "share_percent": round((v / total) * 100, 2)}
+                {"name": k, "value": round(v, 2), "share_percent": round((abs(v) / abs_total) * 100, 2)}
                 for k, v in sorted_dims[:3]
             ]
             metrics["maior_ocorrencia_nome"] = sorted_dims[0][0]
             metrics["maior_ocorrencia_valor"] = round(top_dim_val, 2)
         
-        return metrics
-
-    @staticmethod
-    def validate_metrics(metrics: Dict[str, Any]) -> Dict[str, Any]:
-        """Validation Engine: Assegura que as leis matemáticas fundamentais não foram violadas."""
-        count = metrics.get("count", 0)
-        if count == 0:
-            return metrics
-            
-        total = metrics.get("total", 0.0)
-        conc = metrics.get("concentration", 0.0)
-
-        # Regra 1: Concentração não pode ser > 100%
-        if conc > 100.0 or conc < 0.0:
-            logger.error(f"Validation Error: Concentração impossível ({conc}%)")
-            raise ValidationError(f"Métrica de concentração inválida: {conc}%")
-            
-        # Regra 3: Se o share do Top 1 bater com a concentracao
-        top_items = metrics.get("top_items", [])
-        if top_items and top_items[0]["share_percent"] > 100:
-            raise ValidationError("Share percent do principal item excede 100%")
-
         return metrics
 
     @classmethod
@@ -168,7 +214,6 @@ class AnalyticsEngine:
         if not protheus_data:
             return {}
             
-        # Normalizar protheus_data para lista
         data_items = []
         if isinstance(protheus_data, dict):
             if "items" in protheus_data and isinstance(protheus_data["items"], list):
@@ -186,10 +231,12 @@ class AnalyticsEngine:
         schema = cls._resolve_schema(intent)
         metrics = cls.calculate_metrics(data_items, schema)
         
-        try:
-            validated_metrics = cls.validate_metrics(metrics)
-            return validated_metrics
-        except ValidationError as e:
-            # Em caso de erro de validação, retornamos as métricas base limpas com flag de erro,
-            # impedindo que o LLM use números corrompidos.
-            return {"error": str(e), "status": "INCONSISTENT_DATA"}
+        validator = ValidationEngine()
+        validation_result = validator.validate(metrics, schema, schema["domain"])
+        
+        if validation_result["status"] == "rejected":
+            logger.error(f"Validação falhou: {validation_result['errors']}")
+            raise ValidationError(f"Métricas inconsistentes: {validation_result['errors']}")
+            
+        metrics["quality"] = validation_result
+        return metrics
