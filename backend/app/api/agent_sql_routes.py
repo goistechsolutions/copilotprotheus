@@ -274,18 +274,39 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
             elif tipo in {"PAGAMENTO", "PAGAR", "A PAGAR", "DESPESA", "SAIDA", "DR", "D"}:
                 total_pagar += val
 
-        saldo = total_receber - total_pagar
-        status_saldo = "Superávit projetado" if saldo >= 0 else "Déficit projetado"
-        fmt_rec = f"R$ {total_receber:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        fmt_pag = f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        fmt_sal = f"R$ {saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        return (
-            f"**Resumo do Fluxo de Caixa (Próximos Dias):**\n\n"
-            f"• **Total em Aberto a Receber:** {fmt_rec}\n"
-            f"• **Total em Aberto a Pagar:** {fmt_pag}\n"
-            f"• **Saldo Projetado (Diferença):** {fmt_sal} ({status_saldo})\n"
-            f"• **Títulos em Aberto:** {len(rows)} registros analisados."
-        )
+        # Se houver TANTO recebimentos QUANTO pagamentos, é Fluxo de Caixa
+        if total_receber > 0 and total_pagar > 0:
+            saldo = total_receber - total_pagar
+            status_saldo = "Superávit projetado" if saldo >= 0 else "Déficit projetado"
+            fmt_rec = f"R$ {total_receber:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            fmt_pag = f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            fmt_sal = f"R$ {saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return (
+                f"**Resumo do Fluxo de Caixa (Próximos Dias):**\n\n"
+                f"• **Total em Aberto a Receber:** {fmt_rec}\n"
+                f"• **Total em Aberto a Pagar:** {fmt_pag}\n"
+                f"• **Saldo Projetado (Diferença):** {fmt_sal} ({status_saldo})\n"
+                f"• **Títulos em Aberto:** {len(rows)} registros analisados."
+            )
+        elif total_receber > 0 and total_pagar == 0:
+            fmt_rec = f"R$ {total_receber:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            avg_rec = f"R$ {(total_receber / len(rows)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return (
+                f"**Resumo de Títulos a Receber em Aberto:**\n\n"
+                f"• **Total em Aberto a Receber:** {fmt_rec}\n"
+                f"• **Média por Título:** {avg_rec}\n"
+                f"• **Quantidade de Títulos:** {len(rows)} títulos analisados."
+            )
+        elif total_pagar > 0 and total_receber == 0:
+            fmt_pag = f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            avg_pag = f"R$ {(total_pagar / len(rows)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return (
+                f"**Resumo de Títulos a Pagar em Aberto:**\n\n"
+                f"• **Total em Aberto a Pagar:** {fmt_pag}\n"
+                f"• **Média por Título:** {avg_pag}\n"
+                f"• **Quantidade de Títulos:** {len(rows)} títulos analisados."
+            )
+
 
     dimensions = [
         column for column in columns
@@ -377,19 +398,22 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     elif domain == "finance":
         domain_instruction = (
             " A intenção é FINANCEIRO (Contas a Receber, Contas a Pagar e Fluxo de Caixa). "
-            "DIRETRIZES DE FLUXO DE CAIXA: "
-            "Para 'Fluxo de Caixa' (especialmente projeção dos próximos dias ou período futuro), consulte os TÍTULOS EM ABERTO "
-            "unificando SE1 (contas a receber com E1_SALDO > 0 e filtro em E1_VENCTO) e SE2 (contas a pagar com E2_SALDO > 0 e filtro em E2_VENCTO) "
-            "através de UNION ALL. "
-            "Projete obrigatoriamente as colunas: "
-            "'RECEBIMENTO' AS TIPO_MOVIMENTO para SE1 e 'PAGAMENTO' AS TIPO_MOVIMENTO para SE2, "
-            "SE1.E1_VENCTO AS DATA_VENCTO e SE2.E2_VENCTO AS DATA_VENCTO, "
-            "e o saldo em aberto como métrica: SE1.E1_SALDO AS VALOR e SE2.E2_SALDO AS VALOR. "
-            "Filtre os vencimentos usando comparação de datas Oracle em formato YYYYMMDD, ex: "
-            "SE1.E1_VENCTO BETWEEN TO_CHAR(SYSDATE, 'YYYYMMDD') AND TO_CHAR(SYSDATE + 5, 'YYYYMMDD'). "
-            "Mantenha os filtros obrigatórios de exclusão lógica D_E_L_E_T_ <> '*' e filial autorizada para ambas as tabelas. "
-            "NUNCA referencie SE5 caso a tabela SE5 não esteja listada explicitamente no snapshot autorizado!"
+            "1. FLUXO DE CAIXA: Quando o pedido contiver 'fluxo de caixa', 'projeção de caixa' ou comparar 'pagar e receber', "
+            "consulte os TÍTULOS EM ABERTO unificando SE1 (contas a receber com E1_SALDO > 0) e SE2 (contas a pagar com E2_SALDO > 0) "
+            "através de UNION ALL. Projete obrigatoriamente: 'RECEBIMENTO' AS TIPO_MOVIMENTO para SE1 e 'PAGAMENTO' AS TIPO_MOVIMENTO para SE2, "
+            "data de vencimento (SE1.E1_VENCTO / SE2.E2_VENCTO) AS DATA_VENCTO, e o saldo em aberto (SE1.E1_SALDO / SE2.E2_SALDO) AS VALOR. "
+            "2. CONTAS A RECEBER / TÍTULOS A RECEBER / VENCIDOS A RECEBER / INADIMPLÊNCIA: Quando a pergunta for sobre títulos a receber ou vencidos a receber, "
+            "consulte EXCLUSIVAMENTE a tabela SE1 (SE1010 SE1). Filtre títulos em aberto (SE1.E1_SALDO > 0) e, caso peça 'vencidos', filtre "
+            "SE1.E1_VENCTO < TO_CHAR(SYSDATE, 'YYYYMMDD'). Selecione obrigatoriamente dimensões para análise de clientes e títulos: "
+            "código do cliente (SE1.E1_CLIENTE), nome fantasia/cliente caso conste no catálogo (SE1.E1_NOMCLI), número do título (SE1.E1_NUM), "
+            "parcela (SE1.E1_PARCELA), vencimento (SE1.E1_VENCTO) e saldo em aberto (SE1.E1_SALDO AS VALOR_SALDO). "
+            "NUNCA crie coluna TIPO_MOVIMENTO e NUNCA una com a tabela SE2 quando a pergunta for apenas de contas a receber ou títulos vencidos! "
+            "3. CONTAS A PAGAR / TÍTULOS A PAGAR / VENCIDOS A PAGAR: Quando a pergunta for sobre contas a pagar, consulte EXCLUSIVAMENTE "
+            "a tabela SE2 (SE2010 SE2) com SE2.E2_SALDO > 0, selecionando código do fornecedor (SE2.E2_FORNECE), nome (SE2.E2_NOMFOR caso conste), "
+            "número (SE2.E2_NUM), vencimento (SE2.E2_VENCTO) e saldo (SE2.E2_SALDO AS VALOR_SALDO). NUNCA una com SE1! "
+            "4. REGRAS OBRIGATÓRIAS: Sempre aplique D_E_L_E_T_ <> '*' e a filial autorizada. NUNCA use SE5 se SE5 não estiver listada no snapshot autorizado!"
         )
+
 
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
 

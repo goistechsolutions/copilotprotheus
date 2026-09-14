@@ -62,7 +62,23 @@ const SCREEN_CONFIGS = {
     badge: 'Fluxo de Caixa',
     description: 'Comparativo diário de contas a receber e a pagar em aberto com análise de saldo projetado.',
   },
+  overdue_receivables: {
+    title: 'Títulos Vencidos a Receber',
+    badge: 'Inadimplência',
+    description: 'Análise de títulos vencidos em aberto por cliente e evolução cronológica de vencimentos.',
+  },
+  accounts_receivable: {
+    title: 'Contas a Receber em Aberto',
+    badge: 'Receber',
+    description: 'Acompanhamento de títulos a receber em aberto por cliente e vencimento.',
+  },
+  accounts_payable: {
+    title: 'Contas a Pagar em Aberto',
+    badge: 'Pagar',
+    description: 'Acompanhamento de títulos a pagar em aberto por fornecedor e vencimento.',
+  },
   'financial-dashboard': {
+
     title: 'Painel Executivo Financeiro',
     badge: 'Executivo',
     description: 'Visão consolidada de receitas, despesas e fluxo de caixa.',

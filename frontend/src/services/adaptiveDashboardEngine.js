@@ -10,10 +10,11 @@
 // ─── 1. Padrões Semânticos Protheus ──────────────────────────────────────────
 const SEMANTIC_PATTERNS = {
   customer: [
-    'CLIENTE', 'COD_CLIENTE', 'F2_CLIENTE', 'CLIENT', 'A1_COD', 'A1_NOME', 'NOMCLI', 'NOME_CLIENTE'
+    'CLIENTE', 'COD_CLIENTE', 'F2_CLIENTE', 'CLIENT', 'A1_COD', 'A1_NOME', 'NOMCLI', 'NOME_CLIENTE',
+    'E1_CLIENTE', 'E1_NOMCLI', 'COD_CLI'
   ],
-  product: [
-    'PRODUTO', 'ITEM', 'CODPROD', 'B1_COD', 'B1_DESC', 'DESCRICAO_PRODUTO', 'SERVICO'
+  supplier: [
+    'FORNECEDOR', 'FORNECE', 'A2_COD', 'A2_NOME', 'NOMFOR', 'NOME_FORNECEDOR', 'E2_FORNECE', 'E2_NOMFOR'
   ],
   seller: [
     'VENDEDOR', 'REPRESENTANTE', 'A3_COD', 'A3_NOME', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'NOME_VENDEDOR'
@@ -22,18 +23,21 @@ const SEMANTIC_PATTERNS = {
     'FILIAL', 'LOJA', 'FIL', 'F2_FILIAL', 'D2_FILIAL', 'E1_FILIAL', 'E2_FILIAL'
   ],
   date: [
-    'DATA', 'MES', 'PERIODO', 'YEAR', 'ANO', 'EMISSAO', 'VENCTO', 'F2_EMISSAO', 'E1_VENCTO', 'E2_VENCTO', 'D2_EMISSAO', 'AID_DATA'
+    'DATA', 'MES', 'PERIODO', 'YEAR', 'ANO', 'EMISSAO', 'VENCTO', 'F2_EMISSAO', 'E1_VENCTO', 'E2_VENCTO', 'D2_EMISSAO', 'AID_DATA',
+    'DATA_VENCTO', 'E1_EMISSAO', 'E2_EMISSAO', 'VENCTO_REAL', 'DT_VENCTO'
   ],
   geographic: [
     'UF', 'ESTADO', 'REGIAO', 'CIDADE', 'MUNICIPIO', 'A1_EST', 'A1_MUN', 'PAIS'
   ],
   measure: [
-    'VALOR', 'FATURAMENTO', 'TOTAL', 'SALDO', 'RECEITA', 'QUANTIDADE', 'QTDE', 'PRECO', 'CUSTO', 'LUCRO', 'VALBRUT', 'VENDAS'
+    'VALOR', 'FATURAMENTO', 'TOTAL', 'SALDO', 'RECEITA', 'QUANTIDADE', 'QTDE', 'PRECO', 'CUSTO', 'LUCRO', 'VALBRUT', 'VENDAS',
+    'E1_SALDO', 'E2_SALDO', 'E1_VALOR', 'E2_VALOR', 'VALOR_SALDO', 'SALDO_ABERTO'
   ],
   cashFlowType: [
     'TIPO_MOVIMENTO', 'TIPO_MOV', 'TIPO', 'NATUREZA', 'MOVIMENTO'
   ]
 };
+
 
 // Valores que indicam estrutura de Fluxo de Caixa (RECEBIMENTO vs PAGAMENTO)
 const CASH_FLOW_POSITIVE_TYPES = new Set(['RECEBIMENTO', 'RECEBER', 'A RECEBER', 'RECEITA', 'ENTRADA', 'CR', 'C']);
@@ -177,6 +181,7 @@ export function analyzeSchema(rows, columns = []) {
     semantics,
     hasDate: dateCols.length > 0,
     hasCustomer: !!semantics.customer,
+    hasSupplier: !!semantics.supplier,
     hasProduct: !!semantics.product,
     hasSeller: !!semantics.seller,
     hasBranch: !!semantics.branch,
@@ -189,7 +194,23 @@ export function analyzeSchema(rows, columns = []) {
 }
 
 // ─── 3. Classificador de Dataset com Sistema de Pontuação (Score) ─────────────
-export function classifyDataset(schema) {
+export function classifyDataset(schema, context = {}) {
+  const prompt = String(context.originPrompt || context.prompt || '').toLowerCase();
+  const isOverdue = /vencid|atras|inadimpl/i.test(prompt);
+  const isReceivable = /receb|e1_/i.test(prompt) || (schema.columns || []).some(c => (c.name || '').toUpperCase().startsWith('E1_'));
+  const isPayable = /pagar|pagam|e2_/i.test(prompt) || (schema.columns || []).some(c => (c.name || '').toUpperCase().startsWith('E2_'));
+
+  // Classificações financeiras especializadas
+  if (isOverdue && isReceivable) {
+    return { datasetType: 'overdue_receivables', confidence: 0.95 };
+  }
+  if (isReceivable && !isPayable && (schema.hasCustomer || schema.hasDate)) {
+    return { datasetType: 'accounts_receivable', confidence: 0.92 };
+  }
+  if (isPayable && !isReceivable && (schema.hasSupplier || schema.hasDate)) {
+    return { datasetType: 'accounts_payable', confidence: 0.92 };
+  }
+
   const scores = {
     seller_ranking: 0,
     customer_ranking: 0,
@@ -249,6 +270,7 @@ export function classifyDataset(schema) {
     confidence: Number(confidence.toFixed(2)),
   };
 }
+
 
 // ─── 3.1. Semântica de apresentação ─────────────────────────────────────────
 // O dashboard não pode chamar toda medida numérica de "faturamento". A
@@ -313,10 +335,14 @@ function resolveMeasurePresentation(schema, context = {}) {
 
   let label = presentation.measureLabel;
   if (!label) {
+    const prompt = String(context.originPrompt || context.prompt || '').toLowerCase();
+    const isOverdue = /vencid|atras|inadimpl/i.test(prompt);
+
     if (presentation.domain === 'finance' || presentation.intent === 'cash_flow' || presentation.intent === 'finance') {
-      if (/(RECEB|RECEIVER|A_RECEBER)/.test(upperMeasure)) label = 'Total a receber';
-      else if (/(PAGAR|PAGAMENTO|A_PAGAR)/.test(upperMeasure)) label = 'Total a pagar';
-      else if (upperMeasure.includes('SALDO')) label = 'Saldo financeiro';
+      if (isOverdue) label = 'Total vencido em aberto';
+      else if (/(RECEB|RECEIVER|A_RECEBER|E1_)/.test(upperMeasure)) label = 'Total a receber em aberto';
+      else if (/(PAGAR|PAGAMENTO|A_PAGAR|E2_)/.test(upperMeasure)) label = 'Total a pagar em aberto';
+      else if (upperMeasure.includes('SALDO')) label = isOverdue ? 'Total vencido em aberto' : 'Saldo em aberto';
       else label = 'Total financeiro analisado';
     } else if (presentation.domain === 'sales') {
       label = 'Faturamento total';
@@ -324,6 +350,7 @@ function resolveMeasurePresentation(schema, context = {}) {
       label = `Total de ${humanizeMeasureName(measure)}`;
     }
   }
+
 
   const format = presentation.measureFormat || (isCurrencyMeasure ? 'currency' : 'number');
   return { ...presentation, label, format };
@@ -597,8 +624,9 @@ export function generateContextualSuggestions(schema, data = {}) {
  * Detecta se os dados representam um Fluxo de Caixa (RECEBIMENTO vs PAGAMENTO)
  * Retorna null se não for fluxo de caixa, ou um objeto cashFlowData com os dados processados.
  */
-export function detectCashFlow(schema, rows) {
+export function detectCashFlow(schema, rows, semanticContext = {}) {
   if (!rows || rows.length === 0) return null;
+
 
   const columns = schema.columns || Object.keys(rows[0] || {}).map(k => ({ name: k }));
   let typeCol = null;
@@ -691,7 +719,20 @@ export function detectCashFlow(schema, rows) {
     else if (CASH_FLOW_NEGATIVE_TYPES.has(tipo)) totalPagar += val;
   });
 
+  // REGRA CRÍTICA: Só é Fluxo de Caixa se houver TANTO recebimentos QUANTO pagamentos (> 0),
+  // OU se a pergunta explicitamente solicitar fluxo de caixa.
+  const prompt = String(semanticContext?.originPrompt || semanticContext?.prompt || '').toLowerCase();
+  const isExplicitCashFlow = /fluxo\s+de\s+caixa|proje[cç][aã]o\s+de\s+caixa|entradas?\s+e\s+sa[ií]das?|pagar\s+e\s+receber|receber\s+e\s+pagar/i.test(prompt);
+  const hasBothMovements = totalReceber > 0 && totalPagar > 0;
+
+  if (!hasBothMovements && !isExplicitCashFlow) {
+    // Se tiver apenas RECEBIMENTO (sem pagamentos) e a pergunta não for de fluxo de caixa,
+    // trata-se de Contas a Receber / Inadimplência normal, NÃO de fluxo de caixa!
+    return null;
+  }
+
   const saldoProjetado = totalReceber - totalPagar;
+
 
   // Série temporal por data (para gráfico de barras agrupadas e linha de diferença)
   const dailySeries = Object.entries(byDate)
@@ -879,6 +920,42 @@ export function buildExecutiveChatSummary(context) {
 
 
 
+  // Se for títulos vencidos a receber
+  if (context.screenType === 'overdue_receivables') {
+    const totalKpi = data.kpis?.find(k => k.type === 'sum');
+    const fmtTotal = totalKpi ? `R$ ${totalKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00';
+    const leaderBar = data.charts?.find(c => c.chartType === 'bar' || c.chartType === 'donut');
+    const leaderItem = leaderBar?.data?.[0];
+    const parts = ['**Resumo dos Títulos Vencidos a Receber (Inadimplência):**\n'];
+    parts.push(`• **Total Vencido em Aberto:** ${fmtTotal}`);
+    if (leaderItem) {
+      const leaderVal = typeof leaderItem.value === 'number'
+        ? `R$ ${leaderItem.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : leaderItem.value;
+      parts.push(`• **Maior Título / Devedor:** ${leaderItem.label} (${leaderVal})`);
+    }
+    parts.push(`• **Volume:** ${count} títulos vencidos analisados`);
+    return parts.join('\n');
+  }
+
+  // Se for contas a receber em aberto
+  if (context.screenType === 'accounts_receivable') {
+    const totalKpi = data.kpis?.find(k => k.type === 'sum');
+    const fmtTotal = totalKpi ? `R$ ${totalKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00';
+    const leaderBar = data.charts?.find(c => c.chartType === 'bar' || c.chartType === 'donut');
+    const leaderItem = leaderBar?.data?.[0];
+    const parts = ['**Resumo de Contas a Receber em Aberto:**\n'];
+    parts.push(`• **Total em Aberto a Receber:** ${fmtTotal}`);
+    if (leaderItem) {
+      const leaderVal = typeof leaderItem.value === 'number'
+        ? `R$ ${leaderItem.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : leaderItem.value;
+      parts.push(`• **Cliente Líder:** ${leaderItem.label} (${leaderVal})`);
+    }
+    parts.push(`• **Volume:** ${count} títulos analisados`);
+    return parts.join('\n');
+  }
+
   const totalKpi = data.kpis?.find(k => k.type === 'sum');
 
   // Identifica o líder a partir do primeiro gráfico ou dos dados agrupados
@@ -930,7 +1007,7 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
   const presentation = resolveMeasurePresentation(schema, semanticContext);
 
   // Detecta padrão de Fluxo de Caixa antes de qualquer classificação genérica
-  const cashFlowData = detectCashFlow(schema, rows);
+  const cashFlowData = detectCashFlow(schema, rows, semanticContext);
 
   let kpis, insights, charts, screenType, confidence;
 
@@ -944,8 +1021,8 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
     screenType = 'cash_flow';
     confidence = 0.99;
   } else {
-    // Caminho genérico existente
-    const classification = classifyDataset(schema);
+    // Caminho genérico com classificações especializadas
+    const classification = classifyDataset(schema, semanticContext);
     kpis = buildKPIs(schema, rows, semanticContext);
     // Priorizar KPIs do backend quando disponíveis para evitar divergência chat/dashboard
     insights = buildInsights(schema, rows, backendKpis);
@@ -953,6 +1030,7 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
     screenType = classification.datasetType;
     confidence = classification.confidence;
   }
+
 
   const contextData = {
     rows,
