@@ -559,6 +559,23 @@ def ensure_public_tables(db, force: bool = False):
         """,
 
         """
+        DO $$
+        BEGIN
+            -- Se a tabela business_domains existe mas NÃO tem a coluna domain_code, 
+            -- ela é a versão legada e deve ser recriada. (Dados são 100% seedados no boot)
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'business_domains') THEN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'business_domains' AND column_name = 'domain_code') THEN
+                    DROP TABLE IF EXISTS public.business_dashboard_templates CASCADE;
+                    DROP TABLE IF EXISTS public.business_intent_tables CASCADE;
+                    DROP TABLE IF EXISTS public.business_intents CASCADE;
+                    DROP TABLE IF EXISTS public.business_domain_modules CASCADE;
+                    DROP TABLE IF EXISTS public.business_domains CASCADE;
+                END IF;
+            END IF;
+        END $$;
+        """,
+
+        """
         CREATE TABLE IF NOT EXISTS public.business_domains (
             domain_code VARCHAR(50) PRIMARY KEY,
             name        VARCHAR(120) NOT NULL,
