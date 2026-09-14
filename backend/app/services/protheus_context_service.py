@@ -105,6 +105,69 @@ def _extract_table_refs(sql: str) -> list[tuple[str, str]]:
     return refs
 
 
+def auto_fix_delet_filters(sql: str) -> str:
+    """
+    Garante que toda tabela física Protheus referenciada no FROM/JOIN
+    possua a cláusula obrigatória D_E_L_E_T_ <> '*'.
+    Caso o LLM tenha esquecido, injeta automaticamente de forma não destrutiva.
+    """
+    if not sql or not isinstance(sql, str):
+        return sql
+
+    # Se contiver UNION / UNION ALL, processa cada bloco isoladamente
+    union_pattern = re.compile(r"(\bUNION(?:\s+ALL)?\b)", re.IGNORECASE)
+    parts = union_pattern.split(sql)
+    if len(parts) > 1:
+        fixed_parts = []
+        for p in parts:
+            if union_pattern.match(p.strip()):
+                fixed_parts.append(p)
+            else:
+                fixed_parts.append(auto_fix_delet_filters(p))
+        return "".join(fixed_parts)
+
+    upper_sql = sql.upper()
+    table_refs = _extract_table_refs(sql)
+    if not table_refs:
+        return sql
+
+    missing_filters = []
+    for table_name, alias in table_refs:
+        # Só aplica para tabelas Protheus (ex: SE1, SE1010, SF2010, etc.)
+        if not re.match(r"^[A-Z][A-Z0-9]{2}(?:010)?$", table_name):
+            continue
+
+        qualified = [f"{alias}.D_E_L_E_T_" if alias else "", f"{table_name}.D_E_L_E_T_"]
+        if len(table_refs) == 1 and "D_E_L_E_T_" in upper_sql:
+            continue
+        if not any(q and q in upper_sql for q in qualified):
+            prefix = alias if alias else table_name
+            missing_filters.append(f"{prefix}.D_E_L_E_T_ <> '*'")
+
+    if not missing_filters:
+        return sql
+
+    injected = " AND ".join(missing_filters)
+
+    # 1. Se já possui cláusula WHERE
+    where_match = re.search(r"\bWHERE\b", sql, re.IGNORECASE)
+    if where_match:
+        idx = where_match.end()
+        return sql[:idx] + f" {injected} AND" + sql[idx:]
+
+    # 2. Se não tem WHERE, insere antes de GROUP BY, ORDER BY, HAVING, FETCH, OFFSET
+    tail_match = re.search(r"\b(GROUP\s+BY|ORDER\s+BY|HAVING|FETCH|OFFSET)\b", sql, re.IGNORECASE)
+    if tail_match:
+        idx = tail_match.start()
+        return sql[:idx].rstrip() + f" WHERE {injected} " + sql[idx:]
+
+    # 3. Se não tem nada disso, adiciona no final (preservando eventual ponto-e-vírgula)
+    sql_stripped = sql.rstrip()
+    if sql_stripped.endswith(";"):
+        return sql_stripped[:-1].rstrip() + f" WHERE {injected};"
+    return sql_stripped + f" WHERE {injected}"
+
+
 def _split_select_items(body: str) -> list[str]:
     """Separa itens do SELECT sem quebrar funções, CASE ou literais."""
     items: list[str] = []

@@ -11,7 +11,7 @@ from app.api.agent_sql_routes import (
     _domain_context_block,
 )
 from app.services.dictionary_context_service import render_context_for_prompt
-from app.services.protheus_context_service import mask_sensitive_rows, validate_query_security
+from app.services.protheus_context_service import auto_fix_delet_filters, mask_sensitive_rows, validate_query_security
 from app.services.report_service import ReportService
 
 
@@ -328,4 +328,30 @@ def test_domain_context_block_triggers_with_inherited_domain():
     assert diag is not None
     assert diag["intent"] == "sales_billing"
     assert "SF2" in diag["required_tables"]
+
+
+def test_auto_fix_delet_filters_injects_when_missing():
+    # 1. Single table without WHERE
+    sql1 = "SELECT A1_COD FROM SA1010 A1"
+    fixed1 = auto_fix_delet_filters(sql1)
+    assert "WHERE A1.D_E_L_E_T_ <> '*'" in fixed1
+
+    # 2. Multiple tables with existing WHERE
+    sql2 = "SELECT F2_DOC FROM SF2010 SF2 JOIN SD2010 SD2 ON SF2.F2_DOC = SD2.D2_DOC WHERE SF2.F2_FILIAL = '01'"
+    fixed2 = auto_fix_delet_filters(sql2)
+    assert "SF2.D_E_L_E_T_ <> '*'" in fixed2
+    assert "SD2.D_E_L_E_T_ <> '*'" in fixed2
+    assert "SF2.F2_FILIAL = '01'" in fixed2
+
+    # 3. Query already having all filters is not duplicated
+    sql3 = "SELECT A1_COD FROM SA1010 A1 WHERE A1.D_E_L_E_T_ <> '*'"
+    fixed3 = auto_fix_delet_filters(sql3)
+    assert fixed3 == sql3
+
+    # 4. Query with GROUP BY and ORDER BY without WHERE
+    sql4 = "SELECT A1_MUN, COUNT(*) FROM SA1010 A1 GROUP BY A1_MUN ORDER BY 2 DESC"
+    fixed4 = auto_fix_delet_filters(sql4)
+    assert "WHERE A1.D_E_L_E_T_ <> '*'" in fixed4
+    assert fixed4.index("WHERE") < fixed4.index("GROUP BY")
+
 

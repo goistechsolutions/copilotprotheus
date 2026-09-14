@@ -69,7 +69,7 @@ def test_agent_sql_generator_disables_tools_only_for_gemini(monkeypatch):
 
     async def fake_ask_gemini(**kwargs):
         captured.update(kwargs)
-        return "SELECT A1_COD FROM SA1010 A1"
+        return "SELECT A1_COD FROM SA1010 A1 WHERE A1.D_E_L_E_T_ <> '*'"
 
     monkeypatch.setattr(agent_sql_routes.settings, "llm_backend", "gemini")
     monkeypatch.setattr(gemini_client, "ask_gemini", fake_ask_gemini)
@@ -84,7 +84,7 @@ def test_agent_sql_generator_disables_tools_only_for_gemini(monkeypatch):
         environment_code="env_homolog",
     ))
 
-    assert result == "SELECT A1_COD FROM SA1010 A1"
+    assert result == "SELECT A1_COD FROM SA1010 A1 WHERE A1.D_E_L_E_T_ <> '*'"
     assert captured["allow_tools"] is False
     assert captured["context"]["tenant_id"] == "tenant_alpha"
     assert captured["context"]["environment_code"] == "env_homolog"

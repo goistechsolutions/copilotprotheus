@@ -36,6 +36,7 @@ from app.services.dictionary_context_service import (
 )
 from app.services.protheus_context_service import (
     CatalogValidationError,
+    auto_fix_delet_filters,
     build_protheus_context,
     mask_sensitive_rows,
     validate_query_security,
@@ -573,6 +574,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     if ";" in clean_sql:
         clean_sql = clean_sql.split(";")[0].strip()
 
+    clean_sql = auto_fix_delet_filters(clean_sql)
     return clean_sql
 
 
@@ -1325,28 +1327,37 @@ async def process_agent_task(task_id: str, payload: dict):
                 "authorized_field_count": len(allowed_field_names),
             })
 
+            sql = auto_fix_delet_filters(sql)
             try:
                 validate_query_security(sql=sql, **validation_args)
             except HTTPException as exc:
                 is_field_error = _is_catalog_field_validation_error(exc)
                 is_table_error = isinstance(exc, CatalogValidationError)
+                is_delet_error = "D_E_L_E_T_" in str(exc.detail)
 
                 logger.warning({
                     "stage": "rbac_validation_failed",
                     "task_id": task_id,
                     "query_domain": query_domain,
                     "error": str(exc.detail),
-                    "error_type": "table_not_in_catalog" if is_table_error else "field_not_authorized",
+                    "error_type": "table_not_in_catalog" if is_table_error else ("delet_missing" if is_delet_error else "field_not_authorized"),
                     "authorized_tables": sorted(str(t) for t in allowed_table_names),
                     "authorized_field_count": len(allowed_field_names),
                     "hint": "Verifique se as tabelas do domínio (SE1/SE2/SE5 para FINANCEIRO) estão importadas no dicionário SX3 do tenant.",
                 })
 
-                if not is_field_error and not is_table_error:
+                if not is_field_error and not is_table_error and not is_delet_error:
                     # Erro de segurança não recuperável (ex: SELECT *, DML, etc.)
                     raise
 
-                if is_table_error:
+                if is_delet_error:
+                    retry_reason = (
+                        f"A consulta anterior foi rejeitada porque esqueceu o filtro obrigatório D_E_L_E_T_ <> '*'.\n"
+                        f"Reescreva a consulta incluindo OBRIGATORIAMENTE para TODAS as tabelas o filtro: alias.D_E_L_E_T_ <> '*'.\n"
+                        f"Pergunta original: {prompt}"
+                    )
+                    logger.warning("agent_sql_catalog_retry task_id=%s reason=delet_filter_missing", task_id)
+                elif is_table_error:
                     # LLM usou tabela fora do snapshot; fornecer lista exata das tabelas disponíveis
                     available_sorted = sorted(
                         t for t in allowed_table_names
@@ -1386,6 +1397,7 @@ async def process_agent_task(task_id: str, payload: dict):
                     history=conversation_history,
                     domain=query_domain,
                 )
+                sql = auto_fix_delet_filters(sql)
                 _validate_query_domain(str(prompt), sql, domain=query_domain)
                 validate_query_security(sql=sql, **validation_args)
 

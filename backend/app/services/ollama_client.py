@@ -93,26 +93,7 @@ async def _resolve_ollama_model(base_url: str) -> str:
         return configured
 
 def _log_token_usage_background(tenant_id: str, request_type: str, prompt_tokens: int, completion_tokens: int, model_name: str):
-    try:
-        from app.db.database import SessionLocal
-        from app.models.knowledge import ApiUsageLog, Company
-        db = SessionLocal()
-        company = db.query(Company).filter(Company.tenant_id == tenant_id).first()
-        if company:
-            log = ApiUsageLog(
-                company_id=company.id,
-                session_id=None,
-                request_type=request_type,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=prompt_tokens + completion_tokens,
-                model_name=model_name
-            )
-            db.add(log)
-            db.commit()
-        db.close()
-    except Exception as e:
-        print(f"Failed to log tokens: {e}")
+    pass
 
 def get_system_prompt(tenant_name: str = "Empresa", tenant_id: str | None = None):
     from datetime import datetime
