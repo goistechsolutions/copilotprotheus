@@ -7,6 +7,13 @@
  * 3. Component Factory (constrói KPIs, Gráficos inteligentes, Insights e Tabelas)
  */
 
+import {
+  inferTimeDimensionType,
+  humanizeDimensionValue,
+  humanizeColumnName,
+  buildExecutiveNarrative,
+} from './presentationIntelligence.js';
+
 // ─── 1. Padrões Semânticos Protheus ──────────────────────────────────────────
 // Aliases exatos de entidades (ambíguos entre código e nome, dependem de isLikelyTextName)
 export const SEMANTIC_EXACT_ALIASES = {
@@ -244,10 +251,14 @@ export function analyzeSchema(rows, columns = []) {
     const hasMeasureKeyword = (SEMANTIC_PATTERNS.measure || []).some(p => colUpper.includes(p));
 
     // Data só é válida se tiver formato ou padrão de data e NÃO for identificador
+    // OU se o nome da coluna indica dimensão temporal (MES_FATURAMENTO, ANO, PERIODO, etc.)
+    const timeDimInfo = inferTimeDimensionType(col);
     const isDate = !isIdCol && (
-      dateCount / (values.length || 1) > 0.6 || 
-      ((SEMANTIC_PATTERNS.date || []).some(p => colUpper.includes(p)) && !hasLeadingZeros)
+      dateCount / (values.length || 1) > 0.6 ||
+      ((SEMANTIC_PATTERNS.date || []).some(p => colUpper.includes(p)) && !hasLeadingZeros) ||
+      timeDimInfo.isTemporalDimension  // detecta MES_FATURAMENTO, ANO, PERIODO mesmo sem formato de data
     );
+
 
     // Dimensão semântica (cliente, fornecedor, vendedor, produto, filial, etc.)
     const isSemanticDimension = (SEMANTIC_PATTERNS.customer || []).some(p => colUpper.includes(p)) ||
@@ -272,6 +283,7 @@ export function analyzeSchema(rows, columns = []) {
       type,
       distinct: distinctSet.size,
       sampleValues: values,
+      timeDimInfo: timeDimInfo.isTemporalDimension ? timeDimInfo : undefined,
     };
   });
 
@@ -653,9 +665,21 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
     maxLabel = topEntityName ? `Produto Líder (${topEntityName})` : 'Produto Líder';
     maxSubtitle = topEntityName ? `Produto: ${topEntityName}` : '';
   } else if (topEntityName) {
-    maxLabel = `Maior Ocorrência (${topEntityName})`;
-    maxSubtitle = topEntityName;
+    // Verificar se a dimensão de fallback é temporal (MES_FATURAMENTO, ANO, etc.)
+    const dimTimeDimInfo = entityDim ? inferTimeDimensionType(entityDim) : { isTemporalDimension: false };
+    if (dimTimeDimInfo.isTemporalDimension) {
+      const humanValue = humanizeDimensionValue(entityDim, topEntityName);
+      const periodLabel = dimTimeDimInfo.granularity === 'year' ? 'Melhor Ano'
+        : dimTimeDimInfo.granularity === 'month_year' ? 'Melhor Período'
+        : 'Melhor Mês';
+      maxLabel = humanValue ? `${periodLabel} (${humanValue})` : periodLabel;
+      maxSubtitle = humanValue || topEntityName;
+    } else {
+      maxLabel = `Maior Ocorrência (${topEntityName})`;
+      maxSubtitle = topEntityName;
+    }
   }
+
 
   // 3. Montagem dos 4 KPIs com inteligência de domínio
   const isSalesContext = presentation.domain === 'sales' || schema.hasSeller || schema.hasProduct;
@@ -872,27 +896,45 @@ export function buildCharts(schema, rows) {
   // Se houver data: Gráfico de Linha / Tendência com ordenação cronológica estrita
   if (schema.hasDate) {
     const dateCol = schema.dateColumns[0];
+    const dateColProfile = (schema.columns || []).find(c => c.name === dateCol);
+    const isSemanticTemporal = !!dateColProfile?.timeDimInfo?.isTemporalDimension;
     const dateAgg = new Map();
 
     rows.forEach(r => {
       const rawDate = r[dateCol];
       if (rawDate === null || rawDate === undefined || rawDate === '') return;
-      const normalized = normalizeDateValue(rawDate);
-      if (!normalized.iso) return;
-
       const raw = r[measure];
       const val = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.')) || 0;
 
-      const existing = dateAgg.get(normalized.iso);
-      if (existing) {
-        existing.value += val;
+      if (isSemanticTemporal) {
+        // Dimensão temporal semântica (MES_FATURAMENTO='06', ANO='2025', PERIODO='202506')
+        // Usamos o valor raw como chave de agrupamento e humanizamos o label
+        const key = String(rawDate).trim();
+        const humanLabel = humanizeDimensionValue(dateCol, key);
+        const existing = dateAgg.get(key);
+        if (existing) {
+          existing.value += val;
+        } else {
+          // Timestamp para ordenação: para meses (01-12) ou anos (2025), converte para número
+          const sortKey = parseInt(key.replace(/\D/g, ''), 10) || 0;
+          dateAgg.set(key, { timestamp: sortKey, label: humanLabel, fullLabel: humanLabel, value: val });
+        }
       } else {
-        dateAgg.set(normalized.iso, {
-          timestamp: normalized.timestamp,
-          label: normalized.label,
-          fullLabel: normalized.fullLabel,
-          value: val,
-        });
+        // Data real com formato YYYYMMDD, YYYY-MM-DD, etc.
+        const normalized = normalizeDateValue(rawDate);
+        if (!normalized.iso) return;
+        const humanLabel = humanizeDimensionValue(dateCol, normalized.label) || normalized.label;
+        const existing = dateAgg.get(normalized.iso);
+        if (existing) {
+          existing.value += val;
+        } else {
+          dateAgg.set(normalized.iso, {
+            timestamp: normalized.timestamp,
+            label: humanLabel,
+            fullLabel: humanizeDimensionValue(dateCol, normalized.fullLabel) || normalized.fullLabel,
+            value: val,
+          });
+        }
       }
     });
 
@@ -914,6 +956,7 @@ export function buildCharts(schema, rows) {
       });
     }
   }
+
 
   // Gráficos por dimensão
   const dimCol = (schema.hasProduct && schema.semantics.product) ||
@@ -973,7 +1016,8 @@ export function buildCharts(schema, rows) {
                      entityKey === 'seller' ? 'Vendedor' :
                      entityKey === 'customer' ? 'Cliente' :
                      entityKey === 'supplier' ? 'Fornecedor' :
-                     (schema.hasGeographic && schema.semantics.geographic === dimCol) ? 'Região' : dimCol;
+                     (schema.hasGeographic && schema.semantics.geographic === dimCol) ? 'Região' :
+                     humanizeColumnName(dimCol); // humaniza nomes técnicos: MES_FATURAMENTO → Mês
 
     // Regra da Cardinalidade:
     // Poucos valores (<= 6) -> Donut / Pizza / Composição
@@ -1502,7 +1546,8 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
     domain: cashFlowData ? 'finance' : presentation.domain,
   };
 
-  analysisContext.executiveSummary = buildExecutiveChatSummary(analysisContext);
+  // Ponto E: narrativa executiva gerada pelo Presentation Intelligence Engine
+  analysisContext.executiveSummary = buildExecutiveNarrative(analysisContext);
 
   return analysisContext;
 }
