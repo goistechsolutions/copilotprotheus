@@ -17,7 +17,8 @@ class Settings(BaseModel):
     auth_mode: str = os.getenv("AUTH_MODE", "basic")
     timeout_seconds: int = int(os.getenv("TIMEOUT_SECONDS", "30"))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
-    ollama_url: str = os.getenv("OLLAMA_URL", "")
+    ollama_url: str = os.getenv("OLLAMA_URL") or os.getenv("OLLAMA_BASE_URL") or "http://host.docker.internal:11434"
+    ollama_base_url: str = os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL") or "http://host.docker.internal:11434"
     ollama_model: str = os.getenv("OLLAMA_MODEL", "gemma4:e4b")
     gemini_api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")

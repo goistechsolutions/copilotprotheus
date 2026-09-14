@@ -168,11 +168,47 @@ async def ask_gemini(
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429 or "quota" in e.response.text.lower() or "rate-limit" in e.response.text.lower():
+                logger.warning(
+                    "[Gemini] Quota excedida (Erro 429) no Google Gemini: %s. "
+                    "Ativando fallback automático para LLM Local (servidor Hetzner - Ollama)...",
+                    e.response.text[:200]
+                )
+                from app.services.ollama_client import ask_llm
+                return await ask_llm(
+                    question=question,
+                    protheus_data=protheus_data,
+                    intent=intent,
+                    context=context,
+                    history=history,
+                    image=image,
+                    allow_tools=allow_tools,
+                )
             if e.response.status_code == 503:
-                return "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
+                logger.warning("[Gemini] Erro 503 no Gemini. Ativando fallback para LLM Local (Hetzner)...")
+                from app.services.ollama_client import ask_llm
+                return await ask_llm(
+                    question=question,
+                    protheus_data=protheus_data,
+                    intent=intent,
+                    context=context,
+                    history=history,
+                    image=image,
+                    allow_tools=allow_tools,
+                )
             return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
         except httpx.RequestError as e:
-            return f"Erro de conexão com a API do Gemini: {str(e)}"
+            logger.warning("[Gemini] Erro de conexão com Gemini: %s. Ativando fallback para LLM Local (Hetzner)...", e)
+            from app.services.ollama_client import ask_llm
+            return await ask_llm(
+                question=question,
+                protheus_data=protheus_data,
+                intent=intent,
+                context=context,
+                history=history,
+                image=image,
+                allow_tools=allow_tools,
+            )
             
         resp_json = resp.json()
         
@@ -238,8 +274,23 @@ async def ask_gemini(
             
             # Segunda chamada para gerar a resposta baseada nos dados
             payload["contents"] = contents
-            resp2 = await client.post(url, json=payload)
-            resp2.raise_for_status()
+            try:
+                resp2 = await client.post(url, json=payload)
+                resp2.raise_for_status()
+            except httpx.HTTPStatusError as e2:
+                if e2.response.status_code == 429 or "quota" in e2.response.text.lower() or "rate-limit" in e2.response.text.lower():
+                    logger.warning("[Gemini] Erro 429 na resposta final da ferramenta. Ativando fallback para LLM Local (Hetzner)...")
+                    from app.services.ollama_client import ask_llm
+                    return await ask_llm(
+                        question=question,
+                        protheus_data=protheus_data,
+                        intent=intent,
+                        context=context,
+                        history=history,
+                        image=image,
+                        allow_tools=False,
+                    )
+                raise
             resp2_json = resp2.json()
             
             final_content = resp2_json.get("candidates", [{}])[0].get("content", {})
@@ -299,13 +350,53 @@ async def stream_gemini(
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429 or "quota" in e.response.text.lower() or "rate-limit" in e.response.text.lower():
+                logger.warning(
+                    "[Gemini Stream] Quota excedida (Erro 429) no Google Gemini: %s. "
+                    "Ativando fallback automático para LLM Local (servidor Hetzner - Ollama)...",
+                    e.response.text[:200]
+                )
+                from app.services.ollama_client import stream_llm
+                async for chunk in stream_llm(
+                    question=question,
+                    protheus_data=protheus_data,
+                    intent=intent,
+                    context=context,
+                    history=history,
+                    image=image,
+                    allow_tools=allow_tools,
+                ):
+                    yield chunk
+                return
             if e.response.status_code == 503:
-                yield "A inteligência artificial do Google (Gemini) está temporariamente indisponível ou sobrecarregada (Erro 503). Por favor, aguarde alguns instantes e tente novamente."
-            else:
-                yield f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
+                logger.warning("[Gemini Stream] Erro 503 no Gemini. Ativando fallback para LLM Local (Hetzner)...")
+                from app.services.ollama_client import stream_llm
+                async for chunk in stream_llm(
+                    question=question,
+                    protheus_data=protheus_data,
+                    intent=intent,
+                    context=context,
+                    history=history,
+                    image=image,
+                    allow_tools=allow_tools,
+                ):
+                    yield chunk
+                return
+            yield f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
             return
         except httpx.RequestError as e:
-            yield f"Erro de conexão com a API do Gemini: {str(e)}"
+            logger.warning("[Gemini Stream] Erro de conexão com Gemini (%s). Fallback para LLM Local...", e)
+            from app.services.ollama_client import stream_llm
+            async for chunk in stream_llm(
+                question=question,
+                protheus_data=protheus_data,
+                intent=intent,
+                context=context,
+                history=history,
+                image=image,
+                allow_tools=allow_tools,
+            ):
+                yield chunk
             return
             
         resp_json = resp.json()
@@ -372,51 +463,80 @@ async def stream_gemini(
         # Agora sim, fazemos o stream da resposta final
         stream_url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:streamGenerateContent?key={GEMINI_API_KEY}"
         
-        async with client.stream("POST", stream_url, json=payload) as stream_resp:
-            buffer = ""
-            async for chunk in stream_resp.aiter_text():
-                buffer += chunk
-                while True:
-                    start = buffer.find("{")
-                    if start == -1:
-                        buffer = ""
-                        break
-                    
-                    brace_count = 0
-                    in_string = False
-                    escape = False
-                    end = -1
-                    
-                    for i in range(start, len(buffer)):
-                        char = buffer[i]
-                        if escape:
-                            escape = False
-                            continue
-                        if char == "\\":
-                            escape = True
-                            continue
-                        if char == '"':
-                            in_string = not in_string
-                            continue
-                        if not in_string:
-                            if char == '{':
-                                brace_count += 1
-                            elif char == '}':
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    end = i
-                                    break
-                    
-                    if end != -1:
-                        json_str = buffer[start:end+1]
-                        buffer = buffer[end+1:]
-                        try:
-                            data = json.loads(json_str)
-                            chunk_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                            chunk_text = "".join([p.get("text", "") for p in chunk_parts if "text" in p])
-                            if chunk_text:
-                                yield chunk_text
-                        except Exception as e:
-                            logger.error(f"Erro ao parsear JSON no stream: {e}")
-                    else:
-                        break
+        try:
+            async with client.stream("POST", stream_url, json=payload) as stream_resp:
+                if stream_resp.status_code == 429:
+                    logger.warning("[Gemini Stream] 429 recebido em streamGenerateContent. Ativando fallback para LLM Local (Hetzner)...")
+                    from app.services.ollama_client import stream_llm
+                    async for chunk in stream_llm(
+                        question=question,
+                        protheus_data=protheus_data,
+                        intent=intent,
+                        context=context,
+                        history=history,
+                        image=image,
+                        allow_tools=False,
+                    ):
+                        yield chunk
+                    return
+
+                buffer = ""
+                async for chunk in stream_resp.aiter_text():
+                    buffer += chunk
+                    while True:
+                        start = buffer.find("{")
+                        if start == -1:
+                            buffer = ""
+                            break
+                        
+                        brace_count = 0
+                        in_string = False
+                        escape = False
+                        end = -1
+                        
+                        for i in range(start, len(buffer)):
+                            char = buffer[i]
+                            if escape:
+                                escape = False
+                                continue
+                            if char == "\\":
+                                escape = True
+                                continue
+                            if char == '"':
+                                in_string = not in_string
+                                continue
+                            if not in_string:
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        end = i
+                                        break
+                        
+                        if end != -1:
+                            json_str = buffer[start:end+1]
+                            buffer = buffer[end+1:]
+                            try:
+                                data = json.loads(json_str)
+                                chunk_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                                chunk_text = "".join([p.get("text", "") for p in chunk_parts if "text" in p])
+                                if chunk_text:
+                                    yield chunk_text
+                            except Exception as e:
+                                logger.error(f"Erro ao parsear JSON no stream: {e}")
+                        else:
+                            break
+        except Exception as e_stream:
+            logger.warning("[Gemini Stream] Falha durante streaming: %s. Ativando fallback para LLM Local (Hetzner)...", e_stream)
+            from app.services.ollama_client import stream_llm
+            async for chunk in stream_llm(
+                question=question,
+                protheus_data=protheus_data,
+                intent=intent,
+                context=context,
+                history=history,
+                image=image,
+                allow_tools=False,
+            ):
+                yield chunk

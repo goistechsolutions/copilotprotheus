@@ -70,7 +70,7 @@ _SENSITIVE_CONFIG_MARKERS = ("PASSWORD", "SECRET", "TOKEN", "API_KEY", "ACCESS_K
 _MANAGED_CONFIG_KEYS = {
     "R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME",
     "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_API_TOKEN", "HETZNER_API_TOKEN",
-    "LLM_BACKEND", "GEMINI_MODEL", "GEMINI_API_KEY", "OLLAMA_MODEL", "OLLAMA_BASE_URL",
+    "LLM_BACKEND", "GEMINI_MODEL", "GEMINI_API_KEY", "OLLAMA_MODEL", "OLLAMA_BASE_URL", "OLLAMA_URL",
 }
 _CONFIG_SENTINELS = {"configured", "not_configured"}
 
@@ -233,6 +233,12 @@ def update_config(update: ConfigUpdate, admin: str = Depends(verify_admin)):
     key_lower = key.lower()
     if hasattr(settings, key_lower):
         setattr(settings, key_lower, value)
+    if key_lower == "ollama_url":
+        setattr(settings, "ollama_base_url", value)
+        os.environ["OLLAMA_BASE_URL"] = value
+    elif key_lower == "ollama_base_url":
+        setattr(settings, "ollama_url", value)
+        os.environ["OLLAMA_URL"] = value
     return {"success": True, "message": f"Chave {key} atualizada."}
 
 

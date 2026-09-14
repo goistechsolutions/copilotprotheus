@@ -2,6 +2,7 @@
 import re
 import os
 import time
+import logging
 import httpx
 import json
 import base64
@@ -9,9 +10,67 @@ from typing import Optional
 from app.core.config import settings
 from app.services.protheus_service import descobrir_apis_protheus, execute_protheus_tool
 
-OLLAMA_URL   = settings.ollama_url
-OLLAMA_MODEL = settings.ollama_model
+logger = logging.getLogger("app.ollama")
+
+def get_ollama_url() -> str:
+    return (
+        os.getenv("OLLAMA_URL")
+        or os.getenv("OLLAMA_BASE_URL")
+        or getattr(settings, "ollama_url", "")
+        or getattr(settings, "ollama_base_url", "")
+        or "http://host.docker.internal:11434"
+    )
+
+def get_ollama_model() -> str:
+    return os.getenv("OLLAMA_MODEL") or getattr(settings, "ollama_model", "") or "gemma4:e4b"
+
+OLLAMA_URL   = get_ollama_url()
+OLLAMA_MODEL = get_ollama_model()
 LLM_BACKEND  = settings.llm_backend
+
+async def _get_active_ollama_url() -> str:
+    candidates = [
+        get_ollama_url(),
+        "http://host.docker.internal:11434",
+        "http://127.0.0.1:11434",
+        "http://localhost:11434",
+    ]
+    seen = set()
+    cleaned = []
+    for c in candidates:
+        if c and str(c).strip():
+            url = str(c).strip().rstrip("/")
+            if url not in seen:
+                seen.add(url)
+                cleaned.append(url)
+
+    for url in cleaned:
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                r = await client.get(f"{url}/api/tags")
+                if r.status_code == 200:
+                    return url
+        except Exception:
+            continue
+
+    return cleaned[0] if cleaned else "http://host.docker.internal:11434"
+
+async def _resolve_ollama_model(base_url: str) -> str:
+    configured = get_ollama_model()
+    try:
+        available = await _check_ollama_models(base_url)
+        if not available:
+            return configured
+        if configured in available:
+            return configured
+        base_name = configured.split(":")[0].lower()
+        for m in available:
+            if base_name in m.lower():
+                return m
+        logger.info("[Ollama] Modelo configurado '%s' não encontrado. Usando '%s' disponível.", configured, available[0])
+        return available[0]
+    except Exception:
+        return configured
 
 def _log_token_usage_background(tenant_id: str, request_type: str, prompt_tokens: int, completion_tokens: int, model_name: str):
     try:
@@ -192,10 +251,11 @@ def _build_messages(question, protheus_data, intent, context, history, image=Non
     return msgs
 
 
-async def _check_ollama_models() -> list:
+async def _check_ollama_models(base_url: str = None) -> list:
+    url = base_url or get_ollama_url()
     try:
         async with httpx.AsyncClient(timeout=3.0) as c:
-            r = await c.get(f"{OLLAMA_URL}/api/tags")
+            r = await c.get(f"{url}/api/tags")
             if r.status_code == 200:
                 return [m["name"] for m in r.json().get("models", [])]
     except Exception:
@@ -204,16 +264,17 @@ async def _check_ollama_models() -> list:
 
 
 def _fallback_response(models: list) -> str:
+    current_model = get_ollama_model()
     if not models:
         return (
             "**LLM offline** — nenhum modelo encontrado no Ollama.\n\n"
-            "Execute no PowerShell para ativar:\n"
-            "```\nollama pull mistral\n```\n"
-            "Apos o download (~4 GB) o assistente responde automaticamente."
+            "Execute no terminal do servidor Hetzner:\n"
+            "```\nollama pull gemma:2b\n```\n"
+            "Após o download o assistente responderá automaticamente."
         )
     return (
-        f"**Modelo '{OLLAMA_MODEL}' nao encontrado.**\n\n"
-        f"Modelos disponiveis: `{', '.join(models)}`\n\n"
+        f"**Modelo '{current_model}' nao encontrado.**\n\n"
+        f"Modelos disponiveis no Ollama: `{', '.join(models)}`\n\n"
         f"Edite `backend/.env` e defina:\n"
         f"```\nOLLAMA_MODEL={models[0]}\n```"
     )
@@ -300,40 +361,50 @@ def _analyze_tool_results(tool_results: list) -> str:
     return "empty"
 
 
-async def _call_ollama(messages: list, tenant_id: str = "default", context: Optional[dict] = None) -> str:
+async def _call_ollama(
+    messages: list, 
+    tenant_id: str = "default", 
+    context: Optional[dict] = None,
+    allow_tools: bool = True,
+) -> str:
     # Usar temperature personalizada do tenant, se existir
     temperature = 0.0
     if context and context.get("tenant_temperature") is not None:
         temperature = context["tenant_temperature"]
     
+    ollama_url = await _get_active_ollama_url()
+    ollama_model = await _resolve_ollama_model(ollama_url)
+
     async with httpx.AsyncClient(timeout=180.0) as client:
         payload = {
-            "model": OLLAMA_MODEL, 
+            "model": ollama_model, 
             "messages": messages, 
             "stream": False, 
             "keep_alive": 0,
-            "tools": TOOLS,
             "options": {
                 "temperature": temperature
             }
         }
-        resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+        if allow_tools:
+            payload["tools"] = TOOLS
+
+        resp = await client.post(f"{ollama_url}/api/chat", json=payload)
         if resp.status_code == 400:
             if "does not support tools" in resp.text:
-                print(f"Modelo {OLLAMA_MODEL} nao suporta tools. Fazendo fallback...")
+                logger.warning("[Ollama] Modelo %s não suporta tools. Fazendo fallback sem ferramentas...", ollama_model)
                 payload.pop("tools", None)
-                resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+                resp = await client.post(f"{ollama_url}/api/chat", json=payload)
                 resp.raise_for_status()
             else:
                 resp.raise_for_status()
         elif resp.status_code != 200:
-            print(f"Ollama API Error: {resp.status_code} - {resp.text}")
+            logger.error("[Ollama] Erro da API: %s - %s", resp.status_code, resp.text)
             resp.raise_for_status()
         
         resp_json = resp.json()
         message = resp_json.get("message", {})
         
-        if "tool_calls" in message and message["tool_calls"]:
+        if allow_tools and "tool_calls" in message and message["tool_calls"]:
             messages.append(message)
             tool_results = []
             for tool_call in message["tool_calls"]:
@@ -373,13 +444,11 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
                         "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
                     })
             elif analysis_result == "error":
-                tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
                     "role": "system",
                     "content": f"INSTRUCAO: A consulta no Protheus falhou com um ERRO. Retorne um JSON preenchendo o 'executive_summary' informando que ocorreu um erro ao consultar o ERP e tente descrever o erro em linguagem amigavel. NUNCA invente ou simule dados ficticios."
                 })
             else: # empty
-                tenant_name = context.get("company", "Empresa") if context else "Empresa"
                 messages.append({
                     "role": "system",
                     "content": f"INSTRUCAO: A consulta no Protheus retornou VAZIA (0 registros). Isso significa que nao ha dados para os filtros ou o periodo informado. Retorne um JSON preenchendo o 'executive_summary' informando exatamente que 'Não foram encontrados dados para esta consulta no ERP'. Não diga que 'a consulta retornou apenas a confirmação', diga apenas que não há dados no momento. NUNCA invente ou simule dados ficticios."
@@ -388,23 +457,25 @@ async def _call_ollama(messages: list, tenant_id: str = "default", context: Opti
             payload["messages"] = messages
             payload.pop("tools", None)
             
-            resp2 = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+            resp2 = await client.post(f"{ollama_url}/api/chat", json=payload)
             resp2.raise_for_status()
             r2_json = resp2.json()
             if "prompt_eval_count" in r2_json:
-                _log_token_usage_background(tenant_id, "chat_with_tools", r2_json.get("prompt_eval_count", 0), r2_json.get("eval_count", 0), OLLAMA_MODEL)
+                _log_token_usage_background(tenant_id, "chat_with_tools", r2_json.get("prompt_eval_count", 0), r2_json.get("eval_count", 0), ollama_model)
             return r2_json["message"]["content"]
             
         if "prompt_eval_count" in resp_json:
-            _log_token_usage_background(tenant_id, "chat", resp_json.get("prompt_eval_count", 0), resp_json.get("eval_count", 0), OLLAMA_MODEL)
+            _log_token_usage_background(tenant_id, "chat", resp_json.get("prompt_eval_count", 0), resp_json.get("eval_count", 0), ollama_model)
         return message.get("content", "")
 
 
 async def _call_ovms(messages: list) -> str:
+    ollama_url = await _get_active_ollama_url()
+    ollama_model = await _resolve_ollama_model(ollama_url)
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
-            f"{OLLAMA_URL}/v3/chat/completions",
-            json={"model": OLLAMA_MODEL, "messages": messages},
+            f"{ollama_url}/v3/chat/completions",
+            json={"model": ollama_model, "messages": messages},
             headers={"Content-Type": "application/json"}
         )
         resp.raise_for_status()
@@ -418,13 +489,14 @@ async def ask_llm(
     context: Optional[dict] = None,
     history: Optional[list] = None,
     image: Optional[str] = None,
+    allow_tools: bool = True,
 ) -> str:
     messages = _build_messages(question, protheus_data, intent, context, history, image)
     try:
         tenant_id = context.get("tenant_id", "default") if context else "default"
         if LLM_BACKEND == "ovms":
             return await _call_ovms(messages)
-        return await _call_ollama(messages, tenant_id=tenant_id, context=context)
+        return await _call_ollama(messages, tenant_id=tenant_id, context=context, allow_tools=allow_tools)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             models = await _check_ollama_models()
@@ -432,9 +504,9 @@ async def ask_llm(
         return f"Erro HTTP {e.response.status_code} ao chamar o LLM."
     except httpx.ConnectError:
         return (
-            "**LLM offline** — nao foi possivel conectar ao Ollama.\n\n"
-            "Verifique:\n"
-            "```\nInvoke-RestMethod http://localhost:11434\n```"
+            "**LLM offline** — nao foi possivel conectar ao Ollama no servidor Hetzner.\n\n"
+            "Verifique se o serviço Ollama está ativo no host:\n"
+            "```\nsystemctl status ollama\n```"
         )
     except Exception as e:
         return f"Erro inesperado: {str(e)}"
@@ -447,6 +519,7 @@ async def stream_llm(
     context: Optional[dict] = None,
     history: Optional[list] = None,
     image: Optional[str] = None,
+    allow_tools: bool = True,
 ):
     messages = _build_messages(question, protheus_data, intent, context, history, image)
     
@@ -454,25 +527,32 @@ async def stream_llm(
         yield await _call_ovms(messages)
         return
 
+    ollama_url = await _get_active_ollama_url()
+    ollama_model = await _resolve_ollama_model(ollama_url)
+
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
             payload = {
-                "model": OLLAMA_MODEL, 
+                "model": ollama_model, 
                 "messages": messages, 
                 "stream": False, 
                 "keep_alive": 0,
-                "tools": TOOLS,
                 "options": {
                     "temperature": 0.0
                 }
             }
+            if allow_tools:
+                payload["tools"] = TOOLS
             
-            resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+            resp = await client.post(f"{ollama_url}/api/chat", json=payload)
+            if resp.status_code == 400 and "does not support tools" in resp.text:
+                payload.pop("tools", None)
+                resp = await client.post(f"{ollama_url}/api/chat", json=payload)
             resp.raise_for_status()
             resp_json = resp.json()
             message = resp_json.get("message", {})
             
-            if "tool_calls" in message and message["tool_calls"]:
+            if allow_tools and "tool_calls" in message and message["tool_calls"]:
                 messages.append(message)
                 tool_results = []
                 for tool_call in message["tool_calls"]:
@@ -506,24 +586,17 @@ async def stream_llm(
                             "tool_call_id": tool_call_id
                         })
                 
-                if True:
-                    messages.append({
-                        "role": "system",
-                        "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
-                    })
-                else:
-                    tenant_name = context.get("company", "Empresa") if context else "Empresa"
-                    messages.append({
-                        "role": "system",
-                        "content": f"INSTRUCAO: A consulta no Protheus nao retornou nenhum dado real para a sua busca (tabela vazia, erro ou sem correspondencias). Retorne um JSON preenchendo apenas o 'executive_summary' informando que nao foram encontrados dados. NUNCA invente ou simule dados ficticios."
-                    })
+                messages.append({
+                    "role": "system",
+                    "content": "INSTRUCAO: Os dados acima sao REAIS do Protheus. Apresente os resultados RETORNANDO EXCLUSIVAMENTE UM JSON conforme detalhado em 'APRESENTACAO DO RESULTADO' no seu system prompt. O JSON deve conter executive_summary, kpis, details, etc."
+                })
                 
                 payload["messages"] = messages
                 payload.pop("tools", None)
             
             payload["stream"] = True
             
-            async with client.stream("POST", f"{OLLAMA_URL}/api/chat", json=payload) as stream_resp:
+            async with client.stream("POST", f"{ollama_url}/api/chat", json=payload) as stream_resp:
                 async for line in stream_resp.aiter_lines():
                     if not line:
                         continue
@@ -535,7 +608,7 @@ async def stream_llm(
                     except Exception:
                         pass
     except httpx.ConnectError:
-        yield "**LLM offline** — nao foi possivel conectar ao Ollama para streaming."
+        yield "**LLM offline** — nao foi possivel conectar ao Ollama no servidor Hetzner para streaming."
     except Exception as e:
         yield f"Erro inesperado no stream: {str(e)}"
 

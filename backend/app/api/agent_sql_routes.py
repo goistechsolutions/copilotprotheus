@@ -441,11 +441,14 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
 
-    backend_mode = "gemini"
+    backend_mode = getattr(settings, "llm_backend", "gemini")
+    raw_response = ""
 
-    try:
-        from app.services.gemini_client import ask_gemini
-        raw_response = await ask_gemini(
+    # 1. Se configurado explicitamente para Ollama / local
+    if str(backend_mode).lower() in ("ollama", "local"):
+        logger.info("[SQL Generator] Provedor configurado: LLM Local (Ollama - Hetzner).")
+        from app.services.ollama_client import ask_llm
+        raw_response = await ask_llm(
             question=user_query,
             protheus_data=None,
             intent="sql_generation",
@@ -458,21 +461,68 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
             image=image,
             allow_tools=False,
         )
-    except ProtheusServiceError as e:
-        status_code = e.status_code if e.status_code and 400 <= e.status_code <= 599 else 502
-        logger.error(
-            "[SQL Generator] Falha durante a geração/integração status=%s error_type=%s provider=%s",
-            status_code,
-            type(e).__name__,
-            backend_mode,
-        )
-        raise HTTPException(status_code=status_code, detail=str(e)) from e
-    except Exception as e:
-        logger.error("[SQL Generator] Falha ao acionar provedor LLM provider=%s error_type=%s", backend_mode, type(e).__name__)
-        raise HTTPException(
-            status_code=503,
-            detail=f"O serviço do provedor de IA ({backend_mode}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
-        ) from e
+    else:
+        # 2. Modo Gemini com fallback automático para Ollama
+        try:
+            from app.services.gemini_client import ask_gemini
+            raw_response = await ask_gemini(
+                question=user_query,
+                protheus_data=None,
+                intent="sql_generation",
+                context={
+                    "tenant_system_prompt": system_instruction,
+                    "tenant_id": tenant_id,
+                    "environment_code": environment_code,
+                },
+                history=history or [],
+                image=image,
+                allow_tools=False,
+            )
+        except Exception as e:
+            logger.warning("[SQL Generator] Falha ao acionar Gemini: %s. Ativando fallback para LLM Local (Hetzner)...", e)
+            from app.services.ollama_client import ask_llm
+            raw_response = await ask_llm(
+                question=user_query,
+                protheus_data=None,
+                intent="sql_generation",
+                context={
+                    "tenant_system_prompt": system_instruction,
+                    "tenant_id": tenant_id,
+                    "environment_code": environment_code,
+                },
+                history=history or [],
+                image=image,
+                allow_tools=False,
+            )
+
+        # 3. Se a resposta retornada contiver erro de quota 429 ou erro da API Gemini
+        if raw_response and (
+            "429" in raw_response
+            or "quota" in raw_response.lower()
+            or "rate-limit" in raw_response.lower()
+            or raw_response.startswith("Erro na API do Gemini:")
+            or raw_response.startswith("Erro de conexão com a API do Gemini:")
+            or raw_response.startswith("A inteligência artificial do Google")
+        ):
+            logger.warning(
+                "[SQL Generator] Gemini retornou erro de quota/indisponibilidade (%s). "
+                "Ativando fallback imediato para LLM Local (servidor Hetzner)...",
+                raw_response[:120]
+            )
+            from app.services.ollama_client import ask_llm
+            raw_response = await ask_llm(
+                question=user_query,
+                protheus_data=None,
+                intent="sql_generation",
+                context={
+                    "tenant_system_prompt": system_instruction,
+                    "tenant_id": tenant_id,
+                    "environment_code": environment_code,
+                },
+                history=history or [],
+                image=image,
+                allow_tools=False,
+            )
 
     if not raw_response or not isinstance(raw_response, str):
         raise HTTPException(status_code=500, detail="Provedor LLM retornou uma resposta vazia na geração de SQL.")
@@ -483,15 +533,19 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     # Sanitiza blocos de markdown ou comentários ao redor da query
     clean_sql = re.sub(r'```(?:sql)?|```', '', raw_response, flags=re.IGNORECASE).strip()
     
-    # Extrai estritamente a partir do SELECT e até o ponto-e-vírgula se aplicável
+    # Extrai estritamente a partir do SELECT ou WITH e até o ponto-e-vírgula se aplicável
+    with_idx = clean_sql.upper().find("WITH")
     sel_idx = clean_sql.upper().find("SELECT")
-    if sel_idx != -1:
+    if with_idx != -1 and (sel_idx == -1 or with_idx < sel_idx):
+        clean_sql = clean_sql[with_idx:].strip()
+    elif sel_idx != -1:
         clean_sql = clean_sql[sel_idx:].strip()
-        if clean_sql.endswith(";"):
-            clean_sql = clean_sql[:-1].strip()
     else:
-        # Se não há SELECT na resposta, provável alucinação ou erro
-        raise HTTPException(status_code=500, detail=f"O provedor LLM falhou ao gerar um SELECT válido. Resposta bruta: {raw_response}")
+        # Se não há SELECT nem WITH na resposta, provável alucinação ou erro
+        raise HTTPException(status_code=500, detail=f"O provedor LLM falhou ao gerar um SELECT/WITH válido. Resposta bruta: {raw_response}")
+
+    if ";" in clean_sql:
+        clean_sql = clean_sql.split(";")[0].strip()
 
     return clean_sql
 

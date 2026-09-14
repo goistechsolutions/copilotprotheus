@@ -1,10 +1,16 @@
+import os
+import time
+import asyncio
+import logging
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.services.gemini_client import ask_gemini
 from app.services.rag_service import RAGService
 from app.crud.knowledge_crud import KnowledgeCRUD
 from app.core.audit import AuditService
 from app.models.knowledge import Tenant
-import os, time, asyncio
+
+logger = logging.getLogger("app.assistant")
 
 class AssistantService:
     def __init__(self, db: Session):
@@ -97,28 +103,83 @@ class AssistantService:
                 }
 
         # 5. Generate Answer with Timeout (reduzido para evitar 504 do Cloudflare)
-        # Cloudflare tem hard limit de 100s. Vamos usar 75s para o principal e desistir se passar.
         timeout_sec = 75
         status_audit = "S"
         answer = ""
-        try:
-            answer = await asyncio.wait_for(
-                ask_gemini(
-                    question=question,
-                    protheus_data=protheus_data if protheus_data else None,
-                    intent=intent,
-                    context=ctx,
-                    history=history,
-                    image=payload.image,
-                ),
-                timeout=timeout_sec,
-            )
-        except asyncio.TimeoutError:
-            answer = "O serviço Gemini excedeu o tempo limite. A consulta não foi concluída."
-            status_audit = "T"
-        except Exception:
-            answer = "O serviço Gemini está temporariamente indisponível. A consulta não foi concluída."
-            status_audit = "E"
+        backend_used = getattr(settings, "llm_backend", "gemini")
+
+        if str(backend_used).lower() in ("ollama", "local"):
+            from app.services.ollama_client import ask_llm
+            try:
+                answer = await asyncio.wait_for(
+                    ask_llm(
+                        question=question,
+                        protheus_data=protheus_data if protheus_data else None,
+                        intent=intent,
+                        context=ctx,
+                        history=history,
+                        image=payload.image,
+                    ),
+                    timeout=timeout_sec,
+                )
+            except asyncio.TimeoutError:
+                answer = "O serviço LLM Local excedeu o tempo limite. A consulta não foi concluída."
+                status_audit = "T"
+            except Exception as e:
+                answer = f"O serviço LLM Local está temporariamente indisponível: {str(e)}"
+                status_audit = "E"
+        else:
+            try:
+                answer = await asyncio.wait_for(
+                    ask_gemini(
+                        question=question,
+                        protheus_data=protheus_data if protheus_data else None,
+                        intent=intent,
+                        context=ctx,
+                        history=history,
+                        image=payload.image,
+                    ),
+                    timeout=timeout_sec,
+                )
+            except asyncio.TimeoutError:
+                answer = "O serviço Gemini excedeu o tempo limite. A consulta não foi concluída."
+                status_audit = "T"
+            except Exception as e:
+                logger.warning("[Assistant] Falha ao acionar Gemini (%s). Fallback para LLM Local (Hetzner)...", e)
+                from app.services.ollama_client import ask_llm
+                try:
+                    backend_used = "ollama"
+                    answer = await asyncio.wait_for(
+                        ask_llm(
+                            question=question,
+                            protheus_data=protheus_data if protheus_data else None,
+                            intent=intent,
+                            context=ctx,
+                            history=history,
+                            image=payload.image,
+                        ),
+                        timeout=timeout_sec,
+                    )
+                except Exception:
+                    answer = "O serviço de inteligência artificial está temporariamente indisponível. A consulta não foi concluída."
+                    status_audit = "E"
+
+            # Se Gemini retornou texto de erro de quota/429
+            if answer and ("429" in answer or "quota" in answer.lower() or answer.startswith("Erro na API do Gemini:")):
+                logger.warning("[Assistant] Gemini retornou 429/quota. Ativando fallback para LLM Local (Hetzner)...")
+                from app.services.ollama_client import ask_llm
+                try:
+                    backend_used = "ollama"
+                    answer = await ask_llm(
+                        question=question,
+                        protheus_data=protheus_data if protheus_data else None,
+                        intent=intent,
+                        context=ctx,
+                        history=history,
+                        image=payload.image,
+                    )
+                except Exception as e_fb:
+                    logger.error("[Assistant] Falha no fallback para LLM Local: %s", e_fb)
         
         # Calcular volume de registros retornados do Protheus
         records_returned = 0
@@ -160,7 +221,7 @@ class AssistantService:
         return {
             "answer": answer,
             "intent": intent,
-            "backend": "gemini",
+            "backend": backend_used,
             "records_returned": records_returned,
             "response_time_ms": elapsed_ms,
             "status": status_audit,
@@ -218,26 +279,76 @@ class AssistantService:
 
         # 5. Generate Answer via stream generator
         full_answer = []
-        from app.services.gemini_client import stream_gemini
-        try:
-            async for token in stream_gemini(
-                question=question,
-                protheus_data=protheus_data if protheus_data else None,
-                intent=intent,
-                context=ctx,
-                history=history,
-                image=payload.image,
-            ):
-                full_answer.append(token)
-                yield token
-        except asyncio.TimeoutError:
-            error_message = "O serviço Gemini excedeu o tempo limite. A consulta não foi concluída."
-            full_answer.append(error_message)
-            yield error_message
-        except Exception:
-            error_message = "O serviço Gemini está temporariamente indisponível. A consulta não foi concluída."
-            full_answer.append(error_message)
-            yield error_message
+        target_backend = getattr(settings, "llm_backend", "gemini").lower()
+        if target_backend == "ollama":
+            from app.services.ollama_client import stream_llm
+            try:
+                async for token in stream_llm(
+                    question=question,
+                    protheus_data=protheus_data if protheus_data else None,
+                    intent=intent,
+                    context=ctx,
+                    history=history,
+                    image=payload.image,
+                ):
+                    full_answer.append(token)
+                    yield token
+            except Exception as e:
+                logger.error("[Assistant Stream] Erro no stream Ollama: %s", e)
+                error_message = "O serviço de inteligência artificial local está temporariamente indisponível. A consulta não foi concluída."
+                full_answer.append(error_message)
+                yield error_message
+        else:
+            from app.services.gemini_client import stream_gemini
+            try:
+                async for token in stream_gemini(
+                    question=question,
+                    protheus_data=protheus_data if protheus_data else None,
+                    intent=intent,
+                    context=ctx,
+                    history=history,
+                    image=payload.image,
+                ):
+                    full_answer.append(token)
+                    yield token
+            except asyncio.TimeoutError:
+                logger.warning("[Assistant Stream] Timeout no Gemini. Ativando fallback para LLM Local (Hetzner)...")
+                from app.services.ollama_client import stream_llm
+                try:
+                    async for token in stream_llm(
+                        question=question,
+                        protheus_data=protheus_data if protheus_data else None,
+                        intent=intent,
+                        context=ctx,
+                        history=history,
+                        image=payload.image,
+                    ):
+                        full_answer.append(token)
+                        yield token
+                except Exception as e_fb:
+                    logger.error("[Assistant Stream] Falha no fallback para LLM Local após timeout: %s", e_fb)
+                    error_message = "O serviço de inteligência artificial excedeu o tempo limite e o serviço local está indisponível."
+                    full_answer.append(error_message)
+                    yield error_message
+            except Exception as e:
+                logger.warning("[Assistant Stream] Erro no stream Gemini (%s). Fallback para LLM Local (Hetzner)...", e)
+                from app.services.ollama_client import stream_llm
+                try:
+                    async for token in stream_llm(
+                        question=question,
+                        protheus_data=protheus_data if protheus_data else None,
+                        intent=intent,
+                        context=ctx,
+                        history=history,
+                        image=payload.image,
+                    ):
+                        full_answer.append(token)
+                        yield token
+                except Exception as e_fb:
+                    logger.error("[Assistant Stream] Falha no fallback para LLM Local: %s", e_fb)
+                    error_message = "O serviço de inteligência artificial está temporariamente indisponível. A consulta não foi concluída."
+                    full_answer.append(error_message)
+                    yield error_message
 
         # 6. Audit Log após fim da geração
         answer = "".join(full_answer)
