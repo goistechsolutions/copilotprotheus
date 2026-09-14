@@ -241,11 +241,91 @@ export function classifyDataset(schema) {
   };
 }
 
+// ─── 3.1. Semântica de apresentação ─────────────────────────────────────────
+// O dashboard não pode chamar toda medida numérica de "faturamento". A
+// intenção/domínio e o nome físico da medida são as únicas evidências
+// disponíveis nesta camada; na ausência delas, usamos um rótulo neutro.
+const PRESENTATION_ALIASES = {
+  cash_flow: 'finance',
+  receivables: 'finance',
+  payables: 'finance',
+  sales_billing: 'sales',
+  billing: 'sales',
+  finance: 'finance',
+  sales: 'sales',
+};
+
+function normalizePresentationContext(context = {}) {
+  const source = context?.metadata || context?.semantic || context || {};
+  const rawIntent = String(source.intent || source.intent_code || '').trim().toLowerCase();
+  const rawDomain = String(source.domain || source.domain_code || '').trim().toLowerCase();
+  const intent = rawIntent || null;
+  const domain = PRESENTATION_ALIASES[rawIntent] || rawDomain || null;
+
+  return {
+    intent,
+    domain,
+    measureLabel: source.measureLabel || source.measure_label || null,
+    measureFormat: source.measureFormat || source.measure_format || null,
+  };
+}
+
+function humanizeMeasureName(measure) {
+  return String(measure || 'medida')
+    .replace(/^(TOTAL_|VALOR_|SUM_|AVG_)/i, '')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function inferPresentationDomain(schema) {
+  const columns = (schema?.columns || []).map(column => String(column.name || '').toUpperCase());
+  const hasFinanceEvidence = columns.some(column =>
+    /^(E1|E2|E5)(_|$)/.test(column) || /(RECEB|A_RECEBER|PAGAR|A_PAGAR|SALDO_FINANCEIRO)/.test(column)
+  );
+  const hasSalesEvidence = columns.some(column =>
+    /^(F2|D2|C5|C6)(_|$)/.test(column) || /FATURAMENTO|VALOR_FATURADO/.test(column)
+  );
+
+  if (hasFinanceEvidence && !hasSalesEvidence) return 'finance';
+  if (hasSalesEvidence && !hasFinanceEvidence) return 'sales';
+  return null;
+}
+
+function resolveMeasurePresentation(schema, context = {}) {
+  const explicitPresentation = normalizePresentationContext(context);
+  const presentation = {
+    ...explicitPresentation,
+    domain: explicitPresentation.domain || inferPresentationDomain(schema),
+  };
+  const measure = schema?.primaryMeasure || '';
+  const upperMeasure = String(measure).toUpperCase();
+  const isCurrencyMeasure = /(VALOR|FATUR|RECEITA|SALDO|PRECO|CUSTO|LUCRO|TOTAL)/.test(upperMeasure);
+
+  let label = presentation.measureLabel;
+  if (!label) {
+    if (presentation.domain === 'finance' || presentation.intent === 'cash_flow' || presentation.intent === 'finance') {
+      if (/(RECEB|RECEIVER|A_RECEBER)/.test(upperMeasure)) label = 'Total a receber';
+      else if (/(PAGAR|PAGAMENTO|A_PAGAR)/.test(upperMeasure)) label = 'Total a pagar';
+      else if (upperMeasure.includes('SALDO')) label = 'Saldo financeiro';
+      else label = 'Total financeiro analisado';
+    } else if (presentation.domain === 'sales') {
+      label = 'Faturamento total';
+    } else {
+      label = `Total de ${humanizeMeasureName(measure)}`;
+    }
+  }
+
+  const format = presentation.measureFormat || (isCurrencyMeasure ? 'currency' : 'number');
+  return { ...presentation, label, format };
+}
+
 // ─── 4. Fábrica de KPIs e Insights Adaptativos ────────────────────────────────
-export function buildKPIs(schema, rows) {
+export function buildKPIs(schema, rows, presentationContext = {}) {
   if (!rows || rows.length === 0 || !schema.primaryMeasure) return [];
 
   const measure = schema.primaryMeasure;
+  const presentation = resolveMeasurePresentation(schema, presentationContext);
   let total = 0;
   let min = Infinity;
   let max = -Infinity;
@@ -267,21 +347,21 @@ export function buildKPIs(schema, rows) {
 
   const kpis = [
     {
-      label: 'Total Acumulado',
+      label: presentation.label,
       value: total,
-      format: 'currency',
+      format: presentation.format,
       type: 'sum',
     },
     {
       label: 'Média por Registro',
       value: avg,
-      format: 'currency',
+      format: presentation.format,
       type: 'avg',
     },
     {
-      label: 'Maior Ocorrência',
+      label: presentation.format === 'currency' ? 'Maior Ocorrência' : 'Maior Valor',
       value: max === -Infinity ? 0 : max,
-      format: 'currency',
+      format: presentation.format,
       type: 'max',
     },
     {
@@ -482,6 +562,7 @@ export function buildExecutiveChatSummary(context) {
   const leaderItem = barChart?.data?.[0];
   const leaderLabel = leaderItem?.label || leaderItem?.name;
   const leaderValue = leaderItem?.value;
+  const presentation = resolveMeasurePresentation(schema, context);
 
   const entitySingular = schema.hasSeller ? 'Vendedor líder' :
                          schema.hasCustomer ? 'Cliente líder' :
@@ -497,14 +578,16 @@ export function buildExecutiveChatSummary(context) {
 
   if (totalKpi) {
     const formattedTotal = totalKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    parts.push(`• **Faturamento total:** R$ ${formattedTotal}`);
+    const totalValue = totalKpi.format === 'currency' ? `R$ ${formattedTotal}` : formattedTotal;
+    parts.push(`• **${presentation.label}:** ${totalValue}`);
   }
 
   if (leaderLabel && leaderValue != null) {
     const formattedLeaderVal = typeof leaderValue === 'number'
       ? leaderValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : leaderValue;
-    parts.push(`• **${entitySingular}:** ${leaderLabel} (R$ ${formattedLeaderVal})`);
+    const leaderValueText = totalKpi?.format === 'currency' ? `R$ ${formattedLeaderVal}` : formattedLeaderVal;
+    parts.push(`• **${entitySingular}:** ${leaderLabel} (${leaderValueText})`);
   }
 
   parts.push(`• **Volume:** ${count} ${entityPlural} analisados`);
@@ -513,14 +596,15 @@ export function buildExecutiveChatSummary(context) {
 }
 
 // ─── 8. Pipeline Orquestrador Adaptativo ──────────────────────────────────────
-export function buildAdaptiveDashboard(rows, columns = []) {
+export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {}) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return null;
   }
 
   const schema = analyzeSchema(rows, columns);
   const classification = classifyDataset(schema);
-  const kpis = buildKPIs(schema, rows);
+  const presentation = resolveMeasurePresentation(schema, semanticContext);
+  const kpis = buildKPIs(schema, rows, semanticContext);
   const insights = buildInsights(schema, rows);
   const charts = buildCharts(schema, rows);
 
@@ -544,6 +628,9 @@ export function buildAdaptiveDashboard(rows, columns = []) {
     schema,
     suggestions,
     data: contextData,
+    presentation,
+    intent: presentation.intent,
+    domain: presentation.domain,
   };
 
   analysisContext.executiveSummary = buildExecutiveChatSummary(analysisContext);
