@@ -18,6 +18,7 @@ export function PromptInput() {
     setProcessingStep,
     pendingPrompt,
     clearPendingPrompt,
+    currentDashboard,
   } = useDashboardStore();
   const controllerRef = useRef(null);
 
@@ -122,6 +123,8 @@ export function PromptInput() {
                 : null;
           const semanticContext = {
             ...(result.metadata || {}),
+            originPrompt: text,
+            prompt: text,
             intent: result.intent || result.metadata?.intent || null,
             domain: result.domain || result.metadata?.domain || promptDomain,
             measureFormat: result.metadata?.measureFormat || result.kpis?.[0]?.format || null,
@@ -160,6 +163,10 @@ export function PromptInput() {
             dashboard: adaptive,
             timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           });
+          // Se o usuário já estiver com um dashboard aberto em tela cheia, atualiza-o imediatamente
+          if (currentDashboard) {
+            setDashboard(adaptive);
+          }
         }
       }
     } catch (error) {

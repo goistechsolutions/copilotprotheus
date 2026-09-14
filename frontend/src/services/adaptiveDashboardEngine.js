@@ -19,6 +19,9 @@ const SEMANTIC_PATTERNS = {
   seller: [
     'VENDEDOR', 'REPRESENTANTE', 'A3_COD', 'A3_NOME', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'NOME_VENDEDOR'
   ],
+  product: [
+    'PRODUTO', 'PROD', 'COD_PRODUTO', 'B1_COD', 'B1_DESC', 'DESCRICAO', 'DESCR', 'ITEM', 'D2_COD', 'D1_COD'
+  ],
   branch: [
     'FILIAL', 'LOJA', 'FIL', 'F2_FILIAL', 'D2_FILIAL', 'E1_FILIAL', 'E2_FILIAL'
   ],
@@ -62,7 +65,7 @@ function isIdentifierColumn(colName) {
 }
 
 function hasLeadingZeroCodes(sampleValues) {
-  return sampleValues.some(v => typeof v === 'string' && /^0\d+$/.test(v.trim()));
+  return (sampleValues || []).some(v => typeof v === 'string' && /^0\d+$/.test(v.trim()));
 }
 
 // ─── 2. Detecção de Tipo de Coluna ───────────────────────────────────────────
@@ -112,20 +115,21 @@ export function analyzeSchema(rows, columns = []) {
 
     const hasLeadingZeros = hasLeadingZeroCodes(values);
     const isIdCol = isIdentifierColumn(col);
-    const hasMeasureKeyword = SEMANTIC_PATTERNS.measure.some(p => colUpper.includes(p));
+    const hasMeasureKeyword = (SEMANTIC_PATTERNS.measure || []).some(p => colUpper.includes(p));
 
     // Data só é válida se tiver formato ou padrão de data e NÃO for identificador
     const isDate = !isIdCol && (
       dateCount / (values.length || 1) > 0.6 || 
-      (SEMANTIC_PATTERNS.date.some(p => colUpper.includes(p)) && !hasLeadingZeros)
+      ((SEMANTIC_PATTERNS.date || []).some(p => colUpper.includes(p)) && !hasLeadingZeros)
     );
 
-    // Dimensão semântica (cliente, vendedor, produto, filial, etc.)
-    const isSemanticDimension = SEMANTIC_PATTERNS.customer.some(p => colUpper.includes(p)) ||
-                                SEMANTIC_PATTERNS.seller.some(p => colUpper.includes(p)) ||
-                                SEMANTIC_PATTERNS.product.some(p => colUpper.includes(p)) ||
-                                SEMANTIC_PATTERNS.branch.some(p => colUpper.includes(p)) ||
-                                SEMANTIC_PATTERNS.geographic.some(p => colUpper.includes(p));
+    // Dimensão semântica (cliente, fornecedor, vendedor, produto, filial, etc.)
+    const isSemanticDimension = (SEMANTIC_PATTERNS.customer || []).some(p => colUpper.includes(p)) ||
+                                (SEMANTIC_PATTERNS.supplier || []).some(p => colUpper.includes(p)) ||
+                                (SEMANTIC_PATTERNS.seller || []).some(p => colUpper.includes(p)) ||
+                                (SEMANTIC_PATTERNS.product || []).some(p => colUpper.includes(p)) ||
+                                (SEMANTIC_PATTERNS.branch || []).some(p => colUpper.includes(p)) ||
+                                (SEMANTIC_PATTERNS.geographic || []).some(p => colUpper.includes(p));
 
     // Medida:
     // 1. Tem palavra-chave de medida (ex: VALOR_TOTAL_VENDAS) e não tem zeros à esquerda de código
@@ -147,6 +151,7 @@ export function analyzeSchema(rows, columns = []) {
   // Detectar semântica
   const semantics = {};
   for (const [semKey, patterns] of Object.entries(SEMANTIC_PATTERNS)) {
+    if (!Array.isArray(patterns)) continue;
     const matchedCol = columnProfiles.find(c => {
       const upper = c.name.toUpperCase();
       return patterns.some(p => upper === p || upper.includes(p));
@@ -197,17 +202,18 @@ export function analyzeSchema(rows, columns = []) {
 export function classifyDataset(schema, context = {}) {
   const prompt = String(context.originPrompt || context.prompt || '').toLowerCase();
   const isOverdue = /vencid|atras|inadimpl/i.test(prompt);
-  const isReceivable = /receb|e1_/i.test(prompt) || (schema.columns || []).some(c => (c.name || '').toUpperCase().startsWith('E1_'));
-  const isPayable = /pagar|pagam|e2_/i.test(prompt) || (schema.columns || []).some(c => (c.name || '').toUpperCase().startsWith('E2_'));
+  const cols = Array.isArray(schema?.columns) ? schema.columns : [];
+  const isReceivable = /receb|e1_/i.test(prompt) || cols.some(c => (String(c?.name || c || '')).toUpperCase().startsWith('E1_'));
+  const isPayable = /pagar|pagam|e2_/i.test(prompt) || cols.some(c => (String(c?.name || c || '')).toUpperCase().startsWith('E2_'));
 
   // Classificações financeiras especializadas
   if (isOverdue && isReceivable) {
     return { datasetType: 'overdue_receivables', confidence: 0.95 };
   }
-  if (isReceivable && !isPayable && (schema.hasCustomer || schema.hasDate)) {
+  if (isReceivable && !isPayable && (schema?.hasCustomer || schema?.hasDate)) {
     return { datasetType: 'accounts_receivable', confidence: 0.92 };
   }
-  if (isPayable && !isReceivable && (schema.hasSupplier || schema.hasDate)) {
+  if (isPayable && !isReceivable && (schema?.hasSupplier || schema?.hasDate)) {
     return { datasetType: 'accounts_payable', confidence: 0.92 };
   }
 
@@ -221,29 +227,30 @@ export function classifyDataset(schema, context = {}) {
   };
 
   // Se houver data REAL, pontua time_series
-  if (schema.hasDate) {
+  if (schema?.hasDate) {
     scores.time_series += 80;
   }
   
   // Vendedor ou Cliente -> Ranking
-  if (schema.hasSeller) scores.seller_ranking += 90;
-  if (schema.hasCustomer) scores.customer_ranking += 85;
-  if (schema.hasProduct) scores.product_analysis += 85;
-  if (schema.hasGeographic) scores.geographic_distribution += 85;
+  if (schema?.hasSeller) scores.seller_ranking += 90;
+  if (schema?.hasCustomer) scores.customer_ranking += 85;
+  if (schema?.hasSupplier) scores.customer_ranking += 85;
+  if (schema?.hasProduct) scores.product_analysis += 85;
+  if (schema?.hasGeographic) scores.geographic_distribution += 85;
 
   // Cardinalidade para composição
-  const singleDim = schema.columns.find(c => c.type === 'dimension');
-  if (singleDim && singleDim.distinct > 1 && singleDim.distinct <= 6 && !schema.hasDate) {
+  const singleDim = cols.find(c => c?.type === 'dimension');
+  if (singleDim && singleDim.distinct > 1 && singleDim.distinct <= 6 && !schema?.hasDate) {
     scores.composition += 70;
   }
 
   // Se houver data E entidade, time_series ganha bônus
-  if (schema.hasDate && (schema.hasCustomer || schema.hasProduct || schema.hasSeller)) {
+  if (schema?.hasDate && (schema?.hasCustomer || schema?.hasSupplier || schema?.hasProduct || schema?.hasSeller)) {
     scores.time_series += 20;
   }
 
   // Se NÃO houver data, zera time_series
-  if (!schema.hasDate) {
+  if (!schema?.hasDate) {
     scores.time_series = 0;
   }
 
@@ -310,7 +317,8 @@ function humanizeMeasureName(measure) {
 }
 
 function inferPresentationDomain(schema) {
-  const columns = (schema?.columns || []).map(column => String(column.name || '').toUpperCase());
+  const cols = Array.isArray(schema?.columns) ? schema.columns : [];
+  const columns = cols.map(column => String(column?.name || column || '').toUpperCase());
   const hasFinanceEvidence = columns.some(column =>
     /^(E1|E2|E5)(_|$)/.test(column) || /(RECEB|A_RECEBER|PAGAR|A_PAGAR|SALDO_FINANCEIRO)/.test(column)
   );
@@ -531,9 +539,9 @@ export function buildCharts(schema, rows) {
   }
 
   // Gráficos por dimensão
-  const dimCol = schema.semantics.seller || schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
+  const dimCol = schema.semantics.seller || schema.semantics.customer || schema.semantics.supplier || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
   if (dimCol) {
-    const dimProfile = schema.columns.find(c => c.name === dimCol);
+    const dimProfile = (schema.columns || []).find(c => c.name === dimCol);
     const distinctCount = dimProfile?.distinct || 10;
 
     const aggMap = new Map();
@@ -550,6 +558,7 @@ export function buildCharts(schema, rows) {
 
     const dimLabel = schema.semantics.seller === dimCol ? 'Vendedor' :
                      schema.semantics.customer === dimCol ? 'Cliente' :
+                     schema.semantics.supplier === dimCol ? 'Fornecedor' :
                      schema.semantics.product === dimCol ? 'Produto' :
                      schema.semantics.geographic === dimCol ? 'Região' : dimCol;
 
@@ -645,17 +654,18 @@ export function detectCashFlow(schema, rows, semanticContext = {}) {
 
   // 2. Fallback: Procura por nome de coluna
   if (!typeCol) {
-    const typeCols = (schema.columns || []).filter(c => {
-      const upper = (c.name || '').toUpperCase();
-      return SEMANTIC_PATTERNS.cashFlowType.some(p => upper === p || upper.includes(p));
+    const cols = Array.isArray(schema?.columns) ? schema.columns : [];
+    const typeCols = cols.filter(c => {
+      const upper = (String(c?.name || c || '')).toUpperCase();
+      return (SEMANTIC_PATTERNS.cashFlowType || []).some(p => upper === p || upper.includes(p));
     });
-    if (typeCols.length > 0) typeCol = typeCols[0].name;
+    if (typeCols.length > 0) typeCol = typeCols[0].name || typeCols[0];
   }
 
   if (!typeCol) return null;
 
   // Coluna de valor/medida
-  let measure = schema.primaryMeasure;
+  let measure = schema?.primaryMeasure;
   if (!measure) {
     for (const k of Object.keys(rows[0] || {})) {
       const upper = k.toUpperCase();
@@ -668,11 +678,11 @@ export function detectCashFlow(schema, rows, semanticContext = {}) {
   if (!measure) return null;
 
   // Coluna de data
-  let dateCol = schema.dateColumns?.[0] || null;
+  let dateCol = schema?.dateColumns?.[0] || null;
   if (!dateCol) {
     for (const k of Object.keys(rows[0] || {})) {
       const upper = k.toUpperCase();
-      if (SEMANTIC_PATTERNS.date.some(p => upper.includes(p)) || isDateColumn(k, rows)) {
+      if ((SEMANTIC_PATTERNS.date || []).some(p => upper.includes(p)) || isDateColumn(k, rows)) {
         dateCol = k;
         break;
       }
@@ -967,12 +977,14 @@ export function buildExecutiveChatSummary(context) {
 
   const entitySingular = schema.hasSeller ? 'Vendedor líder' :
                          schema.hasCustomer ? 'Cliente líder' :
+                         schema.hasSupplier ? 'Fornecedor líder' :
                          schema.hasProduct ? 'Produto líder' :
                          schema.hasGeographic ? 'Região líder' :
                          schema.dimensions?.length ? 'Dimensão de maior valor' : 'Maior ocorrência';
 
   const entityPlural = schema.hasSeller ? 'vendedores' :
                        schema.hasCustomer ? 'clientes' :
+                       schema.hasSupplier ? 'fornecedores' :
                        schema.hasProduct ? 'produtos' :
                        schema.hasGeographic ? 'regiões' : 'registros';
 
