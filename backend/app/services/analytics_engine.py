@@ -140,11 +140,20 @@ class AnalyticsEngine:
                 break
         
         dimension_key = None
-        for key in data_items[0].keys():
-            upper_key = key.upper()
-            if any(d in upper_key for d in schema["dimensions"]):
-                dimension_key = key
-                break
+        # Prioritizar colunas de nome/descrição sobre códigos/IDs para rótulos em gráficos e top_items
+        name_keys = [
+            k for k in data_items[0].keys() 
+            if any(p in k.upper() for p in ["NOME", "NOM", "DESC", "DESCRICAO", "RAZAO", "VENDEDOR", "CLIENTE", "FORNECEDOR", "PRODUTO"])
+            and not any(p in k.upper() for p in ["COD", "CODIGO", "ID"])
+        ]
+        if name_keys:
+            dimension_key = name_keys[0]
+        else:
+            for key in data_items[0].keys():
+                upper_key = key.upper()
+                if any(d in upper_key for d in schema["dimensions"]):
+                    dimension_key = key
+                    break
         
         if not measure_key:
             for key, val in data_items[0].items():

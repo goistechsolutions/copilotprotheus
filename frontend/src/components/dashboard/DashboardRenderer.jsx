@@ -189,7 +189,9 @@ export default function DashboardRenderer({ payload }) {
     return s;
   };
 
-  const getKpiIcon = (type) => {
+  const getKpiIcon = (type, label = '') => {
+    const l = String(label).toLowerCase();
+    if (l.includes('pedido') || l.includes('doc') || l.includes('nota')) return ShoppingCart;
     switch (type) {
       case 'receber': return DollarSign;
       case 'pagar': return DollarSign;
@@ -197,7 +199,8 @@ export default function DashboardRenderer({ payload }) {
       case 'sum': return DollarSign;
       case 'avg': return TrendingUp;
       case 'max': return Award;
-      case 'count': return Users;
+      case 'count': return (l.includes('vendedor') || l.includes('cliente') || l.includes('fornecedor')) ? Users : ShoppingCart;
+      case 'percent': return Percent;
       default: return BarChart3;
     }
   };
@@ -211,6 +214,7 @@ export default function DashboardRenderer({ payload }) {
       case 'avg': return 'emerald';
       case 'max': return 'amber';
       case 'count': return 'purple';
+      case 'percent': return 'indigo';
       default: return 'blue';
     }
   };
@@ -376,12 +380,13 @@ export default function DashboardRenderer({ payload }) {
             <MetricCard 
               key={idx}
               title={formatLabel(kpi.label)} 
+              subtitle={kpi.subtitle}
               value={kpi.format === 'currency' 
                 ? `R$ ${kpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
                 : kpi.format === 'percent'
                 ? `${kpi.value.toFixed(1)}%`
                 : kpi.value.toLocaleString('pt-BR')} 
-              icon={getKpiIcon(kpi.type)} 
+              icon={getKpiIcon(kpi.type, kpi.label)} 
               color={getKpiColor(kpi.type)} 
             />
           ))}

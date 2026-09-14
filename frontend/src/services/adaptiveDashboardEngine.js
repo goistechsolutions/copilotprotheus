@@ -17,26 +17,26 @@ const SEMANTIC_NAME_PATTERNS = {
     'NOMFOR', 'E2_NOMFOR', 'NOME_FORNECEDOR', 'A2_NOME', 'A2_NREDUZ', 'FORNECEDOR_NOME', 'NOM_FORNECEDOR', 'RAZAO_SOCIAL', 'NOME_FORN'
   ],
   seller: [
-    'NOME_VENDEDOR', 'A3_NOME', 'A3_NREDUZ', 'VENDEDOR_NOME', 'NOM_VENDEDOR', 'REPRESENTANTE_NOME', 'NOME_VEND'
+    'NOME_VENDEDOR', 'A3_NOME', 'A3_NREDUZ', 'VENDEDOR_NOME', 'NOM_VENDEDOR', 'REPRESENTANTE_NOME', 'NOME_VEND', 'VENDEDOR', 'REPRESENTANTE'
   ],
   product: [
-    'B1_DESC', 'DESCRICAO', 'DESCR', 'DESC_PRODUTO', 'NOME_PRODUTO', 'PRODUTO_DESC', 'DESC'
+    'B1_DESC', 'DESCRICAO', 'DESCR', 'DESC_PRODUTO', 'NOME_PRODUTO', 'PRODUTO_DESC', 'DESC', 'PRODUTO'
   ],
 };
 
 // Padrões de códigos/identificadores (usados como fallback quando não há coluna de nome)
 const SEMANTIC_CODE_PATTERNS = {
   customer: [
-    'E1_CLIENTE', 'A1_COD', 'COD_CLIENTE', 'COD_CLI', 'CODIGO_CLIENTE', 'F2_CLIENTE', 'CLIENTE', 'CLIENT'
+    'E1_CLIENTE', 'A1_COD', 'COD_CLIENTE', 'COD_CLI', 'CODIGO_CLIENTE', 'F2_CLIENTE', 'COD_CLI'
   ],
   supplier: [
-    'E2_FORNECE', 'A2_COD', 'COD_FORNECEDOR', 'COD_FORN', 'CODIGO_FORNECEDOR', 'FORNECEDOR', 'FORNECE'
+    'E2_FORNECE', 'A2_COD', 'COD_FORNECEDOR', 'COD_FORN', 'CODIGO_FORNECEDOR', 'F1_FORNECE', 'FORNECE'
   ],
   seller: [
-    'A3_COD', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'COD_VEND', 'VENDEDOR'
+    'A3_COD', 'COD_VENDEDOR', 'CODIGO_VENDEDOR', 'COD_VEND', 'F2_VEND1', 'F2_VEND', 'C5_VEND1', 'C5_VEND', 'D2_VENDEDOR', 'COD_REPR'
   ],
   product: [
-    'B1_COD', 'D2_COD', 'D1_COD', 'COD_PRODUTO', 'COD_PROD', 'CODIGO_PRODUTO', 'ITEM', 'PRODUTO', 'PROD'
+    'B1_COD', 'D2_COD', 'D1_COD', 'COD_PRODUTO', 'COD_PROD', 'CODIGO_PRODUTO', 'ITEM'
   ],
 };
 
@@ -133,6 +133,26 @@ export function normalizeDateValue(rawDate) {
     fullLabel: s,
     iso: s,
   };
+}
+
+/**
+ * Avalia amostra de valores de uma coluna para verificar se são nomes/textos reais
+ * ou se são códigos/identificadores numéricos/alfanuméricos curtos.
+ */
+export function isLikelyTextName(values) {
+  if (!values || values.length === 0) return false;
+  let textCount = 0;
+  let codeCount = 0;
+  values.forEach(v => {
+    const s = String(v).trim();
+    if (!s) return;
+    if (/^\d+$/.test(s) || (s.length <= 6 && /^[0-9A-Z]+$/.test(s) && !/[a-zA-Z]{4,}/.test(s))) {
+      codeCount++;
+    } else if (/[a-zA-ZÀ-ÿ]{3,}/.test(s)) {
+      textCount++;
+    }
+  });
+  return textCount > codeCount;
 }
 
 
@@ -239,10 +259,11 @@ export function analyzeSchema(rows, columns = []) {
       name: col,
       type,
       distinct: distinctSet.size,
+      sampleValues: values,
     };
   });
 
-  // Detectar semântica com priorização de colunas de NOME sobre CÓDIGO
+  // Detectar semântica com priorização estrita de colunas de NOME sobre CÓDIGO
   const semantics = {};
   const semanticCategories = ['customer', 'supplier', 'seller', 'product', 'branch', 'date', 'geographic', 'measure', 'cashFlowType'];
 
@@ -251,14 +272,20 @@ export function analyzeSchema(rows, columns = []) {
     const codePatterns = SEMANTIC_CODE_PATTERNS[semKey] || SEMANTIC_PATTERNS[semKey] || [];
 
     if (namePatterns) {
-      // 1. Procura primeiro coluna com nome/descrição da entidade (ex: E1_NOMCLI, A1_NOME, NOME_CLIENTE)
+      // 1. Procura primeiro coluna com nome/descrição da entidade (ex: E1_NOMCLI, A1_NOME, NOME_CLIENTE, SA3.A3_NOME)
       const matchedNameCol = columnProfiles.find(c => {
         const upper = c.name.toUpperCase();
+        if (['VENDEDOR', 'CLIENTE', 'FORNECEDOR', 'PRODUTO'].includes(upper)) {
+          return isLikelyTextName(c.sampleValues);
+        }
         return namePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`) || upper.includes(p));
       });
       // 2. Procura coluna com código/ID da entidade
       const matchedCodeCol = columnProfiles.find(c => {
         const upper = c.name.toUpperCase();
+        if (['VENDEDOR', 'CLIENTE', 'FORNECEDOR', 'PRODUTO'].includes(upper)) {
+          return !isLikelyTextName(c.sampleValues);
+        }
         return codePatterns.some(p => upper === p || upper.startsWith(`${p}_`) || upper.endsWith(`_${p}`) || upper.includes(`_${p}_`) || upper.includes(p));
       });
 
@@ -495,6 +522,7 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
   let total = 0;
   let min = Infinity;
   let max = -Infinity;
+  let maxRow = null;
   const values = [];
 
   rows.forEach(r => {
@@ -504,12 +532,126 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
       total += n;
       values.push(n);
       if (n < min) min = n;
-      if (n > max) max = n;
+      if (n > max) {
+        max = n;
+        maxRow = r;
+      }
     }
   });
 
   const count = values.length || 1;
-  const avg = total / count;
+
+  // 1. Identificar se existe coluna de Quantidade de Pedidos ou Documentos no resultado
+  const orderCol = (schema.columns || []).find(c => {
+    const u = c.name.toUpperCase();
+    return /^(QTD_PEDIDOS|NUM_PEDIDOS|PEDIDOS|TOTAL_PEDIDOS|QTD_NOTAS|NOTAS|DOCS|COUNT_DOC|QTD_DOCS|QUANTIDADE_PEDIDOS)$/i.test(u) ||
+           (u.includes('PEDID') && (u.includes('QTD') || u.includes('NUM') || u.includes('COUNT') || u.includes('TOTAL')));
+  })?.name;
+
+  const docCol = (schema.columns || []).find(c => {
+    const u = c.name.toUpperCase();
+    return /^(F2_DOC|C5_NUM|D2_PEDIDO|DOC|NUMERO|NUM_DOC)$/i.test(u) || u.endsWith('_DOC') || u.endsWith('_PEDIDO');
+  })?.name;
+
+  let totalOrders = 0;
+  if (orderCol) {
+    totalOrders = rows.reduce((acc, r) => {
+      const val = r[orderCol];
+      const n = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'));
+      return acc + (isNaN(n) ? 0 : n);
+    }, 0);
+  } else if (docCol) {
+    const distinctDocs = new Set(rows.map(r => r[docCol]).filter(Boolean));
+    totalOrders = distinctDocs.size;
+  }
+
+  // 2. Identificar a entidade da Maior Ocorrência (Vendedor, Cliente, Fornecedor, Produto, etc.)
+  const entityDim = schema.semantics?.seller || schema.semantics?.customer || schema.semantics?.supplier || schema.semantics?.product || schema.dimensions?.[0];
+  const entityType = schema.semantics?.seller === entityDim ? 'seller' :
+                     schema.semantics?.customer === entityDim ? 'customer' :
+                     schema.semantics?.supplier === entityDim ? 'supplier' :
+                     schema.semantics?.product === entityDim ? 'product' : null;
+
+  const nameCol = entityType ? (schema.semantics?.[`${entityType}Name`] || entityDim) : entityDim;
+  const codeCol = entityType ? schema.semantics?.[`${entityType}Code`] : null;
+
+  let topEntityName = '';
+  if (maxRow) {
+    const rawName = String(maxRow[nameCol] || '').trim();
+    const rawCode = codeCol ? String(maxRow[codeCol] || '').trim() : '';
+    topEntityName = rawName || rawCode;
+  }
+
+  // Definição da rotulagem da Maior Ocorrência informando qual entidade gerou a ocorrência
+  let maxLabel = 'Maior Ocorrência';
+  let maxSubtitle = '';
+  if (schema.hasSeller || entityType === 'seller') {
+    maxLabel = topEntityName ? `Maior Vendedor (${topEntityName})` : 'Maior Vendedor';
+    maxSubtitle = topEntityName ? `Vendedor: ${topEntityName}` : '';
+  } else if (schema.hasCustomer || entityType === 'customer') {
+    maxLabel = topEntityName ? `Maior Cliente (${topEntityName})` : 'Maior Cliente';
+    maxSubtitle = topEntityName ? `Cliente: ${topEntityName}` : '';
+  } else if (schema.hasSupplier || entityType === 'supplier') {
+    maxLabel = topEntityName ? `Maior Fornecedor (${topEntityName})` : 'Maior Fornecedor';
+    maxSubtitle = topEntityName ? `Fornecedor: ${topEntityName}` : '';
+  } else if (schema.hasProduct || entityType === 'product') {
+    maxLabel = topEntityName ? `Item Líder (${topEntityName})` : 'Item Líder';
+    maxSubtitle = topEntityName ? `Produto: ${topEntityName}` : '';
+  } else if (topEntityName) {
+    maxLabel = `Maior Ocorrência (${topEntityName})`;
+    maxSubtitle = topEntityName;
+  }
+
+  // 3. Montagem dos 4 KPIs com inteligência de domínio
+  const isSalesContext = presentation.domain === 'sales' || schema.hasSeller || schema.hasProduct;
+
+  let kpiAvg = null;
+  let kpiCount = null;
+
+  if (totalOrders > 0) {
+    kpiAvg = {
+      label: 'Ticket Médio',
+      value: total / totalOrders,
+      format: presentation.format,
+      type: 'avg',
+      subtitle: `Média de ${Math.round(totalOrders).toLocaleString('pt-BR')} pedidos`,
+    };
+    kpiCount = {
+      label: 'Total de Pedidos',
+      value: Math.round(totalOrders),
+      format: 'number',
+      type: 'count',
+      subtitle: count > 1 && schema.hasSeller ? `${count} vendedores ativos` : '',
+    };
+  } else if (isSalesContext) {
+    const leaderShare = total > 0 && max > 0 ? (max / total) * 100 : 0;
+    kpiAvg = {
+      label: 'Participação do Líder',
+      value: leaderShare,
+      format: 'percent',
+      type: 'percent',
+      subtitle: topEntityName ? `Representatividade de ${topEntityName}` : 'Concentração no 1º lugar',
+    };
+    kpiCount = {
+      label: schema.hasSeller ? 'Vendedores Ativos' : (schema.hasCustomer ? 'Clientes Ativos' : 'Total de Registros'),
+      value: count,
+      format: 'number',
+      type: 'count',
+    };
+  } else {
+    kpiAvg = {
+      label: 'Média por Registro',
+      value: total / count,
+      format: presentation.format,
+      type: 'avg',
+    };
+    kpiCount = {
+      label: 'Total de Registros',
+      value: count,
+      format: 'number',
+      type: 'count',
+    };
+  }
 
   const kpis = [
     {
@@ -518,24 +660,16 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
       format: presentation.format,
       type: 'sum',
     },
+    kpiAvg,
     {
-      label: 'Média por Registro',
-      value: avg,
-      format: presentation.format,
-      type: 'avg',
-    },
-    {
-      label: presentation.format === 'currency' ? 'Maior Ocorrência' : 'Maior Valor',
+      label: maxLabel,
       value: max === -Infinity ? 0 : max,
       format: presentation.format,
       type: 'max',
+      subtitle: maxSubtitle,
+      entity: topEntityName,
     },
-    {
-      label: 'Total de Registros',
-      value: count,
-      format: 'number',
-      type: 'count',
-    }
+    kpiCount,
   ];
 
   return kpis;
