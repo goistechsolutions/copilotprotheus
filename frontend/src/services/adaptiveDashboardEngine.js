@@ -375,30 +375,65 @@ export function buildKPIs(schema, rows, presentationContext = {}) {
   return kpis;
 }
 
-export function buildInsights(schema, rows) {
+export function buildInsights(schema, rows, backendKpis = null) {
   if (!rows || rows.length === 0 || !schema.primaryMeasure) return [];
+
+  // Se o backend forneceu KPIs validados, use-os como fonte única da verdade
+  if (backendKpis && backendKpis.top_items && backendKpis.top_items.length > 0 && !backendKpis.error) {
+    const insights = [];
+    const top = backendKpis.top_items[0];
+    const conc = backendKpis.concentration;
+    const dim = schema.semantics.seller || schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
+    const dimLabel = schema.semantics.seller === dim ? 'vendedor' :
+                     schema.semantics.customer === dim ? 'cliente' :
+                     schema.semantics.product === dim ? 'produto' : 'registro';
+
+    if (conc != null) {
+      insights.push({
+        title: 'Concentração Principal',
+        description: `O principal ${dimLabel} (${top.name}) representa ${conc.toFixed(1)}% do total movimentado.`,
+        value: `${conc.toFixed(1)}%`,
+        type: conc > 30 ? 'critical' : 'information',
+      });
+    }
+
+    if (backendKpis.top_items.length >= 3) {
+      const top3Share = backendKpis.top_items.slice(0, 3).reduce((acc, i) => acc + (i.share_percent || 0), 0);
+      insights.push({
+        title: 'Curva ABC (Top 3)',
+        description: `Os 3 maiores respondem por ${top3Share.toFixed(1)}% da movimentação geral.`,
+        value: `${top3Share.toFixed(1)}%`,
+        type: top3Share > 60 ? 'opportunity' : 'success',
+      });
+    }
+    return insights;
+  }
 
   const measure = schema.primaryMeasure;
   const dim = schema.semantics.seller || schema.semantics.customer || schema.semantics.product || schema.semantics.geographic || schema.dimensions[0];
   const insights = [];
 
   if (dim) {
-    // Agregação por dimensão
+    // Passo 1: Agregar por dimensão primeiro
     const aggMap = new Map();
-    let grandTotal = 0;
-
     rows.forEach(r => {
       const key = String(r[dim] || 'Outros');
       const raw = r[measure];
       const val = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.')) || 0;
       aggMap.set(key, (aggMap.get(key) || 0) + val);
-      grandTotal += val;
     });
 
-    const sorted = [...aggMap.entries()].sort((a, b) => b[1] - a[1]);
-    if (sorted.length > 0 && grandTotal > 0) {
+    // Passo 2: Denominador é a SOMA DOS MÓDULOS dos grupos — nunca o saldo líquido
+    // Isso evita share > 100% quando há RECEITA (+) e DESPESA (-) misturados.
+    // Ex: RECEITA=15M, DESPESA=-14.4M → saldo=614k → share ERRADO = 15M/614k = 2444%
+    //                                  → abs_total=29.4M → share CORRETO = 15M/29.4M = 51%
+    const absTotal = [...aggMap.values()].reduce((acc, v) => acc + Math.abs(v), 0);
+
+    const sorted = [...aggMap.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+
+    if (sorted.length > 0 && absTotal > 0) {
       const [topKey, topVal] = sorted[0];
-      const share = (topVal / grandTotal) * 100;
+      const share = (Math.abs(topVal) / absTotal) * 100;
 
       const dimLabel = schema.semantics.seller === dim ? 'vendedor' :
                        schema.semantics.customer === dim ? 'cliente' :
@@ -406,14 +441,14 @@ export function buildInsights(schema, rows) {
 
       insights.push({
         title: 'Concentração Principal',
-        description: `O principal ${dimLabel} (${topKey}) representa ${share.toFixed(1)}% do total acumulado.`,
+        description: `O principal ${dimLabel} (${topKey}) representa ${share.toFixed(1)}% do total movimentado.`,
         value: `${share.toFixed(1)}%`,
         type: share > 30 ? 'critical' : 'information',
       });
 
       if (sorted.length >= 3) {
-        const top3Val = sorted.slice(0, 3).reduce((acc, curr) => acc + curr[1], 0);
-        const top3Share = (top3Val / grandTotal) * 100;
+        const top3AbsVal = sorted.slice(0, 3).reduce((acc, [, v]) => acc + Math.abs(v), 0);
+        const top3Share = (top3AbsVal / absTotal) * 100;
         insights.push({
           title: 'Curva ABC (Top 3)',
           description: `Os 3 maiores respondem por ${top3Share.toFixed(1)}% da movimentação geral.`,
@@ -597,7 +632,7 @@ export function buildExecutiveChatSummary(context) {
 }
 
 // ─── 8. Pipeline Orquestrador Adaptativo ──────────────────────────────────────
-export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {}) {
+export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {}, backendKpis = null) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return null;
   }
@@ -606,7 +641,8 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {})
   const classification = classifyDataset(schema);
   const presentation = resolveMeasurePresentation(schema, semanticContext);
   const kpis = buildKPIs(schema, rows, semanticContext);
-  const insights = buildInsights(schema, rows);
+  // Priorizar KPIs do backend quando disponíveis para evitar divergência chat/dashboard
+  const insights = buildInsights(schema, rows, backendKpis);
   const charts = buildCharts(schema, rows);
 
   const contextData = {
@@ -615,6 +651,7 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {})
     kpis,
     insights,
     charts,
+    backendKpis,
     series: charts.filter(c => c.chartType === 'bar' || c.chartType === 'line').map(c => ({
       label: c.title,
       points: c.data,

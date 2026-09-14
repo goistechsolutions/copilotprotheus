@@ -190,10 +190,12 @@ class AnalyticsEngine:
         metrics["max_value"] = round(max_val, 2) if max_val != -math.inf else 0.0
         metrics["average"] = round(total / metrics["count"], 2) if metrics["count"] > 0 else 0.0
 
-        sorted_dims = sorted(dim_aggregates.items(), key=lambda x: x[1], reverse=True)
+        sorted_dims = sorted(dim_aggregates.items(), key=lambda x: abs(x[1]), reverse=True)
         
-        # Absolute total for share calculations to avoid negative share breaking logic
-        abs_total = abs(total)
+        # Gross absolute total (soma dos MODULOS de cada grupo), nunca o saldo liquido.
+        # Ex: RECEITA=15M, DESPESA=-14.4M → abs_total = 29.4M, nao 614k
+        # Isso garante que share < 100% mesmo em dados financeiros com entradas negativas.
+        abs_total = sum(abs(v) for v in dim_aggregates.values())
         
         if sorted_dims and abs_total > 0:
             top_dim_val = sorted_dims[0][1]
@@ -228,15 +230,48 @@ class AnalyticsEngine:
         if not data_items:
             return {}
 
+        # Log 1: Domain resolution
         schema = cls._resolve_schema(intent)
+        logger.info({
+            "stage": "domain_resolved",
+            "intent": intent,
+            "domain": schema["domain"],
+            "row_count": len(data_items),
+        })
+
         metrics = cls.calculate_metrics(data_items, schema)
+
+        # Log 2: Metric calculation result
+        logger.info({
+            "stage": "metrics_calculated",
+            "domain": schema["domain"],
+            "total": metrics.get("total"),
+            "max_value": metrics.get("max_value"),
+            "average": metrics.get("average"),
+            "concentration": metrics.get("concentration"),
+            "top_dimension": metrics.get("maior_ocorrencia_nome"),
+        })
         
         validator = ValidationEngine()
         validation_result = validator.validate(metrics, schema, schema["domain"])
+
+        # Log 3: Validation outcome
+        logger.info({
+            "stage": "validation_complete",
+            "domain": schema["domain"],
+            "quality_score": validation_result.get("quality_score"),
+            "status": validation_result.get("status"),
+            "errors": validation_result.get("errors", []),
+        })
         
         if validation_result["status"] == "rejected":
-            logger.error(f"Validação falhou: {validation_result['errors']}")
+            logger.error({
+                "stage": "pipeline_rejected",
+                "domain": schema["domain"],
+                "errors": validation_result["errors"],
+            })
             raise ValidationError(f"Métricas inconsistentes: {validation_result['errors']}")
             
         metrics["quality"] = validation_result
         return metrics
+
