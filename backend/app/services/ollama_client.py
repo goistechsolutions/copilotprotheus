@@ -22,7 +22,7 @@ def get_ollama_url() -> str:
     )
 
 def get_ollama_model() -> str:
-    return os.getenv("OLLAMA_MODEL") or getattr(settings, "ollama_model", "") or "gemma4:e4b"
+    return os.getenv("OLLAMA_MODEL") or getattr(settings, "ollama_model", "") or "qwen2.5:3b"
 
 OLLAMA_URL   = get_ollama_url()
 OLLAMA_MODEL = get_ollama_model()
@@ -417,6 +417,25 @@ async def _call_ollama(
                 resp.raise_for_status()
             else:
                 resp.raise_for_status()
+        elif resp.status_code == 500 and any(err in resp.text.lower() for err in ["insufficient memory", "unable to allocate", "out of memory"]):
+            logger.warning("[Ollama] Falha de memória (OOM) ao carregar modelo %s: %s. Tentando modelo leve...", ollama_model, resp.text[:180])
+            models = await _check_ollama_models(ollama_url)
+            lighter = None
+            for m in models:
+                if m != ollama_model and any(light in m.lower() for light in ["qwen", "3b", "2b", "1b", "mini", "llama3.2"]):
+                    lighter = m
+                    break
+            if lighter:
+                logger.info("[Ollama] Fallback automático para modelo leve com menor consumo de RAM: %s", lighter)
+                payload["model"] = lighter
+                resp = await client.post(f"{ollama_url}/api/chat", json=payload)
+                if resp.status_code == 400 and "does not support tools" in resp.text:
+                    payload.pop("tools", None)
+                    resp = await client.post(f"{ollama_url}/api/chat", json=payload)
+                resp.raise_for_status()
+                ollama_model = lighter
+            else:
+                resp.raise_for_status()
         elif resp.status_code != 200:
             logger.error("[Ollama] Erro da API: %s - %s", resp.status_code, resp.text)
             resp.raise_for_status()
@@ -576,6 +595,21 @@ async def stream_llm(
             if resp.status_code == 400 and "does not support tools" in resp.text:
                 payload.pop("tools", None)
                 resp = await client.post(f"{ollama_url}/api/chat", json=payload)
+            elif resp.status_code == 500 and any(err in resp.text.lower() for err in ["insufficient memory", "unable to allocate", "out of memory"]):
+                logger.warning("[Ollama Stream] Falha de memória (OOM) no modelo %s: %s. Tentando modelo leve...", ollama_model, resp.text[:180])
+                models = await _check_ollama_models(ollama_url)
+                lighter = None
+                for m in models:
+                    if m != ollama_model and any(light in m.lower() for light in ["qwen", "3b", "2b", "1b", "mini", "llama3.2"]):
+                        lighter = m
+                        break
+                if lighter:
+                    ollama_model = lighter
+                    payload["model"] = lighter
+                    resp = await client.post(f"{ollama_url}/api/chat", json=payload)
+                    if resp.status_code == 400 and "does not support tools" in resp.text:
+                        payload.pop("tools", None)
+                        resp = await client.post(f"{ollama_url}/api/chat", json=payload)
             resp.raise_for_status()
             resp_json = resp.json()
             message = resp_json.get("message", {})
