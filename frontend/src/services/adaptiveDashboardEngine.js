@@ -867,6 +867,7 @@ export function buildExecutiveChatSummary(context) {
   // Se for fluxo de caixa, usa formatação específica
   if (data.cashFlowData?.isCashFlow) {
     const { totalReceber, totalPagar, saldoProjetado } = data.cashFlowData;
+    const fmt = v => (typeof v === 'number' ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const statusSaldo = saldoProjetado >= 0 ? '✓ (Superávit projetado)' : '⚠ (Déficit projetado)';
     const parts = ['**Resumo do Fluxo de Caixa (Próximos Dias):**\n'];
     parts.push(`• **Total em Aberto a Receber:** R$ ${fmt(totalReceber)}`);
@@ -875,6 +876,7 @@ export function buildExecutiveChatSummary(context) {
     parts.push(`• **Títulos em Aberto:** ${count} registros analisados`);
     return parts.join('\n');
   }
+
 
 
   const totalKpi = data.kpis?.find(k => k.type === 'sum');
