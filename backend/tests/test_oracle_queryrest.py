@@ -6,9 +6,31 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.services.protheus_context_service import validate_query_security
+from app.services.protheus_context_service import auto_fix_oracle_limit, validate_query_security
 from app.db.database import resolve_clean_tenant
 from app.core.rate_limit import check_tenant_rate_limit
+
+
+def test_auto_fix_oracle_limit():
+    """Valida a conversao automatica de SELECT TOP N e LIMIT para sintaxe Oracle."""
+    sql_top = "SELECT TOP 10 A1_COD, A1_NOME FROM SA1010 WHERE D_E_L_E_T_ <> '*'"
+    fixed_top = auto_fix_oracle_limit(sql_top)
+    assert "TOP" not in fixed_top
+    assert "FETCH FIRST 10 ROWS ONLY" in fixed_top
+    # A query corrigida passa na validação de segurança do Oracle
+    validate_query_security(sql=fixed_top, allowed_tables={"SA1010"}, filial="01")
+
+    sql_limit = "SELECT A1_COD, A1_NOME FROM SA1010 WHERE D_E_L_E_T_ <> '*' LIMIT 5"
+    fixed_limit = auto_fix_oracle_limit(sql_limit)
+    assert "LIMIT" not in fixed_limit
+    assert "FETCH FIRST 5 ROWS ONLY" in fixed_limit
+    validate_query_security(sql=fixed_limit, allowed_tables={"SA1010"}, filial="01")
+
+    sql_limit_offset = "SELECT A1_COD, A1_NOME FROM SA1010 WHERE D_E_L_E_T_ <> '*' LIMIT 20 OFFSET 40"
+    fixed_lo = auto_fix_oracle_limit(sql_limit_offset)
+    assert "LIMIT" not in fixed_lo
+    assert "OFFSET 40 ROWS FETCH NEXT 20 ROWS ONLY" in fixed_lo
+    validate_query_security(sql=fixed_lo, allowed_tables={"SA1010"}, filial="01")
 
 
 def test_oracle_sql_prohibits_select_top():

@@ -137,7 +137,7 @@ export function buildReceivablesDashboard({ schema, rows, measure, entityCol, en
   // 3. Sugestões Contextuais de Negócio
   const suggestions = [
     'Mostrar títulos com mais de 60 dias de atraso',
-    top1Name ? `Extrato detalhado do cliente ${top1Name}` : 'Exibir maiores devedores detalhados',
+    top1Name ? `Extrato detalhado de títulos do cliente ${top1Name}` : 'Extrato detalhado de títulos do maior devedor',
     'Projeção de recebimentos das próximas semanas',
     'Comparar evolução da inadimplência por mês',
   ];

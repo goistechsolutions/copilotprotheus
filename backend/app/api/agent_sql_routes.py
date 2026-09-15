@@ -37,6 +37,7 @@ from app.services.dictionary_context_service import (
 from app.services.protheus_context_service import (
     CatalogValidationError,
     auto_fix_delet_filters,
+    auto_fix_oracle_limit,
     build_protheus_context,
     mask_sensitive_rows,
     validate_query_security,
@@ -438,7 +439,11 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
             "a tabela SE2 (SE2010 SE2) com SE2.E2_SALDO > 0. Selecione OBRIGATORIAMENTE o nome do fornecedor (SE2.E2_NOMFOR), código do fornecedor (SE2.E2_FORNECE), "
             "número do título (SE2.E2_NUM), parcela (SE2.E2_PARCELA), vencimento (SE2.E2_VENCTO) e saldo (SE2.E2_SALDO AS VALOR_SALDO). "
             "O campo de nome do fornecedor (SE2.E2_NOMFOR) é INDISPENSÁVEL para os gráficos e rankings executivos. NUNCA selecione apenas o código! NUNCA una com SE1! "
-            "4. REGRAS OBRIGATÓRIAS: Sempre aplique D_E_L_E_T_ <> '*' e a filial autorizada. NUNCA use SE5 se SE5 não estiver listada no snapshot autorizado!"
+            "4. EXTRATO DE TÍTULOS / MAIOR DEVEDOR / CLIENTE ESPECÍFICO: Quando o pedido for um extrato detalhado de devedor ou cliente, "
+            "liste os títulos da tabela SE1 (SE1.E1_SALDO > 0) com SE1.D_E_L_E_T_ <> '*'. Se for pedido o maior devedor, filtre pelo cliente "
+            "que possui o maior somatório de saldo usando subquery: SE1.E1_CLIENTE IN (SELECT E1_CLIENTE FROM (SELECT E1_CLIENTE, SUM(E1_SALDO) AS TOTAL FROM SE1010 WHERE D_E_L_E_T_ <> '*' AND E1_SALDO > 0 GROUP BY E1_CLIENTE ORDER BY TOTAL DESC) WHERE ROWNUM = 1) "
+            "ou filtre pelo nome/código do cliente se especificado no texto. NUNCA use SELECT TOP nem LIMIT. Use SEMPRE ROWNUM ou FETCH FIRST para limites no Oracle. "
+            "5. REGRAS OBRIGATÓRIAS: Sempre aplique D_E_L_E_T_ <> '*' e a filial autorizada. NUNCA use SE5 se SE5 não estiver listada no snapshot autorizado!"
         )
 
 
@@ -576,6 +581,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     if ";" in clean_sql:
         clean_sql = clean_sql.split(";")[0].strip()
 
+    clean_sql = auto_fix_oracle_limit(clean_sql)
     clean_sql = auto_fix_delet_filters(clean_sql)
     return clean_sql
 
@@ -613,7 +619,7 @@ def _infer_query_domain(prompt: str) -> str | None:
     finance_terms = (
         "financeiro", "fluxo de caixa", "receber", "pagar", "contas a receber", "contas a pagar", "inadimplencia", "inadimplência",
         "vencimento", "vencido", "vencidos", "boleto", "boletos", "titulo", "titulos", "se1", "se2", "se5",
-        "saldo", "saldo bancario", "movimento bancario"
+        "saldo", "saldo bancario", "movimento bancario", "devedor", "devedores", "divida", "dividas", "cobranca", "extrato",
     )
     
     if any(term in normalized for term in finance_terms):
@@ -1329,6 +1335,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 "authorized_field_count": len(allowed_field_names),
             })
 
+            sql = auto_fix_oracle_limit(sql)
             sql = auto_fix_delet_filters(sql)
             try:
                 validate_query_security(sql=sql, **validation_args)
@@ -1336,23 +1343,31 @@ async def process_agent_task(task_id: str, payload: dict):
                 is_field_error = _is_catalog_field_validation_error(exc)
                 is_table_error = isinstance(exc, CatalogValidationError)
                 is_delet_error = "D_E_L_E_T_" in str(exc.detail)
+                is_oracle_limit_error = "SELECT TOP" in str(exc.detail) or "LIMIT" in str(exc.detail)
 
                 logger.warning({
                     "stage": "rbac_validation_failed",
                     "task_id": task_id,
                     "query_domain": query_domain,
                     "error": str(exc.detail),
-                    "error_type": "table_not_in_catalog" if is_table_error else ("delet_missing" if is_delet_error else "field_not_authorized"),
+                    "error_type": "table_not_in_catalog" if is_table_error else ("delet_missing" if is_delet_error else ("oracle_limit_invalid" if is_oracle_limit_error else "field_not_authorized")),
                     "authorized_tables": sorted(str(t) for t in allowed_table_names),
                     "authorized_field_count": len(allowed_field_names),
                     "hint": "Verifique se as tabelas do domínio (SE1/SE2/SE5 para FINANCEIRO) estão importadas no dicionário SX3 do tenant.",
                 })
 
-                if not is_field_error and not is_table_error and not is_delet_error:
+                if not is_field_error and not is_table_error and not is_delet_error and not is_oracle_limit_error:
                     # Erro de segurança não recuperável (ex: SELECT *, DML, etc.)
                     raise
 
-                if is_delet_error:
+                if is_oracle_limit_error:
+                    retry_reason = (
+                        f"A consulta anterior foi rejeitada porque usou SELECT TOP ou LIMIT, o que é PROIBIDO no Oracle.\n"
+                        f"Reescreva a consulta usando EXCLUSIVAMENTE a sintaxe Oracle: ROWNUM <= N ou FETCH FIRST N ROWS ONLY.\n"
+                        f"Pergunta original: {prompt}"
+                    )
+                    logger.warning("agent_sql_catalog_retry task_id=%s reason=oracle_limit_invalid", task_id)
+                elif is_delet_error:
                     retry_reason = (
                         f"A consulta anterior foi rejeitada porque esqueceu o filtro obrigatório D_E_L_E_T_ <> '*'.\n"
                         f"Reescreva a consulta incluindo OBRIGATORIAMENTE para TODAS as tabelas o filtro: alias.D_E_L_E_T_ <> '*'.\n"
@@ -1399,6 +1414,7 @@ async def process_agent_task(task_id: str, payload: dict):
                     history=conversation_history,
                     domain=query_domain,
                 )
+                sql = auto_fix_oracle_limit(sql)
                 sql = auto_fix_delet_filters(sql)
                 _validate_query_domain(str(prompt), sql, domain=query_domain)
                 validate_query_security(sql=sql, **validation_args)

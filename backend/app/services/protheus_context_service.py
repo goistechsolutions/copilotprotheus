@@ -105,6 +105,53 @@ def _extract_table_refs(sql: str) -> list[tuple[str, str]]:
     return refs
 
 
+def auto_fix_oracle_limit(sql: str) -> str:
+    """
+    Converte construções incompatíveis de limites para a sintaxe nativa do ORACLE:
+    - SELECT TOP N col1, col2 ... -> SELECT col1, col2 ... FETCH FIRST N ROWS ONLY
+    - ... LIMIT N -> ... FETCH FIRST N ROWS ONLY
+    - ... LIMIT N OFFSET M -> ... OFFSET M ROWS FETCH NEXT N ROWS ONLY
+    """
+    if not sql or not isinstance(sql, str):
+        return sql
+
+    fixed = sql
+
+    # 1. Trata SELECT TOP N
+    top_match = re.search(r"\bSELECT\s+(?:(DISTINCT)\s+)?TOP\s+(\d+)\b", fixed, re.IGNORECASE)
+    if top_match:
+        distinct_part = f"{top_match.group(1)} " if top_match.group(1) else ""
+        top_n = top_match.group(2)
+        # Substitui "SELECT TOP N" por "SELECT "
+        fixed = fixed[:top_match.start()] + f"SELECT {distinct_part}" + fixed[top_match.end():]
+        # Adiciona "FETCH FIRST N ROWS ONLY" ao final se ainda não contiver limite Oracle
+        if not re.search(r"\b(?:FETCH\s+FIRST|ROWNUM)\b", fixed, re.IGNORECASE):
+            fixed = fixed.rstrip()
+            trailing_semi = fixed.endswith(";")
+            if trailing_semi:
+                fixed = fixed[:-1].rstrip()
+            fixed = f"{fixed} FETCH FIRST {top_n} ROWS ONLY"
+            if trailing_semi:
+                fixed += ";"
+
+    # 2. Trata LIMIT N OFFSET M
+    limit_offset_match = re.search(r"\bLIMIT\s+(\d+)\s+OFFSET\s+(\d+)\b", fixed, re.IGNORECASE)
+    if limit_offset_match:
+        limit_n = limit_offset_match.group(1)
+        offset_m = limit_offset_match.group(2)
+        clause = f"OFFSET {offset_m} ROWS FETCH NEXT {limit_n} ROWS ONLY"
+        fixed = fixed[:limit_offset_match.start()] + clause + fixed[limit_offset_match.end():]
+    else:
+        # 3. Trata LIMIT N
+        limit_match = re.search(r"\bLIMIT\s+(\d+)\b", fixed, re.IGNORECASE)
+        if limit_match:
+            limit_n = limit_match.group(1)
+            clause = f"FETCH FIRST {limit_n} ROWS ONLY"
+            fixed = fixed[:limit_match.start()] + clause + fixed[limit_match.end():]
+
+    return fixed
+
+
 def auto_fix_delet_filters(sql: str) -> str:
     """
     Garante que toda tabela física Protheus referenciada no FROM/JOIN
