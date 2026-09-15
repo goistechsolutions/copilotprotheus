@@ -13,9 +13,38 @@ import { humanizeColumnName, humanizeDimensionValue, formatExecutiveValue } from
 export function buildReceivablesDashboard({ schema, rows, measure, entityCol, entityType, backendKpis, backendInsights }) {
   const total = backendKpis?.total || rows.reduce((acc, r) => acc + (parseFloat(String(r[measure] || 0).replace(',', '.')) || 0), 0);
   const count = rows.length;
-  const distinctEntities = backendKpis?.distinct_entities || new Set(rows.map(r => r[entityCol])).size;
-  const top1Share = backendKpis?.concentration || (total > 0 ? ((backendKpis?.maior_ocorrencia_valor || 0) / total) * 100 : 0);
-  const top1Name = backendKpis?.maior_ocorrencia_nome || (rows[0] ? String(rows[0][entityCol] || '') : '');
+
+  // Se houver coluna com o nome do cliente/devedor, preferir sobre códigos de cliente
+  const nameCol = schema?.semantics?.customerName 
+    || schema?.columns?.find(c => /NOMCLI|A1_NOME|NOME_CLIENTE|RAZAO|CLIENTE_NOME/i.test(c.name || c))?.name
+    || entityCol;
+  const effectiveEntityCol = nameCol || entityCol;
+
+  // Gráfico 1: Top Devedores calculados por agregação
+  const aggMap = new Map();
+  rows.forEach(r => {
+    const rawName = String(r[effectiveEntityCol] || r[entityCol] || '').trim();
+    if (!rawName) return;
+    const val = parseFloat(String(r[measure] || 0).replace(',', '.')) || 0;
+    aggMap.set(rawName, (aggMap.get(rawName) || 0) + val);
+  });
+
+  const sortedDevedores = [...aggMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, val]) => ({
+      label: humanizeDimensionValue(effectiveEntityCol, name),
+      name: humanizeDimensionValue(effectiveEntityCol, name),
+      value: val,
+    }));
+
+  const distinctEntities = aggMap.size || backendKpis?.distinct_entities || count;
+
+  // O líder do gráfico é o Top 1 do KPI — garantia de 100% de coerência entre Card e Gráfico!
+  const leaderDevedor = sortedDevedores[0] || null;
+  const top1Name = leaderDevedor?.name || (backendKpis?.maior_ocorrencia_nome ? humanizeDimensionValue(effectiveEntityCol, backendKpis.maior_ocorrencia_nome) : '');
+  const top1Val = leaderDevedor ? leaderDevedor.value : (backendKpis?.maior_ocorrencia_valor || 0);
+  const top1Share = total > 0 ? (top1Val / total) * 100 : (backendKpis?.concentration || 0);
 
   // 1. KPIs Específicos de Recebíveis
   const kpis = [
@@ -34,8 +63,8 @@ export function buildReceivablesDashboard({ schema, rows, measure, entityCol, en
       subtitle: 'Com títulos vencidos',
     },
     {
-      label: top1Name ? `Maior Devedor (${humanizeDimensionValue(entityCol, top1Name)})` : 'Maior Devedor',
-      value: backendKpis?.maior_ocorrencia_valor || (rows[0] ? parseFloat(String(rows[0][measure] || 0).replace(',', '.')) || 0 : 0),
+      label: top1Name ? `Maior Devedor (${top1Name})` : 'Maior Devedor',
+      value: top1Val,
       format: 'currency',
       type: 'pagar',
       subtitle: `${top1Share.toFixed(1)}% do saldo total`,
@@ -64,24 +93,6 @@ export function buildReceivablesDashboard({ schema, rows, measure, entityCol, en
 
   // 2. Gráficos Específicos de Recebíveis
   const charts = [];
-
-  // Gráfico 1: Top Devedores
-  const aggMap = new Map();
-  rows.forEach(r => {
-    const rawName = String(r[entityCol] || '').trim();
-    if (!rawName) return;
-    const val = parseFloat(String(r[measure] || 0).replace(',', '.')) || 0;
-    aggMap.set(rawName, (aggMap.get(rawName) || 0) + val);
-  });
-
-  const sortedDevedores = [...aggMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([name, val]) => ({
-      label: humanizeDimensionValue(entityCol, name),
-      name: humanizeDimensionValue(entityCol, name),
-      value: val,
-    }));
 
   if (sortedDevedores.length > 0) {
     charts.push({

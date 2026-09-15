@@ -93,26 +93,32 @@ class AnalyticsEngine:
     @staticmethod
     def _resolve_schema(intent: str) -> Dict[str, Any]:
         """
-        Retorna o dicionário de dimensões e medidas esperado para a intenção fornecida.
-        Simula um Schema Analyzer / Domain Resolver.
+        Retorna o dicionário de dimensões e medidas esperado para a intenção/domínio fornecido.
         """
         schemas = {
-            "fluxo de caixa": {
+            "finance": {
                 "domain": "FINANCEIRO",
-                "measures": ["VALOR", "SALDO"],
-                "dimensions": ["TIPO", "DATA", "CLASSIFICACAO"]
+                "measures": ["SALDO", "VALOR_SALDO", "E1_SALDO", "E2_SALDO", "VALOR", "VALOR_TOTAL", "TOTAL", "AMOUNT"],
+                "dimensions": ["NOMCLI", "NOME_CLIENTE", "A1_NOME", "CLIENTE", "FORNECEDOR", "A2_NOME", "RAZAO", "NOME", "HISTORICO", "TIPO"]
+            },
+            "sales": {
+                "domain": "VENDAS",
+                "measures": ["TOTAL", "VALOR", "FATURAMENTO", "RECEITA", "VALOR_TOTAL", "QTD", "QUANTIDADE"],
+                "dimensions": ["VENDEDOR", "NOME_VENDEDOR", "A3_NOME", "CLIENTE", "NOMCLI", "PRODUTO", "DESCRICAO", "DESC"]
             },
             # Fallback generico
             "default": {
                 "domain": "UNKNOWN",
-                "measures": ["VALOR", "TOTAL", "AMOUNT", "PRICE", "PRECO", "QTD", "QUANTIDADE"],
-                "dimensions": ["TIPO", "STATUS", "CATEGORIA", "GRUPO", "DATA", "NAME", "NOME"]
+                "measures": ["SALDO", "VALOR", "TOTAL", "AMOUNT", "PRICE", "PRECO", "QTD", "QUANTIDADE"],
+                "dimensions": ["NOMCLI", "NOME", "CLIENTE", "VENDEDOR", "FORNECEDOR", "PRODUTO", "TIPO", "STATUS", "CATEGORIA", "GRUPO", "DATA"]
             }
         }
         
         normalized_intent = intent.lower() if intent else ""
-        if "caixa" in normalized_intent or "financeiro" in normalized_intent:
-            return schemas["fluxo de caixa"]
+        if any(w in normalized_intent for w in ["caixa", "finance", "financeiro", "receber", "pagar", "inadimpl", "vencid"]):
+            return schemas["finance"]
+        if any(w in normalized_intent for w in ["venda", "fatur", "sales"]):
+            return schemas["sales"]
         
         return schemas["default"]
 
@@ -121,11 +127,18 @@ class AnalyticsEngine:
         if val is None:
             return 0.0
         try:
-            if isinstance(val, (int, float)):
-                return float(val)
-            s = str(val).replace('R$', '').replace('.', '').replace(',', '.').strip()
-            return float(s)
-        except ValueError:
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return float(val) if math.isfinite(float(val)) else 0.0
+            candidate = str(val).strip().replace('R$', '').replace('%', '').replace(' ', '')
+            if not candidate:
+                return 0.0
+            if ',' in candidate and '.' in candidate:
+                candidate = candidate.replace('.', '').replace(',', '.')
+            elif ',' in candidate:
+                candidate = candidate.replace(',', '.')
+            parsed = float(candidate)
+            return parsed if math.isfinite(parsed) else 0.0
+        except (ValueError, TypeError):
             return 0.0
 
     @staticmethod
@@ -134,34 +147,54 @@ class AnalyticsEngine:
         if not data_items:
             return {"total": 0.0, "average": 0.0, "max_value": 0.0, "count": 0, "concentration": 0.0, "top_items": []}
 
+        # 1. Seleção determinística de measure_key respeitando prioridade do schema
         measure_key = None
-        for key in data_items[0].keys():
-            upper_key = key.upper()
-            if any(m in upper_key for m in schema["measures"]):
-                measure_key = key
-                break
-        
-        dimension_key = None
-        # Prioritizar colunas de nome/descrição sobre códigos/IDs para rótulos em gráficos e top_items
-        name_keys = [
-            k for k in data_items[0].keys() 
-            if any(p in k.upper() for p in ["NOME", "NOM", "DESC", "DESCRICAO", "RAZAO", "VENDEDOR", "CLIENTE", "FORNECEDOR", "PRODUTO"])
-            and not any(p in k.upper() for p in ["COD", "CODIGO", "ID"])
-        ]
-        if name_keys:
-            dimension_key = name_keys[0]
-        else:
+        schema_measures = schema.get("measures", [])
+        for m in schema_measures:
             for key in data_items[0].keys():
                 upper_key = key.upper()
-                if any(d in upper_key for d in schema["dimensions"]):
-                    dimension_key = key
-                    break
-        
-        if not measure_key:
-            for key, val in data_items[0].items():
-                if isinstance(val, (int, float)):
+                if upper_key == m or upper_key.endswith(f"_{m}") or upper_key.startswith(f"{m}_"):
                     measure_key = key
                     break
+            if measure_key:
+                break
+
+        if not measure_key:
+            for key in data_items[0].keys():
+                upper_key = key.upper()
+                if any(m in upper_key for m in schema_measures):
+                    measure_key = key
+                    break
+
+        if not measure_key:
+            for key, val in data_items[0].items():
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    measure_key = key
+                    break
+
+        # 2. Seleção determinística de dimension_key: priorizar nomes explícitos sobre códigos
+        dimension_key = None
+        explicit_names = [
+            k for k in data_items[0].keys()
+            if any(p in k.upper() for p in ["NOMCLI", "NOME_CLIENTE", "A1_NOME", "A2_NOME", "A3_NOME", "RAZAO", "NOME_FANTASIA", "DESCRICAO"])
+            and not any(p in k.upper() for p in ["COD", "CODIGO", "ID"])
+        ]
+        if explicit_names:
+            dimension_key = explicit_names[0]
+        else:
+            name_keys = [
+                k for k in data_items[0].keys()
+                if any(p in k.upper() for p in ["NOME", "NOM", "DESC", "DESCRICAO", "RAZAO", "VENDEDOR", "CLIENTE", "FORNECEDOR", "PRODUTO"])
+                and not any(p in k.upper() for p in ["COD", "CODIGO", "ID"])
+            ]
+            if name_keys:
+                dimension_key = name_keys[0]
+            else:
+                for key in data_items[0].keys():
+                    upper_key = key.upper()
+                    if any(d in upper_key for d in schema.get("dimensions", [])):
+                        dimension_key = key
+                        break
 
         if not dimension_key:
             for key, val in data_items[0].items():

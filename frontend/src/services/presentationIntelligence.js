@@ -274,10 +274,12 @@ function _narrativeFinancial(kpis, charts, rows, totalLabel, leaderLabel, volume
     parts.push(`O ${totalLabel.toLowerCase()} totaliza **${totalFormatted}** com ${count} ${volumeLabel}.`);
   }
 
-  const top1Share = backendKpis?.concentration || (totalVal > 0 && leaderItem ? ((leaderItem.value / totalVal) * 100) : null);
-  const top1Name = backendKpis?.maior_ocorrencia_nome || leaderItem?.label || leaderItem?.name;
-  if (top1Name && top1Share) {
-    parts.push(`O principal devedor (**${top1Name}**) representa **${top1Share.toFixed(1)}%** do total.`);
+  const leaderName = leaderItem?.label || leaderItem?.name || backendKpis?.maior_ocorrencia_nome;
+  const leaderVal = leaderItem?.value || backendKpis?.maior_ocorrencia_valor || 0;
+  const leaderShare = totalVal > 0 && leaderVal > 0 ? ((leaderVal / totalVal) * 100) : (backendKpis?.concentration || 0);
+
+  if (leaderName && leaderShare > 0) {
+    parts.push(`O principal devedor (**${leaderName}**) representa **${leaderShare.toFixed(1)}%** do total.`);
   }
 
   const top3Share = backendKpis?.top3_share;
@@ -305,13 +307,14 @@ function _narrativeFinancial(kpis, charts, rows, totalLabel, leaderLabel, volume
 }
 
 function _narrativeTimeSeries(kpis, charts, rows, schema, backendKpis) {
-  const totalKpi = kpis.find(k => k.type === 'sum');
+  const totalKpi = kpis.find(k => k.type === 'sum' || k.type === 'receber' || k.type === 'pagar');
   const lineSeries = charts.find(c => c.chartType === 'line');
   const points = lineSeries?.data || [];
   const trend = backendKpis?.trend?.direction || detectTrend(points);
   const growthPct = backendKpis?.trend?.growth_pct;
   const periodCount = points.length || rows.length;
 
+  const isFinancial = schema?.primaryMeasure && /SALDO|RECEB|PAGAR|TITULO|FINANC/i.test(schema.primaryMeasure);
   const totalFormatted = totalKpi ? formatExecutiveValue(totalKpi.value, 'currency') : null;
   const bestPoint = points.length > 0 ? [...points].sort((a, b) => b.value - a.value)[0] : null;
   const bestLabel = bestPoint?.fullLabel || bestPoint?.label || '';
@@ -332,13 +335,21 @@ function _narrativeTimeSeries(kpis, charts, rows, schema, backendKpis) {
 
   const parts = [];
   if (totalFormatted) {
-    parts.push(`O faturamento acumulado atingiu **${totalFormatted}** distribuído em ${periodCount} períodos.`);
+    if (isFinancial) {
+      parts.push(`O volume financeiro acumulado atingiu **${totalFormatted}** distribuído em ${periodCount} períodos.`);
+    } else {
+      parts.push(`O faturamento acumulado atingiu **${totalFormatted}** distribuído em ${periodCount} períodos.`);
+    }
   }
   if (bestLabel && bestValue) {
     parts.push(`O melhor período foi **${bestLabel}** (${bestValue}${bestShare ? `, ${bestShare}% do total` : ''}).`);
   }
   if (top3Share && points.length >= 3) {
-    parts.push(`Os 3 maiores períodos concentram **${top3Share}%** das vendas.`);
+    if (isFinancial) {
+      parts.push(`Os 3 maiores períodos concentram **${top3Share}%** do montante movimentado.`);
+    } else {
+      parts.push(`Os 3 maiores períodos concentram **${top3Share}%** das vendas.`);
+    }
   }
   if (trendText) {
     parts.push(`Observa-se ${trendText}.`);

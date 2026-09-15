@@ -393,17 +393,26 @@ export function classifyDataset(schema, context = {}) {
   const prompt = String(context.originPrompt || context.prompt || '').toLowerCase();
   const isOverdue = /vencid|atras|inadimpl/i.test(prompt);
   const cols = Array.isArray(schema?.columns) ? schema.columns : [];
-  const isReceivable = /receb|e1_/i.test(prompt) || cols.some(c => (String(c?.name || c || '')).toUpperCase().startsWith('E1_'));
-  const isPayable = /pagar|pagam|e2_/i.test(prompt) || cols.some(c => (String(c?.name || c || '')).toUpperCase().startsWith('E2_'));
+  const colNames = cols.map(c => String(c?.name || c || '').toUpperCase());
+  const hasE1 = colNames.some(c => c.startsWith('E1_'));
+  const hasE2 = colNames.some(c => c.startsWith('E2_'));
+  const hasCustomerCol = colNames.some(c => c.includes('CLIENT') || c.includes('NOMCLI') || c.includes('DEVEDOR'));
+  const hasSupplierCol = colNames.some(c => c.includes('FORNEC') || c.includes('FORN'));
+
+  const isPayable = /pagar|pagam|despesa|forneced|e2_/i.test(prompt) || hasE2 || (hasSupplierCol && !hasCustomerCol);
+  const isReceivable = /receb|client|devedor|e1_/i.test(prompt) || hasE1 || hasCustomerCol || (!isPayable && isOverdue) || /titulo|boleto|duplicata/i.test(prompt);
 
   // Classificações financeiras especializadas
-  if (isOverdue && isReceivable) {
-    return { datasetType: 'overdue_receivables', confidence: 0.95 };
+  if (isOverdue) {
+    if (isPayable && !hasCustomerCol) {
+      return { datasetType: 'accounts_payable', confidence: 0.95 };
+    }
+    return { datasetType: 'overdue_receivables', confidence: 0.98 };
   }
-  if (isReceivable && !isPayable && (schema?.hasCustomer || schema?.hasDate)) {
+  if (isReceivable && !isPayable && (schema?.hasCustomer || schema?.hasDate || hasCustomerCol)) {
     return { datasetType: 'accounts_receivable', confidence: 0.92 };
   }
-  if (isPayable && !isReceivable && (schema?.hasSupplier || schema?.hasDate)) {
+  if (isPayable && !isReceivable && (schema?.hasSupplier || schema?.hasDate || hasSupplierCol)) {
     return { datasetType: 'accounts_payable', confidence: 0.92 };
   }
 
