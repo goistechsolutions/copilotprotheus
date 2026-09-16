@@ -75,10 +75,15 @@ class ConversationContextEngine:
         r"(?i)e\s+na\s+semana\s+passada",
         r"(?i)quem\s+s[aã]o\s+os\s+(?:maiores|top)",
         r"(?i)detalhar",
+        r"(?i)detalhes?\s+(?:de|do|da|dos|das)?",
+        r"(?i)extrato\s+(?:de|do|da|dos|das)?",
+        r"(?i)listar\s+t[ií]tulos",
+        r"(?i)movimenta[cç][oõ]es?",
         r"(?i)filtrar?\s+por",
         r"(?i)agora\s+filtr\w*",
         r"(?i)e\s+os\s+a\s+pagar",
         r"(?i)e\s+os\s+a\s+receber",
+        r"(?i)ver\s+(?:t[ií]tulos|pedidos|itens|detalhes)",
     ]
 
     @classmethod

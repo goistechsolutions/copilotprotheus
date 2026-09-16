@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { downloadStructuredReport, exportStructuredReport } from '../services/api';
-import { Bar } from 'react-chartjs-2';
+import { Bar, getElementAtEvent } from 'react-chartjs-2';
 import {
   BarElement,
   CategoryScale,
@@ -20,6 +20,10 @@ import {
   FileSpreadsheet,
   Download,
   Info,
+  Search,
+  ArrowUpRight,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Filler);
@@ -38,12 +42,15 @@ function parseNumeric(val) {
   return Number.isNaN(num) ? null : num;
 }
 
-export default function StructuredResultPanel({ result, context, onAction }) {
+export default function StructuredResultPanel({ result, context, onAction, onDrillDown }) {
   const rows = result?.rows || [];
   const columns = result?.columns || [];
   const kpis = result?.kpis || [];
   const series = result?.series || [];
   const dimensions = result?.dimensions || [];
+  const domain = result?.metadata?.domain || '';
+
+  const chartRef = useRef(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
@@ -52,6 +59,65 @@ export default function StructuredResultPanel({ result, context, onAction }) {
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
+
+  // Helper para identificar se uma coluna representa entidade acionável de drill-down
+  const getDrillDownType = (colName) => {
+    const col = String(colName || '').toUpperCase();
+    if (/CLIENTE|NOMCLI|A1_NOME|A1_COD|SACADO/.test(col)) return 'cliente';
+    if (/FORNECEDOR|NOMFOR|A2_NOME|A2_COD|FORNECE/.test(col)) return 'fornecedor';
+    if (/PRODUTO|B1_DESC|B1_COD|COD_PROD|ITEM|DESCRIC/.test(col)) return 'produto';
+    if (/VENDEDOR|NOMVEN|A3_NOME|A3_COD|REPRESENTANTE/.test(col)) return 'vendedor';
+    return null;
+  };
+
+  // Executa o drill-down enviando comando natural ao Copilot
+  const triggerDrillDown = (entityType, entityValue, extraRowData = null) => {
+    const val = String(entityValue || '').trim();
+    if (!val || val === '---') return;
+
+    let drillPrompt = '';
+    if (entityType === 'cliente') {
+      if (domain === 'finance' || domain === 'receivables') {
+        drillPrompt = `Listar extrato detalhado de títulos a receber do cliente ${val}`;
+      } else {
+        drillPrompt = `Detalhar pedidos e histórico de faturamento do cliente ${val}`;
+      }
+    } else if (entityType === 'fornecedor') {
+      drillPrompt = `Listar títulos a pagar e notas de entrada do fornecedor ${val}`;
+    } else if (entityType === 'produto') {
+      drillPrompt = `Ver movimentações e posição de estoque do produto ${val}`;
+    } else if (entityType === 'vendedor') {
+      drillPrompt = `Detalhar vendas e pedidos faturados do vendedor ${val}`;
+    } else {
+      drillPrompt = `Detalhes de ${val}`;
+    }
+
+    if (typeof onDrillDown === 'function') {
+      onDrillDown(drillPrompt);
+    } else if (typeof onAction === 'function') {
+      onAction('drill_down', { prompt: drillPrompt, entityType, entityValue, row: extraRowData });
+    }
+  };
+
+  const handleChartClick = (event) => {
+    if (!chartRef.current) return;
+    const elements = getElementAtEvent(chartRef.current, event);
+    if (!elements || elements.length === 0) return;
+
+    const firstElement = elements[0];
+    const index = firstElement.index;
+    const point = series[0]?.points?.[index];
+    if (point?.label) {
+      // Infere o tipo da entidade a partir do rótulo da série ou do domínio
+      let entityType = 'cliente';
+      const seriesLabel = String(series[0]?.label || '').toLowerCase();
+      if (seriesLabel.includes('produto') || seriesLabel.includes('item')) entityType = 'produto';
+      else if (seriesLabel.includes('fornecedor')) entityType = 'fornecedor';
+      else if (seriesLabel.includes('vendedor')) entityType = 'vendedor';
+
+      triggerDrillDown(entityType, point.label);
+    }
+  };
 
   const displayValue = val => {
     if (val === null || val === undefined) return '';
@@ -245,16 +311,25 @@ export default function StructuredResultPanel({ result, context, onAction }) {
       {series.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="stitch-card p-5 lg:col-span-2">
-            <h3 className="text-[16px] font-bold text-[#171C20] dark:text-white mb-4">
-              {series[0].label || 'Gráfico'}
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[16px] font-bold text-[#171C20] dark:text-white">
+                {series[0].label || 'Gráfico'}
+              </h3>
+              <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2.5 py-1 rounded-full border border-blue-200/50 dark:border-blue-800/50 flex items-center gap-1">
+                <Sparkles size={12} />
+                <span>Clique em uma barra para detalhar</span>
+              </span>
+            </div>
             <div className="h-[250px] w-full">
               {chartData ? (
                 <Bar
+                  ref={chartRef}
                   data={chartData}
+                  onClick={handleChartClick}
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
+                    cursor: 'pointer',
                     plugins: {
                       legend: { display: false },
                       tooltip: {
@@ -271,6 +346,7 @@ export default function StructuredResultPanel({ result, context, onAction }) {
                             }
                             return label;
                           },
+                          afterBody: () => '\n🔍 Clique para fazer drill-down',
                         },
                       },
                     },
@@ -382,14 +458,31 @@ export default function StructuredResultPanel({ result, context, onAction }) {
                       key={idx}
                       className="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors h-11"
                     >
-                      {columns.map(col => (
-                        <td
-                          key={col}
-                          className="px-4 py-2.5 text-[#171C20] dark:text-slate-200 whitespace-nowrap"
-                        >
-                          {displayValue(row[col])}
-                        </td>
-                      ))}
+                      {columns.map(col => {
+                        const drillType = getDrillDownType(col);
+                        const rawVal = row[col];
+                        const textVal = displayValue(rawVal);
+                        return (
+                          <td
+                            key={col}
+                            className="px-4 py-2.5 text-[#171C20] dark:text-slate-200 whitespace-nowrap"
+                          >
+                            {drillType && rawVal ? (
+                              <button
+                                type="button"
+                                onClick={() => triggerDrillDown(drillType, rawVal, row)}
+                                title={`Clique para detalhar este ${drillType}`}
+                                className="group/cell inline-flex items-center gap-1.5 font-medium text-[#004FCE] dark:text-blue-400 hover:text-blue-700 hover:underline cursor-pointer text-left"
+                              >
+                                <span>{textVal}</span>
+                                <ArrowUpRight size={12} className="opacity-0 group-hover/cell:opacity-100 transition-opacity text-blue-500" />
+                              </button>
+                            ) : (
+                              textVal
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))
                 ) : (

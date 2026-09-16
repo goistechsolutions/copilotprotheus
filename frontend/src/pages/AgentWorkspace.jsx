@@ -12,7 +12,9 @@ import {
   Search,
   Settings,
   Sparkles,
+  Star,
   Sun,
+  Trash2,
   User,
 } from 'lucide-react';
 import {
@@ -167,8 +169,16 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
 
     const stored = safeStorageRead(historyStorageKey, []);
     const title = textMessages.find(item => item.role === 'user')?.text.slice(0, 52) || 'Nova consulta';
+    const existing = stored.find(item => item.id === conversationId);
     safeStorageWrite(historyStorageKey, [
-      { id: conversationId, title, date: 'Agora', messages: textMessages, result: hasValidResult(result) ? result : null },
+      {
+        id: conversationId,
+        title: existing?.title || title,
+        date: 'Agora',
+        isFavorite: existing?.isFavorite || false,
+        messages: textMessages,
+        result: hasValidResult(result) ? result : null
+      },
       ...stored.filter(item => item.id !== conversationId),
     ].slice(0, 20));
   }, [messages, conversationId, historyStorageKey, result]);
@@ -187,6 +197,26 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
     try {
       window.localStorage.setItem(`${historyStorageKey}:active`, item.id);
     } catch {}
+  };
+
+  const handleToggleFavorite = (id, event) => {
+    event?.stopPropagation?.();
+    const stored = safeStorageRead(historyStorageKey, []);
+    const updated = stored.map(conv => conv.id === id ? { ...conv, isFavorite: !conv.isFavorite } : conv);
+    safeStorageWrite(historyStorageKey, updated);
+    setHistoryItems(updated);
+  };
+
+  const handleDeleteConversation = (id, event) => {
+    event?.stopPropagation?.();
+    if (!confirm('Deseja excluir esta conversa do histórico?')) return;
+    const stored = safeStorageRead(historyStorageKey, []);
+    const updated = stored.filter(conv => conv.id !== id);
+    safeStorageWrite(historyStorageKey, updated);
+    setHistoryItems(updated);
+    if (conversationId === id) {
+      handleNewConversation();
+    }
   };
 
   const handleExportConversationPdf = async () => {
@@ -378,10 +408,62 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
           {!showWorkspace && !isIframe && <div className="flex-1 flex flex-col items-center justify-center max-w-4xl w-full mx-auto"><div className="text-center mb-8"><div className="flex items-center justify-center gap-2.5 mb-4"><div className="w-12 h-12 rounded-full bg-[#004FCE] text-white flex items-center justify-center"><Sparkles size={22} /></div><span className="w-2.5 h-2.5 rounded-full bg-green-500" /></div><h1 className="text-[32px] sm:text-[40px] font-bold">Olá, {userName}.<br /><span className="text-[20px] sm:text-[24px] font-semibold text-slate-500">Como posso ajudar com os dados do Protheus hoje?</span></h1></div><div className="w-full mb-8"><SuggestionCards disabled={loading} onPick={send} /></div><div className="w-full"><Composer disabled={loading} onSend={send} placeholder="Pergunte sobre clientes, pedidos, financeiro, faturamento..." /></div></div>}
 
           {(showWorkspace || isIframe) && <div className={`flex-1 flex ${(!isIframe || result) ? 'flex-col lg:flex-row gap-4 sm:gap-6' : 'flex-col'} items-stretch min-h-0 h-full`}>
-            {showWorkspace && !isIframe && <section className="flex-1 lg:w-[70%] min-w-0 flex flex-col"><StructuredResultPanel result={result} context={context} onClose={() => setResult(null)} /></section>}
+            {showWorkspace && !isIframe && <section className="flex-1 lg:w-[70%] min-w-0 flex flex-col"><StructuredResultPanel result={result} context={context} onClose={() => setResult(null)} onDrillDown={send} /></section>}
             <aside className={`flex flex-col shrink-0 overflow-hidden ${isIframe ? 'w-full h-full p-2.5 bg-white dark:bg-[#1E293B] rounded-xl' : 'stitch-card p-4 sm:p-5 w-full lg:w-[30%] min-h-[580px] h-[calc(100vh-8rem)] sticky top-20'}`}>
               <div className="p-2.5 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-xl mb-3"><div className="flex items-center gap-1.5 flex-wrap"><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 text-[10px] font-semibold"><Database size={10} />PROTHEUS - {context.branch || 'Filial não identificada'}</span><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 text-[10px] font-semibold"><User size={10} />{context.user || 'Usuário não identificado'}</span><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-[10px] font-semibold text-[#004FCE]">{context.module || 'Módulo não identificado'}</span></div><div className="flex items-center gap-1"><button type="button" onClick={() => setShowHistory(value => !value)} title="Histórico" className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200"><History size={13} /><span className="hidden sm:inline">Histórico</span></button>{hasValidResult(result) && <button type="button" onClick={handleExportConversationPdf} title="Exportar PDF" className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] border border-blue-200"><FileText size={13} /><span className="hidden sm:inline">PDF</span></button>}<button type="button" onClick={handleNewConversation} title="Nova consulta" className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] border border-blue-200"><Plus size={13} /><span className="hidden sm:inline">Nova Consulta</span></button></div></div>
-              {showHistory && <div className="mb-3 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"><div className="flex items-center justify-between px-3 py-2 border-b border-slate-200"><span className="text-[11px] font-bold">Histórico de conversas</span><span className="text-[10px] text-slate-400">{historyItems.length} registro(s)</span></div><div className="max-h-48 overflow-y-auto">{historyItems.length === 0 ? <p className="px-3 py-4 text-[11px] text-slate-500">Nenhuma conversa persistida neste contexto.</p> : historyItems.map(item => <button type="button" key={item.id} onClick={() => handleSelectConversation(item)} className={`w-full text-left px-3 py-2.5 border-b border-slate-100 hover:bg-blue-50 ${item.id === conversationId ? 'bg-blue-50/70' : ''}`}><span className="block text-[11px] font-semibold truncate">{item.title || 'Consulta sem título'}</span><span className="block text-[10px] text-slate-400 mt-0.5">{item.date || 'Histórico local'}</span></button>)}</div></div>}
+              {showHistory && (
+                <div className="mb-3 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200">
+                    <span className="text-[11px] font-bold">Histórico de conversas</span>
+                    <span className="text-[10px] text-slate-400">{historyItems.length} registro(s)</span>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    {historyItems.length === 0 ? (
+                      <p className="px-3 py-4 text-[11px] text-slate-500 text-center">Nenhuma conversa persistida neste contexto.</p>
+                    ) : (
+                      historyItems.map(item => (
+                        <div
+                          key={item.id}
+                          onClick={() => handleSelectConversation(item)}
+                          className={`group/item flex items-center justify-between px-3 py-2.5 hover:bg-blue-50/70 cursor-pointer transition-colors ${
+                            item.id === conversationId ? 'bg-blue-50/90 font-medium' : ''
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              {item.isFavorite && (
+                                <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" />
+                              )}
+                              <span className="block text-[11px] font-semibold text-slate-800 truncate">
+                                {item.title || 'Consulta sem título'}
+                              </span>
+                            </div>
+                            <span className="block text-[10px] text-slate-400 mt-0.5">{item.date || 'Histórico local'}</span>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleFavorite(item.id, e)}
+                              title={item.isFavorite ? 'Remover dos favoritos' : 'Favoritar conversa'}
+                              className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-amber-500"
+                            >
+                              <Star size={12} className={item.isFavorite ? 'text-amber-500 fill-amber-500' : ''} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteConversation(item.id, e)}
+                              title="Excluir conversa"
+                              className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-600"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex-1 overflow-y-auto space-y-3 pr-1">{messages.length === 0 && <div className="space-y-4 py-2"><p className="text-[12px] font-medium text-slate-500">Pronto para consultar. Escolha uma sugestão ou faça uma pergunta:</p><SuggestionCards disabled={loading} onPick={send} /></div>}<Conversation messages={messages} context={context} onNavigateToDashboard={onNavigateToDashboard} />{loading && <div className="flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 text-[12px] text-[#004FCE] animate-pulse"><Sparkles size={15} /><span>{task ? getTaskStatusLabel(task.status) : 'Consultando dados no Protheus via Oracle QueryRest...'}</span></div>}</div>
               <div className="pt-2.5 border-t border-slate-200 mt-2"><Composer disabled={loading} onSend={send} placeholder="Pergunte sobre seus dados..." /></div>
             </aside>
