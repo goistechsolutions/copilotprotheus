@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
+  Archive,
   BarChart3,
   Bell,
   Database,
@@ -104,6 +105,7 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
   const [task, setTask] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
+  const [historyFilter, setHistoryFilter] = useState('all'); // 'all', 'favorites', 'archived'
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -176,6 +178,7 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
         title: existing?.title || title,
         date: 'Agora',
         isFavorite: existing?.isFavorite || false,
+        isArchived: existing?.isArchived || false,
         messages: textMessages,
         result: hasValidResult(result) ? result : null
       },
@@ -203,6 +206,14 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
     event?.stopPropagation?.();
     const stored = safeStorageRead(historyStorageKey, []);
     const updated = stored.map(conv => conv.id === id ? { ...conv, isFavorite: !conv.isFavorite } : conv);
+    safeStorageWrite(historyStorageKey, updated);
+    setHistoryItems(updated);
+  };
+
+  const handleToggleArchive = (id, event) => {
+    event?.stopPropagation?.();
+    const stored = safeStorageRead(historyStorageKey, []);
+    const updated = stored.map(conv => conv.id === id ? { ...conv, isArchived: !conv.isArchived } : conv);
     safeStorageWrite(historyStorageKey, updated);
     setHistoryItems(updated);
   };
@@ -413,20 +424,78 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
               <div className="p-2.5 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-xl mb-3"><div className="flex items-center gap-1.5 flex-wrap"><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 text-[10px] font-semibold"><Database size={10} />PROTHEUS - {context.branch || 'Filial não identificada'}</span><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 text-[10px] font-semibold"><User size={10} />{context.user || 'Usuário não identificado'}</span><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-[10px] font-semibold text-[#004FCE]">{context.module || 'Módulo não identificado'}</span></div><div className="flex items-center gap-1"><button type="button" onClick={() => setShowHistory(value => !value)} title="Histórico" className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200"><History size={13} /><span className="hidden sm:inline">Histórico</span></button>{hasValidResult(result) && <button type="button" onClick={handleExportConversationPdf} title="Exportar PDF" className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] border border-blue-200"><FileText size={13} /><span className="hidden sm:inline">PDF</span></button>}<button type="button" onClick={handleNewConversation} title="Nova consulta" className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-[#004FCE] border border-blue-200"><Plus size={13} /><span className="hidden sm:inline">Nova Consulta</span></button></div></div>
               {showHistory && (
                 <div className="mb-3 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200">
-                    <span className="text-[11px] font-bold">Histórico de conversas</span>
-                    <span className="text-[10px] text-slate-400">{historyItems.length} registro(s)</span>
+                  <div className="px-3 py-2 border-b border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">Histórico de conversas</span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {historyItems.filter(i => !i.isArchived).length} ativa(s)
+                      </span>
+                    </div>
+                    {/* Tabs de Filtro Rápido */}
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                      <button
+                        type="button"
+                        onClick={() => setHistoryFilter('all')}
+                        className={`flex-1 py-1 px-1.5 rounded text-center transition-colors ${
+                          historyFilter === 'all'
+                            ? 'bg-white dark:bg-slate-700 text-[#004FCE] dark:text-blue-400 font-bold shadow-xs'
+                            : 'hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Todas ({historyItems.filter(i => !i.isArchived).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryFilter('favorites')}
+                        className={`flex-1 py-1 px-1.5 rounded text-center transition-colors flex items-center justify-center gap-1 ${
+                          historyFilter === 'favorites'
+                            ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 font-bold shadow-xs'
+                            : 'hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <Star size={10} className="fill-amber-500 text-amber-500" />
+                        <span>({historyItems.filter(i => !!i.isFavorite && !i.isArchived).length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryFilter('archived')}
+                        className={`flex-1 py-1 px-1.5 rounded text-center transition-colors flex items-center justify-center gap-1 ${
+                          historyFilter === 'archived'
+                            ? 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold shadow-xs'
+                            : 'hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <Archive size={10} />
+                        <span>({historyItems.filter(i => !!i.isArchived).length})</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
-                    {historyItems.length === 0 ? (
-                      <p className="px-3 py-4 text-[11px] text-slate-500 text-center">Nenhuma conversa persistida neste contexto.</p>
-                    ) : (
-                      historyItems.map(item => (
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                    {(() => {
+                      const displayed = historyItems.filter(item => {
+                        if (historyFilter === 'favorites') return !!item.isFavorite && !item.isArchived;
+                        if (historyFilter === 'archived') return !!item.isArchived;
+                        return !item.isArchived;
+                      });
+
+                      if (displayed.length === 0) {
+                        return (
+                          <p className="px-3 py-4 text-[11px] text-slate-500 text-center">
+                            {historyFilter === 'favorites'
+                              ? 'Nenhuma conversa marcada como favorita.'
+                              : historyFilter === 'archived'
+                              ? 'Nenhuma conversa arquivada.'
+                              : 'Nenhuma conversa ativa no histórico.'}
+                          </p>
+                        );
+                      }
+
+                      return displayed.map(item => (
                         <div
                           key={item.id}
                           onClick={() => handleSelectConversation(item)}
-                          className={`group/item flex items-center justify-between px-3 py-2.5 hover:bg-blue-50/70 cursor-pointer transition-colors ${
-                            item.id === conversationId ? 'bg-blue-50/90 font-medium' : ''
+                          className={`group/item flex items-center justify-between px-3 py-2.5 hover:bg-blue-50/70 dark:hover:bg-slate-800/60 cursor-pointer transition-colors ${
+                            item.id === conversationId ? 'bg-blue-50/90 dark:bg-slate-800 font-medium' : ''
                           }`}
                         >
                           <div className="min-w-0 flex-1 pr-2">
@@ -434,7 +503,10 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
                               {item.isFavorite && (
                                 <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" />
                               )}
-                              <span className="block text-[11px] font-semibold text-slate-800 truncate">
+                              {item.isArchived && (
+                                <Archive size={11} className="text-slate-400 shrink-0" />
+                              )}
+                              <span className="block text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate">
                                 {item.title || 'Consulta sem título'}
                               </span>
                             </div>
@@ -445,22 +517,32 @@ export default function AgentWorkspace({ onNavigateToDashboard, externalContext:
                               type="button"
                               onClick={(e) => handleToggleFavorite(item.id, e)}
                               title={item.isFavorite ? 'Remover dos favoritos' : 'Favoritar conversa'}
-                              className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-amber-500"
+                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-amber-500 transition-colors"
                             >
                               <Star size={12} className={item.isFavorite ? 'text-amber-500 fill-amber-500' : ''} />
                             </button>
                             <button
                               type="button"
+                              onClick={(e) => handleToggleArchive(item.id, e)}
+                              title={item.isArchived ? 'Desarquivar conversa' : 'Arquivar conversa'}
+                              className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${
+                                item.isArchived ? 'text-blue-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                              }`}
+                            >
+                              <Archive size={12} />
+                            </button>
+                            <button
+                              type="button"
                               onClick={(e) => handleDeleteConversation(item.id, e)}
                               title="Excluir conversa"
-                              className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-600"
+                              className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-950/50 text-slate-400 hover:text-red-600 transition-colors"
                             >
                               <Trash2 size={12} />
                             </button>
                           </div>
                         </div>
-                      ))
-                    )}
+                      ));
+                    })()}
                   </div>
                 </div>
               )}

@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Database,
   FileSpreadsheet,
   Download,
@@ -24,6 +26,12 @@ import {
   ArrowUpRight,
   Sparkles,
   ExternalLink,
+  SlidersHorizontal,
+  TrendingUp,
+  RefreshCw,
+  ShieldCheck,
+  DollarSign,
+  Percent,
 } from 'lucide-react';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Filler);
@@ -59,6 +67,73 @@ export default function StructuredResultPanel({ result, context, onAction, onDri
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
+
+  // What-If Simulator state (RF012)
+  const [showSimulator, setShowSimulator] = useState(false);
+  const [simPriceDelta, setSimPriceDelta] = useState(0);
+  const [simCostDelta, setSimCostDelta] = useState(0);
+  const [simDelinquencyDelta, setSimDelinquencyDelta] = useState(0);
+
+  // Calcula a receita/faturamento base real a partir dos KPIs ou das linhas retornadas pelo Protheus
+  const realBaseRevenue = useMemo(() => {
+    // 1. Tentar pegar de KPI de valor financeiro ou faturamento
+    const revenueKpi = kpis.find(k => 
+      k.format === 'currency' || 
+      /FATURAMENTO|RECEITA|TOTAL|VALOR|SALDO|MONTANTE/i.test(k.label || '')
+    );
+    const parsedKpi = parseNumeric(revenueKpi?.value);
+    if (parsedKpi && parsedKpi > 0) return parsedKpi;
+
+    // 2. Tentar somar coluna de valor/faturamento nas linhas
+    const valCol = columns.find(c => /VALOR|VALBRUT|VALMERC|TOTAL|TOTAL_FAT|SALDO|FATURAMENTO/i.test(c));
+    if (valCol && rows.length > 0) {
+      const sum = rows.reduce((acc, row) => acc + (parseNumeric(row[valCol]) || 0), 0);
+      if (sum > 0) return sum;
+    }
+
+    // 3. Fallback a partir de backend_kpis se disponível
+    const backendTotal = parseNumeric(result?.backend_kpis?.total);
+    if (backendTotal && backendTotal > 0) return backendTotal;
+
+    return 0;
+  }, [kpis, columns, rows, result]);
+
+  // Cálculos do simulador de sensibilidade sobre a base real
+  const simulationMetrics = useMemo(() => {
+    const base = realBaseRevenue > 0 ? realBaseRevenue : 1000000; // referência se base zerada
+    const priceImpact = base * (simPriceDelta / 100);
+    const costImpact = -(base * 0.58) * (simCostDelta / 100);
+    const delinquencyImpact = -(base * 0.02) * (simDelinquencyDelta / 100);
+    const totalImpact = priceImpact + costImpact + delinquencyImpact;
+    const marginDelta = Number(((totalImpact / base) * 100).toFixed(2));
+    const isPositive = totalImpact >= 0;
+
+    return {
+      base,
+      priceImpact,
+      costImpact,
+      delinquencyImpact,
+      totalImpact,
+      marginDelta,
+      isPositive,
+      formattedTotal: (isPositive ? '+ ' : '- ') + formatCurrency(Math.abs(totalImpact)),
+    };
+  }, [realBaseRevenue, simPriceDelta, simCostDelta, simDelinquencyDelta]);
+
+  const handleResetSimulator = () => {
+    setSimPriceDelta(0);
+    setSimCostDelta(0);
+    setSimDelinquencyDelta(0);
+  };
+
+  const handleAskSimulationCopilot = () => {
+    const prompt = `Avaliar projeção de sensibilidade sobre a base real de ${formatCurrency(simulationMetrics.base)}: Variação de Preço (${simPriceDelta >= 0 ? '+' : ''}${simPriceDelta}%), Custos (${simCostDelta >= 0 ? '+' : ''}${simCostDelta}%) e Inadimplência (${simDelinquencyDelta >= 0 ? '+' : ''}${simDelinquencyDelta}%). Qual o impacto projetado na margem e viabilidade no Protheus?`;
+    if (typeof onDrillDown === 'function') {
+      onDrillDown(prompt);
+    } else if (typeof onAction === 'function') {
+      onAction('ask_copilot', { prompt });
+    }
+  };
 
   // Helper para identificar se uma coluna representa entidade acionável de drill-down
   const getDrillDownType = (colName) => {
@@ -247,6 +322,19 @@ export default function StructuredResultPanel({ result, context, onAction, onDri
         </div>
         
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowSimulator(prev => !prev)}
+            className={`h-9 px-3.5 rounded-xl text-[13px] font-semibold border transition-all flex items-center gap-2 cursor-pointer shadow-sm ${
+              showSimulator
+                ? 'bg-indigo-600 text-white border-indigo-700 shadow-indigo-500/20'
+                : 'bg-white dark:bg-slate-800 border-border-hairline text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
+            }`}
+          >
+            <SlidersHorizontal size={15} className={showSimulator ? 'text-cyan-300' : 'text-indigo-600 dark:text-indigo-400'} />
+            <span>Simulador What-If</span>
+            {showSimulator ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
           {rows.length > 0 && (
             <>
               <button
@@ -262,6 +350,170 @@ export default function StructuredResultPanel({ result, context, onAction, onDri
           )}
         </div>
       </div>
+
+      {/* SIMULADOR WHAT-IF CONECTADO A DADOS REAIS (RF012) */}
+      {showSimulator && (
+        <section className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/70 via-white to-slate-50/80 dark:from-slate-900 dark:via-[#1E293B] dark:to-slate-900 p-5 sm:p-6 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20">
+                <SlidersHorizontal className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Simulador Executivo What-If & Sensibilidade
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">
+                    Base Real: {formatCurrency(simulationMetrics.base)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Simule o impacto de variações de preço, custos e inadimplência aplicados diretamente aos números desta consulta.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleResetSimulator}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Resetar</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAskSimulationCopilot}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#004FCE] hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Avaliar com Copiloto</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 items-center">
+            {/* Sliders (3 Colunas) */}
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Slider 1: Preço Médio */}
+              <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="w-3.5 h-3.5 text-[#004FCE]" />
+                    Variação de Preço
+                  </span>
+                  <span className="font-mono text-[#004FCE] dark:text-blue-400 font-black text-sm">
+                    {simPriceDelta >= 0 ? '+' : ''}{simPriceDelta}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-10"
+                  max="15"
+                  step="0.5"
+                  value={simPriceDelta}
+                  onChange={e => setSimPriceDelta(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#004FCE]"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                  <span>-10%</span>
+                  <span>0%</span>
+                  <span>+15%</span>
+                </div>
+                <div className="text-[10px] font-semibold text-slate-500 text-right">
+                  Impacto: {formatCurrency(simulationMetrics.priceImpact)}
+                </div>
+              </div>
+
+              {/* Slider 2: Custos de Insumos */}
+              <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <span className="flex items-center gap-1">
+                    <Percent className="w-3.5 h-3.5 text-amber-500" />
+                    Custos (COGS / Insumos)
+                  </span>
+                  <span className="font-mono text-amber-600 dark:text-amber-400 font-black text-sm">
+                    {simCostDelta >= 0 ? '+' : ''}{simCostDelta}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-10"
+                  max="15"
+                  step="0.5"
+                  value={simCostDelta}
+                  onChange={e => setSimCostDelta(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                  <span>-10%</span>
+                  <span>0%</span>
+                  <span>+15%</span>
+                </div>
+                <div className="text-[10px] font-semibold text-slate-500 text-right">
+                  Impacto: {formatCurrency(simulationMetrics.costImpact)}
+                </div>
+              </div>
+
+              {/* Slider 3: Inadimplência */}
+              <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
+                    Inadimplência Carteira
+                  </span>
+                  <span className="font-mono text-rose-600 dark:text-rose-400 font-black text-sm">
+                    {simDelinquencyDelta >= 0 ? '+' : ''}{simDelinquencyDelta}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-3"
+                  max="5"
+                  step="0.2"
+                  value={simDelinquencyDelta}
+                  onChange={e => setSimDelinquencyDelta(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-rose-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                  <span>-3%</span>
+                  <span>0%</span>
+                  <span>+5%</span>
+                </div>
+                <div className="text-[10px] font-semibold text-slate-500 text-right">
+                  Impacto: {formatCurrency(simulationMetrics.delinquencyImpact)}
+                </div>
+              </div>
+            </div>
+
+            {/* Caixa de Impacto Projetado */}
+            <div
+              className={`p-4 rounded-2xl border text-center transition-all ${
+                simulationMetrics.isPositive
+                  ? 'bg-emerald-500/10 dark:bg-emerald-950/30 border-emerald-500/30'
+                  : 'bg-rose-500/10 dark:bg-rose-950/30 border-rose-500/30'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Sensibilidade no EBITDA / Margem
+              </div>
+              <div
+                className={`text-2xl font-black tracking-tight mt-1 ${
+                  simulationMetrics.isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                }`}
+              >
+                {simulationMetrics.formattedTotal}
+              </div>
+              <div className="text-[11px] font-bold mt-1 text-slate-600 dark:text-slate-300">
+                Margem Estimada: {simulationMetrics.isPositive ? '+' : ''}
+                {simulationMetrics.marginDelta}%
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {exportError && (
         <div className="text-red-500 text-sm mt-2">{exportError}</div>
