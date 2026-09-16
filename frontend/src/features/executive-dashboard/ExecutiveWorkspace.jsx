@@ -4,14 +4,8 @@ import {
   Sun, 
   ArrowLeft, 
   X, 
-  Bot, 
-  Sparkles, 
-  PanelLeftClose, 
-  PanelLeft,
-  Building2,
-  Globe,
-  Layers,
-  SlidersHorizontal
+  Menu,
+  Sparkles
 } from 'lucide-react';
 import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
@@ -22,22 +16,23 @@ import { QuickActions } from '../conversation/QuickActions';
 import { CopilotSidebar } from '../conversation/CopilotSidebar';
 
 /**
- * Copilot Protheus Chat 3.0 - Executive Intelligence Workspace
- * Layout Geral (Especificação UX/UI Completa):
- * ┌────────────────────────────────────────────────────────────┐
- * │ HEADER (Copilot Executivo • Oracle Online • Assistente...) │
- * ├────────────────────────────────────────────────────────────┤
- * │ WORKSPACE:                                                 │
- * │ ┌───────────────────┐ ┌──────────────────────────────────┐ │
- * │ │ SIDEBAR           │ │ CONVERSATION AREA                │ │
- * │ │ • + Nova Conversa │ │ • Welcome State (Mini Cards)     │ │
- * │ │ • Exec Summary    │ │   OU                             │ │
- * │ │ • Search Univ     │ │ • Chat com Cards Executivos      │ │
- * │ │ • Histórico       │ │                                  │ │
- * │ └───────────────────┘ └──────────────────────────────────┘ │
- * ├────────────────────────────────────────────────────────────┤
- * │ INPUT BAR PREMIUM (O que deseja analisar hoje? + Atalhos)  │
- * └────────────────────────────────────────────────────────────┘
+ * Copilot Protheus - Chat Minimal Executive
+ * Princípio: Remover tudo que não é essencial.
+ * Foco: Perguntar -> Receber Inteligência -> Abrir Dashboard.
+ * 
+ * Header:
+ * ┌──────────────────────────────────────────────┐
+ * │ ☰  ✨ Copilot Executivo                      │
+ * │    Inteligência Corporativa • Oracle • FAT   │
+ * └──────────────────────────────────────────────┘
+ * 
+ * Centro da Tela:
+ * Bom dia, [Nome]
+ * O que deseja analisar hoje?
+ * [ 4 Cards Executivos: Caixa | Inadimplência | Vendas | Estoque ]
+ * 
+ * Drawer Lateral (Off-Canvas):
+ * Oculto por padrão, acionado pelo ícone ☰
  */
 export default function ExecutiveWorkspace() {
   const { 
@@ -47,15 +42,26 @@ export default function ExecutiveWorkspace() {
     setConfig, 
     session, 
     chat,
-    newConversation,
     loadConversations,
   } = useDashboardStore();
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Drawer fechado por padrão para garantir 100% do espaço útil
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     loadConversations();
   }, []);
+
+  // Fechar o drawer com tecla Esc
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (config.theme === 'dark') {
@@ -73,7 +79,7 @@ export default function ExecutiveWorkspace() {
   const isDashboardActive = Boolean(currentDashboard);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // MODO 3: Dashboard Dedicado em Tela Cheia (100% de amplitude)
+  // MODO: Dashboard Dedicado em Tela Cheia (100% de amplitude analítica)
   // ──────────────────────────────────────────────────────────────────────────
   if (isDashboardActive) {
     const title = currentDashboard?.originPrompt || 'Dashboard Executivo';
@@ -82,41 +88,41 @@ export default function ExecutiveWorkspace() {
     return (
       <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#07111F] dark:text-slate-100">
         {/* Header do Dashboard Dedicado */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 dark:border-slate-800/80 dark:bg-[#0D1528] shadow-sm z-10">
-          <div className="flex items-center gap-3">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 dark:border-slate-800/80 dark:bg-[#0D1528] shadow-xs z-10">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setDashboard(null)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 transition-colors cursor-pointer shrink-0"
               title="Voltar ao Workspace de Conversa"
             >
-              <ArrowLeft size={15} />
-              <span>Voltar ao Workspace</span>
+              <ArrowLeft size={14} />
+              <span>Voltar ao Chat</span>
             </button>
 
-            <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 shrink-0" />
 
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-slate-900 dark:text-white">
+                <span className="text-sm font-bold text-slate-900 dark:text-white truncate">
                   Dashboard Executivo
                 </span>
-                <span className="hidden md:inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  Atualizado às {updatedTime}
+                <span className="hidden sm:inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300 shrink-0">
+                  {updatedTime}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[260px] sm:max-w-[450px]">
-                Baseado na consulta: <span className="font-medium text-slate-700 dark:text-slate-300">"{title}"</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[260px] sm:max-w-[450px]">
+                {title}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={toggleTheme}
               className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               title="Alternar Tema"
             >
-              {config.theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              {config.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
             </button>
 
             <button
@@ -124,7 +130,7 @@ export default function ExecutiveWorkspace() {
               className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               title="Fechar Dashboard"
             >
-              <X size={18} />
+              <X size={17} />
             </button>
           </div>
         </header>
@@ -142,78 +148,88 @@ export default function ExecutiveWorkspace() {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // CHAT 3.0: Executive Intelligence Workspace (Sidebar + Area + Input Bar)
+  // CHAT MINIMAL EXECUTIVE
   // ──────────────────────────────────────────────────────────────────────────
-  const tenant = session?.tenantId || 'Padrão';
-  const environment = session?.environment || 'PROD';
   const moduleName = session?.module || session?.currentModule || 'SIGAFAT';
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#07111F] dark:text-slate-100">
-      {/* 6. Novo Header (Wireframe Seção 6) */}
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 dark:border-slate-800/80 dark:bg-[#0D1528] shadow-sm z-20 gap-3">
+      {/* Header Minimal Executive */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/80 dark:border-slate-800/80 dark:bg-[#0D1528]/90 backdrop-blur-md px-4 z-20 gap-3">
         <div className="flex items-center gap-3 min-w-0">
+          {/* Botão Hamburguer para acionar o Drawer de Histórico / Conversas */}
           <button
             type="button"
-            onClick={() => setSidebarOpen((prev) => !prev)}
-            className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title={sidebarOpen ? "Recolher barra lateral" : "Expandir barra lateral"}
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Abrir histórico e conversas (☰)"
           >
-            {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
+            <Menu size={19} />
           </button>
 
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#2563FF] to-[#4F80FF] text-white shadow-sm shadow-blue-500/20">
-            <Bot size={20} />
-          </div>
-
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-slate-900 dark:text-white truncate">
+          {/* Identidade Visual Minimalista */}
+          <div className="min-w-0 flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={14} className="text-[#2563FF] shrink-0" />
+              <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate">
                 Copilot Executivo
               </h1>
-              <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 shrink-0">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#00D26A] animate-pulse" />
-                Oracle Online
+            </div>
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+              <span>Inteligência Corporativa</span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#00D26A]" />
+                Oracle Online • {moduleName}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              Assistente Corporativo de Negócios • <span className="font-semibold">{tenant}</span> ({moduleName} · {environment})
-            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Ações Rápidas */}
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={toggleTheme}
             className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             title="Alternar Tema Claro / Escuro"
           >
-            {config.theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            {config.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
         </div>
       </header>
 
-      {/* WORKSPACE: Sidebar Permanente + Conversation Area (Wireframe Seções 1 & 2) */}
+      {/* WORKSPACE: Área Principal com Drawer Sobreposto */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Sidebar Permanente */}
+        {/* Backdrop escurecido do Drawer */}
         {sidebarOpen && (
-          <CopilotSidebar />
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 transition-opacity animate-in fade-in duration-200"
+            onClick={() => setSidebarOpen(false)}
+          />
         )}
 
-        {/* Conversation Area Principal */}
+        {/* Drawer Off-Canvas Deslizante */}
+        <div 
+          className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out ${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <CopilotSidebar onClose={() => setSidebarOpen(false)} />
+        </div>
+
+        {/* Conversation Area Principal (100% de amplitude) */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50/50 dark:bg-[#07111F] relative">
-          <div className="flex-1 flex flex-col w-full max-w-4xl mx-auto overflow-hidden">
-            {/* Estado Inicial (Welcome + Mini-Cards) quando sem mensagens */}
+          <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto overflow-hidden">
+            {/* Estado Inicial (Boas-vindas + 4 Cards) OU Conversa com Balões */}
             {chat.messages.length === 0 ? (
               <div className="flex-1 overflow-y-auto flex flex-col justify-center">
                 <QuickActions />
               </div>
             ) : (
-              /* Conversa Ativa com Balões e Cards Executivos */
               <CopilotConversation />
             )}
 
-            {/* INPUT BAR PREMIUM (Wireframe Seção 9) */}
+            {/* Floating Input Bar */}
             <PromptInput />
           </div>
         </main>
@@ -221,4 +237,3 @@ export default function ExecutiveWorkspace() {
     </div>
   );
 }
-

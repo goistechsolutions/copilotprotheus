@@ -5,18 +5,14 @@ import {
   Star, 
   Clock, 
   MessageSquare, 
-  Calendar, 
-  TrendingUp, 
-  AlertTriangle, 
-  ShieldAlert, 
-  ChevronRight,
   Trash2,
-  CheckCircle2,
-  Sparkles
+  ChevronRight,
+  X,
+  History
 } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 
-export function CopilotSidebar({ onSelectConversation }) {
+export function CopilotSidebar({ onSelectConversation, onClose }) {
   const { 
     newConversation, 
     conversationsGrouped, 
@@ -47,6 +43,7 @@ export function CopilotSidebar({ onSelectConversation }) {
   const handleNewChat = async () => {
     await newConversation();
     if (onSelectConversation) onSelectConversation();
+    if (onClose) onClose();
   };
 
   const sections = [
@@ -56,8 +53,28 @@ export function CopilotSidebar({ onSelectConversation }) {
   ];
 
   return (
-    <aside className="w-full md:w-72 lg:w-80 shrink-0 h-full flex flex-col border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#07111F] transition-all">
-      {/* 1. Botão + Nova Conversa (Wireframe Seção 3) */}
+    <aside className="w-72 sm:w-80 h-full flex flex-col border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0D1528] shadow-2xl transition-all">
+      {/* Header do Drawer: Título e Botão Fechar */}
+      <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80">
+        <div className="flex items-center gap-2">
+          <History size={16} className="text-[#2563FF]" />
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+            Painel Executivo
+          </span>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Fechar menu lateral"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      {/* 1. Botão + Nova Conversa */}
       <div className="p-3.5 border-b border-slate-100 dark:border-slate-800/60">
         <button
           type="button"
@@ -69,57 +86,21 @@ export function CopilotSidebar({ onSelectConversation }) {
         </button>
       </div>
 
-      {/* 2. Área Intelligence: Executive Summary (Wireframe Seção 7) */}
-      <div className="px-3.5 pt-3 pb-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-[#0D1528]/50">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400">
-            Executive Summary
-          </span>
-          <Sparkles size={11} className="text-amber-500" />
-        </div>
-
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-center justify-between p-1.5 rounded-lg bg-white dark:bg-[#121E35] border border-slate-200/60 dark:border-white/5">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#00D26A]" />
-              <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Oportunidades</span>
-            </div>
-            <span className="text-[11px] font-bold text-[#00D26A]">2</span>
-          </div>
-
-          <div className="flex items-center justify-between p-1.5 rounded-lg bg-white dark:bg-[#121E35] border border-slate-200/60 dark:border-white/5">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#FFB020]" />
-              <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Atenção</span>
-            </div>
-            <span className="text-[11px] font-bold text-[#FFB020]">1</span>
-          </div>
-
-          <div className="flex items-center justify-between p-1.5 rounded-lg bg-white dark:bg-[#121E35] border border-slate-200/60 dark:border-white/5">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#FF5A65]" />
-              <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Risco</span>
-            </div>
-            <span className="text-[11px] font-bold text-[#FF5A65]">1</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Search Universal (Wireframe Seção 8) */}
+      {/* 2. Search Universal */}
       <div className="p-3 border-b border-slate-100 dark:border-slate-800/60">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar Conversa, Cliente, Insight..."
+            placeholder="Buscar consulta ou cliente..."
             value={searchTerm}
             onChange={handleSearch}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D1528] text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all"
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#07111F] text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all"
           />
         </div>
       </div>
 
-      {/* 4. Abas Rápidas da Sidebar: Todas vs Favoritos */}
+      {/* 3. Abas Rápidas da Sidebar: Conversas vs Favoritos */}
       <div className="flex px-3 pt-2 gap-1 border-b border-slate-100 dark:border-slate-800/60">
         <button
           type="button"
@@ -146,7 +127,7 @@ export function CopilotSidebar({ onSelectConversation }) {
         </button>
       </div>
 
-      {/* 5. Lista Rolável: Histórico ou Favoritos (Wireframe Seção 3) */}
+      {/* 4. Lista Rolável: Histórico ou Favoritos */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
         {sidebarTab === 'favorites' ? (
           /* Lista de Favoritos */
@@ -158,6 +139,7 @@ export function CopilotSidebar({ onSelectConversation }) {
                   onClick={() => {
                     if (fav.dashboard) restoreDashboard(fav.dashboard);
                     if (onSelectConversation) onSelectConversation();
+                    if (onClose) onClose();
                   }}
                   className="group flex items-center justify-between p-2.5 rounded-xl border border-amber-200/40 dark:border-amber-900/30 bg-amber-50/20 dark:bg-amber-950/10 hover:border-amber-300 dark:hover:border-amber-700/50 cursor-pointer transition-all"
                 >
@@ -197,11 +179,12 @@ export function CopilotSidebar({ onSelectConversation }) {
                         onClick={() => {
                           selectConversation(conv.id);
                           if (onSelectConversation) onSelectConversation();
+                          if (onClose) onClose();
                         }}
                         className={`group flex items-center justify-between p-2 rounded-xl border transition-all cursor-pointer ${
                           isSelected
                             ? 'border-blue-500 bg-blue-50/70 dark:border-blue-500/50 dark:bg-[#121E35] text-blue-600 dark:text-blue-400 font-semibold shadow-2xs'
-                            : 'border-transparent hover:border-slate-200 dark:hover:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-[#0D1528] text-slate-700 dark:text-slate-300'
+                            : 'border-transparent hover:border-slate-200 dark:hover:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-[#07111F] text-slate-700 dark:text-slate-300'
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0 pr-1">
@@ -234,4 +217,3 @@ export function CopilotSidebar({ onSelectConversation }) {
     </aside>
   );
 }
-

@@ -3,84 +3,87 @@ import {
   DollarSign, 
   TrendingUp, 
   Package, 
-  FileText, 
-  Sparkles, 
+  AlertTriangle, 
   ArrowUpRight 
 } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 
 export function QuickActions() {
-  const { triggerPrompt, isGenerating } = useDashboardStore();
+  const { triggerPrompt, isGenerating, session } = useDashboardStore();
 
   const handleAction = (text) => {
     if (isGenerating) return;
     triggerPrompt(text);
   };
 
-  const domainCards = [
+  // Saudação personalizada por horário
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
+  };
+
+  // Nome do usuário
+  const rawUser = session?.userName || session?.user || session?.userId || 'Executivo';
+  const firstName = rawUser.split(/[\s._@]/)[0] || 'Executivo';
+  const formattedName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+
+  // 4 Cards Principais (Minimal Executive)
+  const executiveCards = [
     {
-      id: 'financeiro',
-      title: 'Financeiro',
-      description: 'Fluxo de caixa, títulos a receber e risco de inadimplência',
+      id: 'caixa',
+      title: 'Fluxo de Caixa',
+      subtitle: 'Próximos 30 dias',
       icon: DollarSign,
       iconColor: 'text-amber-500 dark:text-amber-400',
       bgColor: 'bg-amber-500/10',
-      badge: 'SE1 / SE2',
       prompt: 'Projeção de fluxo de caixa e recebimentos dos próximos 30 dias',
+    },
+    {
+      id: 'inadimplencia',
+      title: 'Inadimplência',
+      subtitle: 'Clientes em risco',
+      icon: AlertTriangle,
+      iconColor: 'text-rose-500 dark:text-rose-400',
+      bgColor: 'bg-rose-500/10',
+      prompt: 'Clientes com títulos vencidos acima de 60 dias e risco de inadimplência',
     },
     {
       id: 'vendas',
       title: 'Vendas',
-      description: 'Faturamento acumulado, margem e ranking comercial',
+      subtitle: 'Faturamento do mês',
       icon: TrendingUp,
       iconColor: 'text-blue-500 dark:text-blue-400',
       bgColor: 'bg-blue-500/10',
-      badge: 'SF2 / SD2',
-      prompt: 'Faturamento acumulado do mês atual comparado por vendedor e filial',
+      prompt: 'Faturamento acumulado do mês atual comparado por vendedor',
     },
     {
       id: 'estoque',
       title: 'Estoque',
-      description: 'Itens parados sem giro e risco de ruptura no almoxarifado',
+      subtitle: 'Produtos sem giro',
       icon: Package,
       iconColor: 'text-emerald-500 dark:text-emerald-400',
       bgColor: 'bg-emerald-500/10',
-      badge: 'SB1 / SB2',
       prompt: 'Identificar produtos parados sem movimentação nos últimos 90 dias com saldo em estoque',
-    },
-    {
-      id: 'fiscal',
-      title: 'Fiscal & Compras',
-      description: 'Notas fiscais de entrada, tributos e fornecedores',
-      icon: FileText,
-      iconColor: 'text-purple-500 dark:text-purple-400',
-      bgColor: 'bg-purple-500/10',
-      badge: 'SF1 / SD1',
-      prompt: 'Notas fiscais de entrada recentes agrupadas por fornecedor e valor total',
     },
   ];
 
   return (
-    <div className="w-full flex flex-col items-center justify-center py-6 px-2 max-w-3xl mx-auto animate-in fade-in duration-500">
-      {/* Brand & Boas-vindas Executivas */}
-      <div className="text-center mb-6 space-y-2">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold mb-1">
-          <Sparkles size={13} className="text-[#2563FF] animate-pulse" />
-          <span>Executive Intelligence Platform 3.0</span>
-        </div>
-        
-        <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          Bem-vindo ao Copilot Executivo
+    <div className="w-full flex flex-col items-center justify-center py-6 px-4 max-w-xl mx-auto animate-in fade-in duration-300">
+      {/* Saudação Executiva Minimalista */}
+      <div className="text-center mb-6 space-y-1">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          {getGreeting()}, {formattedName}
         </h2>
-        
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-lg mx-auto leading-relaxed">
-          Analise dados Financeiros, Comerciais, Estoque, Compras, Fiscal e Controladoria em tempo real com garantia de leitura e zero alucinação no Protheus.
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+          O que deseja analisar hoje?
         </p>
       </div>
 
-      {/* Grid de Mini Cards (Wireframe Seção 2) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full mb-4">
-        {domainCards.map((card) => {
+      {/* Grid de 4 Cards (2 Colunas, Focado) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full mb-5">
+        {executiveCards.map((card) => {
           const Icon = card.icon;
           return (
             <button
@@ -88,31 +91,26 @@ export function QuickActions() {
               type="button"
               disabled={isGenerating}
               onClick={() => handleAction(card.prompt)}
-              className="group p-4 text-left rounded-2xl glass-card-executive cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group p-3.5 text-left rounded-2xl glass-card-executive cursor-pointer transition-all hover:border-blue-500/40 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`p-2.5 rounded-xl ${card.bgColor} ${card.iconColor} shrink-0`}>
+                  <div className={`p-2 rounded-xl ${card.bgColor} ${card.iconColor} shrink-0`}>
                     <Icon size={18} />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
-                        {card.title}
-                      </h3>
-                      <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shrink-0">
-                        {card.badge}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
-                      {card.description}
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
+                      {card.title}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {card.subtitle}
                     </p>
                   </div>
                 </div>
 
                 <ArrowUpRight 
-                  size={15} 
-                  className="text-slate-400 group-hover:text-blue-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0 mt-0.5" 
+                  size={14} 
+                  className="text-slate-400 group-hover:text-blue-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0" 
                 />
               </div>
             </button>
@@ -120,21 +118,20 @@ export function QuickActions() {
         })}
       </div>
 
-      {/* Quick Action Chips Rápidos */}
-      <div className="w-full flex flex-wrap items-center justify-center gap-2 pt-2">
-        <span className="text-[11px] font-semibold text-slate-400 mr-1">Sugestões rápidas:</span>
+      {/* Sugestões Rápidas Minimalistas */}
+      <div className="w-full flex flex-wrap items-center justify-center gap-1.5 pt-1">
         {[
           "Extrato do maior devedor",
-          "Projeção de fluxo de caixa",
           "Ranking de clientes",
-          "Inadimplência acima de 60 dias"
+          "Inadimplência > 60 dias",
+          "Notas fiscais recentes"
         ].map((text) => (
           <button
             key={text}
             type="button"
             disabled={isGenerating}
             onClick={() => handleAction(text)}
-            className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 px-3 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-blue-300 hover:text-blue-600 dark:hover:border-blue-500/40 dark:hover:text-blue-400 transition-colors cursor-pointer"
+            className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70 px-2.5 py-1 text-[10px] sm:text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-500/40 dark:hover:text-blue-400 transition-colors cursor-pointer"
           >
             {text}
           </button>
@@ -143,4 +140,3 @@ export function QuickActions() {
     </div>
   );
 }
-

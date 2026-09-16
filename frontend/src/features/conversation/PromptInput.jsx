@@ -252,29 +252,32 @@ export function PromptInput() {
   }, []);
 
   return (
-    <div className="shrink-0 p-3 sm:p-4 bg-transparent">
-      <div className="relative flex items-center rounded-[18px] border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1326] shadow-sm hover:shadow-md transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 px-4 min-h-[56px]">
+    <div className="shrink-0 p-3 sm:p-4 bg-transparent max-w-3xl w-full mx-auto">
+      <div className="relative flex items-center rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#0B1326]/95 backdrop-blur-md shadow-md hover:shadow-lg transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 px-3.5 sm:px-4 min-h-[52px]">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isGenerating}
-          className="flex-1 max-h-32 min-h-[24px] resize-none bg-transparent py-3 pr-10 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none disabled:opacity-50"
+          className="flex-1 max-h-32 min-h-[22px] resize-none bg-transparent py-2.5 pr-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none disabled:opacity-50 leading-relaxed"
           placeholder={isGenerating ? "Processando no Oracle Protheus..." : PLACEHOLDERS[placeholderIndex]}
           rows={1}
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || isGenerating}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#2563FF] hover:bg-[#3B82F6] text-white shadow-sm shadow-blue-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+          className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-[#2563FF] hover:bg-[#3B82F6] text-white shadow-sm shadow-blue-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-95 ml-2"
           title="Enviar pergunta ao Copilot Executivo"
         >
-          {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} className={input.trim() ? "ml-0.5" : ""} />}
+          {isGenerating ? <Loader2 size={15} className="animate-spin" /> : <Send size={14} className={input.trim() ? "ml-0.5" : ""} />}
         </button>
       </div>
-      <p className="mt-2 text-center text-[10px] text-slate-400 dark:text-slate-500">
-        Copilot Executivo Protheus • Conexão nativa Oracle • Zero alucinação
-      </p>
+      <div className="mt-1.5 flex items-center justify-center gap-2 text-[10px] text-slate-400 dark:text-slate-500">
+        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#00D26A]" />
+        <span>Oracle Online</span>
+        <span>•</span>
+        <span>Zero Alucinação</span>
+      </div>
     </div>
   );
 }
