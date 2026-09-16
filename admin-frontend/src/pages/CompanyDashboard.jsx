@@ -9,7 +9,8 @@ import {
   CreditCard, 
   Activity, 
   ChevronLeft,
-  Layers
+  Layers,
+  Scale
 } from 'lucide-react';
 
 // Placeholder components for the sub-routes
@@ -54,6 +55,12 @@ export default function CompanyDashboard() {
   const tabs = [
     { path: '', label: 'Geral', icon: <Settings size={18} /> },
     { path: '/dictionary', label: 'Dicionário (Tabelas)', icon: <Database size={18} /> },
+    { 
+      path: `/governance/business-rules?tenant=${encodeURIComponent(company?.tenant_id || company?.protheus_grupo || '')}`, 
+      label: 'Regras de Negócio', 
+      icon: <Scale size={18} />, 
+      isExternal: true 
+    },
     { path: '/users', label: 'Usuários', icon: <Users size={18} /> },
     { path: '/billing', label: 'Recursos & Custos', icon: <CreditCard size={18} /> },
     { path: '/health', label: 'Logs & Protheus', icon: <Activity size={18} /> }
@@ -94,12 +101,12 @@ export default function CompanyDashboard() {
       {/* Navigation Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-1 flex overflow-x-auto custom-scrollbar">
         {tabs.map(tab => {
-          const fullPath = `/companies/${id}${tab.path}`;
-          const isActive = location.pathname === fullPath || (tab.path === '' && location.pathname === `/companies/${id}`);
+          const fullPath = tab.isExternal ? tab.path : `/companies/${id}${tab.path}`;
+          const isActive = !tab.isExternal && (location.pathname === fullPath || (tab.path === '' && location.pathname === `/companies/${id}`));
           
           return (
             <Link
-              key={tab.path}
+              key={tab.label}
               to={fullPath}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
                 isActive 

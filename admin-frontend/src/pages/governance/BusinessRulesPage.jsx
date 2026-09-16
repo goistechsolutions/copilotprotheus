@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Scale, RefreshCw, AlertCircle, Plus, Trash2, CheckCircle2,
   ShoppingCart, ShoppingBag, DollarSign, Package, FileText,
@@ -8,8 +9,11 @@ import api from '../../api/axios';
 import PageHeader from '../../components/ui/PageHeader';
 
 export default function BusinessRulesPage() {
+  const [searchParams] = useSearchParams();
+  const tenantParam = searchParams.get('tenant');
+
   const [tenants, setTenants] = useState([]);
-  const [selectedTenant, setSelectedTenant] = useState('');
+  const [selectedTenant, setSelectedTenant] = useState(tenantParam || '');
   const [activeTab, setActiveTab] = useState('comercial');
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -57,6 +61,12 @@ export default function BusinessRulesPage() {
   }, []);
 
   useEffect(() => {
+    if (tenantParam) {
+      setSelectedTenant(tenantParam);
+    }
+  }, [tenantParam]);
+
+  useEffect(() => {
     if (selectedTenant) {
       loadAllData(selectedTenant);
     }
@@ -72,7 +82,7 @@ export default function BusinessRulesPage() {
       const res = await api.get('/api/tenants');
       const list = res.data?.tenants || res.data || [];
       setTenants(list);
-      if (list.length > 0) {
+      if (list.length > 0 && !selectedTenant && !tenantParam) {
         setSelectedTenant(String(list[0].tenant_code || list[0].id));
       }
     } catch {
@@ -95,16 +105,18 @@ export default function BusinessRulesPage() {
         api.get(`/api/admin/business-rules/audit?tenant_id=${encodeURIComponent(tid)}`)
       ]);
 
+      const toArray = (d) => (Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []));
+
       setOverview(overRes.data);
-      setTesSaidaList(tesSaidaRes.data?.data || []);
-      setTesEntradaList(tesEntradaRes.data?.data || []);
-      setCfopList(cfopRes.data?.data || []);
-      setNaturesList(natRes.data?.data || []);
-      setSynonymsList(synRes.data?.data || []);
-      if (confRes.data?.config) {
-        setConfig(confRes.data.config);
+      setTesSaidaList(toArray(tesSaidaRes.data));
+      setTesEntradaList(toArray(tesEntradaRes.data));
+      setCfopList(toArray(cfopRes.data));
+      setNaturesList(toArray(natRes.data));
+      setSynonymsList(toArray(synRes.data));
+      if (confRes.data) {
+        setConfig(confRes.data.config || confRes.data);
       }
-      setAuditList(auditRes.data?.data || []);
+      setAuditList(toArray(auditRes.data));
     } catch (e) {
       setError(e.response?.data?.detail || 'Erro ao carregar dados do Business Rules Center');
     } finally {
@@ -324,7 +336,7 @@ export default function BusinessRulesPage() {
           <div>
             <div className="text-[11px] text-slate-400 font-medium">Total de Regras Ativas</div>
             <div className="text-xl font-bold text-white">
-              {overview?.counts?.active_rules_total ?? 0}
+              {overview?.total_active_rules ?? overview?.counts?.active_rules_total ?? 0}
             </div>
           </div>
         </div>
@@ -336,7 +348,9 @@ export default function BusinessRulesPage() {
           <div>
             <div className="text-[11px] text-slate-400 font-medium">Última Atualização</div>
             <div className="text-xs font-semibold text-slate-200">
-              {overview?.last_updated ? new Date(overview.last_updated).toLocaleString('pt-BR') : 'Sem registros'}
+              {overview?.last_update || overview?.last_updated
+                ? new Date(overview.last_update || overview.last_updated).toLocaleString('pt-BR')
+                : 'Sem registros'}
             </div>
           </div>
         </div>
