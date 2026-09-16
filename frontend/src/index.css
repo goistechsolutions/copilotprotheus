@@ -40,7 +40,7 @@
 
 .dark {
   color: #f8fafc;
-  background-color: #0f172a;
+  background-color: #0B0E14;
 }
 
 * {
@@ -69,7 +69,7 @@ body {
 }
 
 .dark body {
-  background-color: #0f172a;
+  background-color: #0B0E14;
   color: #f8fafc;
 }
 
@@ -143,13 +143,13 @@ input:focus-visible {
    Design System 3.0: Copilot Protheus Executive Intelligence Workspace
    ========================================================================== */
 :root {
-  --bg-primary: #07111F;
-  --bg-secondary: #0D1528;
-  --bg-tertiary: #101B33;
-  --surface-card: #121E35;
-  --surface-elevated: #16233D;
-  --primary: #2563FF;
-  --primary-hover: #3B82F6;
+  --bg-primary: #0B0E14;
+  --bg-secondary: #10141D;
+  --bg-tertiary: #161C28;
+  --surface-card: #121722;
+  --surface-elevated: #182030;
+  --primary: #4F7CFF;
+  --primary-hover: #3D6BF0;
   --success: #00D26A;
   --warning: #FFB020;
   --danger: #FF5A65;

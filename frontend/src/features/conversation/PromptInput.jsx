@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { askAgent, waitForAgentTask } from '../../services/api';
 import { normalizeAgentResult } from '../../utils/normalizeAgentResult';
@@ -8,6 +8,7 @@ import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 export function PromptInput() {
   const [input, setInput] = useState('');
   const { 
+    chat,
     addChatMessage, 
     setIsGenerating, 
     setDashboard, 
@@ -235,48 +236,34 @@ export function PromptInput() {
     }
   };
 
-  const PLACEHOLDERS = [
-    "Ex: Fluxo de Caixa dos próximos 30 dias...",
-    "Ex: Clientes em atraso com títulos acima de 60 dias...",
-    "Ex: Faturamento por vendedor e margem bruta...",
-    "Ex: Produtos sem giro no almoxarifado...",
-    "Ex: Notas fiscais de entrada recentes...",
-  ];
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDERS.length);
-    }, 4500);
-    return () => clearInterval(interval);
-  }, []);
+  const placeholderText = isGenerating
+    ? "Processando no Oracle Protheus..."
+    : (chat.messages.length === 0 ? "Pergunte ao ERP..." : "Continue a análise...");
 
   return (
-    <div className="shrink-0 p-3 sm:p-4 bg-transparent max-w-3xl w-full mx-auto">
-      <div className="relative flex items-center rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#0B1326]/95 backdrop-blur-md shadow-md hover:shadow-lg transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 px-3.5 sm:px-4 min-h-[52px]">
+    <div className="shrink-0 px-4 sm:px-6 py-4 bg-transparent max-w-2xl w-full mx-auto">
+      <div className="relative flex items-center rounded-[20px] border border-slate-200/80 dark:border-white/[0.06] bg-white/70 dark:bg-[#0B0E14] backdrop-blur-sm px-4 py-1.5 focus-within:border-[#4F7CFF] focus-within:ring-1 focus-within:ring-[#4F7CFF]/30 transition-all min-h-[50px]">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isGenerating}
-          className="flex-1 max-h-32 min-h-[22px] resize-none bg-transparent py-2.5 pr-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none disabled:opacity-50 leading-relaxed"
-          placeholder={isGenerating ? "Processando no Oracle Protheus..." : PLACEHOLDERS[placeholderIndex]}
+          className="flex-1 max-h-32 min-h-[26px] resize-none bg-transparent py-2 pr-2 text-sm sm:text-[15px] text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none disabled:opacity-50 leading-relaxed font-normal"
+          placeholder={placeholderText}
           rows={1}
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || isGenerating}
-          className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-[#2563FF] hover:bg-[#3B82F6] text-white shadow-sm shadow-blue-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-95 ml-2"
-          title="Enviar pergunta ao Copilot Executivo"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#4F7CFF] hover:bg-[#3D6BF0] text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95 ml-2"
+          title="Enviar (➜)"
         >
-          {isGenerating ? <Loader2 size={15} className="animate-spin" /> : <Send size={14} className={input.trim() ? "ml-0.5" : ""} />}
+          {isGenerating ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <ArrowRight size={15} />
+          )}
         </button>
-      </div>
-      <div className="mt-1.5 flex items-center justify-center gap-2 text-[10px] text-slate-400 dark:text-slate-500">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#00D26A]" />
-        <span>Oracle Online</span>
-        <span>•</span>
-        <span>Zero Alucinação</span>
       </div>
     </div>
   );

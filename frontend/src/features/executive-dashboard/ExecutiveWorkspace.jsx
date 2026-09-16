@@ -4,7 +4,7 @@ import {
   Sun, 
   ArrowLeft, 
   X, 
-  Menu,
+  Settings,
   Sparkles
 } from 'lucide-react';
 import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
@@ -16,23 +16,13 @@ import { QuickActions } from '../conversation/QuickActions';
 import { CopilotSidebar } from '../conversation/CopilotSidebar';
 
 /**
- * Copilot Protheus - Chat Minimal Executive
- * Princípio: Remover tudo que não é essencial.
- * Foco: Perguntar -> Receber Inteligência -> Abrir Dashboard.
+ * Copilot Protheus — Minimal Executive Workspace
+ * Inspirado em Apple Human Interface, Claude AI, Linear, Arc e Notion AI.
  * 
- * Header:
- * ┌──────────────────────────────────────────────┐
- * │ ☰  ✨ Copilot Executivo                      │
- * │    Inteligência Corporativa • Oracle • FAT   │
- * └──────────────────────────────────────────────┘
- * 
- * Centro da Tela:
- * Bom dia, [Nome]
- * O que deseja analisar hoje?
- * [ 4 Cards Executivos: Caixa | Inadimplência | Vendas | Estoque ]
- * 
- * Drawer Lateral (Off-Canvas):
- * Oculto por padrão, acionado pelo ícone ☰
+ * Hierarquia Visual:
+ * - 10% Header (Apenas ✨ Copilot Protheus e ⚙ Configurações)
+ * - 80% Conversa / Estado Inicial
+ * - 10% Input
  */
 export default function ExecutiveWorkspace() {
   const { 
@@ -40,12 +30,11 @@ export default function ExecutiveWorkspace() {
     setDashboard, 
     config, 
     setConfig, 
-    session, 
     chat,
     loadConversations,
   } = useDashboardStore();
 
-  // Drawer fechado por padrão para garantir 100% do espaço útil
+  // Drawer de configurações/histórico fechado por padrão
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -86,27 +75,27 @@ export default function ExecutiveWorkspace() {
     const updatedTime = currentDashboard?.updatedAt || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     return (
-      <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#07111F] dark:text-slate-100">
+      <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0E14] dark:text-slate-100">
         {/* Header do Dashboard Dedicado */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 dark:border-slate-800/80 dark:bg-[#0D1528] shadow-xs z-10">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white/80 px-4 sm:px-6 dark:border-white/[0.05] dark:bg-[#0B0E14]/90 backdrop-blur-md z-10">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setDashboard(null)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 transition-colors cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-50 text-[#4F7CFF] hover:bg-blue-100 dark:bg-[#4F7CFF]/10 dark:text-[#4F7CFF] dark:hover:bg-[#4F7CFF]/20 transition-colors cursor-pointer shrink-0"
               title="Voltar ao Workspace de Conversa"
             >
               <ArrowLeft size={14} />
               <span>Voltar ao Chat</span>
             </button>
 
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 shrink-0" />
+            <div className="h-4 w-px bg-slate-200 dark:bg-white/[0.08] shrink-0" />
 
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                   Dashboard Executivo
                 </span>
-                <span className="hidden sm:inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300 shrink-0">
+                <span className="hidden sm:inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-white/[0.06] dark:text-slate-300 shrink-0">
                   {updatedTime}
                 </span>
               </div>
@@ -119,7 +108,7 @@ export default function ExecutiveWorkspace() {
           <div className="flex items-center gap-2">
             <button
               onClick={toggleTheme}
-              className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="rounded-xl p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
               title="Alternar Tema"
             >
               {config.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
@@ -127,7 +116,7 @@ export default function ExecutiveWorkspace() {
 
             <button
               onClick={() => setDashboard(null)}
-              className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="rounded-xl p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
               title="Fechar Dashboard"
             >
               <X size={17} />
@@ -149,51 +138,35 @@ export default function ExecutiveWorkspace() {
 
   // ──────────────────────────────────────────────────────────────────────────
   // CHAT MINIMAL EXECUTIVE
+  // Hierarquia: 10% Header | 80% Conversa | 10% Input
   // ──────────────────────────────────────────────────────────────────────────
-  const moduleName = session?.module || session?.currentModule || 'SIGAFAT';
-
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#07111F] dark:text-slate-100">
-      {/* Header Minimal Executive */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/80 dark:border-slate-800/80 dark:bg-[#0D1528]/90 backdrop-blur-md px-4 z-20 gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          {/* Botão Hamburguer para acionar o Drawer de Histórico / Conversas */}
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-white text-slate-900 dark:bg-[#0B0E14] dark:text-slate-100">
+      {/* 10% Header Premium: ✨ Copilot Protheus e ⚙ Configurações */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/50 bg-white/70 dark:border-white/[0.05] dark:bg-[#0B0E14]/80 backdrop-blur-md px-5 z-20">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-[#4F7CFF]" />
+          <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight">
+            Copilot Protheus
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+            title="Alternar Tema Claro / Escuro"
+          >
+            {config.theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Abrir histórico e conversas (☰)"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+            title="Configurações e Histórico (⚙)"
           >
-            <Menu size={19} />
-          </button>
-
-          {/* Identidade Visual Minimalista */}
-          <div className="min-w-0 flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <Sparkles size={14} className="text-[#2563FF] shrink-0" />
-              <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate">
-                Copilot Executivo
-              </h1>
-            </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 truncate">
-              <span>Inteligência Corporativa</span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#00D26A]" />
-                Oracle Online • {moduleName}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Ações Rápidas */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={toggleTheme}
-            className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Alternar Tema Claro / Escuro"
-          >
-            {config.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            <Settings size={16} />
           </button>
         </div>
       </header>
@@ -208,19 +181,18 @@ export default function ExecutiveWorkspace() {
           />
         )}
 
-        {/* Drawer Off-Canvas Deslizante */}
+        {/* Drawer Off-Canvas Deslizante para Histórico & Configurações */}
         <div 
-          className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          className={`fixed inset-y-0 right-0 z-50 transform transition-transform duration-300 ease-in-out ${
+            sidebarOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
           <CopilotSidebar onClose={() => setSidebarOpen(false)} />
         </div>
 
-        {/* Conversation Area Principal (100% de amplitude) */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50/50 dark:bg-[#07111F] relative">
-          <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto overflow-hidden">
-            {/* Estado Inicial (Boas-vindas + 4 Cards) OU Conversa com Balões */}
+        {/* 80% Conversa / Estado Inicial (100% de amplitude limpa) */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white dark:bg-[#0B0E14] relative">
+          <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto overflow-hidden">
             {chat.messages.length === 0 ? (
               <div className="flex-1 overflow-y-auto flex flex-col justify-center">
                 <QuickActions />
@@ -229,7 +201,7 @@ export default function ExecutiveWorkspace() {
               <CopilotConversation />
             )}
 
-            {/* Floating Input Bar */}
+            {/* 10% Input Ultra-Minimal */}
             <PromptInput />
           </div>
         </main>
