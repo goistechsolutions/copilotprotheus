@@ -642,6 +642,89 @@ def ensure_public_tables(db, force: bool = False):
         CREATE UNIQUE INDEX IF NOT EXISTS uq_business_dashboard_templates_code ON public.business_dashboard_templates (dashboard_code);
         CREATE INDEX IF NOT EXISTS idx_business_dashboard_templates_intent ON public.business_dashboard_templates (intent_id);
         """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.copilot_conversations (
+            id            VARCHAR(64) PRIMARY KEY,
+            tenant_id     VARCHAR(100) NOT NULL,
+            user_id       VARCHAR(100) NOT NULL,
+            title         VARCHAR(255) NOT NULL,
+            domain_code   VARCHAR(50),
+            status        VARCHAR(20) NOT NULL DEFAULT 'active',
+            is_favorite   BOOLEAN NOT NULL DEFAULT FALSE,
+            context_state JSONB DEFAULT '{}',
+            created_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_copilot_conv_tenant_user ON public.copilot_conversations (tenant_id, user_id);
+        CREATE INDEX IF NOT EXISTS idx_copilot_conv_updated_at ON public.copilot_conversations (updated_at DESC);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.copilot_messages (
+            id              VARCHAR(64) PRIMARY KEY,
+            conversation_id VARCHAR(64) NOT NULL,
+            role            VARCHAR(20) NOT NULL,
+            message         TEXT NOT NULL,
+            metadata        JSONB DEFAULT '{}',
+            created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_copilot_msg_conv ON public.copilot_messages (conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_copilot_msg_created ON public.copilot_messages (created_at ASC);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.copilot_dashboards (
+            id              VARCHAR(64) PRIMARY KEY,
+            conversation_id VARCHAR(64) NOT NULL,
+            title           VARCHAR(255) NOT NULL,
+            dashboard_type  VARCHAR(100),
+            query           TEXT,
+            dashboard_json  JSONB NOT NULL,
+            insight_json    JSONB DEFAULT '[]',
+            is_favorite     BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_copilot_dash_conv ON public.copilot_dashboards (conversation_id);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.copilot_favorites (
+            id         VARCHAR(64) PRIMARY KEY,
+            tenant_id  VARCHAR(100) NOT NULL,
+            user_id    VARCHAR(100) NOT NULL,
+            item_type  VARCHAR(20) NOT NULL,
+            item_id    VARCHAR(64) NOT NULL,
+            title      VARCHAR(255) NOT NULL,
+            metadata   JSONB DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_copilot_fav_tenant_user ON public.copilot_favorites (tenant_id, user_id);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.copilot_sessions (
+            id                     VARCHAR(64) PRIMARY KEY,
+            tenant_id              VARCHAR(100) NOT NULL,
+            user_id                VARCHAR(100) NOT NULL,
+            active_conversation_id VARCHAR(64),
+            last_activity          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_copilot_sessions_user ON public.copilot_sessions (tenant_id, user_id);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.copilot_events (
+            id              VARCHAR(64) PRIMARY KEY,
+            tenant_id       VARCHAR(100) NOT NULL,
+            user_id         VARCHAR(100) NOT NULL,
+            conversation_id VARCHAR(64),
+            event_type      VARCHAR(50) NOT NULL,
+            event_data      JSONB DEFAULT '{}',
+            created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_copilot_events_tenant ON public.copilot_events (tenant_id);
+        """,
     ]
 
     try:

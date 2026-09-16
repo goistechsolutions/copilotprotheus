@@ -3,7 +3,13 @@ import { Star, ExternalLink, Play, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 
 export function FavoritesList() {
-  const { favorites, restoreDashboard, toggleFavorite, currentDashboard } = useDashboardStore();
+  const { favorites, restoreDashboard, toggleFavorite, currentDashboard, loadServerFavorites } = useDashboardStore();
+
+  React.useEffect(() => {
+    if (loadServerFavorites) {
+      loadServerFavorites();
+    }
+  }, []);
 
   if (!favorites || favorites.length === 0) {
     return (

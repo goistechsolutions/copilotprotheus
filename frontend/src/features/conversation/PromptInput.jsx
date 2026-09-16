@@ -19,6 +19,10 @@ export function PromptInput() {
     pendingPrompt,
     clearPendingPrompt,
     currentDashboard,
+    currentConversationId,
+    newConversation,
+    syncMessage,
+    syncDashboard,
   } = useDashboardStore();
   const controllerRef = useRef(null);
 
@@ -43,6 +47,12 @@ export function PromptInput() {
     const text = promptText.trim();
     if (!text) return;
     setInput('');
+
+    // Garante que exista um conversation_id ativo
+    let convId = currentConversationId;
+    if (!convId) {
+      convId = await newConversation(text);
+    }
     
     addChatMessage({
       id: Date.now().toString(),
@@ -50,6 +60,9 @@ export function PromptInput() {
       content: text,
       timestamp: new Date().toISOString()
     });
+
+    // Sincroniza pergunta do usuário no backend
+    syncMessage(convId, 'user', text, { originPrompt: text });
     
     setIsGenerating(true);
     setProcessingStep(1); // 1. Entendendo pergunta
@@ -162,6 +175,13 @@ export function PromptInput() {
           timestamp: new Date().toISOString()
         });
 
+        // Sincroniza resposta do assistente no backend
+        syncMessage(convId, 'assistant', finalMessage, {
+          originPrompt: text,
+          dashboard: adaptive,
+          suggestions: adaptive?.suggestions || [],
+        });
+
         // Registrar no histórico unificado de dashboards
         if (adaptive) {
           addToHistory({
@@ -170,6 +190,16 @@ export function PromptInput() {
             dashboard: adaptive,
             timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           });
+
+          // Sincroniza dashboard na conversa no backend
+          syncDashboard(
+            convId,
+            adaptive.originPrompt || text,
+            adaptive,
+            adaptive.insights || null,
+            result?.sql_query || ''
+          );
+
           // Se o usuário já estiver com um dashboard aberto em tela cheia, atualiza-o imediatamente
           if (currentDashboard) {
             setDashboard(adaptive);

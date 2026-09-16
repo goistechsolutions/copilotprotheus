@@ -19,6 +19,7 @@ from app.api.powerbi_routes import router as powerbi_router
 from app.api.leonardo_routes import router as leonardo_router
 from app.core.admin_security import require_admin
 from app.api.agent_sql_routes import router as agent_sql_router
+from app.api.conversation_routes import router as conversation_router
 from app.core.logging_config import (
     setup_logging,
     get_correlation_id,
@@ -168,6 +169,7 @@ app.include_router(agent_router, prefix="/api")
 app.include_router(agent_sql_router, prefix="/api")
 app.include_router(catalog_v52_router)
 app.include_router(infra_router)
+app.include_router(conversation_router)
 # --- Fase 4: Power BI + Leonardo AI ---
 app.include_router(powerbi_router)   # prefixo já definido em powerbi_routes.py  (/api/powerbi)
 app.include_router(leonardo_router)  # prefixo já definido em leonardo_routes.py (/api/leonardo)

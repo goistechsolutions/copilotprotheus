@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Sun, ArrowLeft, X, Bot, MessageSquare, History, Star } from 'lucide-react';
+import { Moon, Sun, ArrowLeft, X, Bot, MessageSquare, History, Star, Plus } from 'lucide-react';
 import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { useDashboardStore } from '../../stores/useDashboardStore';
@@ -16,8 +16,21 @@ import { FavoritesList } from '../favorites/FavoritesList';
  * - Modo 3: Dashboard Dedicado em Tela Cheia (100% de amplitude com cabeçalho de retorno)
  */
 export default function ExecutiveWorkspace() {
-  const { currentDashboard, setDashboard, config, setConfig, session, chat } = useDashboardStore();
+  const { 
+    currentDashboard, 
+    setDashboard, 
+    config, 
+    setConfig, 
+    session, 
+    chat,
+    newConversation,
+    loadConversations,
+  } = useDashboardStore();
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'history' | 'favorites'
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
 
   useEffect(() => {
     if (config.theme === 'dark') {
@@ -144,6 +157,21 @@ export default function ExecutiveWorkspace() {
               <span className="font-mono">{environment}</span>
             </div>
           </div>
+
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block" />
+
+          {/* Botão Nova Conversa */}
+          <button
+            onClick={() => {
+              newConversation();
+              setActiveTab('chat');
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+            title="Iniciar uma nova conversa limpa"
+          >
+            <Plus size={14} />
+            <span>Nova Conversa</span>
+          </button>
         </div>
 
         {/* Abas de Navegação (Conversa, Histórico, Favoritos) + Tema */}

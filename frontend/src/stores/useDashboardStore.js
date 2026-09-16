@@ -1,10 +1,20 @@
 import { create } from 'zustand';
+import {
+  getConversations,
+  createConversation,
+  getConversation,
+  deleteConversation,
+  addConversationMessage,
+  addConversationDashboard,
+  getFavorites,
+  toggleConversationFavorite,
+} from '../services/api';
 
 /**
  * Store centralizado para gerenciar o estado da plataforma.
- * Responsável por: Sessão, Dashboard Atual, Histórico, Chat, e Configurações.
+ * Responsável por: Sessão, Conversas Persistentes (Chat 2.0), Dashboard Atual, Histórico, Chat e Configurações.
  */
-export const useDashboardStore = create((set) => ({
+export const useDashboardStore = create((set, get) => ({
   // Sessão
   session: {
     tenantId: null,
@@ -16,9 +26,161 @@ export const useDashboardStore = create((set) => ({
     session: { ...state.session, ...sessionData } 
   })),
 
+  // ==========================================
+  // Copilot Chat 2.0: Conversas Persistentes
+  // ==========================================
+  currentConversationId: null,
+  activeConversation: null,
+  conversationsGrouped: {
+    today: [],
+    last_7_days: [],
+    last_30_days: [],
+    older: [],
+  },
+  conversationsLoading: false,
+  conversationsSearchQuery: '',
+  setSearchQuery: (q) => set({ conversationsSearchQuery: q }),
+
+  // Carrega lista de conversas com agrupamento temporal do backend
+  loadConversations: async (search = '') => {
+    set({ conversationsLoading: true });
+    try {
+      const { session } = get();
+      const res = await getConversations({
+        tenant_id: session?.tenantId || undefined,
+        user_id: session?.userId || undefined,
+        q: search || undefined,
+      });
+      if (res && res.grouped) {
+        set({ conversationsGrouped: res.grouped, conversationsLoading: false });
+      } else {
+        set({ conversationsLoading: false });
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar conversas:', err);
+      set({ conversationsLoading: false });
+    }
+  },
+
+  // Inicia uma Nova Conversa limpa
+  newConversation: async (title = 'Nova Conversa') => {
+    const { session } = get();
+    try {
+      const res = await createConversation({
+        title,
+        tenant_id: session?.tenantId || 'padrao',
+        user_id: session?.userId || 'default_user',
+        domain_code: session?.module || 'SIGAFAT',
+      });
+      const convId = res.conversation_id;
+      set({
+        currentConversationId: convId,
+        activeConversation: { id: convId, title, is_favorite: false },
+        currentDashboard: null,
+        chat: { messages: [], isOpen: true },
+      });
+      get().loadConversations(get().conversationsSearchQuery);
+      return convId;
+    } catch (err) {
+      console.error('Erro ao criar conversa no backend:', err);
+      const fallbackId = `conv_${Date.now()}`;
+      set({
+        currentConversationId: fallbackId,
+        activeConversation: { id: fallbackId, title, is_favorite: false },
+        currentDashboard: null,
+        chat: { messages: [], isOpen: true },
+      });
+      return fallbackId;
+    }
+  },
+
+  // Seleciona e restaura uma conversa existente
+  selectConversation: async (conversationId) => {
+    if (!conversationId) return;
+    try {
+      const data = await getConversation(conversationId);
+      if (data && data.conversation) {
+        const conv = data.conversation;
+        const messages = (data.messages || []).map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.message,
+          metadata: m.metadata || {},
+          timestamp: m.created_at || new Date().toISOString(),
+          dashboard: m.metadata?.dashboard || null,
+          suggestions: m.metadata?.suggestions || [],
+          originPrompt: m.metadata?.originPrompt || '',
+        }));
+
+        // Se houver dashboards vinculados, restaura o último gerado
+        let latestDashboard = null;
+        if (data.dashboards && data.dashboards.length > 0) {
+          const lastDash = data.dashboards[data.dashboards.length - 1];
+          latestDashboard = lastDash.dashboard_json || null;
+        }
+
+        set({
+          currentConversationId: conversationId,
+          activeConversation: conv,
+          chat: { messages, isOpen: true },
+          currentDashboard: latestDashboard,
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao restaurar conversa:', err);
+    }
+  },
+
+  // Remove uma conversa
+  removeConversation: async (conversationId) => {
+    try {
+      await deleteConversation(conversationId);
+      const { currentConversationId } = get();
+      if (currentConversationId === conversationId) {
+        await get().newConversation();
+      } else {
+        get().loadConversations(get().conversationsSearchQuery);
+      }
+    } catch (err) {
+      console.error('Erro ao deletar conversa:', err);
+    }
+  },
+
+  // Sincroniza mensagem no backend
+  syncMessage: async (conversationId, role, message, metadata = {}) => {
+    if (!conversationId) return;
+    try {
+      await addConversationMessage(conversationId, {
+        role,
+        message,
+        metadata,
+      });
+      // Atualiza lista lateral de conversas (para refletir auto-título na primeira mensagem)
+      get().loadConversations(get().conversationsSearchQuery);
+    } catch (err) {
+      console.warn('Erro ao sincronizar mensagem:', err);
+    }
+  },
+
+  // Sincroniza dashboard gerado no backend
+  syncDashboard: async (conversationId, title, dashboardJson, insightJson = null, query = '') => {
+    if (!conversationId) return;
+    try {
+      await addConversationDashboard(conversationId, {
+        title: title || 'Dashboard Executivo',
+        dashboard_type: dashboardJson?.screenType || 'ranking',
+        query,
+        dashboard_json: dashboardJson,
+        insight_json: insightJson,
+      });
+    } catch (err) {
+      console.warn('Erro ao sincronizar dashboard:', err);
+    }
+  },
+
   // Dashboard Atual (Dashboard Engine State)
-  currentDashboard: null, // O contrato completo retornado pela IA (charts, kpis, type)
-  isGenerating: false, // Se a IA está gerando/processando o dashboard no momento
+  currentDashboard: null,
+  isGenerating: false,
   setDashboard: (dashboardData) => set({ currentDashboard: dashboardData }),
   setIsGenerating: (status) => set({ isGenerating: status }),
 
@@ -43,7 +205,7 @@ export const useDashboardStore = create((set) => ({
   triggerPrompt: (promptText) => set({ pendingPrompt: promptText }),
   clearPendingPrompt: () => set({ pendingPrompt: null }),
 
-  // Histórico e Favoritos
+  // Histórico local e Favoritos
   history: [],
   addToHistory: (entry) => set((state) => {
     const newEntry = {
@@ -64,6 +226,23 @@ export const useDashboardStore = create((set) => ({
   closeDashboard: () => set({ currentDashboard: null }),
   
   favorites: [],
+  loadServerFavorites: async () => {
+    try {
+      const { session } = get();
+      const res = await getFavorites(session?.tenantId);
+      if (res && res.dashboards) {
+        const mapped = res.dashboards.map((d) => ({
+          id: d.id,
+          title: d.title,
+          date: d.created_at ? new Date(d.created_at).toLocaleDateString('pt-BR') : 'Recente',
+          dashboard: d.dashboard_json,
+        }));
+        set({ favorites: mapped });
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar favoritos do servidor:', e);
+    }
+  },
   toggleFavorite: (dashboard) => set((state) => {
     if (!dashboard) return state;
     const exists = state.favorites.some(f => f.originPrompt === dashboard.originPrompt || (f.id && f.id === dashboard.id));
@@ -94,3 +273,4 @@ export const useDashboardStore = create((set) => ({
     config: { ...state.config, ...configData }
   })),
 }));
+

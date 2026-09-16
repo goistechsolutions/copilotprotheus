@@ -243,3 +243,78 @@ export async function apiLogin(tenant_id, username, password) {
   return data;
 }
 
+// ==========================================
+// Copilot Chat 2.0 - Conversas e Persistência
+// ==========================================
+
+export async function getConversations(params = {}) {
+  const base = getApiBaseUrl();
+  const query = new URLSearchParams();
+  if (params.tenant_id) query.append('tenant_id', params.tenant_id);
+  if (params.user_id) query.append('user_id', params.user_id);
+  if (params.q) query.append('q', params.q);
+  if (params.is_favorite !== undefined) query.append('is_favorite', params.is_favorite);
+  if (params.limit) query.append('limit', params.limit);
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  return fetchWithRetry(`${base}/conversations${qs}`, { method: 'GET' });
+}
+
+export async function createConversation(payload = {}) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getConversation(conversationId) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations/${conversationId}`, { method: 'GET' });
+}
+
+export async function updateConversation(conversationId, payload = {}) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations/${conversationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteConversation(conversationId) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations/${conversationId}`, { method: 'DELETE' });
+}
+
+export async function addConversationMessage(conversationId, payload = {}) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function addConversationDashboard(conversationId, payload = {}) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations/${conversationId}/dashboards`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getFavorites(tenant_id = null) {
+  const base = getApiBaseUrl();
+  const qs = tenant_id ? `?tenant_id=${encodeURIComponent(tenant_id)}` : '';
+  return fetchWithRetry(`${base}/conversations/favorites${qs}`, { method: 'GET' });
+}
+
+export async function toggleConversationFavorite(entityType, entityId, isFavorite) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations/favorites/toggle`, {
+    method: 'POST',
+    body: JSON.stringify({
+      entity_type: entityType,
+      entity_id: entityId,
+      is_favorite: isFavorite,
+    }),
+  });
+}
