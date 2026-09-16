@@ -49,6 +49,7 @@ from app.services.protheus_module_catalog import quote_tenant_schema
 from app.core.auth import get_current_user, require_current_user
 from app.services.analytics_engine import AnalyticsEngine
 from app.services.insight_rules import InsightEngine
+from app.services.business_rules_engine import BusinessRulesEngine
 
 logger = logging.getLogger("app.api.agent_sql")
 router = APIRouter(prefix="/agent", tags=["agent-sql"], dependencies=[Depends(require_current_user)])
@@ -447,7 +448,17 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
         )
 
 
-    user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}"
+    tenant_rules_instruction = ""
+    if tenant_id:
+        try:
+            from app.db.database import SessionLocal
+            with SessionLocal() as r_db:
+                t_rules = BusinessRulesEngine.get_tenant_rules(tenant_id, r_db)
+                tenant_rules_instruction = BusinessRulesEngine.build_rules_instruction(t_rules, prompt, domain)
+        except Exception as r_err:
+            logger.warning("Falha ao carregar regras de negocio do tenant %s: %s", tenant_id, r_err)
+
+    user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}{tenant_rules_instruction}"
 
     backend_mode = getattr(settings, "llm_backend", "gemini")
     raw_response = ""
@@ -902,13 +913,16 @@ async def process_agent_task(task_id: str, payload: dict):
     logger.info("agent_task_started task_id=%s", task_id)
     try:
 
-        execute = payload.get("execute", False)
-        
         prompt = payload.get("prompt") or payload.get("query")
         if not prompt:
             AGENT_TASKS[task_id] = {"status": "error", "error": "O campo prompt ou query é obrigatório na v2.", "correlation_id": correlation_id}
-
             return
+
+        tenant_candidate = payload.get("tenant_id") or (payload.get("context") or {}).get("tenant_id")
+        if tenant_candidate:
+            from app.db.database import SessionLocal
+            with SessionLocal() as syn_db:
+                prompt = BusinessRulesEngine.apply_synonyms(str(prompt), str(tenant_candidate), syn_db)
 
         environment_code = str(
             payload.get("environment_code")

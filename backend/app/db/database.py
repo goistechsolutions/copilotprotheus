@@ -725,6 +725,102 @@ def ensure_public_tables(db, force: bool = False):
         );
         CREATE INDEX IF NOT EXISTS idx_copilot_events_tenant ON public.copilot_events (tenant_id);
         """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_rule_sets (
+            id         VARCHAR(64) PRIMARY KEY,
+            tenant_id  VARCHAR(100) NOT NULL,
+            name       VARCHAR(200) NOT NULL,
+            enabled    BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_brs_tenant ON public.business_rule_sets (tenant_id);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_rule_tes (
+            id             VARCHAR(64) PRIMARY KEY,
+            tenant_id      VARCHAR(100) NOT NULL,
+            tes            VARCHAR(10) NOT NULL,
+            direction      VARCHAR(10) NOT NULL,
+            classification VARCHAR(50) NOT NULL,
+            description    VARCHAR(200),
+            active         BOOLEAN DEFAULT TRUE,
+            created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_br_tes_tenant ON public.business_rule_tes (tenant_id, tes);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_financial_natures (
+            id              VARCHAR(64) PRIMARY KEY,
+            tenant_id       VARCHAR(100) NOT NULL,
+            nature_code     VARCHAR(20) NOT NULL,
+            nature_name     VARCHAR(200) NOT NULL,
+            financial_group VARCHAR(100) NOT NULL,
+            created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_bfn_tenant ON public.business_financial_natures (tenant_id, nature_code);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_cfop_rules (
+            id             VARCHAR(64) PRIMARY KEY,
+            tenant_id      VARCHAR(100) NOT NULL,
+            cfop           VARCHAR(10) NOT NULL,
+            classification VARCHAR(50) NOT NULL,
+            created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_bcr_tenant ON public.business_cfop_rules (tenant_id, cfop);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_synonyms (
+            id          VARCHAR(64) PRIMARY KEY,
+            tenant_id   VARCHAR(100) NOT NULL,
+            source_term VARCHAR(200) NOT NULL,
+            target_term VARCHAR(200) NOT NULL,
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_bsyn_tenant ON public.business_synonyms (tenant_id, source_term);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_module_configs (
+            id                                VARCHAR(64) PRIMARY KEY,
+            tenant_id                         VARCHAR(100) NOT NULL UNIQUE,
+            billing_included_classifications  JSONB DEFAULT '["Venda", "Exportação"]',
+            billing_excluded_classifications  JSONB DEFAULT '["Bonificação", "Remessa", "Transferência"]',
+            receivables_overdue_days          INT DEFAULT 30,
+            receivables_include_renegotiated  BOOLEAN DEFAULT FALSE,
+            receivables_include_provisional   BOOLEAN DEFAULT TRUE,
+            stock_idle_days                   INT DEFAULT 90,
+            stock_critical_days               INT DEFAULT 7,
+            stock_rupture_days                INT DEFAULT 3,
+            abc_curve_a_pct                   NUMERIC(5,2) DEFAULT 80.0,
+            abc_curve_b_pct                   NUMERIC(5,2) DEFAULT 15.0,
+            abc_curve_c_pct                   NUMERIC(5,2) DEFAULT 5.0,
+            ai_cash_flow_tables               JSONB DEFAULT '["SE1", "SE2", "SE5"]',
+            created_at                        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at                        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_bmc_tenant ON public.business_module_configs (tenant_id);
+        """,
+
+        """
+        CREATE TABLE IF NOT EXISTS public.business_rule_audit (
+            id             VARCHAR(64) PRIMARY KEY,
+            tenant_id      VARCHAR(100) NOT NULL,
+            user_id        VARCHAR(100) NOT NULL,
+            event_date     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            rule_entity    VARCHAR(100) NOT NULL,
+            action         VARCHAR(20) NOT NULL,
+            previous_value JSONB,
+            new_value      JSONB
+        );
+        CREATE INDEX IF NOT EXISTS idx_bra_tenant ON public.business_rule_audit (tenant_id, event_date);
+        """,
     ]
 
     try:

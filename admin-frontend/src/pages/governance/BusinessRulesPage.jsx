@@ -1,101 +1,296 @@
 import { useState, useEffect } from 'react';
-import { Scale, RefreshCw, AlertCircle, Plus, Trash2, ChevronDown } from 'lucide-react';
+import {
+  Scale, RefreshCw, AlertCircle, Plus, Trash2, CheckCircle2,
+  ShoppingCart, ShoppingBag, DollarSign, Package, FileText,
+  BrainCircuit, BookOpen, History, Save, Filter
+} from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/ui/PageHeader';
 
 export default function BusinessRulesPage() {
   const [tenants, setTenants] = useState([]);
   const [selectedTenant, setSelectedTenant] = useState('');
-  const [rules, setRules] = useState([]);
+  const [activeTab, setActiveTab] = useState('comercial');
+  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  // Form modal
-  const [showModal, setShowModal] = useState(false);
-  const [intentCode, setIntentCode] = useState('');
-  const [ruleType, setRuleType] = useState('mandatory_filter');
-  const [ruleJsonText, setRuleJsonText] = useState('{\n  "where": "F2_TIPO = \'N\'"\n}');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  useEffect(() => { loadTenants(); }, []);
+  // Tab Data States
+  const [tesSaidaList, setTesSaidaList] = useState([]);
+  const [tesEntradaList, setTesEntradaList] = useState([]);
+  const [cfopList, setCfopList] = useState([]);
+  const [naturesList, setNaturesList] = useState([]);
+  const [synonymsList, setSynonymsList] = useState([]);
+  const [auditList, setAuditList] = useState([]);
+  const [config, setConfig] = useState({
+    billing_included_classifications: ['Venda', 'Exportação'],
+    billing_excluded_classifications: ['Bonificação', 'Remessa', 'Transferência'],
+    receivables_overdue_days: 30,
+    receivables_include_renegotiated: false,
+    receivables_include_provisional: true,
+    stock_idle_days: 90,
+    stock_critical_days: 7,
+    stock_rupture_days: 3,
+    abc_curve_a_pct: 80.0,
+    abc_curve_b_pct: 15.0,
+    abc_curve_c_pct: 5.0,
+    ai_cash_flow_tables: ['SE1', 'SE2', 'SE5']
+  });
+
+  // Modal / Add States
+  const [showAddTesModal, setShowAddTesModal] = useState(false);
+  const [newTes, setNewTes] = useState({ tes: '', direction: 'saida', classification: 'Venda', description: '' });
+
+  const [showAddCfopModal, setShowAddCfopModal] = useState(false);
+  const [newCfop, setNewCfop] = useState({ cfop: '', classification: 'Venda' });
+
+  const [showAddNatureModal, setShowAddNatureModal] = useState(false);
+  const [newNature, setNewNature] = useState({ nature_code: '', nature_name: '', financial_group: 'Receita' });
+
+  const [showAddSynonymModal, setShowAddSynonymModal] = useState(false);
+  const [newSynonym, setNewSynonym] = useState({ source_term: '', target_term: '' });
+
   useEffect(() => {
-    if (selectedTenant) loadRules(selectedTenant);
-    else setRules([]);
+    loadTenants();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTenant) {
+      loadAllData(selectedTenant);
+    }
   }, [selectedTenant]);
+
+  const showNotification = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 4000);
+  };
 
   const loadTenants = async () => {
     try {
       const res = await api.get('/api/tenants');
       const list = res.data?.tenants || res.data || [];
       setTenants(list);
-      if (list.length > 0) setSelectedTenant(String(list[0].tenant_code || list[0].id));
+      if (list.length > 0) {
+        setSelectedTenant(String(list[0].tenant_code || list[0].id));
+      }
     } catch {
-      setError('Erro ao carregar tenants');
+      setError('Erro ao carregar lista de tenants');
     }
   };
 
-  const loadRules = async (tId) => {
+  const loadAllData = async (tid) => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get(`/api/admin/governance/business-rules?tenant_id=${encodeURIComponent(tId)}`);
-      setRules(res.data || []);
+      const [overRes, tesSaidaRes, tesEntradaRes, cfopRes, natRes, synRes, confRes, auditRes] = await Promise.all([
+        api.get(`/api/admin/business-rules/overview?tenant_id=${encodeURIComponent(tid)}`),
+        api.get(`/api/admin/business-rules/tes?tenant_id=${encodeURIComponent(tid)}&direction=saida`),
+        api.get(`/api/admin/business-rules/tes?tenant_id=${encodeURIComponent(tid)}&direction=entrada`),
+        api.get(`/api/admin/business-rules/cfop?tenant_id=${encodeURIComponent(tid)}`),
+        api.get(`/api/admin/business-rules/financial-natures?tenant_id=${encodeURIComponent(tid)}`),
+        api.get(`/api/admin/business-rules/synonyms?tenant_id=${encodeURIComponent(tid)}`),
+        api.get(`/api/admin/business-rules/config?tenant_id=${encodeURIComponent(tid)}`),
+        api.get(`/api/admin/business-rules/audit?tenant_id=${encodeURIComponent(tid)}`)
+      ]);
+
+      setOverview(overRes.data);
+      setTesSaidaList(tesSaidaRes.data?.data || []);
+      setTesEntradaList(tesEntradaRes.data?.data || []);
+      setCfopList(cfopRes.data?.data || []);
+      setNaturesList(natRes.data?.data || []);
+      setSynonymsList(synRes.data?.data || []);
+      if (confRes.data?.config) {
+        setConfig(confRes.data.config);
+      }
+      setAuditList(auditRes.data?.data || []);
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erro ao carregar regras de negócio');
+      setError(e.response?.data?.detail || 'Erro ao carregar dados do Business Rules Center');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreate = async (e) => {
+  // Handlers: TES
+  const handleCreateTes = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const parsed = JSON.parse(ruleJsonText);
-      await api.post('/api/admin/governance/business-rules', {
+      await api.post('/api/admin/business-rules/tes', {
         tenant_id: selectedTenant,
-        intent_code: intentCode,
-        rule_type: ruleType,
-        rule_json: parsed,
+        ...newTes
       });
-      setShowModal(false);
-      setIntentCode('');
-      loadRules(selectedTenant);
+      setShowAddTesModal(false);
+      setNewTes({ tes: '', direction: newTes.direction, classification: 'Venda', description: '' });
+      showNotification('Regra de TES adicionada com sucesso!');
+      loadAllData(selectedTenant);
     } catch (e) {
-      alert('JSON inválido ou erro na criação: ' + (e.response?.data?.detail || e.message));
+      alert(e.response?.data?.detail || 'Erro ao salvar TES');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Deseja excluir esta regra de negócio?')) return;
+  const handleDeleteTes = async (id) => {
+    if (!confirm('Deseja realmente remover esta regra de TES?')) return;
     try {
-      await api.delete(`/api/admin/governance/business-rules/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
-      loadRules(selectedTenant);
+      await api.delete(`/api/admin/business-rules/tes/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      showNotification('Regra de TES removida');
+      loadAllData(selectedTenant);
     } catch (e) {
       alert(e.response?.data?.detail || 'Erro ao excluir');
     }
   };
 
+  // Handlers: CFOP
+  const handleCreateCfop = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.post('/api/admin/business-rules/cfop', {
+        tenant_id: selectedTenant,
+        ...newCfop
+      });
+      setShowAddCfopModal(false);
+      setNewCfop({ cfop: '', classification: 'Venda' });
+      showNotification('CFOP cadastrada com sucesso!');
+      loadAllData(selectedTenant);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erro ao salvar CFOP');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteCfop = async (id) => {
+    if (!confirm('Deseja remover esta regra de CFOP?')) return;
+    try {
+      await api.delete(`/api/admin/business-rules/cfop/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      showNotification('CFOP removida');
+      loadAllData(selectedTenant);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erro ao excluir');
+    }
+  };
+
+  // Handlers: Naturezas Financeiras
+  const handleCreateNature = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.post('/api/admin/business-rules/financial-natures', {
+        tenant_id: selectedTenant,
+        ...newNature
+      });
+      setShowAddNatureModal(false);
+      setNewNature({ nature_code: '', nature_name: '', financial_group: 'Receita' });
+      showNotification('Natureza Financeira cadastrada!');
+      loadAllData(selectedTenant);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erro ao salvar Natureza Financeira');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteNature = async (id) => {
+    if (!confirm('Deseja remover esta Natureza Financeira?')) return;
+    try {
+      await api.delete(`/api/admin/business-rules/financial-natures/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      showNotification('Natureza Financeira removida');
+      loadAllData(selectedTenant);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erro ao excluir');
+    }
+  };
+
+  // Handlers: Sinônimos
+  const handleCreateSynonym = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.post('/api/admin/business-rules/synonyms', {
+        tenant_id: selectedTenant,
+        ...newSynonym
+      });
+      setShowAddSynonymModal(false);
+      setNewSynonym({ source_term: '', target_term: '' });
+      showNotification('Sinônimo cadastrado com sucesso!');
+      loadAllData(selectedTenant);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erro ao salvar Sinônimo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSynonym = async (id) => {
+    if (!confirm('Deseja remover este sinônimo?')) return;
+    try {
+      await api.delete(`/api/admin/business-rules/synonyms/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      showNotification('Sinônimo removido');
+      loadAllData(selectedTenant);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erro ao excluir');
+    }
+  };
+
+  // Handlers: Salvar Configurações Gerais
+  const handleSaveConfig = async () => {
+    setSaving(true);
+    try {
+      await api.put('/api/admin/business-rules/config', {
+        tenant_id: selectedTenant,
+        ...config
+      });
+      showNotification('Configurações atualizadas com sucesso!');
+      loadAllData(selectedTenant);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erro ao atualizar configurações');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleBillingClassification = (type, category) => {
+    if (type === 'included') {
+      const current = [...(config.billing_included_classifications || [])];
+      const next = current.includes(category)
+        ? current.filter(c => c !== category)
+        : [...current, category];
+      setConfig(prev => ({ ...prev, billing_included_classifications: next }));
+    } else {
+      const current = [...(config.billing_excluded_classifications || [])];
+      const next = current.includes(category)
+        ? current.filter(c => c !== category)
+        : [...current, category];
+      setConfig(prev => ({ ...prev, billing_excluded_classifications: next }));
+    }
+  };
+
+  const tabs = [
+    { id: 'comercial', label: 'Comercial', icon: ShoppingCart },
+    { id: 'compras', label: 'Compras', icon: ShoppingBag },
+    { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
+    { id: 'estoque', label: 'Estoque', icon: Package },
+    { id: 'fiscal', label: 'Fiscal', icon: FileText },
+    { id: 'ia_abc', label: 'IA & Curva ABC', icon: BrainCircuit },
+    { id: 'sinonimos', label: 'Sinônimos', icon: BookOpen },
+    { id: 'auditoria', label: 'Auditoria', icon: History },
+  ];
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        title="Regras de Negócio"
-        description="Filtros mandatórios, cláusulas WHERE padrão e regras corporativas aplicadas nas consultas SQL geradas pelo agente."
+        title="Business Rules Center"
+        description="Configure as regras de negócio, interpretações e filtros específicos do tenant sem alterar código ou redeploy."
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setShowModal(true)}
-              disabled={!selectedTenant}
-              className="flex items-center gap-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition"
-            >
-              <Plus className="w-3.5 h-3.5" /> Nova Regra
-            </button>
-            <button
-              onClick={() => loadRules(selectedTenant)}
-              disabled={!selectedTenant || loading}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#161B27] border border-[#1E2535] text-slate-300 hover:text-white rounded-lg text-xs transition"
+              onClick={() => loadAllData(selectedTenant)}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#161B27] border border-[#1E2535] text-slate-300 hover:text-white rounded-lg text-xs font-medium transition"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Atualizar
             </button>
@@ -103,104 +298,920 @@ export default function BusinessRulesPage() {
         }
       />
 
-      <div className="flex gap-3 mb-5">
-        <div className="relative">
+      {/* Seletor de Tenant & Painel Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-xl border border-[#1E2535] bg-[#121622]">
+        <div className="md:col-span-2 flex flex-col justify-center">
+          <label className="text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-cyan-400" /> Empresa / Tenant Ativo
+          </label>
           <select
             value={selectedTenant}
             onChange={e => setSelectedTenant(e.target.value)}
-            className="appearance-none bg-[#161B27] border border-[#1E2535] text-white text-xs rounded-lg pl-3 pr-8 py-2.5 focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+            className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-sm text-white font-medium focus:outline-none focus:border-cyan-500"
           >
-            {tenants.map(t => {
-              const code = t.tenant_code || t.id;
-              const name = t.name || t.tenant_name || code;
-              return <option key={t.id} value={code}>{code} — {name}</option>;
-            })}
+            {tenants.map(t => (
+              <option key={t.id || t.tenant_code} value={t.tenant_code || t.id}>
+                {t.tenant_code || t.name} — {t.name || t.tenant_code}
+              </option>
+            ))}
           </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8892A4] pointer-events-none" />
+        </div>
+
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0F121C] border border-[#1E2535]">
+          <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-400">
+            <Scale className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] text-slate-400 font-medium">Total de Regras Ativas</div>
+            <div className="text-xl font-bold text-white">
+              {overview?.counts?.active_rules_total ?? 0}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0F121C] border border-[#1E2535]">
+          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] text-slate-400 font-medium">Última Atualização</div>
+            <div className="text-xs font-semibold text-slate-200">
+              {overview?.last_updated ? new Date(overview.last_updated).toLocaleString('pt-BR') : 'Sem registros'}
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Alertas */}
       {error && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-xs text-red-400">
-          <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+        <div className="p-3 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      {successMsg && (
+        <div className="p-3 bg-emerald-900/30 border border-emerald-700/50 rounded-lg text-emerald-300 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+          <span>{successMsg}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {rules.length === 0 ? (
-          <div className="col-span-full rounded-xl border border-[#1E2535] bg-[#161B27] p-8 text-center text-slate-500 text-xs">
-            Nenhuma regra de negócio configurada para este tenant.
-          </div>
-        ) : (
-          rules.map(r => (
-            <div key={r.id} className="rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-2">
-                    {r.intent_code}
-                  </span>
-                  <h3 className="text-white text-sm font-semibold">{r.rule_type}</h3>
-                </div>
-                <button
-                  onClick={() => handleDelete(r.id)}
-                  className="p-1 text-slate-500 hover:text-red-400 transition"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+      {/* Navegação por Abas */}
+      <div className="flex border-b border-[#1E2535] gap-2 overflow-x-auto pb-px">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition border-b-2 whitespace-nowrap ${
+                isActive
+                  ? 'border-cyan-500 text-cyan-400 bg-[#161B27]'
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-[#121622]'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* CONTEÚDO DAS ABAS */}
+      <div className="rounded-xl border border-[#1E2535] bg-[#121622] p-6">
+        {/* 1. ABA COMERCIAL */}
+        {activeTab === 'comercial' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">TES de Saída & Faturamento</h3>
+                <p className="text-xs text-slate-400">Classificação de Tipos de Entrada e Saída (SF4) para determinar faturamento e deduções.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setNewTes({ tes: '', direction: 'saida', classification: 'Venda', description: '' });
+                  setShowAddTesModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar TES de Saída
+              </button>
+            </div>
+
+            {/* Tabela de TES Saída */}
+            <div className="border border-[#1E2535] rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#161B27] text-slate-400 border-b border-[#1E2535]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">TES</th>
+                    <th className="px-4 py-3 font-semibold">Classificação</th>
+                    <th className="px-4 py-3 font-semibold">Descrição</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1E2535]">
+                  {tesSaidaList.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-6 text-center text-slate-500">Nenhuma TES de saída cadastrada.</td>
+                    </tr>
+                  ) : (
+                    tesSaidaList.map(t => (
+                      <tr key={t.id} className="hover:bg-[#161B27]/50">
+                        <td className="px-4 py-3 font-mono text-cyan-400 font-bold">{t.tes}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            t.classification === 'Venda' ? 'bg-emerald-500/20 text-emerald-400' :
+                            t.classification === 'Bonificação' ? 'bg-purple-500/20 text-purple-400' :
+                            t.classification === 'Devolução' ? 'bg-rose-500/20 text-rose-400' :
+                            'bg-slate-500/20 text-slate-300'
+                          }`}>
+                            {t.classification}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{t.description || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-emerald-400 font-medium">Ativo</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteTes(t.id)}
+                            className="p-1 text-slate-400 hover:text-red-400 transition"
+                            title="Excluir regra"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Composição do Faturamento */}
+            <div className="p-4 rounded-lg bg-[#0E131F] border border-[#1E2535] space-y-4">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Composição do Faturamento Líquido</h4>
+              <p className="text-xs text-slate-400">Marque quais classificações entram no cálculo da receita e quais são desconsideradas nas consultas geradas pela IA.</p>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                {['Venda', 'Exportação', 'Bonificação', 'Remessa', 'Transferência', 'Consignação', 'Mostruário'].map(cat => {
+                  const isIncluded = (config.billing_included_classifications || []).includes(cat);
+                  return (
+                    <label key={cat} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer p-2 rounded bg-[#161B27] border border-[#1E2535]">
+                      <input
+                        type="checkbox"
+                        checked={isIncluded}
+                        onChange={() => toggleBillingClassification('included', cat)}
+                        className="rounded border-[#2B3850] text-cyan-600 focus:ring-cyan-500"
+                      />
+                      <span>{cat}</span>
+                    </label>
+                  );
+                })}
               </div>
 
-              <div className="mt-3 p-2.5 rounded bg-[#0F1117] border border-[#1E2535]">
-                <pre className="text-[11px] text-cyan-300 font-mono overflow-x-auto">
-                  {typeof r.rule_json === 'string' ? r.rule_json : JSON.stringify(r.rule_json, null, 2)}
-                </pre>
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={handleSaveConfig}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition"
+                >
+                  <Save className="w-3.5 h-3.5" /> Salvar Composição
+                </button>
               </div>
             </div>
-          ))
+          </div>
+        )}
+
+        {/* 2. ABA COMPRAS */}
+        {activeTab === 'compras' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">TES de Entrada & Compras</h3>
+                <p className="text-xs text-slate-400">Classificação de Tipos de Entrada para compras de mercadorias, insumos, devoluções recebidas e remessas.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setNewTes({ tes: '', direction: 'entrada', classification: 'Compra', description: '' });
+                  setShowAddTesModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar TES de Entrada
+              </button>
+            </div>
+
+            <div className="border border-[#1E2535] rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#161B27] text-slate-400 border-b border-[#1E2535]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">TES</th>
+                    <th className="px-4 py-3 font-semibold">Classificação</th>
+                    <th className="px-4 py-3 font-semibold">Descrição</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1E2535]">
+                  {tesEntradaList.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-6 text-center text-slate-500">Nenhuma TES de entrada cadastrada.</td>
+                    </tr>
+                  ) : (
+                    tesEntradaList.map(t => (
+                      <tr key={t.id} className="hover:bg-[#161B27]/50">
+                        <td className="px-4 py-3 font-mono text-cyan-400 font-bold">{t.tes}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-400">
+                            {t.classification}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{t.description || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-emerald-400 font-medium">Ativo</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteTes(t.id)}
+                            className="p-1 text-slate-400 hover:text-red-400 transition"
+                            title="Excluir regra"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 3. ABA FINANCEIRO */}
+        {activeTab === 'financeiro' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">Naturezas Financeiras & Recebíveis</h3>
+                <p className="text-xs text-slate-400">Mapeamento de naturezas do Protheus (SED) para DRE/Fluxo de Caixa e regras de cobrança.</p>
+              </div>
+              <button
+                onClick={() => setShowAddNatureModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar Natureza
+              </button>
+            </div>
+
+            <div className="border border-[#1E2535] rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#161B27] text-slate-400 border-b border-[#1E2535]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Código Natureza</th>
+                    <th className="px-4 py-3 font-semibold">Descrição</th>
+                    <th className="px-4 py-3 font-semibold">Grupo Financeiro</th>
+                    <th className="px-4 py-3 font-semibold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1E2535]">
+                  {naturesList.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="px-4 py-6 text-center text-slate-500">Nenhuma natureza cadastrada para este tenant.</td>
+                    </tr>
+                  ) : (
+                    naturesList.map(n => (
+                      <tr key={n.id} className="hover:bg-[#161B27]/50">
+                        <td className="px-4 py-3 font-mono text-cyan-400 font-bold">{n.nature_code}</td>
+                        <td className="px-4 py-3 text-slate-200 font-medium">{n.nature_name}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                            {n.financial_group}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteNature(n.id)}
+                            className="p-1 text-slate-400 hover:text-red-400 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Parâmetros de Recebíveis */}
+            <div className="p-4 rounded-lg bg-[#0E131F] border border-[#1E2535] space-y-4">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Políticas de Contas a Receber (SE1)</h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Dias para considerar Título Vencido / Inadimplente</label>
+                  <input
+                    type="number"
+                    value={config.receivables_overdue_days || 30}
+                    onChange={e => setConfig(prev => ({ ...prev, receivables_overdue_days: parseInt(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
+                  />
+                </div>
+
+                <div className="flex flex-col justify-center">
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.receivables_include_renegotiated || false}
+                      onChange={e => setConfig(prev => ({ ...prev, receivables_include_renegotiated: e.target.checked }))}
+                      className="rounded border-[#2B3850] text-cyan-600 focus:ring-cyan-500"
+                    />
+                    <span>Incluir títulos renegociados nas análises</span>
+                  </label>
+                </div>
+
+                <div className="flex flex-col justify-center">
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.receivables_include_provisional || false}
+                      onChange={e => setConfig(prev => ({ ...prev, receivables_include_provisional: e.target.checked }))}
+                      className="rounded border-[#2B3850] text-cyan-600 focus:ring-cyan-500"
+                    />
+                    <span>Incluir títulos provisórios (ex: PR)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={handleSaveConfig}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition"
+                >
+                  <Save className="w-3.5 h-3.5" /> Salvar Parâmetros Financeiros
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. ABA ESTOQUE */}
+        {activeTab === 'estoque' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-white">Parâmetros de Gestão de Estoque (SB2 / SB1)</h3>
+              <p className="text-xs text-slate-400">Definição dos horizontes temporais para alerta de obsolescência, estoque crítico e ruptura.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-lg bg-[#0E131F] border border-[#1E2535]">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Produto Parado / Sem Giro (Dias)</label>
+                <input
+                  type="number"
+                  value={config.stock_idle_days || 90}
+                  onChange={e => setConfig(prev => ({ ...prev, stock_idle_days: parseInt(e.target.value) || 0 }))}
+                  className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Gera alertas de obsolescência e excesso de estoque.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Estoque Crítico (Dias de Cobertura)</label>
+                <input
+                  type="number"
+                  value={config.stock_critical_days || 7}
+                  onChange={e => setConfig(prev => ({ ...prev, stock_critical_days: parseInt(e.target.value) || 0 }))}
+                  className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Dispara alerta amarelo de necessidade de compra.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Risco de Ruptura (Dias)</label>
+                <input
+                  type="number"
+                  value={config.stock_rupture_days || 3}
+                  onChange={e => setConfig(prev => ({ ...prev, stock_rupture_days: parseInt(e.target.value) || 0 }))}
+                  className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Dispara alerta vermelho de desabastecimento iminente.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveConfig}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition"
+              >
+                <Save className="w-3.5 h-3.5" /> Salvar Regras de Estoque
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 5. ABA FISCAL */}
+        {activeTab === 'fiscal' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">Classificação de CFOPs Fiscais</h3>
+                <p className="text-xs text-slate-400">Interpretação e mapeamento de CFOPs específicas utilizadas pelo departamento fiscal deste tenant.</p>
+              </div>
+              <button
+                onClick={() => setShowAddCfopModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar CFOP
+              </button>
+            </div>
+
+            <div className="border border-[#1E2535] rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#161B27] text-slate-400 border-b border-[#1E2535]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">CFOP</th>
+                    <th className="px-4 py-3 font-semibold">Classificação de Negócio</th>
+                    <th className="px-4 py-3 font-semibold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1E2535]">
+                  {cfopList.length === 0 ? (
+                    <tr>
+                      <td colSpan="3" className="px-4 py-6 text-center text-slate-500">Nenhuma CFOP cadastrada para este tenant.</td>
+                    </tr>
+                  ) : (
+                    cfopList.map(c => (
+                      <tr key={c.id} className="hover:bg-[#161B27]/50">
+                        <td className="px-4 py-3 font-mono text-cyan-400 font-bold">{c.cfop}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {c.classification}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteCfop(c.id)}
+                            className="p-1 text-slate-400 hover:text-red-400 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 6. ABA IA & CURVA ABC */}
+        {activeTab === 'ia_abc' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-white">Parâmetros de IA & Curva ABC</h3>
+              <p className="text-xs text-slate-400">Configure a distribuição percentual da Curva de Pareto (ABC) e tabelas financeiras prioritárias.</p>
+            </div>
+
+            <div className="p-4 rounded-lg bg-[#0E131F] border border-[#1E2535] space-y-4">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Cortes Percentuais da Curva ABC</h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold text-emerald-400 mb-1">Classe A (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={config.abc_curve_a_pct || 80.0}
+                    onChange={e => setConfig(prev => ({ ...prev, abc_curve_a_pct: parseFloat(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Percentual acumulado principal (geralmente 80%).</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-amber-400 mb-1">Classe B (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={config.abc_curve_b_pct || 15.0}
+                    onChange={e => setConfig(prev => ({ ...prev, abc_curve_b_pct: parseFloat(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Percentual intermediário (geralmente 15%).</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-rose-400 mb-1">Classe C (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={config.abc_curve_c_pct || 5.0}
+                    onChange={e => setConfig(prev => ({ ...prev, abc_curve_c_pct: parseFloat(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Percentual de cauda longa (geralmente 5%).</p>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-[#1E2535]">
+                <label className="block text-xs font-semibold text-slate-300 mb-2">Tabelas Protheus Prioritárias para Análise de Fluxo de Caixa</label>
+                <div className="flex gap-4">
+                  {['SE1', 'SE2', 'SE5', 'FK1', 'FK2'].map(tbl => {
+                    const isSelected = (config.ai_cash_flow_tables || []).includes(tbl);
+                    return (
+                      <label key={tbl} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer p-2 rounded bg-[#161B27] border border-[#1E2535]">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            const current = [...(config.ai_cash_flow_tables || [])];
+                            const next = current.includes(tbl) ? current.filter(x => x !== tbl) : [...current, tbl];
+                            setConfig(prev => ({ ...prev, ai_cash_flow_tables: next }));
+                          }}
+                          className="rounded border-[#2B3850] text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <span className="font-mono">{tbl}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={handleSaveConfig}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition"
+                >
+                  <Save className="w-3.5 h-3.5" /> Salvar Parâmetros IA & ABC
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 7. ABA SINÔNIMOS */}
+        {activeTab === 'sinonimos' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">Dicionário de Sinônimos Empresariais</h3>
+                <p className="text-xs text-slate-400">Substituição automática de jargões e termos customizados da empresa para o vocabulário padrão do Protheus.</p>
+              </div>
+              <button
+                onClick={() => setShowAddSynonymModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar Sinônimo
+              </button>
+            </div>
+
+            <div className="border border-[#1E2535] rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#161B27] text-slate-400 border-b border-[#1E2535]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Termo do Usuário (Entrada)</th>
+                    <th className="px-4 py-3 font-semibold"></th>
+                    <th className="px-4 py-3 font-semibold">Termo Protheus (Substituição)</th>
+                    <th className="px-4 py-3 font-semibold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1E2535]">
+                  {synonymsList.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="px-4 py-6 text-center text-slate-500">Nenhum sinônimo configurado.</td>
+                    </tr>
+                  ) : (
+                    synonymsList.map(s => (
+                      <tr key={s.id} className="hover:bg-[#161B27]/50">
+                        <td className="px-4 py-3 font-semibold text-amber-300">"{s.source_term}"</td>
+                        <td className="px-4 py-3 text-slate-500">➔</td>
+                        <td className="px-4 py-3 font-semibold text-cyan-400">"{s.target_term}"</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteSynonym(s.id)}
+                            className="p-1 text-slate-400 hover:text-red-400 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 8. ABA AUDITORIA */}
+        {activeTab === 'auditoria' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-white">Histórico de Auditoria e Governança</h3>
+              <p className="text-xs text-slate-400">Rastreabilidade completa de todas as alterações realizadas nas regras de negócio da empresa.</p>
+            </div>
+
+            <div className="border border-[#1E2535] rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#161B27] text-slate-400 border-b border-[#1E2535]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Data / Hora</th>
+                    <th className="px-4 py-3 font-semibold">Usuário</th>
+                    <th className="px-4 py-3 font-semibold">Entidade</th>
+                    <th className="px-4 py-3 font-semibold">Ação</th>
+                    <th className="px-4 py-3 font-semibold">Detalhes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1E2535]">
+                  {auditList.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-6 text-center text-slate-500">Nenhum registro de auditoria encontrado.</td>
+                    </tr>
+                  ) : (
+                    auditList.map(a => (
+                      <tr key={a.id} className="hover:bg-[#161B27]/50">
+                        <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                          {new Date(a.event_date).toLocaleString('pt-BR')}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-300">{a.user_id}</td>
+                        <td className="px-4 py-3 font-medium text-white">{a.rule_entity}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            a.action === 'CREATE' ? 'bg-emerald-500/20 text-emerald-400' :
+                            a.action === 'UPDATE' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-rose-500/20 text-rose-400'
+                          }`}>
+                            {a.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-[11px] font-mono text-slate-400 max-w-md truncate">
+                            {JSON.stringify(a.new_value || a.previous_value)}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 
-      {showModal && (
+      {/* MODAIS DE CADASTRO */}
+      {/* Modal: TES */}
+      {showAddTesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#161B27] p-6 shadow-2xl">
-            <h3 className="text-base font-semibold text-white mb-4">Adicionar Regra de Negócio</h3>
-            <form onSubmit={handleCreate} className="space-y-3">
+            <h3 className="text-base font-semibold text-white mb-4">Adicionar Regra de TES</h3>
+            <form onSubmit={handleCreateTes} className="space-y-4">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Intent (Ex: billing, receivables, sales_orders)</label>
+                <label className="block text-xs text-slate-400 mb-1">Código da TES (SF4)</label>
                 <input
                   required
-                  value={intentCode}
-                  onChange={e => setIntentCode(e.target.value.toLowerCase())}
-                  placeholder="ex: billing"
+                  maxLength="10"
+                  value={newTes.tes}
+                  onChange={e => setNewTes(prev => ({ ...prev, tes: e.target.value.trim() }))}
+                  placeholder="Ex: 501"
                   className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white font-mono"
                 />
               </div>
+
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Tipo de Regra</label>
+                <label className="block text-xs text-slate-400 mb-1">Direção</label>
                 <select
-                  value={ruleType}
-                  onChange={e => setRuleType(e.target.value)}
+                  value={newTes.direction}
+                  onChange={e => setNewTes(prev => ({ ...prev, direction: e.target.value }))}
                   className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
                 >
-                  <option value="mandatory_filter">Filtro Mandatório (WHERE)</option>
-                  <option value="join_rule">Regra de JOIN Específica</option>
-                  <option value="exclusion">Exclusão Lógica Customizada</option>
-                  <option value="aggregation">Regra de Agregação / Group By</option>
+                  <option value="saida">Saída (Faturamento / Vendas)</option>
+                  <option value="entrada">Entrada (Compras / Insumos)</option>
                 </select>
               </div>
+
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Definição JSON</label>
-                <textarea
-                  rows="4"
-                  required
-                  value={ruleJsonText}
-                  onChange={e => setRuleJsonText(e.target.value)}
-                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-cyan-300 font-mono"
+                <label className="block text-xs text-slate-400 mb-1">Classificação de Negócio</label>
+                <select
+                  value={newTes.classification}
+                  onChange={e => setNewTes(prev => ({ ...prev, classification: e.target.value }))}
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
+                >
+                  <option value="Venda">Venda</option>
+                  <option value="Bonificação">Bonificação</option>
+                  <option value="Devolução">Devolução</option>
+                  <option value="Remessa">Remessa</option>
+                  <option value="Transferência">Transferência</option>
+                  <option value="Exportação">Exportação</option>
+                  <option value="Compra">Compra</option>
+                  <option value="Consignação">Consignação</option>
+                  <option value="Mostruário">Mostruário</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Descrição</label>
+                <input
+                  value={newTes.description}
+                  onChange={e => setNewTes(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Ex: Venda no mercado interno"
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
                 />
               </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
-                <button type="button" onClick={() => setShowModal(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancelar</button>
-                <button type="submit" disabled={saving} className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg disabled:opacity-50">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTesModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg disabled:opacity-50"
+                >
                   {saving ? 'Salvando...' : 'Salvar Regra'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: CFOP */}
+      {showAddCfopModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#161B27] p-6 shadow-2xl">
+            <h3 className="text-base font-semibold text-white mb-4">Adicionar Regra de CFOP</h3>
+            <form onSubmit={handleCreateCfop} className="space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Código CFOP</label>
+                <input
+                  required
+                  maxLength="10"
+                  value={newCfop.cfop}
+                  onChange={e => setNewCfop(prev => ({ ...prev, cfop: e.target.value.trim() }))}
+                  placeholder="Ex: 5101"
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Classificação de Negócio</label>
+                <select
+                  value={newCfop.classification}
+                  onChange={e => setNewCfop(prev => ({ ...prev, classification: e.target.value }))}
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
+                >
+                  <option value="Venda">Venda</option>
+                  <option value="Devolução">Devolução</option>
+                  <option value="Remessa">Remessa</option>
+                  <option value="Transferência">Transferência</option>
+                  <option value="Compra">Compra</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCfopModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg disabled:opacity-50"
+                >
+                  {saving ? 'Salvando...' : 'Salvar CFOP'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Natureza Financeira */}
+      {showAddNatureModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#161B27] p-6 shadow-2xl">
+            <h3 className="text-base font-semibold text-white mb-4">Adicionar Natureza Financeira</h3>
+            <form onSubmit={handleCreateNature} className="space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Código da Natureza (SED)</label>
+                <input
+                  required
+                  value={newNature.nature_code}
+                  onChange={e => setNewNature(prev => ({ ...prev, nature_code: e.target.value.trim() }))}
+                  placeholder="Ex: 101"
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Nome / Descrição da Natureza</label>
+                <input
+                  required
+                  value={newNature.nature_name}
+                  onChange={e => setNewNature(prev => ({ ...prev, nature_name: e.target.value }))}
+                  placeholder="Ex: Salários e Ordenados"
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Grupo Financeiro</label>
+                <select
+                  value={newNature.financial_group}
+                  onChange={e => setNewNature(prev => ({ ...prev, financial_group: e.target.value }))}
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
+                >
+                  <option value="Receita">Receita</option>
+                  <option value="Custos Fixos">Custos Fixos</option>
+                  <option value="Custos Variáveis">Custos Variáveis</option>
+                  <option value="Impostos">Impostos</option>
+                  <option value="Financeiro">Financeiro</option>
+                  <option value="Investimentos">Investimentos</option>
+                  <option value="Operacional">Operacional</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
+                <button
+                  type="button"
+                  onClick={() => setShowAddNatureModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg disabled:opacity-50"
+                >
+                  {saving ? 'Salvando...' : 'Salvar Natureza'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Sinônimo */}
+      {showAddSynonymModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#161B27] p-6 shadow-2xl">
+            <h3 className="text-base font-semibold text-white mb-4">Adicionar Sinônimo Empresarial</h3>
+            <form onSubmit={handleCreateSynonym} className="space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Termo do Usuário / Negócio</label>
+                <input
+                  required
+                  value={newSynonym.source_term}
+                  onChange={e => setNewSynonym(prev => ({ ...prev, source_term: e.target.value }))}
+                  placeholder="Ex: Receita"
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Termo Técnico Protheus Equivalente</label>
+                <input
+                  required
+                  value={newSynonym.target_term}
+                  onChange={e => setNewSynonym(prev => ({ ...prev, target_term: e.target.value }))}
+                  placeholder="Ex: Faturamento"
+                  className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
+                <button
+                  type="button"
+                  onClick={() => setShowAddSynonymModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg disabled:opacity-50"
+                >
+                  {saving ? 'Salvando...' : 'Salvar Sinônimo'}
                 </button>
               </div>
             </form>
