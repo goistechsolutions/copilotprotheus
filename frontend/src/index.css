@@ -124,8 +124,8 @@ input:focus-visible {
 }
 
 .dark .stitch-card {
-  background: #1e293b;
-  border-color: #334155;
+  background: #121e35;
+  border-color: rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
@@ -135,6 +135,79 @@ input:focus-visible {
 }
 
 .dark .stitch-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 6px 20px rgba(15, 102, 255, 0.18);
+  border-color: #2563ff;
+  box-shadow: 0 6px 20px rgba(37, 99, 255, 0.18);
+}
+
+/* ==========================================================================
+   Design System 3.0: Copilot Protheus Executive Intelligence Workspace
+   ========================================================================== */
+:root {
+  --bg-primary: #07111F;
+  --bg-secondary: #0D1528;
+  --bg-tertiary: #101B33;
+  --surface-card: #121E35;
+  --surface-elevated: #16233D;
+  --primary: #2563FF;
+  --primary-hover: #3B82F6;
+  --success: #00D26A;
+  --warning: #FFB020;
+  --danger: #FF5A65;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B2B8C7;
+  --text-muted: #7B8497;
+}
+
+.bg-exec-primary {
+  background-color: var(--bg-primary);
+}
+
+.bg-exec-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.bg-exec-tertiary {
+  background-color: var(--bg-tertiary);
+}
+
+.bg-exec-card {
+  background-color: var(--surface-card);
+}
+
+.bg-exec-elevated {
+  background-color: var(--surface-elevated);
+}
+
+.gradient-executive-blue {
+  background: linear-gradient(135deg, #0A1735 0%, #1A2A52 100%);
+}
+
+.gradient-brand-glow {
+  background: linear-gradient(90deg, #2563FF 0%, #4F80FF 100%);
+}
+
+.glass-card-executive {
+  background: rgba(18, 30, 53, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-executive:hover {
+  border-color: rgba(37, 99, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(37, 99, 255, 0.12);
+}
+
+/* Light mode fallback adjustments for executive glass */
+html:not(.dark) .glass-card-executive {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+html:not(.dark) .glass-card-executive:hover {
+  border-color: #2563ff;
+  box-shadow: 0 8px 24px rgba(37, 99, 255, 0.08);
 }

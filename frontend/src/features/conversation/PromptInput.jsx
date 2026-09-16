@@ -235,29 +235,47 @@ export function PromptInput() {
     }
   };
 
+  const PLACEHOLDERS = [
+    "Ex: Fluxo de Caixa dos próximos 30 dias...",
+    "Ex: Clientes em atraso com títulos acima de 60 dias...",
+    "Ex: Faturamento por vendedor e margem bruta...",
+    "Ex: Produtos sem giro no almoxarifado...",
+    "Ex: Notas fiscais de entrada recentes...",
+  ];
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDERS.length);
+    }, 4500);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="shrink-0 border-t border-slate-100 p-4 dark:border-slate-800/60 bg-white dark:bg-slate-900">
-      <div className="relative flex items-end rounded-xl border border-slate-300 bg-white shadow-sm transition-colors focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:focus-within:border-blue-500">
+    <div className="shrink-0 p-3 sm:p-4 bg-transparent">
+      <div className="relative flex items-center rounded-[18px] border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1326] shadow-sm hover:shadow-md transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 px-4 min-h-[56px]">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isGenerating}
-          className="max-h-32 min-h-[44px] w-full resize-none bg-transparent py-3 pl-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 disabled:opacity-50"
-          placeholder={isGenerating ? "Processando..." : "Pergunte ao Protheus..."}
+          className="flex-1 max-h-32 min-h-[24px] resize-none bg-transparent py-3 pr-10 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none disabled:opacity-50"
+          placeholder={isGenerating ? "Processando no Oracle Protheus..." : PLACEHOLDERS[placeholderIndex]}
           rows={1}
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || isGenerating}
-          className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-600"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#2563FF] hover:bg-[#3B82F6] text-white shadow-sm shadow-blue-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+          title="Enviar pergunta ao Copilot Executivo"
         >
-          {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} className={input.trim() ? "ml-0.5" : ""} />}
+          {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} className={input.trim() ? "ml-0.5" : ""} />}
         </button>
       </div>
-      <p className="mt-2 text-center text-[10px] text-slate-400">
-        O Copiloto pode cometer erros. Considere verificar as informações.
+      <p className="mt-2 text-center text-[10px] text-slate-400 dark:text-slate-500">
+        Copilot Executivo Protheus • Conexão nativa Oracle • Zero alucinação
       </p>
     </div>
   );
 }
+

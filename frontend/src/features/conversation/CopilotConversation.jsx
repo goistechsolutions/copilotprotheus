@@ -1,5 +1,17 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, User, AlertTriangle, Database, ArrowRight, LayoutDashboard, Sparkles } from 'lucide-react';
+import { 
+  Bot, 
+  User, 
+  AlertTriangle, 
+  Database, 
+  ArrowRight, 
+  LayoutDashboard, 
+  Sparkles,
+  CheckCircle2,
+  TrendingUp,
+  AlertCircle,
+  Lightbulb
+} from 'lucide-react';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { ProcessingTracker } from '../../components/chat/ProcessingTracker';
 
@@ -104,31 +116,45 @@ export function CopilotConversation() {
             </div>
             
             {/* Balloon de Mensagem */}
-            <div className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <div className={`flex flex-col max-w-[90%] sm:max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-1 px-1">
+                {msg.role === 'user' ? 'Você' : 'Copilot Executivo'}
+              </span>
+
               {/* Card especial para DOMAIN_CATALOG_MISMATCH */}
               {msg.domainDiagnostic ? (
                 <DomainMismatchCard diag={msg.domainDiagnostic} />
-              ) : (
-                <div className={`rounded-2xl px-4 py-2.5 text-sm whitespace-pre-line ${
-                  msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-tr-sm'
-                    : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
-                }`}>
+              ) : msg.role === 'user' ? (
+                <div className="rounded-2xl rounded-tr-xs px-4 py-2.5 text-sm bg-[#2563FF] text-white shadow-sm font-normal">
                   {msg.content}
                 </div>
-              )}
+              ) : (
+                /* Card Executivo da IA (Wireframe Seção 4) */
+                <div className="rounded-2xl rounded-tl-xs p-4 text-sm glass-card-executive w-full space-y-3 shadow-sm border border-slate-200 dark:border-white/10">
+                  <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-white/5">
+                    <CheckCircle2 size={16} className="text-[#00D26A]" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white">
+                      Análise Concluída
+                    </span>
+                  </div>
 
-              {/* Botão de Ação para Abrir / Reabrir Dashboard */}
-              {msg.dashboard && (
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    onClick={() => setDashboard(msg.dashboard)}
-                    className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all border shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-blue-500/20 active:scale-95 cursor-pointer"
-                  >
-                    <LayoutDashboard size={14} />
-                    <span>📊 Abrir Dashboard</span>
-                    <ArrowRight size={13} />
-                  </button>
+                  <div className="text-slate-700 dark:text-slate-200 text-xs sm:text-sm whitespace-pre-line leading-relaxed">
+                    {msg.content}
+                  </div>
+
+                  {/* Botão de Ação para Abrir / Reabrir Dashboard */}
+                  {msg.dashboard && (
+                    <div className="pt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => setDashboard(msg.dashboard)}
+                        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all shadow-sm bg-[#2563FF] hover:bg-[#3B82F6] text-white shadow-blue-500/25 active:scale-95 cursor-pointer"
+                      >
+                        <LayoutDashboard size={14} />
+                        <span>Abrir Dashboard Executivo</span>
+                        <ArrowRight size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
