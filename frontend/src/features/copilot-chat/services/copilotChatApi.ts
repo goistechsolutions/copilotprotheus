@@ -1,0 +1,288 @@
+import { 
+  ConversationItem, 
+  CopilotMessage, 
+  CopilotSessionContext 
+} from '../types/chat.types';
+import { 
+  askAgent, 
+  waitForAgentTask, 
+  getConversations, 
+  createConversation, 
+  getConversation,
+  addConversationMessage,
+  addConversationDashboard
+} from '../../../services/api';
+import { normalizeAgentResult } from '../../../utils/normalizeAgentResult';
+import { buildAdaptiveDashboard } from '../../../services/adaptiveDashboardEngine';
+
+const USE_MOCK = import.meta.env.VITE_COPILOT_USE_MOCK === 'true';
+
+// Mock generator for offline / test demonstration
+function createMockResponse(prompt: string): { content: string; suggestions: string[]; dashboard: any } {
+  const lower = prompt.toLowerCase();
+  
+  if (lower.includes('fluxo') || lower.includes('caixa')) {
+    return {
+      content: `Análise concluída.\n\nA projeção de caixa para os próximos 30 dias indica saldo positivo consolidado de R$ 840 mil.\nOs recebimentos programados somam R$ 1,42 milhão contra pagamentos previstos de R$ 580 mil.\nO índice de cobertura operacional atual é de 2,45x.`,
+      suggestions: [
+        'Ver maiores desembolsos da semana',
+        'Simular inadimplência de 10%',
+        'Abrir conciliação bancária'
+      ],
+      dashboard: {
+        id: 'dash-mock-caixa',
+        title: 'Fluxo de Caixa 30 Dias',
+        originPrompt: prompt,
+        screenType: 'finance',
+        updatedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        kpis: [
+          { label: 'Saldo Projetado', value: 'R$ 840.000', change: '+12%', tone: 'positive' },
+          { label: 'A Receber', value: 'R$ 1.420.000', change: '+5%', tone: 'neutral' },
+          { label: 'A Pagar', value: 'R$ 580.000', change: '-3%', tone: 'positive' },
+        ]
+      }
+    };
+  }
+
+  if (lower.includes('inadimpl') || lower.includes('cliente')) {
+    return {
+      content: `Análise concluída.\n\nIdentificamos 14 clientes com títulos vencidos acima de 60 dias, totalizando R$ 318 mil em risco.\nO maior devedor concentra 41,2% deste montante em duas duplicatas em aberto.\nRecomenda-se bloqueio automático de pedidos para títulos em atraso.`,
+      suggestions: [
+        'Extrato analítico do maior devedor',
+        'Contatar equipe de cobrança',
+        'Ver histórico de renegociação'
+      ],
+      dashboard: {
+        id: 'dash-mock-inadimpl',
+        title: 'Inadimplência Carteira',
+        originPrompt: prompt,
+        screenType: 'credit_risk',
+        updatedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        kpis: [
+          { label: 'Total Vencido >60d', value: 'R$ 318.450', change: '+8%', tone: 'negative' },
+          { label: 'Clientes em Atraso', value: '14', change: '-2', tone: 'neutral' },
+          { label: 'Concentração Top 1', value: '41,2%', change: 'Alto Risco', tone: 'negative' }
+        ]
+      }
+    };
+  }
+
+  return {
+    content: `Análise concluída.\n\nAs vendas do período totalizaram R$ 1,12 milhão.\nO principal vendedor respondeu por 27,3% do faturamento.\nOs três primeiros concentraram 45,2% do volume total.`,
+    suggestions: [
+      'Comparar com mês anterior',
+      'Mostrar Top 20 vendedores',
+      'Analisar margem por linha'
+    ],
+    dashboard: {
+      id: 'dash-mock-vendas',
+      title: 'Faturamento do Mês',
+      originPrompt: prompt,
+      screenType: 'sales',
+      updatedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      kpis: [
+        { label: 'Faturamento Total', value: 'R$ 1.120.000', change: '+14,2%', tone: 'positive' },
+        { label: 'Ticket Médio', value: 'R$ 18.400', change: '+4,1%', tone: 'positive' },
+        { label: 'Participação Top 1', value: '27,3%', change: 'Equilibrado', tone: 'neutral' }
+      ]
+    }
+  };
+}
+
+export async function fetchConversationList(context?: CopilotSessionContext): Promise<ConversationItem[]> {
+  if (USE_MOCK) {
+    const saved = localStorage.getItem('cprot_mock_conversations');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return [
+      { id: 'conv-1', title: 'Faturamento acumulado por vendedor', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), isFavorite: true },
+      { id: 'conv-2', title: 'Projeção de fluxo de caixa 30d', createdAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date(Date.now() - 86400000).toISOString() },
+    ];
+  }
+
+  try {
+    const res = await getConversations({
+      tenant_id: context?.tenantId,
+      user_id: context?.userId,
+      limit: 30
+    });
+    const items = res?.conversations || [];
+    return items.map((c: any) => ({
+      id: c.id,
+      title: c.title || 'Consulta sem título',
+      createdAt: c.created_at || new Date().toISOString(),
+      updatedAt: c.updated_at || new Date().toISOString(),
+      isFavorite: Boolean(c.is_favorite),
+      lastMessage: c.last_message || ''
+    }));
+  } catch (err) {
+    console.warn('[CopilotChatApi] Falha ao listar conversas do backend:', err);
+    return [];
+  }
+}
+
+export async function createNewConversationRemote(title: string, context?: CopilotSessionContext): Promise<string> {
+  const newId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
+
+  if (USE_MOCK) {
+    return newId;
+  }
+
+  try {
+    const res = await createConversation({
+      id: newId,
+      title,
+      tenant_id: context?.tenantId || '',
+      user_id: context?.userId || '',
+      company: context?.company || '',
+      branch: context?.branch || '',
+      environment: context?.environment || '',
+      module: context?.module || 'SIGAFAT'
+    });
+    return res?.id || newId;
+  } catch (err) {
+    console.warn('[CopilotChatApi] createConversation fallback para local ID:', err);
+    return newId;
+  }
+}
+
+export async function fetchConversationMessagesRemote(conversationId: string): Promise<CopilotMessage[]> {
+  if (USE_MOCK) return [];
+
+  try {
+    const res = await getConversation(conversationId);
+    const messages = res?.messages || [];
+    return messages.map((m: any) => ({
+      id: m.id || String(m.timestamp),
+      role: m.role || 'assistant',
+      content: m.content || '',
+      status: 'done',
+      timestamp: m.created_at || m.timestamp || new Date().toISOString(),
+      dashboard: m.metadata?.dashboard || null,
+      suggestions: m.metadata?.suggestions || []
+    }));
+  } catch (err) {
+    console.warn('[CopilotChatApi] getConversation error:', err);
+    return [];
+  }
+}
+
+export async function askCopilotQuery(
+  prompt: string,
+  context?: CopilotSessionContext,
+  signal?: AbortSignal
+): Promise<{ content: string; suggestions: string[]; dashboard: any }> {
+  if (USE_MOCK) {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, 1400);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+    });
+    return createMockResponse(prompt);
+  }
+
+  // Identificação automática de módulo Protheus
+  let currentMod = context?.module || context?.currentModule || 'SIGAFAT';
+  const lower = prompt.toLowerCase();
+  if (/fluxo de caixa|contas a pagar|contas a receber|inadimpl|vencimento|boleto|t[ií]tulo|se1|se2|se5|saldo banc/i.test(lower)) {
+    currentMod = 'SIGAFIN';
+  } else if (/compra|fornecedor|pedido de compra|sc7|recebimento/i.test(lower)) {
+    currentMod = 'SIGACOM';
+  } else if (/estoque|saldo de estoque|sb1|sb2|armaz[eé]m/i.test(lower)) {
+    currentMod = 'SIGAEST';
+  } else if (/venda|fatur|pedido de venda|cliente|sf2|sd2|sc5/i.test(lower)) {
+    currentMod = 'SIGAFAT';
+  }
+
+  const payload = {
+    tenant_id: context?.tenantId || '',
+    company: context?.company || '',
+    branch: context?.branch || '',
+    user: context?.userId || '',
+    environment: context?.environment || '',
+    environment_code: context?.environment || '',
+    module: currentMod,
+    module_sigla: currentMod,
+    session_id: Date.now().toString(),
+    prompt: prompt,
+    execute: true,
+  };
+
+  const accepted = await askAgent(payload, { signal });
+  const response = accepted.task_id 
+    ? await waitForAgentTask(accepted.task_id, { signal }) 
+    : accepted;
+
+  const normalized = normalizeAgentResult(response);
+
+  if (normalized.status === 'error') {
+    throw new Error(normalized.message || 'Falha ao consultar banco Oracle Protheus.');
+  }
+
+  const result = normalized.result;
+  let adaptive: any = null;
+
+  if (result && Array.isArray(result.rows) && result.rows.length > 0) {
+    const semanticContext = {
+      ...(result.metadata || {}),
+      originPrompt: prompt,
+      prompt: prompt,
+      intent: result.intent || result.metadata?.intent || null,
+      domain: result.domain || result.metadata?.domain || null,
+      measureFormat: result.metadata?.measureFormat || null,
+    };
+    adaptive = buildAdaptiveDashboard(
+      result.rows,
+      result.columns || [],
+      semanticContext,
+      result.backend_kpis || null,
+      result.backend_insights || null
+    );
+    if (adaptive) {
+      adaptive.originPrompt = prompt;
+      adaptive.id = adaptive.id || `dash-${Date.now()}`;
+    }
+  }
+
+  const finalContent = adaptive?.executiveSummary || normalized.message || 'Análise concluída com sucesso.';
+  const suggestions = adaptive?.suggestions || [
+    'Comparar com período anterior',
+    'Exibir detalhamento dos itens',
+    'Analisar concentração de volume'
+  ];
+
+  return {
+    content: finalContent,
+    suggestions: suggestions.slice(0, 3), // Limite de 3 sugestões
+    dashboard: adaptive
+  };
+}
+
+export async function syncRemoteMessage(
+  conversationId: string, 
+  role: string, 
+  content: string, 
+  metadata: any = {}
+): Promise<void> {
+  if (USE_MOCK || !conversationId) return;
+  try {
+    await addConversationMessage(conversationId, {
+      role,
+      content,
+      metadata
+    });
+    if (metadata?.dashboard) {
+      await addConversationDashboard(conversationId, {
+        title: metadata.originPrompt || 'Dashboard',
+        payload: metadata.dashboard,
+        insights: metadata.dashboard.insights || null,
+        origin_prompt: metadata.originPrompt || ''
+      });
+    }
+  } catch (e) {
+    console.warn('[CopilotChatApi] syncRemoteMessage error:', e);
+  }
+}

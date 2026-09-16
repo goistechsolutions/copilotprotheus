@@ -1,28 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { 
   Moon, 
   Sun, 
   ArrowLeft, 
   X, 
-  Settings,
-  Sparkles
 } from 'lucide-react';
 import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { useDashboardStore } from '../../stores/useDashboardStore';
-import { CopilotConversation } from '../conversation/CopilotConversation';
-import { PromptInput } from '../conversation/PromptInput';
-import { QuickActions } from '../conversation/QuickActions';
-import { CopilotSidebar } from '../conversation/CopilotSidebar';
+import { CopilotChat } from '../copilot-chat';
 
 /**
- * Copilot Protheus — Minimal Executive Workspace
- * Inspirado em Apple Human Interface, Claude AI, Linear, Arc e Notion AI.
- * 
- * Hierarquia Visual:
- * - 10% Header (Apenas ✨ Copilot Protheus e ⚙ Configurações)
- * - 80% Conversa / Estado Inicial
- * - 10% Input
+ * ExecutiveWorkspace — Integração do Copilot Chat Minimalista
+ * com suporte à visualização de Dashboards dedicados em tela cheia.
  */
 export default function ExecutiveWorkspace() {
   const { 
@@ -30,27 +20,8 @@ export default function ExecutiveWorkspace() {
     setDashboard, 
     config, 
     setConfig, 
-    chat,
-    loadConversations,
+    session,
   } = useDashboardStore();
-
-  // Drawer de configurações/histórico fechado por padrão
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    loadConversations();
-  }, []);
-
-  // Fechar o drawer com tecla Esc
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && sidebarOpen) {
-        setSidebarOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sidebarOpen]);
 
   useEffect(() => {
     if (config.theme === 'dark') {
@@ -64,6 +35,18 @@ export default function ExecutiveWorkspace() {
   const toggleTheme = () => {
     setConfig({ theme: config.theme === 'dark' ? 'light' : 'dark' });
   };
+
+  // Escuta evento global de integração 'copilot:open-dashboard'
+  useEffect(() => {
+    const handleOpenDashboardEvent = (event) => {
+      const detail = event?.detail;
+      if (detail?.dashboard) {
+        setDashboard(detail.dashboard);
+      }
+    };
+    window.addEventListener('copilot:open-dashboard', handleOpenDashboardEvent);
+    return () => window.removeEventListener('copilot:open-dashboard', handleOpenDashboardEvent);
+  }, [setDashboard]);
 
   const isDashboardActive = Boolean(currentDashboard);
 
@@ -137,75 +120,12 @@ export default function ExecutiveWorkspace() {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // CHAT MINIMAL EXECUTIVE
-  // Hierarquia: 10% Header | 80% Conversa | 10% Input
+  // COPILOT CHAT MINIMAL
   // ──────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-white text-slate-900 dark:bg-[#0B0E14] dark:text-slate-100">
-      {/* 10% Header Premium: ✨ Copilot Protheus e ⚙ Configurações */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/50 bg-white/70 dark:border-white/[0.05] dark:bg-[#0B0E14]/80 backdrop-blur-md px-5 z-20">
-        <div className="flex items-center gap-2">
-          <Sparkles size={16} className="text-[#4F7CFF]" />
-          <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight">
-            Copilot Protheus
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
-            title="Alternar Tema Claro / Escuro"
-          >
-            {config.theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
-            title="Configurações e Histórico (⚙)"
-          >
-            <Settings size={16} />
-          </button>
-        </div>
-      </header>
-
-      {/* WORKSPACE: Área Principal com Drawer Sobreposto */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Backdrop escurecido do Drawer */}
-        {sidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 transition-opacity animate-in fade-in duration-200"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        {/* Drawer Off-Canvas Deslizante para Histórico & Configurações */}
-        <div 
-          className={`fixed inset-y-0 right-0 z-50 transform transition-transform duration-300 ease-in-out ${
-            sidebarOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
-        >
-          <CopilotSidebar onClose={() => setSidebarOpen(false)} />
-        </div>
-
-        {/* 80% Conversa / Estado Inicial (100% de amplitude limpa) */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white dark:bg-[#0B0E14] relative">
-          <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto overflow-hidden">
-            {chat.messages.length === 0 ? (
-              <div className="flex-1 overflow-y-auto flex flex-col justify-center">
-                <QuickActions />
-              </div>
-            ) : (
-              <CopilotConversation />
-            )}
-
-            {/* 10% Input Ultra-Minimal */}
-            <PromptInput />
-          </div>
-        </main>
-      </div>
-    </div>
+    <CopilotChat
+      context={session}
+      onOpenDashboard={(dash) => setDashboard(dash)}
+    />
   );
 }
