@@ -146,10 +146,12 @@
       position: fixed;
       bottom: 24px;
       right: 24px;
-      width: min(460px, calc(100vw - 32px));
-      height: min(760px, calc(100vh - 48px));
-      max-width: 460px;
-      max-height: 760px;
+      width: min(580px, calc(100vw - 32px));
+      height: min(800px, calc(100vh - 48px));
+      min-width: 420px;
+      min-height: 500px;
+      max-width: min(1200px, calc(100vw - 24px));
+      max-height: calc(100vh - 24px);
       background: #ffffff !important;
       border-radius: 20px;
       border: 1px solid #e2e8f0;
@@ -160,13 +162,76 @@
       overflow: hidden;
       box-sizing: border-box;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #copilot-panel.is-resizing {
+      transition: none !important;
+      user-select: none !important;
+    }
+    #copilot-panel.is-resizing #copilot-iframe {
+      pointer-events: none !important;
     }
     #copilot-panel.results-open {
-      width: min(1560px, calc(100vw - 48px));
-      height: min(920px, calc(100vh - 48px));
-      max-width: 1560px;
-      max-height: 920px;
+      width: min(1560px, calc(100vw - 48px)) !important;
+      height: min(920px, calc(100vh - 48px)) !important;
+      max-width: 1560px !important;
+      max-height: 920px !important;
+    }
+    .copilot-resizer-l {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 8px;
+      height: 100%;
+      cursor: ew-resize;
+      z-index: 100;
+      transition: background 0.15s;
+    }
+    .copilot-resizer-l:hover {
+      background: rgba(59, 130, 246, 0.3);
+    }
+    .copilot-resizer-t {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 8px;
+      cursor: ns-resize;
+      z-index: 100;
+      transition: background 0.15s;
+    }
+    .copilot-resizer-t:hover {
+      background: rgba(59, 130, 246, 0.3);
+    }
+    .copilot-resizer-tl {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 22px;
+      height: 22px;
+      cursor: nwse-resize;
+      z-index: 101;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-top-left-radius: 20px;
+      transition: background 0.15s;
+    }
+    .copilot-resizer-tl::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-top: 2px solid #94a3b8;
+      border-left: 2px solid #94a3b8;
+      border-top-left-radius: 4px;
+      opacity: 0.7;
+    }
+    .copilot-resizer-tl:hover {
+      background: rgba(59, 130, 246, 0.2);
+    }
+    .copilot-resizer-tl:hover::after {
+      border-color: #2563eb;
+      opacity: 1;
     }
     #copilot-panel-header {
       background: #ffffff !important;
@@ -192,15 +257,23 @@
       background: #22c55e;
       display: inline-block;
     }
+    #copilot-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    #copilot-reset-size,
     #copilot-close {
       background: transparent;
       border: none;
       color: #64748b;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 15px;
       padding: 4px 8px;
       border-radius: 8px;
+      transition: all 0.15s;
     }
+    #copilot-reset-size:hover,
     #copilot-close:hover {
       background: #f1f5f9;
       color: #0f172a;
@@ -237,12 +310,18 @@
   const panel = document.createElement("div");
   panel.id = "copilot-panel";
   panel.innerHTML = `
+    <div class="copilot-resizer-l" title="Arraste para ajustar largura"></div>
+    <div class="copilot-resizer-t" title="Arraste para ajustar altura"></div>
+    <div class="copilot-resizer-tl" title="Arraste para redimensionar o chat livremente"></div>
     <div id="copilot-panel-header">
       <div id="copilot-header-brand">
         <span id="copilot-header-dot"></span>
         <span>Copilot Protheus</span>
       </div>
-      <button id="copilot-close" type="button" aria-label="Fechar">✕</button>
+      <div id="copilot-header-actions">
+        <button id="copilot-reset-size" type="button" aria-label="Restaurar tamanho padrão" title="Restaurar tamanho padrão (580x800)">⟲</button>
+        <button id="copilot-close" type="button" aria-label="Fechar" title="Fechar Copilot">✕</button>
+      </div>
     </div>
     <div id="copilot-body">
       <iframe id="copilot-iframe" src="" title="Copilot Protheus"></iframe>
@@ -250,13 +329,127 @@
   `;
   shadow.appendChild(panel);
 
-  // Escuta redimensionamento solicitado pelo Copilot
+  // ─── Lógica de Redimensionamento Livre com o Mouse ────────────────────────
+  const resizerL = panel.querySelector('.copilot-resizer-l');
+  const resizerT = panel.querySelector('.copilot-resizer-t');
+  const resizerTL = panel.querySelector('.copilot-resizer-tl');
+  const btnReset = panel.querySelector('#copilot-reset-size');
+
+  let isResizing = false;
+  let currentResizeMode = null;
+  let startX = 0;
+  let startY = 0;
+  let startW = 0;
+  let startH = 0;
+
+  function initResize(e, mode) {
+    if (panel.classList.contains('results-open')) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    isResizing = true;
+    currentResizeMode = mode;
+    startX = e.clientX;
+    startY = e.clientY;
+    startW = panel.offsetWidth;
+    startH = panel.offsetHeight;
+
+    panel.classList.add('is-resizing');
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function onMouseMove(e) {
+    if (!isResizing) return;
+
+    if (currentResizeMode === 'l' || currentResizeMode === 'tl') {
+      const deltaX = startX - e.clientX;
+      const newWidth = Math.min(
+        Math.max(startW + deltaX, 420),
+        window.innerWidth - 32
+      );
+      panel.style.width = `${newWidth}px`;
+    }
+
+    if (currentResizeMode === 't' || currentResizeMode === 'tl') {
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.min(
+        Math.max(startH + deltaY, 500),
+        window.innerHeight - 32
+      );
+      panel.style.height = `${newHeight}px`;
+    }
+  }
+
+  function onMouseUp() {
+    if (!isResizing) return;
+    isResizing = false;
+    panel.classList.remove('is-resizing');
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+
+    const customSize = {
+      width: parseInt(panel.style.width, 10),
+      height: parseInt(panel.style.height, 10)
+    };
+    if (customSize.width && customSize.height) {
+      try {
+        localStorage.setItem('copilot_chat_size', JSON.stringify(customSize));
+      } catch (err) {}
+    }
+  }
+
+  resizerL?.addEventListener('mousedown', (e) => initResize(e, 'l'));
+  resizerT?.addEventListener('mousedown', (e) => initResize(e, 't'));
+  resizerTL?.addEventListener('mousedown', (e) => initResize(e, 'tl'));
+
+  // Botão de restaurar tamanho padrão
+  btnReset?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    try {
+      localStorage.removeItem('copilot_chat_size');
+    } catch (err) {}
+    panel.style.width = `min(580px, calc(100vw - 32px))`;
+    panel.style.height = `min(800px, calc(100vh - 48px))`;
+  });
+
+  // Aplica tamanho customizado se previamente salvo pelo usuário
+  try {
+    const saved = localStorage.getItem('copilot_chat_size');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.width >= 420 && parsed.height >= 500) {
+        panel.style.width = `${Math.min(parsed.width, window.innerWidth - 32)}px`;
+        panel.style.height = `${Math.min(parsed.height, window.innerHeight - 32)}px`;
+      }
+    }
+  } catch (err) {}
+
+  // Escuta redimensionamento solicitado pelo Copilot (Dashboard)
   window.addEventListener("message", (event) => {
     const iframe = shadow.querySelector("#copilot-iframe");
     if (!iframe || event.source !== iframe.contentWindow) return;
 
     if (event.data?.type === "cprot-result-state") {
-      panel.classList.toggle("results-open", Boolean(event.data.open));
+      const isOpen = Boolean(event.data.open);
+      panel.classList.toggle("results-open", isOpen);
+      if (!isOpen) {
+        // Ao fechar o dashboard, restaura tamanho salvo ou padrão
+        try {
+          const saved = localStorage.getItem('copilot_chat_size');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.width && parsed.height) {
+              panel.style.width = `${Math.min(parsed.width, window.innerWidth - 32)}px`;
+              panel.style.height = `${Math.min(parsed.height, window.innerHeight - 32)}px`;
+              return;
+            }
+          }
+        } catch (err) {}
+        panel.style.width = `min(580px, calc(100vw - 32px))`;
+        panel.style.height = `min(800px, calc(100vh - 48px))`;
+      }
     }
   });
 
