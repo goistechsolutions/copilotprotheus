@@ -10,6 +10,11 @@ _SQL_WORDS = {
     "NEXT", "ROWS", "ONLY", "OFFSET", "ROWNUM", "DISTINCT", "CASE", "WHEN", "THEN",
     "ELSE", "END", "ASC", "DESC", "INNER", "LEFT", "RIGHT", "FULL", "OUTER",
     "CROSS", "UNION", "ALL", "WITH", "SELECT", "FROM", "TRUE", "FALSE",
+    # Funções e palavras reservadas comuns do Oracle e SQL ANSI
+    "TO_CHAR", "TO_DATE", "TO_NUMBER", "SUBSTR", "NVL", "NVL2", "COALESCE",
+    "TRUNC", "ROUND", "SYSDATE", "CURRENT_DATE", "ADD_MONTHS", "MONTHS_BETWEEN",
+    "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "REPLACE", "INSTR", "LENGTH",
+    "SUM", "COUNT", "AVG", "MIN", "MAX", "EXTRACT", "CAST", "MOD", "FLOOR", "CEIL",
 }
 
 

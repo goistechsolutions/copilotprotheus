@@ -355,3 +355,28 @@ def test_auto_fix_delet_filters_injects_when_missing():
     assert fixed4.index("WHERE") < fixed4.index("GROUP BY")
 
 
+def test_validate_query_security_accepts_oracle_built_in_functions():
+    sql = (
+        "SELECT TO_CHAR(TO_DATE(E1.E1_VENCTO, 'YYYYMMDD'), 'IW') AS SEMANA, "
+        "SUM(E1.E1_SALDO) AS TOTAL_SEMANA, "
+        "ROUND(AVG(E1.E1_SALDO), 2) AS MEDIA_VALOR, "
+        "TO_NUMBER('100') AS CONSTANTE "
+        "FROM SE1010 E1 "
+        "WHERE E1.D_E_L_E_T_ <> '*' "
+        "AND E1.E1_VENCTO >= TO_CHAR(SYSDATE, 'YYYYMMDD') "
+        "GROUP BY TO_CHAR(TO_DATE(E1.E1_VENCTO, 'YYYYMMDD'), 'IW')"
+    )
+    allowed_tables = {"SE1010"}
+    fields_by_table = {
+        "SE1010": {"E1_FILIAL", "E1_NUM", "E1_VENCTO", "E1_SALDO", "E1_NOMCLI", "E1_CLIENTE"},
+    }
+    # Should not raise RBAC exception for TO_CHAR, TO_DATE, TO_NUMBER, ROUND, AVG, SYSDATE, etc.
+    assert validate_query_security(
+        sql=sql,
+        allowed_tables=allowed_tables,
+        filial="0101",
+        allowed_fields_by_table=fields_by_table,
+        filter_fields_by_table=fields_by_table,
+    ) is True
+
+
