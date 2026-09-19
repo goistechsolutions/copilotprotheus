@@ -547,34 +547,9 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                 allow_tools=False,
             )
 
-        # 3. Se a resposta retornada contiver erro de quota 429 ou erro da API Gemini
-        if raw_response and (
-            "429" in raw_response
-            or "quota" in raw_response.lower()
-            or "rate-limit" in raw_response.lower()
-            or raw_response.startswith("Erro na API do Gemini:")
-            or raw_response.startswith("Erro de conexão com a API do Gemini:")
-            or raw_response.startswith("A inteligência artificial do Google")
-        ):
-            logger.warning(
-                "[SQL Generator] Gemini retornou erro de quota/indisponibilidade (%s). "
-                "Ativando fallback imediato para LLM Local (servidor Hetzner)...",
-                raw_response[:120]
-            )
-            from app.services.ollama_client import ask_llm
-            raw_response = await ask_llm(
-                question=user_query,
-                protheus_data=None,
-                intent="sql_generation",
-                context={
-                    "tenant_system_prompt": system_instruction,
-                    "tenant_id": tenant_id,
-                    "environment_code": environment_code,
-                },
-                history=history or [],
-                image=image,
-                allow_tools=False,
-            )
+        # O ask_gemini já centraliza o fallback para Ollama em 429/503/rede.
+        # Não reprocessar o texto retornado: uma resposta local pode mencionar
+        # quota e isso causava uma segunda chamada ao Ollama.
 
     if not raw_response or not isinstance(raw_response, str):
         raise HTTPException(status_code=500, detail="Provedor LLM retornou uma resposta vazia na geração de SQL.")
