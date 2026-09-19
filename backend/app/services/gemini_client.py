@@ -180,23 +180,9 @@ async def ask_gemini(
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429 or "quota" in e.response.text.lower() or "rate-limit" in e.response.text.lower():
                 logger.warning(
-                    "[Gemini] Quota excedida (Erro 429) no Google Gemini: %s.",
+                    "[Gemini] Quota excedida (Erro 429). Ativando fallback para Ollama (qwen2.5:7b)... Detalhe: %s",
                     e.response.text[:200]
                 )
-                # Se allow_tools=False significa modo geração SQL — NÃO fazer fallback para Ollama
-                # (Ollama pode estar offline e causa 180s de timeout → loop infinito no frontend).
-                # Lançar HTTPException para encerrar a task imediatamente com erro claro.
-                if not allow_tools:
-                    raise HTTPException(
-                        status_code=429,
-                        detail=(
-                            "A cota da API do Gemini foi excedida (Erro 429). "
-                            "Aguarde alguns instantes e tente novamente. "
-                            "Se o problema persistir, verifique sua cota em console.cloud.google.com."
-                        )
-                    )
-                # Modo chat assistente: tentar fallback para Ollama
-                logger.info("[Gemini] Modo chat — ativando fallback para LLM Local (servidor Hetzner - Ollama)...")
                 from app.services.ollama_client import ask_llm
                 return await ask_llm(
                     question=question,
@@ -208,13 +194,7 @@ async def ask_gemini(
                     allow_tools=allow_tools,
                 )
             if e.response.status_code == 503:
-                logger.warning("[Gemini] Erro 503 no Gemini.")
-                if not allow_tools:
-                    raise HTTPException(
-                        status_code=503,
-                        detail="O serviço do Gemini está temporariamente indisponível (503). Tente novamente em instantes."
-                    )
-                logger.info("[Gemini] Modo chat — ativando fallback para LLM Local (Hetzner)...")
+                logger.warning("[Gemini] Erro 503 no Gemini. Ativando fallback para Ollama (qwen2.5:7b)...")
                 from app.services.ollama_client import ask_llm
                 return await ask_llm(
                     question=question,
@@ -227,13 +207,7 @@ async def ask_gemini(
                 )
             return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
         except httpx.RequestError as e:
-            logger.warning("[Gemini] Erro de conexão com Gemini: %s.", e)
-            if not allow_tools:
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Não foi possível conectar ao serviço Gemini: {str(e)}"
-                )
-
+            logger.warning("[Gemini] Erro de conexão com Gemini: %s. Ativando fallback para Ollama (qwen2.5:7b)...", e)
             from app.services.ollama_client import ask_llm
             return await ask_llm(
                 question=question,
@@ -244,6 +218,7 @@ async def ask_gemini(
                 image=image,
                 allow_tools=allow_tools,
             )
+
             
         resp_json = resp.json()
         
