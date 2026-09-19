@@ -5,7 +5,20 @@ import {
   ShoppingCart, ShoppingBag, DollarSign, Package, FileText,
   BrainCircuit, BookOpen, History, Save, Filter
 } from 'lucide-react';
-import api from '../../api/axios';
+import {
+  createCfopRule,
+  createFinancialNature,
+  createSynonym,
+  createTesRule,
+  deleteCfopRule,
+  deleteFinancialNature,
+  deleteSynonym,
+  deleteTesRule,
+  getBusinessRulesData,
+  getBusinessRulesMetadata,
+  getBusinessRulesTenants,
+  updateBusinessRulesConfig,
+} from '../../services/businessRulesApi';
 import PageHeader from '../../components/ui/PageHeader';
 
 export default function BusinessRulesPage() {
@@ -13,6 +26,7 @@ export default function BusinessRulesPage() {
   const tenantParam = searchParams.get('tenant');
 
   const [tenants, setTenants] = useState([]);
+  const [metadata, setMetadata] = useState(null);
   const [selectedTenant, setSelectedTenant] = useState(tenantParam || '');
   const [activeTab, setActiveTab] = useState('comercial');
   const [overview, setOverview] = useState(null);
@@ -28,35 +42,40 @@ export default function BusinessRulesPage() {
   const [naturesList, setNaturesList] = useState([]);
   const [synonymsList, setSynonymsList] = useState([]);
   const [auditList, setAuditList] = useState([]);
-  const [config, setConfig] = useState({
-    billing_included_classifications: ['Venda', 'Exportação'],
-    billing_excluded_classifications: ['Bonificação', 'Remessa', 'Transferência'],
-    receivables_overdue_days: 30,
-    receivables_include_renegotiated: false,
-    receivables_include_provisional: true,
-    stock_idle_days: 90,
-    stock_critical_days: 7,
-    stock_rupture_days: 3,
-    abc_curve_a_pct: 80.0,
-    abc_curve_b_pct: 15.0,
-    abc_curve_c_pct: 5.0,
-    ai_cash_flow_tables: ['SE1', 'SE2', 'SE5']
-  });
+  const [config, setConfig] = useState({});
 
   // Modal / Add States
   const [showAddTesModal, setShowAddTesModal] = useState(false);
-  const [newTes, setNewTes] = useState({ tes: '', direction: 'saida', classification: 'Venda', description: '' });
+  const [newTes, setNewTes] = useState({ tes: '', direction: 'saida', classification: '', description: '' });
 
   const [showAddCfopModal, setShowAddCfopModal] = useState(false);
-  const [newCfop, setNewCfop] = useState({ cfop: '', classification: 'Venda' });
+  const [newCfop, setNewCfop] = useState({ cfop: '', classification: '' });
 
   const [showAddNatureModal, setShowAddNatureModal] = useState(false);
-  const [newNature, setNewNature] = useState({ nature_code: '', nature_name: '', financial_group: 'Receita' });
+  const [newNature, setNewNature] = useState({ nature_code: '', nature_name: '', financial_group: '' });
 
   const [showAddSynonymModal, setShowAddSynonymModal] = useState(false);
   const [newSynonym, setNewSynonym] = useState({ source_term: '', target_term: '' });
 
+  const firstClassificationFor = direction => (
+    metadata?.classifications?.tes?.find(option => option.directions?.includes(direction))?.value || ''
+  );
+  const tesOptions = metadata?.classifications?.tes || [];
+  const cfopOptions = metadata?.classifications?.cfop || [];
+  const financialGroups = metadata?.financialGroups || [];
+  const cashFlowTables = metadata?.cashFlowTables || [];
+
   useEffect(() => {
+    const loadMetadata = async () => {
+      try {
+        const data = await getBusinessRulesMetadata();
+        setMetadata(data);
+        setConfig(data.defaults || {});
+      } catch (e) {
+        setError(e.response?.data?.detail || 'Erro ao carregar metadata das regras de negócio');
+      }
+    };
+    loadMetadata();
     loadTenants();
   }, []);
 
@@ -79,14 +98,13 @@ export default function BusinessRulesPage() {
 
   const loadTenants = async () => {
     try {
-      const res = await api.get('/api/tenants');
-      const list = res.data?.tenants || res.data || [];
+      const list = await getBusinessRulesTenants();
       setTenants(list);
       if (list.length > 0 && !selectedTenant && !tenantParam) {
         setSelectedTenant(String(list[0].tenant_code || list[0].id));
       }
-    } catch {
-      setError('Erro ao carregar lista de tenants');
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erro ao carregar lista de tenants');
     }
   };
 
@@ -94,29 +112,15 @@ export default function BusinessRulesPage() {
     setLoading(true);
     setError('');
     try {
-      const [overRes, tesSaidaRes, tesEntradaRes, cfopRes, natRes, synRes, confRes, auditRes] = await Promise.all([
-        api.get(`/api/admin/business-rules/overview?tenant_id=${encodeURIComponent(tid)}`),
-        api.get(`/api/admin/business-rules/tes?tenant_id=${encodeURIComponent(tid)}&direction=saida`),
-        api.get(`/api/admin/business-rules/tes?tenant_id=${encodeURIComponent(tid)}&direction=entrada`),
-        api.get(`/api/admin/business-rules/cfop?tenant_id=${encodeURIComponent(tid)}`),
-        api.get(`/api/admin/business-rules/financial-natures?tenant_id=${encodeURIComponent(tid)}`),
-        api.get(`/api/admin/business-rules/synonyms?tenant_id=${encodeURIComponent(tid)}`),
-        api.get(`/api/admin/business-rules/config?tenant_id=${encodeURIComponent(tid)}`),
-        api.get(`/api/admin/business-rules/audit?tenant_id=${encodeURIComponent(tid)}`)
-      ]);
-
-      const toArray = (d) => (Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []));
-
-      setOverview(overRes.data);
-      setTesSaidaList(toArray(tesSaidaRes.data));
-      setTesEntradaList(toArray(tesEntradaRes.data));
-      setCfopList(toArray(cfopRes.data));
-      setNaturesList(toArray(natRes.data));
-      setSynonymsList(toArray(synRes.data));
-      if (confRes.data) {
-        setConfig(confRes.data.config || confRes.data);
-      }
-      setAuditList(toArray(auditRes.data));
+      const data = await getBusinessRulesData(tid);
+      setOverview(data.overview);
+      setTesSaidaList(data.tesSaida);
+      setTesEntradaList(data.tesEntrada);
+      setCfopList(data.cfop);
+      setNaturesList(data.financialNatures);
+      setSynonymsList(data.synonyms);
+      if (data.config) setConfig(data.config);
+      setAuditList(data.audit);
     } catch (e) {
       setError(e.response?.data?.detail || 'Erro ao carregar dados do Business Rules Center');
     } finally {
@@ -129,12 +133,9 @@ export default function BusinessRulesPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/api/admin/business-rules/tes', {
-        tenant_id: selectedTenant,
-        ...newTes
-      });
+      await createTesRule(selectedTenant, newTes);
       setShowAddTesModal(false);
-      setNewTes({ tes: '', direction: newTes.direction, classification: 'Venda', description: '' });
+      setNewTes({ tes: '', direction: newTes.direction, classification: firstClassificationFor(newTes.direction), description: '' });
       showNotification('Regra de TES adicionada com sucesso!');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -147,7 +148,7 @@ export default function BusinessRulesPage() {
   const handleDeleteTes = async (id) => {
     if (!confirm('Deseja realmente remover esta regra de TES?')) return;
     try {
-      await api.delete(`/api/admin/business-rules/tes/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      await deleteTesRule(selectedTenant, id);
       showNotification('Regra de TES removida');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -160,12 +161,9 @@ export default function BusinessRulesPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/api/admin/business-rules/cfop', {
-        tenant_id: selectedTenant,
-        ...newCfop
-      });
+      await createCfopRule(selectedTenant, newCfop);
       setShowAddCfopModal(false);
-      setNewCfop({ cfop: '', classification: 'Venda' });
+      setNewCfop({ cfop: '', classification: cfopOptions[0]?.value || '' });
       showNotification('CFOP cadastrada com sucesso!');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -178,7 +176,7 @@ export default function BusinessRulesPage() {
   const handleDeleteCfop = async (id) => {
     if (!confirm('Deseja remover esta regra de CFOP?')) return;
     try {
-      await api.delete(`/api/admin/business-rules/cfop/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      await deleteCfopRule(selectedTenant, id);
       showNotification('CFOP removida');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -191,12 +189,9 @@ export default function BusinessRulesPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/api/admin/business-rules/financial-natures', {
-        tenant_id: selectedTenant,
-        ...newNature
-      });
+      await createFinancialNature(selectedTenant, newNature);
       setShowAddNatureModal(false);
-      setNewNature({ nature_code: '', nature_name: '', financial_group: 'Receita' });
+      setNewNature({ nature_code: '', nature_name: '', financial_group: financialGroups[0]?.value || '' });
       showNotification('Natureza Financeira cadastrada!');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -209,7 +204,7 @@ export default function BusinessRulesPage() {
   const handleDeleteNature = async (id) => {
     if (!confirm('Deseja remover esta Natureza Financeira?')) return;
     try {
-      await api.delete(`/api/admin/business-rules/financial-natures/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      await deleteFinancialNature(selectedTenant, id);
       showNotification('Natureza Financeira removida');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -222,10 +217,7 @@ export default function BusinessRulesPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/api/admin/business-rules/synonyms', {
-        tenant_id: selectedTenant,
-        ...newSynonym
-      });
+      await createSynonym(selectedTenant, newSynonym);
       setShowAddSynonymModal(false);
       setNewSynonym({ source_term: '', target_term: '' });
       showNotification('Sinônimo cadastrado com sucesso!');
@@ -240,7 +232,7 @@ export default function BusinessRulesPage() {
   const handleDeleteSynonym = async (id) => {
     if (!confirm('Deseja remover este sinônimo?')) return;
     try {
-      await api.delete(`/api/admin/business-rules/synonyms/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      await deleteSynonym(selectedTenant, id);
       showNotification('Sinônimo removido');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -252,10 +244,7 @@ export default function BusinessRulesPage() {
   const handleSaveConfig = async () => {
     setSaving(true);
     try {
-      await api.put('/api/admin/business-rules/config', {
-        tenant_id: selectedTenant,
-        ...config
-      });
+      await updateBusinessRulesConfig(selectedTenant, config);
       showNotification('Configurações atualizadas com sucesso!');
       loadAllData(selectedTenant);
     } catch (e) {
@@ -404,7 +393,7 @@ export default function BusinessRulesPage() {
               </div>
               <button
                 onClick={() => {
-                  setNewTes({ tes: '', direction: 'saida', classification: 'Venda', description: '' });
+                  setNewTes({ tes: '', direction: 'saida', classification: firstClassificationFor('saida'), description: '' });
                   setShowAddTesModal(true);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
@@ -470,7 +459,8 @@ export default function BusinessRulesPage() {
               <p className="text-xs text-slate-400">Marque quais classificações entram no cálculo da receita e quais são desconsideradas nas consultas geradas pela IA.</p>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-                {['Venda', 'Exportação', 'Bonificação', 'Remessa', 'Transferência', 'Consignação', 'Mostruário'].map(cat => {
+                {tesOptions.filter(option => option.directions?.includes('saida')).map(option => {
+                  const cat = option.value;
                   const isIncluded = (config.billing_included_classifications || []).includes(cat);
                   return (
                     <label key={cat} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer p-2 rounded bg-[#161B27] border border-[#1E2535]">
@@ -509,7 +499,7 @@ export default function BusinessRulesPage() {
               </div>
               <button
                 onClick={() => {
-                  setNewTes({ tes: '', direction: 'entrada', classification: 'Compra', description: '' });
+                  setNewTes({ tes: '', direction: 'entrada', classification: firstClassificationFor('entrada'), description: '' });
                   setShowAddTesModal(true);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
@@ -630,7 +620,7 @@ export default function BusinessRulesPage() {
                   <label className="block text-xs text-slate-400 mb-1">Dias para considerar Título Vencido / Inadimplente</label>
                   <input
                     type="number"
-                    value={config.receivables_overdue_days || 30}
+                    value={config.receivables_overdue_days ?? ''}
                     onChange={e => setConfig(prev => ({ ...prev, receivables_overdue_days: parseInt(e.target.value) || 0 }))}
                     className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
                   />
@@ -687,7 +677,7 @@ export default function BusinessRulesPage() {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Produto Parado / Sem Giro (Dias)</label>
                 <input
                   type="number"
-                  value={config.stock_idle_days || 90}
+                  value={config.stock_idle_days ?? ''}
                   onChange={e => setConfig(prev => ({ ...prev, stock_idle_days: parseInt(e.target.value) || 0 }))}
                   className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
                 />
@@ -698,7 +688,7 @@ export default function BusinessRulesPage() {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Estoque Crítico (Dias de Cobertura)</label>
                 <input
                   type="number"
-                  value={config.stock_critical_days || 7}
+                  value={config.stock_critical_days ?? ''}
                   onChange={e => setConfig(prev => ({ ...prev, stock_critical_days: parseInt(e.target.value) || 0 }))}
                   className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
                 />
@@ -709,7 +699,7 @@ export default function BusinessRulesPage() {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Risco de Ruptura (Dias)</label>
                 <input
                   type="number"
-                  value={config.stock_rupture_days || 3}
+                  value={config.stock_rupture_days ?? ''}
                   onChange={e => setConfig(prev => ({ ...prev, stock_rupture_days: parseInt(e.target.value) || 0 }))}
                   className="w-full rounded-lg border border-[#263550] bg-[#161B27] px-3 py-2 text-xs text-white"
                 />
@@ -837,7 +827,7 @@ export default function BusinessRulesPage() {
               <div className="pt-4 border-t border-[#1E2535]">
                 <label className="block text-xs font-semibold text-slate-300 mb-2">Tabelas Protheus Prioritárias para Análise de Fluxo de Caixa</label>
                 <div className="flex gap-4">
-                  {['SE1', 'SE2', 'SE5', 'FK1', 'FK2'].map(tbl => {
+                  {cashFlowTables.map(tbl => {
                     const isSelected = (config.ai_cash_flow_tables || []).includes(tbl);
                     return (
                       <label key={tbl} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer p-2 rounded bg-[#161B27] border border-[#1E2535]">
@@ -1019,16 +1009,9 @@ export default function BusinessRulesPage() {
                   onChange={e => setNewTes(prev => ({ ...prev, classification: e.target.value }))}
                   className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
                 >
-                  <option value="Venda">Venda</option>
-                  <option value="Bonificação">Bonificação</option>
-                  <option value="Devolução">Devolução</option>
-                  <option value="Remessa">Remessa</option>
-                  <option value="Transferência">Transferência</option>
-                  <option value="Exportação">Exportação</option>
-                  <option value="Compra">Compra</option>
-                  <option value="Consignação">Consignação</option>
-                  <option value="Mostruário">Mostruário</option>
-                  <option value="Outros">Outros</option>
+                  {tesOptions
+                    .filter(option => option.directions?.includes(newTes.direction))
+                    .map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </div>
 
@@ -1088,12 +1071,7 @@ export default function BusinessRulesPage() {
                   onChange={e => setNewCfop(prev => ({ ...prev, classification: e.target.value }))}
                   className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
                 >
-                  <option value="Venda">Venda</option>
-                  <option value="Devolução">Devolução</option>
-                  <option value="Remessa">Remessa</option>
-                  <option value="Transferência">Transferência</option>
-                  <option value="Compra">Compra</option>
-                  <option value="Outros">Outros</option>
+                  {cfopOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </div>
 
@@ -1153,13 +1131,7 @@ export default function BusinessRulesPage() {
                   onChange={e => setNewNature(prev => ({ ...prev, financial_group: e.target.value }))}
                   className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
                 >
-                  <option value="Receita">Receita</option>
-                  <option value="Custos Fixos">Custos Fixos</option>
-                  <option value="Custos Variáveis">Custos Variáveis</option>
-                  <option value="Impostos">Impostos</option>
-                  <option value="Financeiro">Financeiro</option>
-                  <option value="Investimentos">Investimentos</option>
-                  <option value="Operacional">Operacional</option>
+                  {financialGroups.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </div>
 
