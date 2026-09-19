@@ -4,6 +4,7 @@ import json
 import httpx
 import logging
 from typing import Optional, AsyncGenerator
+from fastapi import HTTPException
 from app.core.config import settings
 from app.services.protheus_service import descobrir_apis_protheus, execute_protheus_tool
 from app.services.ollama_client import _analyze_tool_results, get_system_prompt
@@ -61,13 +62,22 @@ def _build_gemini_messages(question: str, protheus_data: Optional[dict], intent:
     """
     contents = []
     
-    # Adicionar histórico se houver
+    # Adicionar histórico se houver — limitar tamanho para evitar 429 por excesso de tokens
+    # Cada mensagem do histórico é truncada em 800 chars para evitar que respostas ricas em JSON
+    # (executive_summary, kpis, datasets, etc.) inflacionem o payload na segunda pergunta.
+    MAX_HISTORY_CHARS = 800
     if history:
-        for m in history[-6:]:
+        for m in history[-4:]:
             role = "model" if m.get("role") == "assistant" else "user"
+            raw_text = m.get("text", m.get("content", "")) or ""
+            # Trunca respostas longas do LLM (JSON com kpis, datasets, details, etc.)
+            # para evitar estouro de quota na 2ª e subsequentes perguntas da conversa.
+            truncated_text = raw_text[:MAX_HISTORY_CHARS]
+            if len(raw_text) > MAX_HISTORY_CHARS:
+                truncated_text += "... [resumido para contexto]"
             contents.append({
                 "role": role,
-                "parts": [{"text": m.get("text", m.get("content", ""))}]
+                "parts": [{"text": truncated_text}]
             })
             
     # Injetar contexto de dados/telas como mensagem de contexto (user)
@@ -170,10 +180,23 @@ async def ask_gemini(
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429 or "quota" in e.response.text.lower() or "rate-limit" in e.response.text.lower():
                 logger.warning(
-                    "[Gemini] Quota excedida (Erro 429) no Google Gemini: %s. "
-                    "Ativando fallback automático para LLM Local (servidor Hetzner - Ollama)...",
+                    "[Gemini] Quota excedida (Erro 429) no Google Gemini: %s.",
                     e.response.text[:200]
                 )
+                # Se allow_tools=False significa modo geração SQL — NÃO fazer fallback para Ollama
+                # (Ollama pode estar offline e causa 180s de timeout → loop infinito no frontend).
+                # Lançar HTTPException para encerrar a task imediatamente com erro claro.
+                if not allow_tools:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=(
+                            "A cota da API do Gemini foi excedida (Erro 429). "
+                            "Aguarde alguns instantes e tente novamente. "
+                            "Se o problema persistir, verifique sua cota em console.cloud.google.com."
+                        )
+                    )
+                # Modo chat assistente: tentar fallback para Ollama
+                logger.info("[Gemini] Modo chat — ativando fallback para LLM Local (servidor Hetzner - Ollama)...")
                 from app.services.ollama_client import ask_llm
                 return await ask_llm(
                     question=question,
@@ -185,7 +208,13 @@ async def ask_gemini(
                     allow_tools=allow_tools,
                 )
             if e.response.status_code == 503:
-                logger.warning("[Gemini] Erro 503 no Gemini. Ativando fallback para LLM Local (Hetzner)...")
+                logger.warning("[Gemini] Erro 503 no Gemini.")
+                if not allow_tools:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="O serviço do Gemini está temporariamente indisponível (503). Tente novamente em instantes."
+                    )
+                logger.info("[Gemini] Modo chat — ativando fallback para LLM Local (Hetzner)...")
                 from app.services.ollama_client import ask_llm
                 return await ask_llm(
                     question=question,
@@ -198,7 +227,13 @@ async def ask_gemini(
                 )
             return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
         except httpx.RequestError as e:
-            logger.warning("[Gemini] Erro de conexão com Gemini: %s. Ativando fallback para LLM Local (Hetzner)...", e)
+            logger.warning("[Gemini] Erro de conexão com Gemini: %s.", e)
+            if not allow_tools:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Não foi possível conectar ao serviço Gemini: {str(e)}"
+                )
+
             from app.services.ollama_client import ask_llm
             return await ask_llm(
                 question=question,

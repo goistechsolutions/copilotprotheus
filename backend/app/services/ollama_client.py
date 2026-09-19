@@ -376,7 +376,7 @@ async def _call_ollama(
     ollama_url = await _get_active_ollama_url()
     ollama_model = await _resolve_ollama_model(ollama_url)
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         payload = {
             "model": ollama_model, 
             "messages": messages, 
@@ -559,7 +559,7 @@ async def stream_llm(
     ollama_model = await _resolve_ollama_model(ollama_url)
 
     try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             payload = {
                 "model": ollama_model, 
                 "messages": messages, 

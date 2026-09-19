@@ -847,7 +847,7 @@ def _append_conversation_turn(
             "tenant_id": tenant_id,
             "company_id": str(company_id),
             "role": role,
-            "content": str(content).strip()[:4000],
+            "content": str(content).strip()[:600],
             "conversation_id": conversation_id,
             "actor_key": actor_key,
         },
@@ -867,7 +867,7 @@ def _normalize_conversation_history(value: Any, limit: int = 12) -> list[dict[st
             continue
         content = content.strip()
         if content:
-            normalized.append({"role": role, "text": content[:4000]})
+            normalized.append({"role": role, "text": content[:600]})
     return normalized
 
 
