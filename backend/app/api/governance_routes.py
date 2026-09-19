@@ -14,7 +14,14 @@ from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 
-router = APIRouter(prefix="/api/governance", tags=["governance"])
+# Compatibilidade temporária: a governança administrativa canônica está em
+# /api/admin/governance (business_governance_routes.py). Este router permanece
+# registrado até haver evidência de tráfego zero em produção.
+router = APIRouter(
+    prefix="/api/governance",
+    tags=["legacy-governance"],
+    deprecated=True,
+)
 
 
 class AllowTableRequest(BaseModel):
