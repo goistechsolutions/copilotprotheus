@@ -8,7 +8,7 @@ import os
 import hmac
 import uuid
 
-from app.core.admin_security import JWT_ISSUER
+from app.core.admin_security import JWT_ISSUER, _admin_access_claims
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 
@@ -49,7 +49,14 @@ def create_admin_token() -> str:
     _, _, secret = get_admin_credentials()
     issued_at = datetime.utcnow()
     expire = issued_at + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    payload = {"sub": "admin", "iss": JWT_ISSUER, "jti": str(uuid.uuid4()), "exp": expire, "iat": issued_at}
+    payload = {
+        "sub": "admin",
+        "iss": JWT_ISSUER,
+        "jti": str(uuid.uuid4()),
+        "exp": expire,
+        "iat": issued_at,
+        **_admin_access_claims(),
+    }
     return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
 
 
