@@ -20,13 +20,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.admin_security import require_admin
+from app.core.admin_security import authorize_admin_access, require_admin, require_admin_permission
 from app.db.database import get_db, resolve_clean_tenant
 from app.services.business_rules_engine import BusinessRulesEngine
 
 logger = logging.getLogger("app.business_rules_routes")
 
 router = APIRouter(prefix="/admin/business-rules", tags=["business-rules-center"])
+
+BUSINESS_RULES_READ_PERMISSION = "business_rules:read"
+BUSINESS_RULES_WRITE_PERMISSION = "business_rules:write"
+
+
+def _authorize_business_rules(admin: dict, tenant_id: str, permission: str) -> str:
+    return authorize_admin_access(admin, permission, tenant_id) or ""
 
 
 # Fonte única das opções exibidas pelo Business Rules Center. Os valores
@@ -125,7 +132,7 @@ class ModuleConfigUpdate(BaseModel):
 
 # ── 0. METADATA ─────────────────────────────────────────────────────
 @router.get("/metadata")
-def get_business_rules_metadata(admin: str = Depends(require_admin)):
+def get_business_rules_metadata(admin: dict = Depends(require_admin_permission(BUSINESS_RULES_READ_PERMISSION))):
     """Retorna opções e defaults canônicos para o painel administrativo."""
     return BUSINESS_RULES_METADATA
 
@@ -135,9 +142,9 @@ def get_business_rules_metadata(admin: str = Depends(require_admin)):
 def get_business_rules_overview(
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     try:
         tes_count = db.execute(text("SELECT COUNT(*) FROM public.business_rule_tes WHERE tenant_id = :tid"), {"tid": tid}).scalar() or 0
         cfop_count = db.execute(text("SELECT COUNT(*) FROM public.business_cfop_rules WHERE tenant_id = :tid"), {"tid": tid}).scalar() or 0
@@ -175,9 +182,9 @@ def list_tes_rules(
     tenant_id: str = Query(...),
     direction: Optional[str] = None,
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     sql = "SELECT id, tes, direction, classification, description, active, created_at FROM public.business_rule_tes WHERE tenant_id = :tid"
     params = {"tid": tid}
     if direction:
@@ -199,9 +206,9 @@ def list_tes_rules(
 def create_or_update_tes_rule(
     payload: TesRuleCreate,
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(payload.tenant_id).lower()
+    tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     clean_tes = str(payload.tes).strip()
     rule_id = uuid.uuid4().hex
 
@@ -248,9 +255,9 @@ def delete_tes_rule(
     rule_id: str,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     existing = db.execute(text("SELECT * FROM public.business_rule_tes WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_rule_tes WHERE id = :id"), {"id": rule_id})
@@ -264,9 +271,9 @@ def delete_tes_rule(
 def list_cfop_rules(
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     rows = db.execute(text("""
         SELECT id, cfop, classification, created_at
         FROM public.business_cfop_rules
@@ -286,9 +293,9 @@ def list_cfop_rules(
 def create_or_update_cfop_rule(
     payload: CfopRuleCreate,
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(payload.tenant_id).lower()
+    tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     clean_cfop = str(payload.cfop).strip()
     rule_id = uuid.uuid4().hex
 
@@ -324,9 +331,9 @@ def delete_cfop_rule(
     rule_id: str,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     existing = db.execute(text("SELECT * FROM public.business_cfop_rules WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_cfop_rules WHERE id = :id"), {"id": rule_id})
@@ -340,9 +347,9 @@ def delete_cfop_rule(
 def list_financial_natures(
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     rows = db.execute(text("""
         SELECT id, nature_code, nature_name, financial_group, created_at
         FROM public.business_financial_natures
@@ -362,9 +369,9 @@ def list_financial_natures(
 def create_financial_nature(
     payload: FinancialNatureCreate,
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(payload.tenant_id).lower()
+    tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     clean_code = str(payload.nature_code).strip()
     rule_id = uuid.uuid4().hex
 
@@ -408,9 +415,9 @@ def delete_financial_nature(
     rule_id: str,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     existing = db.execute(text("SELECT * FROM public.business_financial_natures WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_financial_natures WHERE id = :id"), {"id": rule_id})
@@ -424,9 +431,9 @@ def delete_financial_nature(
 def list_synonyms(
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     rows = db.execute(text("""
         SELECT id, source_term, target_term, created_at
         FROM public.business_synonyms
@@ -446,9 +453,9 @@ def list_synonyms(
 def create_synonym(
     payload: SynonymCreate,
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(payload.tenant_id).lower()
+    tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     clean_src = payload.source_term.strip()
     clean_tgt = payload.target_term.strip()
     rule_id = uuid.uuid4().hex
@@ -485,9 +492,9 @@ def delete_synonym(
     rule_id: str,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     existing = db.execute(text("SELECT * FROM public.business_synonyms WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_synonyms WHERE id = :id"), {"id": rule_id})
@@ -501,9 +508,9 @@ def delete_synonym(
 def get_module_config(
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     cfg = db.execute(text("""
         SELECT * FROM public.business_module_configs
         WHERE tenant_id = :tid
@@ -541,9 +548,9 @@ def get_module_config(
 def update_module_config(
     payload: ModuleConfigUpdate,
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(payload.tenant_id).lower()
+    tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     existing = db.execute(text("SELECT * FROM public.business_module_configs WHERE tenant_id = :tid"), {"tid": tid}).mappings().first()
     cfg_id = existing["id"] if existing else uuid.uuid4().hex
 
@@ -622,9 +629,9 @@ def list_business_rules_audit(
     tenant_id: str = Query(...),
     limit: int = 50,
     db: Session = Depends(get_db),
-    admin: str = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
-    tid = str(tenant_id).lower()
+    tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     rows = db.execute(text("""
         SELECT id, user_id, event_date, rule_entity, action, previous_value, new_value
         FROM public.business_rule_audit
