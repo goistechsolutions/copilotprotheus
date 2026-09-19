@@ -64,6 +64,8 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const contextKey = JSON.stringify(context || {});
+
   // Restaura imediatamente do snapshot; o backend continua sendo a fonte canônica.
   useEffect(() => {
     if (currentConversationId) {
@@ -76,13 +78,15 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
         }
       }).catch(() => {});
     }
-  }, [currentConversationId, context]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentConversationId, contextKey]);
 
   useEffect(() => {
     if (currentConversationId && messages.length > 0) {
       writeMessageSnapshot(context, currentConversationId, messages);
     }
-  }, [context, currentConversationId, messages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextKey, currentConversationId, messages]);
 
   const stopProcessing = useCallback(() => {
     if (abortControllerRef.current) {
