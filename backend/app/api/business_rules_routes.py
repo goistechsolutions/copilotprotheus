@@ -29,6 +29,59 @@ logger = logging.getLogger("app.business_rules_routes")
 router = APIRouter(prefix="/admin/business-rules", tags=["business-rules-center"])
 
 
+# Fonte única das opções exibidas pelo Business Rules Center. Os valores
+# permanecem compatíveis com as tabelas legadas enquanto a migração para
+# códigos técnicos está sendo preparada.
+BUSINESS_RULES_METADATA = {
+    "version": 1,
+    "classifications": {
+        "tes": [
+            {"value": "Venda", "label": "Venda", "directions": ["saida"]},
+            {"value": "Bonificação", "label": "Bonificação", "directions": ["saida", "entrada"]},
+            {"value": "Devolução", "label": "Devolução", "directions": ["saida", "entrada"]},
+            {"value": "Remessa", "label": "Remessa", "directions": ["saida", "entrada"]},
+            {"value": "Transferência", "label": "Transferência", "directions": ["saida", "entrada"]},
+            {"value": "Exportação", "label": "Exportação", "directions": ["saida"]},
+            {"value": "Compra", "label": "Compra", "directions": ["entrada"]},
+            {"value": "Consignação", "label": "Consignação", "directions": ["saida", "entrada"]},
+            {"value": "Mostruário", "label": "Mostruário", "directions": ["saida", "entrada"]},
+            {"value": "Outros", "label": "Outros", "directions": ["saida", "entrada"]},
+        ],
+        "cfop": [
+            {"value": "Venda", "label": "Venda"},
+            {"value": "Devolução", "label": "Devolução"},
+            {"value": "Remessa", "label": "Remessa"},
+            {"value": "Transferência", "label": "Transferência"},
+            {"value": "Compra", "label": "Compra"},
+            {"value": "Outros", "label": "Outros"},
+        ],
+    },
+    "financialGroups": [
+        {"value": "Receita", "label": "Receita"},
+        {"value": "Custo", "label": "Custo"},
+        {"value": "Despesa", "label": "Despesa"},
+        {"value": "Investimento", "label": "Investimento"},
+        {"value": "Imposto", "label": "Imposto"},
+        {"value": "Operação Financeira", "label": "Operação Financeira"},
+    ],
+    "cashFlowTables": ["SE1", "SE2", "SE5"],
+    "defaults": {
+        "billing_included_classifications": ["Venda", "Exportação"],
+        "billing_excluded_classifications": ["Bonificação", "Remessa", "Transferência"],
+        "receivables_overdue_days": 30,
+        "receivables_include_renegotiated": False,
+        "receivables_include_provisional": True,
+        "stock_idle_days": 90,
+        "stock_critical_days": 7,
+        "stock_rupture_days": 3,
+        "abc_curve_a_pct": 80.0,
+        "abc_curve_b_pct": 15.0,
+        "abc_curve_c_pct": 5.0,
+        "ai_cash_flow_tables": ["SE1", "SE2", "SE5"],
+    },
+}
+
+
 # ── SCHEMAS ────────────────────────────────────────────────────────
 class TesRuleCreate(BaseModel):
     tenant_id: str
@@ -68,6 +121,13 @@ class ModuleConfigUpdate(BaseModel):
     abc_curve_b_pct: Optional[float] = 15.0
     abc_curve_c_pct: Optional[float] = 5.0
     ai_cash_flow_tables: Optional[List[str]] = None
+
+
+# ── 0. METADATA ─────────────────────────────────────────────────────
+@router.get("/metadata")
+def get_business_rules_metadata(admin: str = Depends(require_admin)):
+    """Retorna opções e defaults canônicos para o painel administrativo."""
+    return BUSINESS_RULES_METADATA
 
 
 # ── 1. VISÃO GERAL / OVERVIEW ──────────────────────────────────────
