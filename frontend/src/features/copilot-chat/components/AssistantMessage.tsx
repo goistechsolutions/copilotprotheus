@@ -31,26 +31,8 @@ export function AssistantMessage({
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'flex-start',
-      width: '100%',
-      marginBottom: '28px',
-    }} className="animate-fade-in">
-      {/* Rótulo Superior */}
-      <span style={{
-        fontSize: '11px',
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        color: 'var(--cprot-primary)',
-        marginBottom: '8px',
-      }}>
-        Análise concluída
-      </span>
-
-      {/* Resposta Analítica e Ação de Dashboard */}
+    <div className="copilot-assistant-turn animate-fade-in">
+      <div className="copilot-message-label"><span className="copilot-label-dot" /> Análise concluída</div>
       <AnalysisAnswer
         content={message.content}
         dashboard={message.dashboard}
@@ -59,7 +41,6 @@ export function AssistantMessage({
         onOpenDashboard={onOpenDashboard}
       />
 
-      {/* Sugestões Contextuais (Aparecem somente após resposta) */}
       {message.suggestions && message.suggestions.length > 0 && (
         <FollowUpSuggestions
           suggestions={message.suggestions}

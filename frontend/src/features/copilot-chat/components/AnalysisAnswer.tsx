@@ -1,6 +1,7 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 import { CopilotDashboardReference, OpenDashboardDetail } from '../types/chat.types';
-import { ArrowRightIcon } from './icons';
+import { ArrowRightIcon, SparklesIcon } from './icons';
 
 interface AnalysisAnswerProps {
   content: string;
@@ -35,58 +36,30 @@ export function AnalysisAnswer({
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '12px',
-      width: '100%',
-      fontSize: '15px',
-      lineHeight: 1.6,
-      color: 'var(--cprot-text-main)',
-    }}>
-      {/* Texto de Resumo Analítico Puro */}
-      <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-        {content}
+    <article className="copilot-answer-card">
+      <div className="copilot-answer-content">
+        <ReactMarkdown
+          components={{
+            a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+            table: ({ node, ...props }) => <div className="copilot-markdown-table"><table {...props} /></div>,
+          }}
+        >
+          {content || 'A análise foi concluída, mas não retornou um resumo textual.'}
+        </ReactMarkdown>
       </div>
-
-      {/* Link Discreto para Abrir Dashboard */}
       {dashboard && (
-        <div style={{ marginTop: '6px' }}>
-          <button
-            type="button"
-            onClick={handleOpenDashboard}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: 'var(--cprot-primary)',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '12px',
-              fontSize: '13px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'background-color 0.15s, transform 0.1s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--cprot-primary-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--cprot-primary)';
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.transform = 'scale(0.98)';
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-          >
-            <span>Abrir Dashboard</span>
+        <div className="copilot-answer-action">
+          <div>
+            <span className="copilot-answer-action-eyebrow">Visão executiva pronta</span>
+            <span className="copilot-answer-action-title">Explore os indicadores desta análise</span>
+          </div>
+          <button type="button" onClick={handleOpenDashboard} className="copilot-dashboard-button">
+            <SparklesIcon size={15} />
+            <span>Abrir dashboard</span>
             <ArrowRightIcon size={14} />
           </button>
         </div>
       )}
-    </div>
+    </article>
   );
 }

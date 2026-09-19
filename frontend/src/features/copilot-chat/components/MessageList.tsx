@@ -21,13 +21,7 @@ export function MessageList({
   onRetryLast,
 }: MessageListProps) {
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      width: '100%',
-      maxWidth: '680px',
-      margin: '0 auto',
-    }}>
+    <div className="copilot-message-list">
       {messages.map((message, index) => {
         const isUser = message.role === 'user';
         const isLast = index === messages.length - 1;
@@ -47,14 +41,8 @@ export function MessageList({
               />
             )}
 
-            {/* Divisória minimalista entre turnos completos (quando a próxima for do usuário) */}
             {!isUser && !isLast && (
-              <div style={{
-                width: '100%',
-                height: '1px',
-                backgroundColor: 'var(--cprot-border)',
-                marginBottom: '28px',
-              }} />
+              <div className="copilot-turn-divider" />
             )}
           </React.Fragment>
         );
