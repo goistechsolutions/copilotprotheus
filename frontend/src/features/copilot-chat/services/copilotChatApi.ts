@@ -100,6 +100,15 @@ function createMockResponse(prompt: string): { content: string; suggestions: str
         { label: 'Faturamento Total', value: 'R$ 1.120.000', change: '+14,2%', tone: 'positive' },
         { label: 'Ticket Médio', value: 'R$ 18.400', change: '+4,1%', tone: 'positive' },
         { label: 'Participação Top 1', value: '27,3%', change: 'Equilibrado', tone: 'neutral' }
+      ],
+      columns: ['VENDEDOR', 'QTD_PEDIDOS', 'FATURAMENTO'],
+      rows: [
+        { VENDEDOR: 'CARLOS SILVA', QTD_PEDIDOS: 436, FATURAMENTO: 1220448.54 },
+        { VENDEDOR: 'MARCOS OLIVEIRA', QTD_PEDIDOS: 37, FATURAMENTO: 699299.42 },
+        { VENDEDOR: 'ANA BEATRIZ SANTOS', QTD_PEDIDOS: 125, FATURAMENTO: 335211.76 },
+        { VENDEDOR: 'ROBERTO ALMEIDA', QTD_PEDIDOS: 43, FATURAMENTO: 224153.82 },
+        { VENDEDOR: 'JULIANA LIMA', QTD_PEDIDOS: 185, FATURAMENTO: 213486.29 },
+        { VENDEDOR: 'FERNANDO COSTA', QTD_PEDIDOS: 131, FATURAMENTO: 210602.76 }
       ]
     }
   };

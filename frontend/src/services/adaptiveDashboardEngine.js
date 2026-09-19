@@ -1065,9 +1065,21 @@ export function buildCharts(schema, rows) {
             value: othersVal,
           });
         }
+        const pluralMap = {
+          'Vendedor': 'Vendedores',
+          'Cliente': 'Clientes',
+          'Fornecedor': 'Fornecedores',
+          'Produto': 'Produtos',
+          'Filial': 'Filiais',
+          'Cidade': 'Cidades',
+          'Estado': 'Estados',
+          'Região': 'Regiões',
+          'Mês': 'Meses',
+        };
+        const dimPlural = pluralMap[dimLabel] || (dimLabel.endsWith('r') || dimLabel.endsWith('s') || dimLabel.endsWith('z') ? `${dimLabel}es` : `${dimLabel}s`);
         charts.push({
           chartType: 'donut',
-          title: `Participação Top 5 ${dimLabel}s vs Outros`,
+          title: `Participação Top 5 ${dimPlural} vs Outros`,
           data: top5,
           dataKey: 'value',
           nameKey: 'name',

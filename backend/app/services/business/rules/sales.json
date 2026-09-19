@@ -16,7 +16,11 @@
     "nota de saida",
     "notas de saida",
     "cliente",
-    "clientes"
+    "clientes",
+    "vendedor",
+    "vendedores",
+    "representante",
+    "representantes"
   ],
   "allowed_families": [
     "SF2",
@@ -24,6 +28,7 @@
     "SC5",
     "SC6",
     "SA1",
+    "SA3",
     "SE1",
     "SB1",
     "SB2",
@@ -38,9 +43,9 @@
     "SD1",
     "SA2"
   ],
-  "domain_instruction": "A intenção é VENDAS/FATURAMENTO. Use SF2/SD2 para notas de saída e SA1 para clientes quando essas famílias estiverem no catálogo; nunca use SF1/SD1/SA2, que são entrada/compras/fornecedores.",
+  "domain_instruction": "A intenção é VENDAS/FATURAMENTO. Use SF2/SD2 para notas de saída, SA1 para clientes e SA3 para vendedores quando essas famílias estiverem no catálogo; nunca use SF1/SD1/SA2, que são entrada/compras/fornecedores. Na análise de vendas, use SEMPRE o nome dos vendedores através do JOIN com SA3 (SA3.A3_NOME AS VENDEDOR).",
   "error_messages": {
-    "missing_required": "A pergunta é de vendas/faturamento, mas o módulo e o snapshot ativos não contêm SF2/SD2/SA1. Selecione um módulo de vendas autorizado e sincronize o dicionário antes de consultar.",
+    "missing_required": "A pergunta é de vendas/faturamento, mas o módulo e o snapshot ativos não contêm SF2/SD2/SA1/SA3. Selecione um módulo de vendas autorizado e sincronize o dicionário antes de consultar.",
     "blocked_used": "Consulta de vendas gerou tabela de entrada/fornecedor (SF1, SD1 ou SA2); SQL bloqueado."
   }
 }
