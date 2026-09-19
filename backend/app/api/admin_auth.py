@@ -136,7 +136,10 @@ async def login(request: LoginRequest, raw_request: Request, response: Response)
     if not user_ok or not pass_ok:
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
-    token = create_admin_token()
+    try:
+        token = create_admin_token()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Escopo administrativo não configurado com segurança.")
     _set_auth_cookie(response, token, is_https=_is_https(raw_request))
     return LoginResponse(success=True, message="Login realizado com sucesso")
 
