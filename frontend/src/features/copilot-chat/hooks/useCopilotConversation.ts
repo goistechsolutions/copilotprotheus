@@ -10,27 +10,79 @@ import {
   syncRemoteMessage 
 } from '../services/copilotChatApi';
 
-const ACTIVE_CONV_STORAGE_KEY = 'cprot_active_conversation_id';
+const ACTIVE_CONV_STORAGE_PREFIX = 'cprot_active_conversation_id';
+const MESSAGE_SNAPSHOT_PREFIX = 'cprot_conversation_messages';
+
+function storageScope(context?: CopilotSessionContext): string {
+  return [
+    context?.tenantId,
+    context?.userId,
+    context?.company,
+    context?.branch,
+    context?.environment,
+    context?.module || context?.currentModule,
+  ].map((value) => encodeURIComponent(String(value || 'unknown'))).join(':');
+}
+
+function activeConversationKey(context?: CopilotSessionContext): string {
+  return `${ACTIVE_CONV_STORAGE_PREFIX}:${storageScope(context)}`;
+}
+
+function messageSnapshotKey(context: CopilotSessionContext | undefined, conversationId: string): string {
+  return `${MESSAGE_SNAPSHOT_PREFIX}:${storageScope(context)}:${encodeURIComponent(conversationId)}`;
+}
+
+function readMessageSnapshot(context: CopilotSessionContext | undefined, conversationId: string): CopilotMessage[] {
+  try {
+    const saved = localStorage.getItem(messageSnapshotKey(context, conversationId));
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed.filter((message) => message?.status !== 'processing') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMessageSnapshot(context: CopilotSessionContext | undefined, conversationId: string, messages: CopilotMessage[]): void {
+  try {
+    const stableMessages = messages.filter((message) => message?.status !== 'processing');
+    localStorage.setItem(messageSnapshotKey(context, conversationId), JSON.stringify(stableMessages));
+  } catch {
+    // A falha de storage não pode impedir a conversa remota.
+  }
+}
 
 export function useCopilotConversation(context?: CopilotSessionContext) {
-  const [messages, setMessages] = useState<CopilotMessage[]>([]);
+  const activeConversationStorageKey = activeConversationKey(context);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(() => {
-    return localStorage.getItem(ACTIVE_CONV_STORAGE_KEY) || null;
+    return localStorage.getItem(activeConversationStorageKey) || null;
+  });
+  const [messages, setMessages] = useState<CopilotMessage[]>(() => {
+    const conversationId = localStorage.getItem(activeConversationStorageKey);
+    return conversationId ? readMessageSnapshot(context, conversationId) : [];
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Carrega mensagens da conversa salva se houver
+  // Restaura imediatamente do snapshot; o backend continua sendo a fonte canônica.
   useEffect(() => {
     if (currentConversationId) {
+      const snapshot = readMessageSnapshot(context, currentConversationId);
+      if (snapshot.length > 0) setMessages(snapshot);
       fetchConversationMessagesRemote(currentConversationId).then((loaded) => {
         if (loaded && loaded.length > 0) {
           setMessages(loaded);
+          writeMessageSnapshot(context, currentConversationId, loaded);
         }
       }).catch(() => {});
     }
-  }, [currentConversationId]);
+  }, [currentConversationId, context]);
+
+  useEffect(() => {
+    if (currentConversationId && messages.length > 0) {
+      writeMessageSnapshot(context, currentConversationId, messages);
+    }
+  }, [context, currentConversationId, messages]);
 
   const stopProcessing = useCallback(() => {
     if (abortControllerRef.current) {
@@ -45,21 +97,26 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
   const startNewConversation = useCallback(() => {
     stopProcessing();
     setCurrentConversationId(null);
-    localStorage.removeItem(ACTIVE_CONV_STORAGE_KEY);
+    localStorage.removeItem(activeConversationStorageKey);
     setMessages([]);
-  }, [stopProcessing]);
+  }, [activeConversationStorageKey, stopProcessing]);
 
   const selectConversation = useCallback(async (conversationId: string) => {
     stopProcessing();
     setCurrentConversationId(conversationId);
-    localStorage.setItem(ACTIVE_CONV_STORAGE_KEY, conversationId);
+    localStorage.setItem(activeConversationStorageKey, conversationId);
+    const snapshot = readMessageSnapshot(context, conversationId);
+    setMessages(snapshot);
     try {
       const msgs = await fetchConversationMessagesRemote(conversationId);
-      setMessages(msgs);
+      if (msgs.length > 0) {
+        setMessages(msgs);
+        writeMessageSnapshot(context, conversationId, msgs);
+      }
     } catch {
-      setMessages([]);
+      if (snapshot.length === 0) setMessages([]);
     }
-  }, [stopProcessing]);
+  }, [activeConversationStorageKey, context, stopProcessing]);
 
   const sendMessage = useCallback(async (promptText: string) => {
     const text = promptText.trim();
@@ -73,7 +130,7 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
     if (!convId) {
       convId = await createNewConversationRemote(text.slice(0, 40), context);
       setCurrentConversationId(convId);
-      localStorage.setItem(ACTIVE_CONV_STORAGE_KEY, convId);
+      localStorage.setItem(activeConversationStorageKey, convId);
     }
 
     // 2. Adiciona mensagem do usuário e mensagem provisória de processamento
@@ -147,7 +204,7 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
       setIsProcessing(false);
       abortControllerRef.current = null;
     }
-  }, [currentConversationId, isProcessing, context]);
+  }, [activeConversationStorageKey, currentConversationId, isProcessing, context]);
 
   return {
     messages,
