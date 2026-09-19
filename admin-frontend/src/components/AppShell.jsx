@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -100,7 +100,7 @@ function initials(value) {
   return parts.slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'AD';
 }
 
-function Sidebar({ collapsed, mobileOpen, onClose, onToggle, user, onLogout, loggingOut, search, onSearch }) {
+function Sidebar({ collapsed, mobileOpen, onClose, onToggle, user, onLogout, loggingOut, search, onSearch, searchRef }) {
   const visibleGroups = nav
     .map(group => ({
       ...group,
@@ -114,7 +114,7 @@ function Sidebar({ collapsed, mobileOpen, onClose, onToggle, user, onLogout, log
   return (
     <>
       {mobileOpen && <button aria-label="Fechar menu" className="fixed inset-0 z-30 bg-slate-950/70 backdrop-blur-sm lg:hidden" onClick={onClose} />}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-[286px] flex-col border-r border-slate-800/80 bg-[#0d1422] shadow-2xl transition-transform duration-200 lg:static lg:z-auto lg:shadow-none ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${collapsed ? 'lg:w-[82px]' : 'lg:w-[286px]'}`}>
+      <aside aria-label="Navegação principal" className={`fixed inset-y-0 left-0 z-40 flex w-[286px] flex-col border-r border-slate-800/80 bg-[#0d1422] shadow-2xl transition-transform duration-200 lg:static lg:z-auto lg:shadow-none ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${collapsed ? 'lg:w-[82px]' : 'lg:w-[286px]'}`}>
         <div className={`flex h-[76px] shrink-0 items-center border-b border-slate-800/80 px-5 ${collapsed ? 'lg:justify-center lg:px-3' : 'justify-between'}`}>
           <Link to="/" className="flex min-w-0 items-center gap-3" onClick={onClose}>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 text-sm font-black text-white shadow-lg shadow-blue-900/30">N</span>
@@ -132,13 +132,14 @@ function Sidebar({ collapsed, mobileOpen, onClose, onToggle, user, onLogout, log
           <div className="px-4 pb-3 pt-4">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input value={search} onChange={event => onSearch(event.target.value)} placeholder="Buscar no painel" aria-label="Buscar no painel" className="h-10 w-full rounded-xl border border-slate-800 bg-slate-950/50 pl-9 pr-3 text-xs text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/10" />
+              <input ref={searchRef} value={search} onChange={event => onSearch(event.target.value)} onKeyDown={event => event.key === 'Escape' && onSearch('')} placeholder="Buscar no painel" aria-label="Buscar no painel" aria-controls="admin-navigation" className="h-10 w-full rounded-xl border border-slate-800 bg-slate-950/50 pl-9 pr-16 text-xs text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/10" />
+              {search && <button type="button" aria-label="Limpar busca" onClick={() => onSearch('')} className="absolute right-10 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition hover:bg-slate-800 hover:text-slate-200"><X className="h-3.5 w-3.5" /></button>}
               <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-800 px-1.5 py-0.5 text-[9px] text-slate-600 xl:block">⌘K</kbd>
             </label>
           </div>
         )}
 
-        <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5">
+        <nav id="admin-navigation" className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5">
           {visibleGroups.map(group => (
             <div key={group.section} className="mb-5">
               {!collapsed && <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">{group.section}</div>}
@@ -173,10 +174,11 @@ function Sidebar({ collapsed, mobileOpen, onClose, onToggle, user, onLogout, log
 export default function AppShell() {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('nexxus-admin-sidebar-collapsed') === 'true');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -184,15 +186,21 @@ export default function AppShell() {
   }, [location.pathname]);
 
   useEffect(() => {
+    window.localStorage.setItem('nexxus-admin-sidebar-collapsed', String(collapsed));
+  }, [collapsed]);
+
+  useEffect(() => {
     const handler = event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        document.querySelector('input[aria-label="Buscar no painel"]')?.focus();
+        setCollapsed(false);
+        window.requestAnimationFrame(() => searchRef.current?.focus());
       }
+      if (event.key === 'Escape' && mobileOpen) setMobileOpen(false);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+    }, [mobileOpen]);
 
   const activeItem = useMemo(() => flattenedItems.find(item => item.to !== '/' && location.pathname.startsWith(`/admin${item.to}`)) || flattenedItems.find(item => item.to === '/'), [location.pathname]);
   const section = nav.find(group => group.items.some(item => item.to === activeItem?.to))?.section || 'Administração';
@@ -205,7 +213,8 @@ export default function AppShell() {
 
   return (
     <div className="min-h-screen bg-[#09111e] text-slate-100 lg:flex">
-      <Sidebar collapsed={collapsed} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} onToggle={() => setCollapsed(value => !value)} user={user} onLogout={handleLogout} loggingOut={loggingOut} search={search} onSearch={setSearch} />
+      <a href="#admin-main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-cyan-400 focus:px-4 focus:py-2 focus:text-xs focus:font-bold focus:text-slate-950">Ir para o conteúdo principal</a>
+      <Sidebar collapsed={collapsed} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} onToggle={() => setCollapsed(value => !value)} user={user} onLogout={handleLogout} loggingOut={loggingOut} search={search} onSearch={setSearch} searchRef={searchRef} />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-[76px] shrink-0 items-center justify-between border-b border-slate-800/80 bg-[#09111e]/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
@@ -220,7 +229,7 @@ export default function AppShell() {
             <div className="hidden items-center gap-2 sm:flex"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 text-[10px] font-bold text-white">{initials(user?.user)}</div><ChevronDown className="h-3.5 w-3.5 text-slate-600" /></div>
           </div>
         </header>
-        <main className="min-w-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8"><Outlet /></main>
+        <main id="admin-main" tabIndex="-1" className="min-w-0 flex-1 overflow-auto px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8"><div className="mx-auto w-full max-w-[1600px]"><Outlet /></div></main>
         <footer className="flex shrink-0 items-center justify-between border-t border-slate-800/60 px-4 py-3 text-[10px] text-slate-600 sm:px-6 lg:px-8"><span>NEXXUS Admin · Copilot Protheus</span><span className="hidden items-center gap-1.5 sm:flex"><CircleHelp className="h-3.5 w-3.5" /> Operação somente leitura no ERP</span></footer>
       </div>
     </div>
