@@ -103,6 +103,8 @@ async def require_admin(
         try:
             payload = _decode_admin_token(admin_token)
             if payload.get("sub") == "admin":
+                if not payload.get("scope_level") or "permissions" not in payload or "tenant_ids" not in payload:
+                    payload = {**_admin_access_claims(), **payload}
                 return payload
         except (jwt.InvalidTokenError, ValueError):
             pass
