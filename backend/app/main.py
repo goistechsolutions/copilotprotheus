@@ -162,6 +162,9 @@ app.include_router(auth_router, prefix="/api/auth")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(admin_billing_router, prefix="/api/admin")
 app.include_router(admin_auth_router)
+# Governança canônica do painel: /api/admin/governance/*.
+# governance_router permanece apenas como compatibilidade legada em
+# /api/api/governance/* até a validação de tráfego zero em produção.
 app.include_router(governance_router, prefix="/api")
 app.include_router(business_governance_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
