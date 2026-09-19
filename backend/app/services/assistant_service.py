@@ -298,43 +298,15 @@ class AssistantService:
                     full_answer.append(token)
                     yield token
             except asyncio.TimeoutError:
-                logger.warning("[Assistant Stream] Timeout no Gemini. Ativando fallback para LLM Local (Hetzner)...")
-                from app.services.ollama_client import stream_llm
-                try:
-                    async for token in stream_llm(
-                        question=question,
-                        protheus_data=protheus_data if protheus_data else None,
-                        intent=intent,
-                        context=ctx,
-                        history=history,
-                        image=payload.image,
-                    ):
-                        full_answer.append(token)
-                        yield token
-                except Exception as e_fb:
-                    logger.error("[Assistant Stream] Falha no fallback para LLM Local após timeout: %s", e_fb)
-                    error_message = "O serviço de inteligência artificial excedeu o tempo limite e o serviço local está indisponível."
-                    full_answer.append(error_message)
-                    yield error_message
+                logger.warning("[Assistant Stream] Timeout no fluxo Gemini/Ollama; nenhum segundo fallback será iniciado.")
+                error_message = "O serviço de inteligência artificial excedeu o tempo limite. A consulta não foi concluída."
+                full_answer.append(error_message)
+                yield error_message
             except Exception as e:
-                logger.warning("[Assistant Stream] Erro no stream Gemini (%s). Fallback para LLM Local (Hetzner)...", e)
-                from app.services.ollama_client import stream_llm
-                try:
-                    async for token in stream_llm(
-                        question=question,
-                        protheus_data=protheus_data if protheus_data else None,
-                        intent=intent,
-                        context=ctx,
-                        history=history,
-                        image=payload.image,
-                    ):
-                        full_answer.append(token)
-                        yield token
-                except Exception as e_fb:
-                    logger.error("[Assistant Stream] Falha no fallback para LLM Local: %s", e_fb)
-                    error_message = "O serviço de inteligência artificial está temporariamente indisponível. A consulta não foi concluída."
-                    full_answer.append(error_message)
-                    yield error_message
+                logger.error("[Assistant Stream] Falha no fluxo Gemini/Ollama: %s", e)
+                error_message = "O serviço de inteligência artificial está temporariamente indisponível. A consulta não foi concluída."
+                full_answer.append(error_message)
+                yield error_message
 
         # 6. Audit Log após fim da geração
         answer = "".join(full_answer)
