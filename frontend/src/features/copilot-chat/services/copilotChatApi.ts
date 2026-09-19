@@ -165,7 +165,9 @@ export async function createNewConversationRemote(title: string, context?: Copil
       environment: context?.environment || '',
       module: context?.module || 'SIGAFAT'
     });
-    return res?.id || newId;
+    // O backend retorna o identificador persistido dentro de `conversation.id`.
+    // Usar apenas o UUID local causava GET 404, pois ele não era o registro inserido.
+    return res?.conversation?.id || res?.id || newId;
   } catch (err) {
     console.warn('[CopilotChatApi] createConversation fallback para local ID:', err);
     return newId;
@@ -177,11 +179,12 @@ export async function fetchConversationMessagesRemote(conversationId: string): P
 
   try {
     const res = await getConversation(conversationId);
-    const messages = res?.messages || [];
+    const conversation = res?.conversation || res;
+    const messages = conversation?.messages || [];
     return messages.map((m: any) => ({
       id: m.id || String(m.timestamp),
       role: m.role || 'assistant',
-      content: m.content || '',
+      content: m.message || m.content || '',
       status: 'done',
       timestamp: m.created_at || m.timestamp || new Date().toISOString(),
       dashboard: m.metadata?.dashboard || null,
@@ -296,15 +299,16 @@ export async function syncRemoteMessage(
   try {
     await addConversationMessage(conversationId, {
       role,
-      content,
+      message: content,
       metadata
     });
     if (metadata?.dashboard) {
       await addConversationDashboard(conversationId, {
         title: metadata.originPrompt || 'Dashboard',
-        payload: metadata.dashboard,
-        insights: metadata.dashboard.insights || null,
-        origin_prompt: metadata.originPrompt || ''
+        dashboard_type: metadata.dashboard.screenType || 'ranking',
+        query: metadata.dashboard.sql_query || null,
+        dashboard_json: metadata.dashboard,
+        insight_json: metadata.dashboard.insights || []
       });
     }
   } catch (e) {
