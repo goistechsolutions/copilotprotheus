@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 import { humanizeColumnName } from '../../services/presentationIntelligence';
+import { formatDateBR } from '../../utils/formatDate';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { ExecutiveModeToggle } from './ExecutiveModeToggle';
 
@@ -189,15 +190,7 @@ export default function DashboardRenderer({ payload }) {
 
   const formatDateTick = (str) => {
     if (!str) return '';
-    const s = String(str).trim();
-    if (s.length === 8 && !isNaN(s)) {
-      return `${s.substring(6, 8)}/${s.substring(4, 6)}/${s.substring(2, 4)}`;
-    }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      const parts = s.split('-');
-      return `${parts[2]}/${parts[1]}/${parts[0].slice(2, 4)}`;
-    }
-    return s;
+    return formatDateBR(str);
   };
 
   const getKpiIcon = (type, label = '') => {

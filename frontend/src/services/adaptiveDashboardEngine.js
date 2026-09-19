@@ -116,8 +116,8 @@ export function normalizeDateValue(rawDate) {
     const ts = new Date(`${y}-${m}-${d}T00:00:00`).getTime();
     return {
       timestamp: isNaN(ts) ? 0 : ts,
-      label: `${d}/${m}/${y.slice(2, 4)}`, // DD/MM/AA
-      fullLabel: `${d}/${m}/${y}`,        // DD/MM/AAAA
+      label: `${d}/${m}/${y}`,            // DD/MM/YYYY
+      fullLabel: `${d}/${m}/${y}`,        // DD/MM/YYYY
       iso: `${y}-${m}-${d}`,
     };
   }
@@ -130,7 +130,7 @@ export function normalizeDateValue(rawDate) {
     const ts = new Date(`${y}-${m}-${d}T00:00:00`).getTime();
     return {
       timestamp: isNaN(ts) ? 0 : ts,
-      label: `${d}/${m}/${y.slice(2, 4)}`,
+      label: `${d}/${m}/${y}`,            // DD/MM/YYYY
       fullLabel: `${d}/${m}/${y}`,
       iso: `${y}-${m}-${d}`,
     };
@@ -145,7 +145,7 @@ export function normalizeDateValue(rawDate) {
     const ts = new Date(`${y}-${m}-${d}T00:00:00`).getTime();
     return {
       timestamp: isNaN(ts) ? 0 : ts,
-      label: `${d}/${m}/${y.slice(2, 4)}`,
+      label: `${d}/${m}/${y}`,            // DD/MM/YYYY
       fullLabel: `${d}/${m}/${y}`,
       iso: `${y}-${m}-${d}`,
     };

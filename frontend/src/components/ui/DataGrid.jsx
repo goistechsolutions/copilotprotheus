@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { formatDateBR, isDateValue } from '../../utils/formatDate';
 
 export function DataGrid({ data, columns, pagination = true, onRowClick }) {
   const [page, setPage] = useState(0);
@@ -9,6 +10,30 @@ export function DataGrid({ data, columns, pagination = true, onRowClick }) {
   const startIdx = page * pageSize;
   const currentData = data?.slice(startIdx, startIdx + pageSize) || [];
 
+  const formatCell = (row, col) => {
+    if (col.cell) {
+      return col.cell({ getValue: () => row[col.accessorKey], row });
+    }
+    const val = row[col.accessorKey];
+    if (val === null || val === undefined || val === '') return '—';
+
+    // Se for data ou coluna temporal -> SEMPRE dd/mm/yyyy
+    if (isDateValue(val, col.accessorKey || col.header)) {
+      return formatDateBR(val);
+    }
+
+    // Se for coluna de valor/medida numérica -> formatação brasileira com 2 casas
+    const colKey = String(col.accessorKey || col.header || '').toUpperCase();
+    if (/VALOR|SALDO|TOTAL|VALBRUT|VALLIQ|PRECO|CUSTO|FATURAMENTO/i.test(colKey)) {
+      const num = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'));
+      if (!isNaN(num)) {
+        return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+    }
+
+    return String(val);
+  };
+
   return (
     <div className="flex flex-col w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="overflow-x-auto">
@@ -16,7 +41,7 @@ export function DataGrid({ data, columns, pagination = true, onRowClick }) {
           <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             <tr>
               {columns?.map((col, idx) => (
-                <th key={idx} className="px-6 py-4 font-semibold tracking-wider">
+                <th key={idx} className="px-6 py-4 font-semibold tracking-wider whitespace-nowrap">
                   {col.header || col.accessorKey}
                 </th>
               ))}
@@ -35,8 +60,8 @@ export function DataGrid({ data, columns, pagination = true, onRowClick }) {
                   }`}
                 >
                   {columns?.map((col, colIdx) => (
-                    <td key={colIdx} className="px-6 py-3.5 text-slate-700 dark:text-slate-300">
-                      {col.cell ? col.cell({ getValue: () => row[col.accessorKey] }) : row[col.accessorKey]}
+                    <td key={colIdx} className="px-6 py-3.5 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      {formatCell(row, col)}
                     </td>
                   ))}
                 </tr>
