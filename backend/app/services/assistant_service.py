@@ -164,22 +164,8 @@ class AssistantService:
                     answer = "O serviço de inteligência artificial está temporariamente indisponível. A consulta não foi concluída."
                     status_audit = "E"
 
-            # Se Gemini retornou texto de erro de quota/429
-            if answer and ("429" in answer or "quota" in answer.lower() or answer.startswith("Erro na API do Gemini:")):
-                logger.warning("[Assistant] Gemini retornou 429/quota. Ativando fallback para LLM Local (Hetzner)...")
-                from app.services.ollama_client import ask_llm
-                try:
-                    backend_used = "ollama"
-                    answer = await ask_llm(
-                        question=question,
-                        protheus_data=protheus_data if protheus_data else None,
-                        intent=intent,
-                        context=ctx,
-                        history=history,
-                        image=payload.image,
-                    )
-                except Exception as e_fb:
-                    logger.error("[Assistant] Falha no fallback para LLM Local: %s", e_fb)
+            # ask_gemini já centraliza o fallback para Ollama em 429/503/rede.
+            # Não interpretar o texto retornado para iniciar uma segunda chamada.
         
         # Calcular volume de registros retornados do Protheus
         records_returned = 0
@@ -372,4 +358,3 @@ class AssistantService:
             })
         except Exception as e:
             print(f"Failed to save audit log: {e}")
-
