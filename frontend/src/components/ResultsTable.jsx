@@ -1,11 +1,27 @@
 import React from 'react';
 import { Table2 } from 'lucide-react';
+import { formatDateBR, isDateValue } from '../utils/formatDate';
 
 export default function ResultsTable({ rows }) {
   if (!rows || rows.length === 0) return null;
 
   const headers = Object.keys(rows[0] || {});
   if (headers.length === 0) return null;
+
+  const formatValue = (val, header) => {
+    if (val === null || val === undefined || val === '') return '-';
+    if (isDateValue(val, header)) {
+      return formatDateBR(val);
+    }
+    const hUpper = String(header || '').toUpperCase();
+    if (/VALOR|SALDO|TOTAL|VALBRUT|VALLIQ|PRECO|CUSTO|FATURAMENTO/i.test(hUpper)) {
+      const num = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'));
+      if (!isNaN(num)) {
+        return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+    }
+    return String(val);
+  };
 
   return (
     <div className="w-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-full max-h-[600px]">
@@ -31,7 +47,7 @@ export default function ResultsTable({ rows }) {
               <tr key={i} className="hover:bg-brand-50/50 transition-colors">
                 {headers.map((h, j) => (
                   <td key={j} className="px-4 py-2.5 whitespace-nowrap text-[13px] text-slate-600 font-medium">
-                    {row[h] !== null && row[h] !== undefined ? String(row[h]) : '-'}
+                    {formatValue(row[h], h)}
                   </td>
                 ))}
               </tr>

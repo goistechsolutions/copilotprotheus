@@ -32,7 +32,7 @@
     "SA6"
   ],
   "blocked_families": [],
-  "domain_instruction": "A intenção é FINANCEIRO (Contas a Receber/Pagar/Fluxo de Caixa). Para contas a receber ou receitas use SE1; para contas a pagar ou despesas use SE2; movimentação bancária use SE5. Para fluxo de caixa, relacione recebimentos (SE1) e pagamentos (SE2) ou construa a visão solicitada usando essas tabelas financeiras caso estejam autorizadas. NUNCA use tabelas aleatórias como AID.",
+  "domain_instruction": "A intenção é FINANCEIRO (Contas a Receber/Pagar/Fluxo de Caixa). Para contas a receber ou receitas use SE1; para contas a pagar ou despesas use SE2; movimentação bancária use SE5. Para fluxo de caixa, relacione recebimentos (SE1) e pagamentos (SE2) projetando sempre TIPO_MOVIMENTO, NUM_TITULO, PARCELA, CLIENTE (E1_NOMCLI ou E2_NOMFOR), DATA_VENCTO e VALOR (saldo em aberto). NUNCA use tabelas aleatórias como AID.",
   "error_messages": {
     "missing_required": "A pergunta é financeira (fluxo de caixa/contas a receber/pagar), mas o módulo e o snapshot ativos não contêm SE1/SE2/SE5. Selecione um módulo financeiro autorizado e sincronize o dicionário antes de consultar.",
     "blocked_used": "Consulta financeira gerou SQL sem tabelas financeiras adequadas (SE1, SE2, SE5); SQL bloqueado."

@@ -33,6 +33,7 @@ import {
   DollarSign,
   Percent,
 } from 'lucide-react';
+import { formatDateBR, isDateValue } from '../utils/formatDate';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -194,8 +195,9 @@ export default function StructuredResultPanel({ result, context, onAction, onDri
     }
   };
 
-  const displayValue = val => {
-    if (val === null || val === undefined) return '';
+  const displayValue = (val, colKey = '') => {
+    if (val === null || val === undefined || val === '') return '';
+    if (isDateValue(val, colKey)) return formatDateBR(val);
     if (typeof val === 'number') {
       if (Number.isInteger(val)) return formatNumber(val);
       return formatNumber(val); // will use default locale format
@@ -713,7 +715,7 @@ export default function StructuredResultPanel({ result, context, onAction, onDri
                       {columns.map(col => {
                         const drillType = getDrillDownType(col);
                         const rawVal = row[col];
-                        const textVal = displayValue(rawVal);
+                        const textVal = displayValue(rawVal, col);
                         return (
                           <td
                             key={col}

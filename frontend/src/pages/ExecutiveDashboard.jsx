@@ -14,6 +14,7 @@ import {
   Activity
 } from 'lucide-react';
 import { downloadStructuredReport, exportStructuredReport } from '../services/api';
+import { formatDateBR, isDateValue } from '../utils/formatDate';
 
 const SUCCESS_STATUSES = new Set(['success', 'completed', 'execution_success']);
 
@@ -24,8 +25,9 @@ const formatCurrency = value => new Intl.NumberFormat('pt-BR', {
 
 const formatNumber = value => new Intl.NumberFormat('pt-BR').format(Number(value) || 0);
 
-const displayValue = value => {
-  if (value === null || value === undefined) return '';
+const displayValue = (value, columnKey = '') => {
+  if (value === null || value === undefined || value === '') return '';
+  if (isDateValue(value, columnKey)) return formatDateBR(value);
   if (typeof value === 'number') return formatNumber(value);
   return String(value);
 };
@@ -260,7 +262,7 @@ export default function ExecutiveDashboard({ context, result }) {
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700/60">
             <thead className="bg-slate-50/50 dark:bg-slate-800/40"><tr>{columns.map(column => <th key={column} className="whitespace-nowrap px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{column.replace(/_/g, ' ')}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">{paginatedRows.map((row, index) => <tr key={index} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40">{columns.map(column => <td key={column} className="whitespace-nowrap px-5 py-3.5 text-slate-700 dark:text-slate-300 font-medium">{displayValue(row?.[column])}</td>)}</tr>)}</tbody>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">{paginatedRows.map((row, index) => <tr key={index} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40">{columns.map(column => <td key={column} className="whitespace-nowrap px-5 py-3.5 text-slate-700 dark:text-slate-300 font-medium">{displayValue(row?.[column], column)}</td>)}</tr>)}</tbody>
           </table>
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/30 px-5 py-3 text-sm dark:border-slate-700/60 dark:bg-slate-800/20">

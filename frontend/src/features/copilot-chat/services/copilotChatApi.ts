@@ -39,6 +39,14 @@ function createMockResponse(prompt: string): { content: string; suggestions: str
           { label: 'Saldo Projetado', value: 'R$ 840.000', change: '+12%', tone: 'positive' },
           { label: 'A Receber', value: 'R$ 1.420.000', change: '+5%', tone: 'neutral' },
           { label: 'A Pagar', value: 'R$ 580.000', change: '-3%', tone: 'positive' },
+        ],
+        columns: ['TIPO_MOVIMENTO', 'NUM_TITULO', 'CLIENTE', 'DATA_VENCTO', 'VALOR'],
+        rows: [
+          { TIPO_MOVIMENTO: 'RECEBIMENTO', NUM_TITULO: '000142', CLIENTE: 'ATACADO DISTRIBUIDOR LTDA', DATA_VENCTO: '22/09/2026', VALOR: 38450.00 },
+          { TIPO_MOVIMENTO: 'PAGAMENTO', NUM_TITULO: '084920', CLIENTE: 'FORNECEDOR MATERIAIS S.A.', DATA_VENCTO: '24/09/2026', VALOR: 18200.00 },
+          { TIPO_MOVIMENTO: 'RECEBIMENTO', NUM_TITULO: '000143', CLIENTE: 'SUPERMERCADOS UNIAO EIRELI', DATA_VENCTO: '25/09/2026', VALOR: 54100.00 },
+          { TIPO_MOVIMENTO: 'PAGAMENTO', NUM_TITULO: '084925', CLIENTE: 'ENERGIA E TELECOMUNICACOES', DATA_VENCTO: '28/09/2026', VALOR: 9800.00 },
+          { TIPO_MOVIMENTO: 'RECEBIMENTO', NUM_TITULO: '000145', CLIENTE: 'COMERCIAL SANTOS & CIA', DATA_VENCTO: '30/09/2026', VALOR: 42300.00 }
         ]
       }
     };
@@ -62,6 +70,14 @@ function createMockResponse(prompt: string): { content: string; suggestions: str
           { label: 'Total Vencido >60d', value: 'R$ 318.450', change: '+8%', tone: 'negative' },
           { label: 'Clientes em Atraso', value: '14', change: '-2', tone: 'neutral' },
           { label: 'Concentração Top 1', value: '41,2%', change: 'Alto Risco', tone: 'negative' }
+        ],
+        columns: ['NUM_TITULO', 'CLIENTE', 'DATA_VENCTO', 'VALOR'],
+        rows: [
+          { NUM_TITULO: '000112', CLIENTE: 'COMERCIO VAREJISTA CENTRAL', DATA_VENCTO: '15/07/2026', VALOR: 131200.00 },
+          { NUM_TITULO: '000115', CLIENTE: 'DELTA LOGISTICA E TRANSPORTES', DATA_VENCTO: '20/07/2026', VALOR: 84300.00 },
+          { NUM_TITULO: '000119', CLIENTE: 'REDE SUL DE ALIMENTOS', DATA_VENCTO: '02/08/2026', VALOR: 48500.00 },
+          { NUM_TITULO: '000122', CLIENTE: 'MERCADO BOM PRECO', DATA_VENCTO: '10/08/2026', VALOR: 32450.00 },
+          { NUM_TITULO: '000128', CLIENTE: 'DISTRIBUIDORA NORTE', DATA_VENCTO: '18/08/2026', VALOR: 22000.00 }
         ]
       }
     };
