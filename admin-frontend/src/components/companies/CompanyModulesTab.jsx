@@ -7,6 +7,14 @@ import {
 } from '../../services/companyModulesApi';
 import { Layers, Save, RefreshCw, CheckSquare, Square, Search, AlertCircle, CheckCircle2, Loader2, Database } from 'lucide-react';
 
+const INVALID_ENVIRONMENTS = new Set(['default', 'none', 'null']);
+
+function getCompanyEnvironment(company) {
+  return String(company?.protheus_ambientes || company?.environment || '')
+    .split(',')[0]
+    .trim();
+}
+
 export default function CompanyModulesTab({ company }) {
   const [availableModules, setAvailableModules] = useState([]);
   const [selectedMap, setSelectedMap] = useState({});
@@ -18,11 +26,12 @@ export default function CompanyModulesTab({ company }) {
   const [filter, setFilter] = useState('');
 
   const companyId = company?.id;
+  const environmentCode = getCompanyEnvironment(company);
 
   useEffect(() => {
     if (!companyId) return;
     loadData();
-  }, [companyId]);
+  }, [companyId, environmentCode]);
 
   async function loadData() {
     setLoading(true);
@@ -30,8 +39,12 @@ export default function CompanyModulesTab({ company }) {
     setMessage(null);
 
     try {
+      if (!environmentCode || INVALID_ENVIRONMENTS.has(environmentCode.toLowerCase())) {
+        throw new Error('Ambiente real não informado para carregar os módulos.');
+      }
+
       const [availableRes, assignedRes] = await Promise.all([
-        getAvailableModules(companyId),
+        getAvailableModules(companyId, environmentCode),
         getCompanyModules(companyId),
       ]);
 
@@ -48,6 +61,7 @@ export default function CompanyModulesTab({ company }) {
     } catch (err) {
       setError(
         err?.response?.data?.detail ||
+          err?.message ||
           'Falha ao carregar módulos da empresa. Verifique a conexão com o servidor REST.'
       );
     } finally {
@@ -111,9 +125,6 @@ export default function CompanyModulesTab({ company }) {
     setMessage(null);
 
     try {
-      const environmentCode = String(
-        company?.protheus_ambientes || company?.environment || ''
-      ).split(',')[0].trim();
       const res = await syncCompanyModules(companyId, environmentCode, false);
       const syncedModules = res?.module_filter?.join(', ') || '-';
       setMessage(`Sincronização concluída com sucesso! Módulos sincronizados: ${syncedModules}`);
