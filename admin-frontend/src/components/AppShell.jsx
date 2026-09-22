@@ -82,8 +82,19 @@ const nav = [
     section: 'Administração',
     items: [
       { to: '/tenants', icon: Building2, label: 'Tenants', description: 'Empresas e filiais' },
+      { to: '/companies', icon: Building2, label: 'Empresas', description: 'Grupos e organizações' },
       { to: '/users', icon: Users, label: 'Usuários', description: 'Contas do sistema' },
-      { to: '/platform', icon: Gauge, label: 'Plataforma', description: 'Logs e serviços' },
+      { to: '/platform', icon: Gauge, label: 'Plataforma', description: 'Saúde dos serviços' },
+    ],
+  },
+  {
+    section: 'Configurações Avançadas',
+    items: [
+      { to: '/logs', icon: Activity, label: 'Logs do Sistema', description: 'Eventos técnicos' },
+      { to: '/integrations', icon: PlugZap, label: 'Integrações', description: 'Conectores e REST' },
+      { to: '/licenses', icon: KeyRound, label: 'Licenças', description: 'Planos e contratos' },
+      { to: '/config', icon: Settings2, label: 'Configurações', description: 'Preferências seguras' },
+      { to: '/adminer', icon: Database, label: 'DB Admin', description: 'Acesso operacional' },
     ],
   },
 ];
