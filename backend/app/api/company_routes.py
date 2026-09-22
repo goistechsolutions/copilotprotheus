@@ -321,21 +321,26 @@ def sync_modules_dictionary(
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/companies", response_model=List[CompanyResponse])
-def list_all_companies(tenant_id: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
+def list_all_companies(tenant_id: Optional[str] = Query(default=None), db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    if tenant_id:
+        authorize_admin_access(admin, "companies:read", tenant_id)
     from app.services.company_module_service import list_companies
     return list_companies(db, tenant_id=tenant_id)
 
 
 @router.get("/companies/by-tenant/{tenant_id}", response_model=CompanyResponse)
-def get_company_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
+def get_company_by_tenant(tenant_id: str, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    authorize_admin_access(admin, "companies:read", tenant_id)
     from app.services.company_module_service import get_company_or_404
     return get_company_or_404(db, tenant_id)
 
 
 @router.get("/companies/{company_id}", response_model=CompanyResponse)
-def get_company(company_id: int, db: Session = Depends(get_db)):
+def get_company(company_id: int, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
     from app.services.company_module_service import get_company_or_404
-    return get_company_or_404(db, company_id)
+    comp = get_company_or_404(db, company_id)
+    authorize_admin_access(admin, "companies:read", comp.get("tenant_id"))
+    return comp
 
 
 def sync_company_into_tenant_schema(db: Session, comp: Company):
@@ -419,7 +424,7 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
 
 
 @router.post("/companies", response_model=CompanyResponse)
-async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
+async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
     raw_tenant = str(payload.tenant_id or payload.protheus_grupo or "").strip()
     if not raw_tenant:
         raise HTTPException(status_code=400, detail="tenant_id é obrigatório para criar uma empresa.")
@@ -440,6 +445,8 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     clean_tenant = resolve_clean_tenant(db, tenant_code)
     if not clean_tenant or clean_tenant == "public":
         raise HTTPException(status_code=400, detail="tenant_id inválido para criação da empresa.")
+        
+    authorize_admin_access(admin, "companies:write", clean_tenant)
 
     # Registra o tenant antes do bootstrap do schema específico.
     db.execute(text("""
@@ -561,10 +568,12 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/companies/{company_id}", response_model=CompanyResponse)
-def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
+def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    from app.services.company_module_service import get_company_or_404
     comp_info = get_company_or_404(db, company_id)
     tenant_code = str(comp_info.get("tenant_id"))
     clean_tenant = resolve_clean_tenant(db, tenant_code)
+    authorize_admin_access(admin, "companies:write", clean_tenant)
 
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
@@ -647,11 +656,13 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
 
 
 @router.delete("/companies/{company_id}")
-def delete_company(company_id: int, db: Session = Depends(get_db)):
+def delete_company(company_id: int, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    from app.services.company_module_service import get_company_or_404
     comp_info = get_company_or_404(db, company_id)
     tenant_code = str(comp_info.get("tenant_id") or "").strip()
     clean_tenant = resolve_clean_tenant(db, tenant_code)
     if clean_tenant and clean_tenant != "public":
+        authorize_admin_access(admin, "companies:write", clean_tenant)
         try:
             db.execute(text(f'DELETE FROM "{clean_tenant}".company_info WHERE id = :cid'), {"cid": company_id})
             db.commit()
@@ -674,12 +685,15 @@ def api_generate_license(payload: LicenseGenerateRequest, admin_key: str = Depen
 
 
 @router.get("/companies/{company_id}/billing")
-def get_company_billing(company_id: int, db: Session = Depends(get_db)):
+def get_company_billing(company_id: int, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    from app.services.company_module_service import get_company_or_404
     comp_info = get_company_or_404(db, company_id)
     total_queries = 0
     tenant_code = str(comp_info.get("tenant_id") or "").strip()
     clean_tenant = resolve_clean_tenant(db, tenant_code)
+    
     if clean_tenant and clean_tenant != "public":
+        authorize_admin_access(admin, "companies:read", clean_tenant)
         try:
             from app.db.database import ensure_tenant_tables
             ensure_tenant_tables(db, clean_tenant)
