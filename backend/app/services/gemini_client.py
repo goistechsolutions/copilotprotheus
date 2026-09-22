@@ -180,7 +180,7 @@ async def ask_gemini(
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429 or "quota" in e.response.text.lower() or "rate-limit" in e.response.text.lower():
                 logger.warning(
-                    "[Gemini] Quota excedida (Erro 429). Ativando fallback para Ollama (qwen2.5:7b)... Detalhe: %s",
+                    "[Gemini] Quota excedida (Erro 429). Ativando fallback para Ollama (qwen3:8b)... Detalhe: %s",
                     e.response.text[:200]
                 )
                 from app.services.ollama_client import ask_llm
@@ -194,7 +194,7 @@ async def ask_gemini(
                     allow_tools=allow_tools,
                 )
             if e.response.status_code == 503:
-                logger.warning("[Gemini] Erro 503 no Gemini. Ativando fallback para Ollama (qwen2.5:7b)...")
+                logger.warning("[Gemini] Erro 503 no Gemini. Ativando fallback para Ollama (qwen3:8b)...")
                 from app.services.ollama_client import ask_llm
                 return await ask_llm(
                     question=question,
@@ -207,7 +207,7 @@ async def ask_gemini(
                 )
             return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
         except httpx.RequestError as e:
-            logger.warning("[Gemini] Erro de conexão com Gemini: %s. Ativando fallback para Ollama (qwen2.5:7b)...", e)
+            logger.warning("[Gemini] Erro de conexão com Gemini: %s. Ativando fallback para Ollama (qwen3:8b)...", e)
             from app.services.ollama_client import ask_llm
             return await ask_llm(
                 question=question,

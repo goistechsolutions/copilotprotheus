@@ -30,7 +30,7 @@ services:
       - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       # Modelo Ollama para fallback quando Gemini excede cota (429).
       # Este valor sobrescreve qualquer OLLAMA_MODEL definido no .env do servidor.
-      - OLLAMA_MODEL=qwen2.5:7b
+      - OLLAMA_MODEL=qwen3:8b
     depends_on:
       db:
         condition: service_healthy
