@@ -42,38 +42,56 @@ export default function DomainsPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {domains.map(d => (
-          <div key={d.domain_code} className="rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 mb-2">
-                  {d.domain_code}
-                </span>
-                <h3 className="text-white text-base font-semibold">{d.name}</h3>
-                <p className="text-xs text-[#8892A4] mt-1 line-clamp-2">{d.description || 'Sem descrição cadastrada.'}</p>
-              </div>
-            </div>
+        {domains.map(d => {
+          const primaryMod = d.modules?.find(m => m.is_primary) || d.modules?.[0];
+          const kpis = 'N/D'; // Pending tenant context
+          const health = 'N/D'; // Pending tenant context
 
-            <div className="mt-4 pt-4 border-t border-[#1E2535]">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-                Módulos Protheus Vinculados
+          return (
+            <div key={d.domain_code} className="flex flex-col justify-between rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm transition hover:border-[#2b354b]">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-white text-lg font-bold">{d.name}</h3>
+                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                    {d.domain_code}
+                  </span>
+                </div>
+
+                <div className="mb-4">
+                  <span className="inline-block px-3 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-mono font-bold text-sm">
+                    {primaryMod ? primaryMod.mod_sigla : 'Sem Módulo'}
+                  </span>
+                  {d.modules?.length > 1 && (
+                    <span className="ml-2 text-xs text-slate-500">+{d.modules.length - 1}</span>
+                  )}
+                </div>
+
+                <div className="space-y-2 mb-6">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Tabelas vinculadas</span>
+                    <span className="text-white font-medium">{d.table_count || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Intents</span>
+                    <span className="text-white font-medium">{d.intent_count || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">KPIs</span>
+                    <span className="text-white font-medium">{kpis}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Saúde</span>
+                    <span className="text-emerald-400 font-medium">{health}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {d.modules?.length > 0 ? (
-                  d.modules.map(m => (
-                    <span key={m.id} className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-[#0F1117] border border-[#1E2535] text-xs font-mono text-slate-300">
-                      <span className="text-cyan-300 font-bold">{m.mod_sigla}</span>
-                      <span className="text-slate-500 text-[10px]">(cód. {m.mod_code})</span>
-                      {m.is_primary && <span className="text-[9px] text-amber-400 bg-amber-400/10 px-1 rounded">Primário</span>}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-slate-600 italic">Nenhum módulo associado</span>
-                )}
-              </div>
+
+              <button className="w-full py-2.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 font-medium text-sm transition hover:bg-cyan-500/20 hover:border-cyan-500/50">
+                Abrir Domínio
+              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

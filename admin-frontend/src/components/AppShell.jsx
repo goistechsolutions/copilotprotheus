@@ -57,15 +57,15 @@ const nav = [
   {
     section: 'Governança Protheus',
     items: [
-      { to: '/tables', icon: Database, label: 'Tabelas e Campos', description: 'Catálogo SX2/SX3' },
-      { to: '/dictionary', icon: SlidersHorizontal, label: 'Sincronização', description: 'Dicionário autorizado' },
-      { to: '/governance/domains', icon: Layers, label: 'Domínios ERP', description: 'Mapeamento de macro-domínios' },
+      { to: '/tables', icon: Database, label: 'Catálogo ERP', description: 'Tabelas e dicionário' },
+      { to: '/governance/domains', icon: Layers, label: 'Domínios de Negócio', description: 'Mapeamento de macro-domínios' },
       { to: '/governance/intents', icon: Sparkles, label: 'Intents', description: 'Intenções de negócio e tabelas' },
       { to: '/governance/semantic-dictionary', icon: BookMarked, label: 'Dicionário Semântico', description: 'Aliases e termos de negócio' },
-      { to: '/governance/metrics', icon: Calculator, label: 'Métricas', description: 'Fórmulas e KPIs governados' },
+      { to: '/governance/metrics', icon: Calculator, label: 'KPIs', description: 'Métricas e fórmulas' },
       { to: '/governance/dashboards', icon: LayoutGrid, label: 'Dashboards', description: 'Templates por intenção' },
       { to: '/governance/business-rules', icon: Scale, label: 'Regras de Negócio', description: 'Filtros mandatórios e restrições' },
-      { to: '/governance/health', icon: HeartPulse, label: 'Saúde do Conhecimento', description: 'Auditoria e diagnóstico' },
+      { to: '/governance/health', icon: HeartPulse, label: 'Saúde do Conhecimento', description: 'Diagnóstico e integridade' },
+      { to: '/audit', icon: FileSearch, label: 'Auditoria do Agente', description: 'Log de consultas' },
     ],
   },
   {
@@ -78,7 +78,6 @@ const nav = [
     section: 'Operação',
     items: [
       { to: '/logs', icon: Activity, label: 'Logs', description: 'Eventos técnicos' },
-      { to: '/audit', icon: FileSearch, label: 'Auditoria de uso', description: 'Consultas e ações' },
       { to: '/platform', icon: Gauge, label: 'Infraestrutura', description: 'Saúde dos serviços' },
     ],
   },

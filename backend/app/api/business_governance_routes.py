@@ -100,6 +100,14 @@ def list_business_domains(
         domains = db.query(BusinessDomain).order_by(BusinessDomain.domain_code.asc()).all()
         modules = db.query(BusinessDomainModule).order_by(BusinessDomainModule.domain_code, BusinessDomainModule.is_primary.desc()).all()
         
+        intent_counts = dict(db.execute(text("SELECT domain_code, count(*) FROM public.business_intents GROUP BY domain_code")).fetchall())
+        table_counts = dict(db.execute(text("""
+            SELECT bi.domain_code, count(DISTINCT bit.table_code)
+            FROM public.business_intents bi
+            JOIN public.business_intent_tables bit ON bi.id = bit.intent_id
+            GROUP BY bi.domain_code
+        """)).fetchall())
+
         mods_by_domain: Dict[str, List[Dict[str, Any]]] = {}
         for m in modules:
             mods_by_domain.setdefault(m.domain_code, []).append({
@@ -117,6 +125,8 @@ def list_business_domains(
                 "active": d.active,
                 "created_at": d.created_at,
                 "modules": mods_by_domain.get(d.domain_code, []),
+                "intent_count": intent_counts.get(d.domain_code, 0),
+                "table_count": table_counts.get(d.domain_code, 0),
             }
             for d in domains
         ]
