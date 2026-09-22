@@ -72,7 +72,7 @@ export default function KnowledgeHealthPage() {
           <button
             onClick={() => loadHealth(selectedTenant)}
             disabled={!selectedTenant || loading}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#161B27] border border-[#1E2535] text-slate-300 hover:text-white rounded-lg text-xs transition"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#0F172A] border border-[#1E293B] text-slate-300 hover:text-white rounded-lg text-xs transition"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Auditar Agora
           </button>
@@ -84,7 +84,7 @@ export default function KnowledgeHealthPage() {
           <select
             value={selectedTenant}
             onChange={e => setSelectedTenant(e.target.value)}
-            className="appearance-none bg-[#161B27] border border-[#1E2535] text-white text-xs rounded-lg pl-3 pr-8 py-2.5 focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+            className="appearance-none bg-[#0F172A] border border-[#1E293B] text-white text-xs rounded-lg pl-3 pr-8 py-2.5 focus:outline-none focus:border-cyan-500 transition cursor-pointer"
           >
             {tenants.map(t => {
               const code = t.tenant_code || t.id;
@@ -104,7 +104,7 @@ export default function KnowledgeHealthPage() {
 
       {report?.summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="rounded-xl border border-[#1E2535] bg-[#161B27] p-4">
+          <div className="rounded-xl border border-[#1E293B] bg-[#0F172A] p-4">
             <div className="text-xs text-slate-400">Total de Intents</div>
             <div className="text-2xl font-bold text-white mt-1">{report.summary.total_intents}</div>
           </div>
@@ -123,10 +123,10 @@ export default function KnowledgeHealthPage() {
         </div>
       )}
 
-      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#0F1117] border-b border-[#1E2535] text-[#8892A4] uppercase font-semibold">
+            <thead className="bg-[#020817] border-b border-[#1E293B] text-[#8892A4] uppercase font-semibold">
               <tr>
                 <th className="px-4 py-3">Intenção / Caso de Uso</th>
                 <th className="px-4 py-3">Domínio</th>
@@ -135,7 +135,7 @@ export default function KnowledgeHealthPage() {
                 <th className="px-4 py-3">Tabelas Faltantes</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1E2535]">
+            <tbody className="divide-y divide-[#1E293B]">
               {loading ? (
                 <tr>
                   <td colSpan="5" className="text-center py-8 text-slate-500">
@@ -151,7 +151,7 @@ export default function KnowledgeHealthPage() {
                 </tr>
               ) : (
                 report.intents.map(item => (
-                  <tr key={item.intent_code} className="hover:bg-[#1E2535]/40 transition">
+                  <tr key={item.intent_code} className="hover:bg-[#1E293B]/40 transition">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-white">{item.intent_name}</div>
                       <div className="font-mono text-[10px] text-slate-500">{item.intent_code}</div>

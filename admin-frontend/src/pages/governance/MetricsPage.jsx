@@ -98,7 +98,7 @@ export default function MetricsPage() {
             <button
               onClick={() => loadMetrics(selectedTenant)}
               disabled={!selectedTenant || loading}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#161B27] border border-[#1E2535] text-slate-300 hover:text-white rounded-lg text-xs transition"
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#0F172A] border border-[#1E293B] text-slate-300 hover:text-white rounded-lg text-xs transition"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Atualizar
             </button>
@@ -111,7 +111,7 @@ export default function MetricsPage() {
           <select
             value={selectedTenant}
             onChange={e => setSelectedTenant(e.target.value)}
-            className="appearance-none bg-[#161B27] border border-[#1E2535] text-white text-xs rounded-lg pl-3 pr-8 py-2.5 focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+            className="appearance-none bg-[#0F172A] border border-[#1E293B] text-white text-xs rounded-lg pl-3 pr-8 py-2.5 focus:outline-none focus:border-cyan-500 transition cursor-pointer"
           >
             {tenants.map(t => {
               const code = t.tenant_code || t.id;
@@ -131,12 +131,12 @@ export default function MetricsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {metrics.length === 0 ? (
-          <div className="col-span-full rounded-xl border border-[#1E2535] bg-[#161B27] p-8 text-center text-slate-500 text-xs">
+          <div className="col-span-full rounded-xl border border-[#1E293B] bg-[#0F172A] p-8 text-center text-slate-500 text-xs">
             Nenhuma métrica cadastrada para este tenant.
           </div>
         ) : (
           metrics.map(m => (
-            <div key={m.id} className="rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm">
+            <div key={m.id} className="rounded-xl border border-[#1E293B] bg-[#0F172A] p-5 shadow-sm">
               <div className="flex items-start justify-between">
                 <div>
                   <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 mb-2">
@@ -152,7 +152,7 @@ export default function MetricsPage() {
                 </button>
               </div>
 
-              <div className="mt-3 p-2.5 rounded bg-[#0F1117] border border-[#1E2535]">
+              <div className="mt-3 p-2.5 rounded bg-[#020817] border border-[#1E293B]">
                 <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Fórmula de Cálculo</div>
                 <code className="text-xs text-cyan-300 font-mono break-all">{m.metric_formula}</code>
               </div>
@@ -167,7 +167,7 @@ export default function MetricsPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#161B27] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#0F172A] p-6 shadow-2xl">
             <h3 className="text-base font-semibold text-white mb-4">Adicionar Métrica Oficial</h3>
             <form onSubmit={handleCreate} className="space-y-3">
               <div>
@@ -214,7 +214,7 @@ export default function MetricsPage() {
                   <option value="average">Média</option>
                 </select>
               </div>
-              <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#1E293B]">
                 <button type="button" onClick={() => setShowModal(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancelar</button>
                 <button type="submit" disabled={saving} className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg disabled:opacity-50">
                   {saving ? 'Salvando...' : 'Salvar Métrica'}

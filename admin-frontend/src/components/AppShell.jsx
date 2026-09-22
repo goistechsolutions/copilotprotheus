@@ -37,57 +37,53 @@ const nav = [
   {
     section: 'Visão geral',
     items: [
-      { to: '/', icon: LayoutDashboard, label: 'Dashboard', description: 'Saúde e indicadores', end: true },
+      { to: '/', icon: LayoutDashboard, label: 'Dashboard', description: 'Visão executiva', end: true },
+      { to: '/governance', icon: Sparkles, label: 'Governança do Conhecimento', description: 'Business Knowledge Layer', end: true },
     ],
   },
   {
-    section: 'Estrutura corporativa',
+    section: 'Catálogo ERP',
     items: [
-      { to: '/tenants', icon: Building2, label: 'Tenants', description: 'Clientes e ambientes' },
-      { to: '/companies', icon: Building2, label: 'Empresas', description: 'Empresas e filiais' },
-    ],
-  },
-  {
-    section: 'Identidade e acesso',
-    items: [
-      { to: '/users', icon: Users, label: 'Usuários', description: 'Contas autorizadas' },
-      { to: '/roles', icon: ShieldCheck, label: 'Perfis e permissões', description: 'RBAC administrativo' },
-    ],
-  },
-  {
-    section: 'Governança Protheus',
-    items: [
-      { to: '/tables', icon: Database, label: 'Catálogo ERP', description: 'Tabelas e dicionário' },
-      { to: '/governance/domains', icon: Layers, label: 'Domínios de Negócio', description: 'Mapeamento de macro-domínios' },
-      { to: '/governance/intents', icon: Sparkles, label: 'Intents', description: 'Intenções de negócio e tabelas' },
-      { to: '/governance/semantic-dictionary', icon: BookMarked, label: 'Dicionário Semântico', description: 'Aliases e termos de negócio' },
-      { to: '/governance/metrics', icon: Calculator, label: 'KPIs', description: 'Métricas e fórmulas' },
-      { to: '/governance/dashboards', icon: LayoutGrid, label: 'Dashboards', description: 'Templates por intenção' },
-      { to: '/governance/business-rules', icon: Scale, label: 'Regras de Negócio', description: 'Filtros mandatórios e restrições' },
-      { to: '/governance/health', icon: HeartPulse, label: 'Saúde do Conhecimento', description: 'Diagnóstico e integridade' },
-      { to: '/audit', icon: FileSearch, label: 'Auditoria do Agente', description: 'Log de consultas' },
+      { to: '/tables', icon: Database, label: 'Tabelas e Dicionário', description: 'SX2 e SX3' },
     ],
   },
   {
     section: 'Conhecimento',
     items: [
-      { to: '/knowledge', icon: BookOpen, label: 'Memórias RAG', description: 'Base de conhecimento' },
+      { to: '/governance/domains', icon: Layers, label: 'Domínios', description: 'Domínios de negócio' },
+      { to: '/governance/intents', icon: Sparkles, label: 'Intents', description: 'Casos de uso' },
+      { to: '/governance/metrics', icon: Calculator, label: 'KPIs', description: 'Fórmulas e métricas' },
+      { to: '/governance/dashboards', icon: LayoutGrid, label: 'Dashboards', description: 'Layouts visuais' },
     ],
   },
   {
-    section: 'Operação',
+    section: 'Segurança',
     items: [
-      { to: '/logs', icon: Activity, label: 'Logs', description: 'Eventos técnicos' },
-      { to: '/platform', icon: Gauge, label: 'Infraestrutura', description: 'Saúde dos serviços' },
+      { to: '/query-guard', icon: ShieldCheck, label: 'Tabelas', description: 'Auditoria de filtros' },
+      { to: '/permissions', icon: ShieldCheck, label: 'Campos', description: 'Restrições granulares' },
+      { to: '/roles', icon: KeyRound, label: 'Permissões', description: 'RBAC e perfis' },
     ],
   },
   {
-    section: 'Plataforma',
+    section: 'Diagnóstico',
     items: [
-      { to: '/integrations', icon: PlugZap, label: 'Integrações', description: 'Conectores e REST' },
-      { to: '/licenses', icon: KeyRound, label: 'Licenças', description: 'Planos e contratos' },
-      { to: '/config', icon: Settings2, label: 'Configurações', description: 'Preferências seguras' },
-      { to: '/adminer', icon: Database, label: 'DB Admin', description: 'Acesso operacional restrito' },
+      { to: '/governance/health', icon: HeartPulse, label: 'Saúde', description: 'Status do agente' },
+      { to: '/audit', icon: FileSearch, label: 'Auditoria', description: 'Histórico de eventos' },
+      { to: '/governance/audit', icon: Activity, label: 'Consultas', description: 'Ações do modelo' },
+    ],
+  },
+  {
+    section: 'RAG',
+    items: [
+      { to: '/knowledge', icon: BookOpen, label: 'Memórias RAG', description: 'Contexto vetorial' },
+    ],
+  },
+  {
+    section: 'Administração',
+    items: [
+      { to: '/tenants', icon: Building2, label: 'Tenants', description: 'Empresas e filiais' },
+      { to: '/users', icon: Users, label: 'Usuários', description: 'Contas do sistema' },
+      { to: '/platform', icon: Gauge, label: 'Plataforma', description: 'Logs e serviços' },
     ],
   },
 ];

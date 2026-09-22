@@ -33,7 +33,7 @@ export default function IntentsPage() {
         title="Intents de Negócio"
         description="Casos de uso e intenções analíticas compreendidas pelo Copilot Protheus e suas tabelas necessárias."
         actions={
-          <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-[#161B27] border border-[#1E2535] text-slate-300 hover:text-white rounded-lg text-xs transition">
+          <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-[#0F172A] border border-[#1E293B] text-slate-300 hover:text-white rounded-lg text-xs transition">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
         }
@@ -52,7 +52,7 @@ export default function IntentsPage() {
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
             selectedDomain === 'ALL'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-              : 'bg-[#161B27] text-slate-400 border border-[#1E2535] hover:text-white'
+              : 'bg-[#0F172A] text-slate-400 border border-[#1E293B] hover:text-white'
           }`}
         >
           Todos os Domínios ({intents.length})
@@ -64,7 +64,7 @@ export default function IntentsPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
               selectedDomain === d
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                : 'bg-[#161B27] text-slate-400 border border-[#1E2535] hover:text-white'
+                : 'bg-[#0F172A] text-slate-400 border border-[#1E293B] hover:text-white'
             }`}
           >
             {d}
@@ -74,7 +74,7 @@ export default function IntentsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(item => (
-          <div key={item.id} className="rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm">
+          <div key={item.id} className="rounded-xl border border-[#1E293B] bg-[#0F172A] p-5 shadow-sm">
             <div className="flex items-start justify-between">
               <div>
                 <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 mb-2">
@@ -85,14 +85,14 @@ export default function IntentsPage() {
               </div>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-[#1E2535]">
+            <div className="mt-4 pt-4 border-t border-[#1E293B]">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Tabelas Protheus Mapeadas
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {item.tables?.length > 0 ? (
                   item.tables.map(t => (
-                    <span key={t.id} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#0F1117] border border-[#1E2535] text-xs font-mono text-slate-300">
+                    <span key={t.id} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#020817] border border-[#1E293B] text-xs font-mono text-slate-300">
                       <Table2 className="w-3 h-3 text-cyan-400" />
                       <span className="font-bold text-white">{t.table_code}</span>
                       {t.required ? (

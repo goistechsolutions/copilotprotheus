@@ -115,7 +115,7 @@ export default function SemanticDictionaryPage() {
             <button
               onClick={() => loadAliases(selectedTenant)}
               disabled={!selectedTenant || loading}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#161B27] border border-[#1E2535] text-slate-300 hover:text-white rounded-lg text-xs transition"
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#0F172A] border border-[#1E293B] text-slate-300 hover:text-white rounded-lg text-xs transition"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Atualizar
             </button>
@@ -129,7 +129,7 @@ export default function SemanticDictionaryPage() {
           <select
             value={selectedTenant}
             onChange={e => setSelectedTenant(e.target.value)}
-            className="appearance-none bg-[#161B27] border border-[#1E2535] text-white text-xs rounded-lg pl-3 pr-8 py-2.5 focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+            className="appearance-none bg-[#0F172A] border border-[#1E293B] text-white text-xs rounded-lg pl-3 pr-8 py-2.5 focus:outline-none focus:border-cyan-500 transition cursor-pointer"
           >
             {tenants.map(t => {
               const code = t.tenant_code || t.id;
@@ -146,7 +146,7 @@ export default function SemanticDictionaryPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Filtrar por campo físico ou termo amigável..."
-            className="w-full bg-[#161B27] border border-[#1E2535] rounded-lg pl-9 pr-4 py-2 text-white text-xs placeholder-[#8892A4]/50 focus:outline-none focus:border-cyan-500 transition"
+            className="w-full bg-[#0F172A] border border-[#1E293B] rounded-lg pl-9 pr-4 py-2 text-white text-xs placeholder-[#8892A4]/50 focus:outline-none focus:border-cyan-500 transition"
           />
         </div>
       </div>
@@ -158,10 +158,10 @@ export default function SemanticDictionaryPage() {
       )}
 
       {/* Tabela de Aliases */}
-      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#0F1117] border-b border-[#1E2535] text-[#8892A4] uppercase font-semibold">
+            <thead className="bg-[#020817] border-b border-[#1E293B] text-[#8892A4] uppercase font-semibold">
               <tr>
                 <th className="px-4 py-3">Campo Físico (SX3)</th>
                 <th className="px-4 py-3">Nome de Negócio</th>
@@ -170,7 +170,7 @@ export default function SemanticDictionaryPage() {
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1E2535]">
+            <tbody className="divide-y divide-[#1E293B]">
               {loading ? (
                 <tr>
                   <td colSpan="5" className="text-center py-8 text-slate-500">
@@ -186,7 +186,7 @@ export default function SemanticDictionaryPage() {
                 </tr>
               ) : (
                 filtered.map(row => (
-                  <tr key={row.id} className="hover:bg-[#1E2535]/40 transition">
+                  <tr key={row.id} className="hover:bg-[#1E293B]/40 transition">
                     <td className="px-4 py-3 font-mono font-bold text-cyan-300">{row.field_name}</td>
                     <td className="px-4 py-3 font-semibold text-white">{row.business_name}</td>
                     <td className="px-4 py-3">
@@ -215,7 +215,7 @@ export default function SemanticDictionaryPage() {
       {/* Modal Criar Alias */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#161B27] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl border border-[#2B3850] bg-[#0F172A] p-6 shadow-2xl">
             <h3 className="text-base font-semibold text-white mb-4">Adicionar Termo Semântico</h3>
             <form onSubmit={handleCreate} className="space-y-3">
               <div>
@@ -262,7 +262,7 @@ export default function SemanticDictionaryPage() {
                   className="w-full rounded-lg border border-[#263550] bg-[#0B1220] px-3 py-2 text-xs text-white"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#1E293B]">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}

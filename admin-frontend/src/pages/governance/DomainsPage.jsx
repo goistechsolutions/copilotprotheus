@@ -29,7 +29,7 @@ export default function DomainsPage() {
         title="Domínios ERP"
         description="Mapeamento conceitual de macro-domínios de negócio aos módulos oficiais do Protheus."
         actions={
-          <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-[#161B27] border border-[#1E2535] text-slate-300 hover:text-white rounded-lg text-xs transition">
+          <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-[#0F172A] border border-[#1E293B] text-slate-300 hover:text-white rounded-lg text-xs transition">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
         }
@@ -48,7 +48,7 @@ export default function DomainsPage() {
           const health = 'N/D'; // Pending tenant context
 
           return (
-            <div key={d.domain_code} className="flex flex-col justify-between rounded-xl border border-[#1E2535] bg-[#161B27] p-5 shadow-sm transition hover:border-[#2b354b]">
+            <div key={d.domain_code} className="flex flex-col justify-between rounded-xl border border-[#1E293B] bg-[#0F172A] p-5 shadow-sm transition hover:border-[#2b354b]">
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-white text-lg font-bold">{d.name}</h3>
