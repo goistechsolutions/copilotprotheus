@@ -138,6 +138,7 @@ def get_company_or_404(db: Session, company_id: int | str) -> dict:
 
         if row:
             res_dict = dict(row)
+            res_dict["has_password"] = bool(res_dict.get("encrypted_protheus_password"))
             
             # Merge with real connection from protheus_rest_connections
             conn = db.execute(text('''
@@ -207,6 +208,7 @@ def list_companies(db: Session, tenant_id: str | None = None) -> list[dict]:
                         protheus_rest_url,
                         webapp_url,
                         COALESCE(status, 'ativa')                               AS status,
+                        (encrypted_protheus_password IS NOT NULL AND length(encrypted_protheus_password) > 0) AS has_password,
                         created_at,
                         updated_at
                     FROM "{clean}".company_info
@@ -244,7 +246,7 @@ def list_company_modules(db: Session, company_id: int | str, tenant_id: str) -> 
     # 1. Catálogo global (DDL V5: mod_code, mod_sigla, mod_name)
     master_rows = db.execute(
         text("""
-            SELECT mod_code, mod_sigla, mod_name
+            SELECT id as module_id, mod_code, mod_sigla, mod_name
             FROM public.protheus_modules_master
             WHERE active = TRUE
             ORDER BY mod_code
@@ -261,9 +263,29 @@ def list_company_modules(db: Session, company_id: int | str, tenant_id: str) -> 
     except Exception as e:
         logger.debug(f"Sem módulos salvos em {clean_tenant}: {e}")
 
+    # 3. Status de contrato (entitlement)
+    contract_status_map = {}
+    try:
+        tenant_contracts = db.execute(
+            text("""
+                SELECT tmc.module_id, tmc.status
+                FROM public.tenant_module_contracts tmc
+                JOIN public.tenant_contracts tc ON tc.id = tmc.contract_id
+                WHERE lower(btrim(tc.tenant_id)) = :tid
+                  AND lower(btrim(tc.contract_status)) IN ('active', 'enabled', 'allowed')
+                  AND tc.starts_at <= CURRENT_DATE
+                  AND (tc.ends_at IS NULL OR tc.ends_at >= CURRENT_DATE)
+            """),
+            {"tid": clean_tenant}
+        ).mappings().all()
+        contract_status_map = {str(c["module_id"]): c["status"] for c in tenant_contracts}
+    except Exception as e:
+        logger.debug(f"Aviso ao buscar contratos para {clean_tenant}: {e}")
+
     result = []
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     for m in master_rows:
+        m_id = str(m["module_id"])
         m_code = m["mod_code"]         # int
         m_sigla = str(m["mod_sigla"] or "").strip().upper()  # SIGAFAT
         m_name = str(m["mod_name"] or m_sigla).strip()       # Nome completo
@@ -271,13 +293,18 @@ def list_company_modules(db: Session, company_id: int | str, tenant_id: str) -> 
         if not m_sigla:
             continue
 
+        c_status = contract_status_map.get(m_id)
+
         result.append({
             "company_id": company_id,
             "tenant_id": tenant_id,
-            "module_code": m_sigla,       # campo usado no frontend
+            "module_id": m_id,
+            "module_code": m_sigla,       # transitorio: mantido como sigla para frontend antigo
+            "mod_code": m_code,
+            "module_sigla": m_sigla,
             "module_name": m_name,
-            "mod_code": m_code,           # ID numérico auxiliar
             "enabled": m_code in enabled_codes,
+            "contract_status": c_status or "unlicensed",
             "created_at": now,
         })
 
@@ -341,43 +368,6 @@ def replace_company_modules(
             )
             saved += 1
 
-        # Mantém o escopo contratual consistente quando os módulos são alterados
-        # depois da criação/ativação da licença. Somente módulos existentes no
-        # catálogo global e contratos vigentes do mesmo tenant são afetados.
-        db.execute(
-            text("""
-                DELETE FROM public.tenant_module_contracts tmc
-                USING public.tenant_contracts tc
-                WHERE tmc.contract_id = tc.id
-                  AND lower(btrim(tmc.tenant_id)) = :tenant_id
-                  AND lower(btrim(tc.tenant_id)) = :tenant_id
-                  AND lower(btrim(tc.contract_status)) IN ('active', 'enabled', 'allowed')
-                  AND tc.starts_at <= CURRENT_DATE
-                  AND (tc.ends_at IS NULL OR tc.ends_at >= CURRENT_DATE)
-            """),
-            {"tenant_id": clean_tenant},
-        )
-        db.execute(
-            text(f"""
-                INSERT INTO public.tenant_module_contracts
-                    (tenant_id, contract_id, module_id, status)
-                SELECT DISTINCT
-                    :tenant_id,
-                    tc.id,
-                    pm.id,
-                    'allowed'
-                FROM public.tenant_contracts tc
-                JOIN {chr(34)}{clean_tenant}{chr(34)}.protheus_modules tm ON TRUE
-                JOIN public.protheus_modules_master pm
-                  ON pm.mod_code = tm.mod_code
-                WHERE lower(btrim(tc.tenant_id)) = :tenant_id
-                  AND lower(btrim(tc.contract_status)) IN ('active', 'enabled', 'allowed')
-                  AND tc.starts_at <= CURRENT_DATE
-                  AND (tc.ends_at IS NULL OR tc.ends_at >= CURRENT_DATE)
-                  AND pm.active = TRUE
-            """),
-            {"tenant_id": clean_tenant},
-        )
 
         db.commit()
         return saved

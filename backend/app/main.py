@@ -209,6 +209,9 @@ from fastapi import Request
 from fastapi.responses import Response
 from datetime import datetime
 
+import time
+APP_START_TIME = time.time()
+
 # ─── Dashboard Stats ──────────────────────────────────────────────────────────
 @app.get("/api/admin/dashboard/stats")
 async def dashboard_stats(
@@ -216,28 +219,40 @@ async def dashboard_stats(
     _admin=Depends(require_admin),
 ):
     """Métricas gerais do painel admin EliteCorp"""
+    tenants = 0
+    users = 0
+    rag_docs = 0
+    conversations = 0
+    activity_by_module = []
+    recent_actions = []
+
     try:
-        tenants = db.execute(text("SELECT COUNT(*) FROM tenant")).scalar() or 0
-    except Exception:
-        tenants = 0
+        tenants = db.execute(text("SELECT COUNT(*) FROM public.tenant WHERE status = 'active'")).scalar() or 0
+    except Exception as e:
+        logger.warning(f"Erro ao contar tenants: {e}")
+
     try:
-        # agent_users era uma tabela legada e pode não existir após a
-        # reconstrução do schema. O cadastro canônico de usuários é public.users.
         users = db.execute(text("SELECT COUNT(*) FROM public.users")).scalar() or 0
-    except Exception:
-        users = 0
+    except Exception as e:
+        logger.warning(f"Erro ao contar users: {e}")
+
     try:
-        rag_docs = db.execute(text("SELECT COUNT(*) FROM documents")).scalar() or 0
-    except Exception:
-        rag_docs = 0
+        # Assuming public.documents is the correct canonical source for rag docs globally, or querying tenant specific later
+        rag_docs = db.execute(text("SELECT COUNT(*) FROM public.documents")).scalar() or 0
+    except Exception as e:
+        logger.warning(f"Erro ao contar documents: {e}")
+
     try:
         today = datetime.utcnow().date()
         conversations = db.execute(
-            text("SELECT COUNT(DISTINCT session_id) FROM memories WHERE DATE(created_at) = :today"),
+            text("SELECT COUNT(DISTINCT id) FROM public.copilot_conversations WHERE DATE(created_at) = :today"),
             {"today": today}
         ).scalar() or 0
-    except Exception:
-        conversations = 0
+    except Exception as e:
+        logger.warning(f"Erro ao contar conversas: {e}")
+
+    uptime_seconds = time.time() - APP_START_TIME
+    uptime_str = f"{int(uptime_seconds // 3600)}h {int((uptime_seconds % 3600) // 60)}m"
 
     return {
         "tenants": tenants,
@@ -245,7 +260,9 @@ async def dashboard_stats(
         "rag_documents": rag_docs,
         "conversations_today": conversations,
         "avg_response_ms": None,
-        "uptime": "100%",
+        "uptime": uptime_str,
+        "activity_by_module": activity_by_module,
+        "recent_actions": recent_actions,
     }
 
 # Proxy for Adminer

@@ -122,7 +122,7 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
             {f({ label:'Filial', name:'protheus_filial', placeholder:'0101', mono:true })}
             {f({ label:'Ambientes', name:'protheus_ambientes', placeholder:'producao,hml', mono:true, span:true })}
             {f({ label:'Usuário REST', name:'protheus_usuario', placeholder:'admin' })}
-            {f({ label:'Senha REST', name:'protheus_password', type:'password', placeholder: isNew ? 'Obrigatória' : 'Em branco = manter' })}
+            {f({ label:'Senha REST', name:'protheus_password', type:'password', placeholder: isNew ? 'Obrigatória' : (form.has_password ? 'Senha configurada (em branco = manter)' : 'Em branco = manter') })}
             {f({ label:'URL REST (API)', name:'protheus_rest_url', placeholder:'http://ip:porta/rest', span:true, mono:true })}
             {f({ label:'URL WebApp', name:'webapp_url', placeholder:'http://ip:porta/webapp', span:true, mono:true })}
 

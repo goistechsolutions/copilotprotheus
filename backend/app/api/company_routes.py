@@ -142,8 +142,10 @@ async def get_available_modules(
             mod_code_int = int(mod_code_raw) if mod_code_raw.isdigit() else 0
             seen.add(mod_sigla)
             items.append({
+                "module_id": None,
                 "module_code": mod_sigla,
                 "mod_code":  mod_code_int,
+                "module_sigla": mod_sigla,
                 "module_name":  mod_name,
             })
 
@@ -187,8 +189,10 @@ async def get_available_modules(
         "company_id": str(company_id),
         "items": [
             {
+                "module_id": str(m.id),
                 "module_code": m.mod_sigla,
                 "mod_code":  m.mod_code,
+                "module_sigla": m.mod_sigla,
                 "module_name":  m.mod_name or m.mod_sigla,
             }
             for m in master_mods if m.mod_sigla
@@ -547,6 +551,7 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
         "protheus_usuario": payload.protheus_usuario,
         "protheus_rest_url": payload.protheus_rest_url,
         "webapp_url": payload.webapp_url,
+        "has_password": bool(payload.protheus_password),
         # CompanyCreate não expõe licenca_uso; não acessar atributo inexistente.
         "licenca_uso": getattr(payload, "licenca_uso", None),
         "status": payload.status or "ativa",
@@ -634,6 +639,7 @@ def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depend
         "protheus_usuario": payload.protheus_usuario or comp_info.get("protheus_usuario"),
         "protheus_rest_url": payload.protheus_rest_url or comp_info.get("protheus_rest_url"),
         "webapp_url": payload.webapp_url or comp_info.get("webapp_url"),
+        "has_password": bool(payload.protheus_password) if payload.protheus_password is not None else bool(comp_info.get("encrypted_protheus_password")),
         "status": payload.status or comp_info.get("status", "ativa"),
         "created_at": res[1] if res and res[1] else now,
         "updated_at": res[2] if res and res[2] else now

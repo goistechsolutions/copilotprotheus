@@ -134,9 +134,8 @@ def test_replace_company_modules_refreshes_active_contract_scope(monkeypatch):
     sql = "\n".join(statement for statement, _ in db.calls)
     assert saved == 1
     assert 'INSERT INTO "tenant_fixture".protheus_modules' in sql
-    assert "DELETE FROM public.tenant_module_contracts" in sql
-    assert "INSERT INTO public.tenant_module_contracts" in sql
-    assert 'JOIN "tenant_fixture".protheus_modules tm ON TRUE' in sql
+    assert "DELETE FROM public.tenant_module_contracts" not in sql
+    assert "INSERT INTO public.tenant_module_contracts" not in sql
     assert db.commits == 1
     assert db.rollbacks == 0
 

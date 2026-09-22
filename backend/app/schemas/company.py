@@ -98,6 +98,7 @@ class CompanyUpdate(BaseModel):
 class CompanyResponse(CompanyBase):
     """Resposta pública — NUNCA retorna encrypted_protheus_password."""
     id: int
+    has_password: Optional[bool] = Field(False, description="Indica se a empresa possui senha configurada")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
