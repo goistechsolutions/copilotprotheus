@@ -91,7 +91,6 @@ class CompanyUpdate(BaseModel):
     system_prompt: Optional[str] = None
     temperature: Optional[float] = Field(None, ge=0.0, le=1.0)
     status: Optional[str] = None
-    tenant_id: Optional[str] = None
 
 
 # ─── Response ─────────────────────────────────────────────────────────────────

@@ -40,6 +40,7 @@ from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.sync_dictionary_v52 import run_snapshot
 from app.core.config import settings
 from app.core.security import encrypt_password
+from app.core.admin_security import authorize_admin_access, require_admin
 
 logger = logging.getLogger("app.api.company_routes")
 
@@ -83,8 +84,10 @@ def verify_admin_key(
 def get_companies_list(
     tenant_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    admin_key: str = Depends(verify_admin_key),
+    admin: dict = Depends(require_admin),
 ):
+    if tenant_id:
+        authorize_admin_access(admin, "companies:read", tenant_id)
     items = list_companies(db, tenant_id=tenant_id)
     return {
         "status": "success",
@@ -97,12 +100,13 @@ async def get_available_modules(
     company_id: str,
     environment_code: str = Query(..., min_length=1, max_length=100),
     db: Session = Depends(get_db),
-    admin_key: str = Depends(verify_admin_key),
+    admin: dict = Depends(require_admin),
 ):
     company = get_company_or_404(db, company_id)
     tenant_id = company.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=404, detail="Tenant da empresa não encontrado")
+    authorize_admin_access(admin, "modules:read", tenant_id)
     if environment_code.strip().lower() in {"default", "none", "null"}:
         raise HTTPException(status_code=400, detail="environment_code deve identificar um ambiente real")
 
@@ -198,9 +202,10 @@ async def get_available_modules(
 def get_modules_by_company(
     company_id: str,
     db: Session = Depends(get_db),
-    admin_key: str = Depends(verify_admin_key),
+    admin: dict = Depends(require_admin),
 ):
     company = get_company_or_404(db, company_id)
+    authorize_admin_access(admin, "modules:read", company["tenant_id"])
 
     items = list_company_modules(
         db=db,
@@ -220,9 +225,10 @@ def save_modules_by_company(
     company_id: str,
     payload: CompanyModulesSaveRequest,
     db: Session = Depends(get_db),
-    admin_key: str = Depends(verify_admin_key),
+    admin: dict = Depends(require_admin),
 ):
     company = get_company_or_404(db, company_id)
+    authorize_admin_access(admin, "modules:write", company["tenant_id"])
 
     modules_saved = replace_company_modules(
         db=db,
@@ -243,9 +249,10 @@ def sync_modules_dictionary(
     company_id: str,
     payload: CompanyModulesSyncRequest,
     db: Session = Depends(get_db),
-    admin_key: str = Depends(verify_admin_key),
+    admin: dict = Depends(require_admin),
 ):
     company = get_company_or_404(db, company_id)
+    authorize_admin_access(admin, "modules:sync", company["tenant_id"])
 
     import re
     from app.db.database import ensure_tenant_tables
@@ -551,7 +558,7 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 @router.put("/companies/{company_id}", response_model=CompanyResponse)
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
     comp_info = get_company_or_404(db, company_id)
-    tenant_code = str(payload.tenant_id or comp_info.get("tenant_id"))
+    tenant_code = str(comp_info.get("tenant_id"))
     clean_tenant = resolve_clean_tenant(db, tenant_code)
 
     from app.db.database import ensure_tenant_tables

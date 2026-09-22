@@ -29,6 +29,59 @@ def _clean(tenant_id: str | None) -> str:
     return raw
 
 
+def load_active_module_master(db: Session) -> dict[str, dict]:
+    """Carrega o catálogo global ativo e valida sua identidade mínima."""
+    rows = db.execute(
+        text(
+            """
+            SELECT mod_code, mod_sigla, mod_name
+            FROM public.protheus_modules_master
+            WHERE active = TRUE
+            ORDER BY mod_code
+            """
+        )
+    ).mappings().all()
+
+    master_map: dict[str, dict] = {}
+    for row in rows:
+        sigla = str(row.get("mod_sigla") or "").strip().upper()
+        raw_code = row.get("mod_code")
+        try:
+            mod_code = int(raw_code)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "MODULE_CATALOG_INVALID",
+                    "message": "O catálogo global contém código de módulo inválido.",
+                },
+            ) from exc
+
+        if not sigla or mod_code <= 0:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "MODULE_CATALOG_INVALID",
+                    "message": "O catálogo global contém módulo sem sigla ou código válido.",
+                },
+            )
+        if sigla in master_map:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "MODULE_CATALOG_DUPLICATE",
+                    "message": f"A sigla de módulo '{sigla}' está duplicada no catálogo global.",
+                },
+            )
+
+        master_map[sigla] = {
+            "mod_code": mod_code,
+            "mod_name": str(row.get("mod_name") or sigla).strip(),
+        }
+
+    return master_map
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # get_company_or_404
 # ─────────────────────────────────────────────────────────────────────────────
@@ -246,20 +299,8 @@ def replace_company_modules(
     clean_tenant = _clean(tenant_id)
     ensure_tenant_tables(db, clean_tenant)
 
-    # Monta mapeamento sigla → (mod_code, mod_name) a partir do master
-    master_map: dict[str, dict] = {}
     try:
-        rows = db.execute(
-            text("SELECT mod_code, mod_sigla, mod_name FROM public.protheus_modules_master WHERE active = TRUE")
-        ).mappings().all()
-        for r in rows:
-            sigla = str(r["mod_sigla"] or "").strip().upper()
-            if sigla:
-                master_map[sigla] = {"mod_code": r["mod_code"], "mod_name": r["mod_name"]}
-    except Exception as e:
-        logger.warning(f"Erro ao carregar master de módulos: {e}")
-
-    try:
+        master_map = load_active_module_master(db)
         db.execute(text(f'DELETE FROM "{clean_tenant}".protheus_modules'))
 
         saved = 0
@@ -270,10 +311,16 @@ def replace_company_modules(
             m_sigla = item.module_code.strip().upper()   # campo do frontend = sigla
             
             if m_sigla not in master_map:
-                raise HTTPException(status_code=400, detail=f"MODULE_NOT_FOUND: Módulo {m_sigla} não encontrado no catálogo mestre.")
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "MODULE_NOT_FOUND",
+                        "message": f"O módulo '{m_sigla}' não existe no catálogo global ativo.",
+                    },
+                )
                 
             master = master_map[m_sigla]
-            m_code = master.get("mod_code", 0)           # int do master
+            m_code = master["mod_code"]
             m_name = master.get("mod_name") or m_sigla   # nome descritivo
 
             db.execute(
@@ -335,11 +382,17 @@ def replace_company_modules(
         db.commit()
         return saved
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Falha ao salvar módulos no schema do tenant: {str(e)}"
+            detail={
+                "code": "MODULE_SAVE_FAILED",
+                "message": "Falha ao salvar os módulos no schema do tenant.",
+            },
         )
 
 

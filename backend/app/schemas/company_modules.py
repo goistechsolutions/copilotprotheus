@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class CompanyModuleAvailableItem(BaseModel):
     module_code: str = Field(..., min_length=1, max_length=30)
-    mod_code: int = Field(0)
+    mod_code: int = Field(..., gt=0)
     module_name: str = Field(..., min_length=1, max_length=120)
 
 

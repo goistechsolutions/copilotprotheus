@@ -11,11 +11,21 @@ function normalizeEnvironmentCode(environmentCode) {
 }
 
 function normalizeModule(item = {}) {
+  const moduleCode = String(item.module_code || '').trim().toUpperCase();
+  const modCode = Number(item.mod_code);
+  const moduleName = String(item.module_name || '').trim();
+
+  if (!moduleCode || !Number.isInteger(modCode) || modCode <= 0 || !moduleName) {
+    const error = new Error('Resposta inválida do catálogo de módulos.');
+    error.code = 'INVALID_MODULE_CATALOG_RESPONSE';
+    throw error;
+  }
+
   return {
     ...item,
-    module_code: String(item.module_code || '').trim().toUpperCase(),
-    mod_code: Number(item.mod_code || 0),
-    module_name: String(item.module_name || item.module_code || '').trim(),
+    module_code: moduleCode,
+    mod_code: modCode,
+    module_name: moduleName,
   };
 }
 

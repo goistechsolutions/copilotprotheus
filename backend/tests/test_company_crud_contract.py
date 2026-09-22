@@ -1,4 +1,5 @@
 import pytest
+from fastapi import HTTPException
 
 from app.schemas.company_modules import CompanyModulesSaveRequest
 from app.services import company_module_service
@@ -103,7 +104,7 @@ class _ModuleWriteDB:
     def execute(self, statement, params=None):
         sql = str(statement)
         self.calls.append((sql, params or {}))
-        if "FROM public.protheus_modules_master WHERE active = TRUE" in sql:
+        if "FROM public.protheus_modules_master" in sql:
             return _FakeResult([
                 {"mod_code": 2, "mod_sigla": "SIGACOM", "mod_name": "Compras"},
             ])
@@ -138,3 +139,25 @@ def test_replace_company_modules_refreshes_active_contract_scope(monkeypatch):
     assert 'JOIN "tenant_fixture".protheus_modules tm ON TRUE' in sql
     assert db.commits == 1
     assert db.rollbacks == 0
+
+
+def test_replace_company_modules_rejects_module_outside_global_catalog(monkeypatch):
+    db = _ModuleWriteDB()
+    monkeypatch.setattr(company_module_service, "ensure_tenant_tables", lambda *_args: None)
+    payload = CompanyModulesSaveRequest(
+        modules=[{"module_code": "SIGAINVALIDO", "enabled": True}],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        company_module_service.replace_company_modules(
+            db,
+            company_id=1,
+            tenant_id="tenant_fixture",
+            payload=payload,
+        )
+
+    error = exc_info.value
+    assert getattr(error, "status_code", None) == 400
+    assert error.detail["code"] == "MODULE_NOT_FOUND"
+    assert db.commits == 0
+    assert db.rollbacks == 1
