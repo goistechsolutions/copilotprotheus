@@ -87,8 +87,8 @@ export default function SnapshotsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Snapshots do dicionário"
-        description="Resumo do catálogo SX2/SX3/SXG/SIX sincronizado por módulo e tenant."
+        title="Snapshots do dicionário (Agregado por Tenant)"
+        description="Resumo do catálogo SX2/SX3/SXG/SIX sincronizado e agregado por módulo em todas as empresas do tenant."
         actions={<button type="button" onClick={() => loadSnapshots()} disabled={!selectedTenant || loading} className="inline-flex items-center gap-2 rounded-lg border border-[#2B3850] bg-[#161B27] px-3.5 py-2 text-sm font-medium text-[#CBD5E1] transition hover:border-[#60A5FA]/60 hover:bg-[#1E293B] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Atualizar</button>}
       />
 

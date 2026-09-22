@@ -83,6 +83,7 @@ def verify_admin_key(
 def get_companies_list(
     tenant_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
+    admin_key: str = Depends(verify_admin_key),
 ):
     items = list_companies(db, tenant_id=tenant_id)
     return {
@@ -96,6 +97,7 @@ async def get_available_modules(
     company_id: str,
     environment_code: str = Query(..., min_length=1, max_length=100),
     db: Session = Depends(get_db),
+    admin_key: str = Depends(verify_admin_key),
 ):
     company = get_company_or_404(db, company_id)
     tenant_id = company.get("tenant_id")
@@ -136,9 +138,9 @@ async def get_available_modules(
             mod_code_int = int(mod_code_raw) if mod_code_raw.isdigit() else 0
             seen.add(mod_sigla)
             items.append({
+                "module_code": mod_sigla,
                 "mod_code":  mod_code_int,
-                "mod_sigla": mod_sigla,
-                "mod_name":  mod_name,
+                "module_name":  mod_name,
             })
 
             # ── Atualiza protheus_modules_master com os códigos reais do Protheus ──
@@ -181,9 +183,9 @@ async def get_available_modules(
         "company_id": str(company_id),
         "items": [
             {
+                "module_code": m.mod_sigla,
                 "mod_code":  m.mod_code,
-                "mod_sigla": m.mod_sigla,
-                "mod_name":  m.mod_name or m.mod_sigla,
+                "module_name":  m.mod_name or m.mod_sigla,
             }
             for m in master_mods if m.mod_sigla
         ],
@@ -196,6 +198,7 @@ async def get_available_modules(
 def get_modules_by_company(
     company_id: str,
     db: Session = Depends(get_db),
+    admin_key: str = Depends(verify_admin_key),
 ):
     company = get_company_or_404(db, company_id)
 
@@ -217,6 +220,7 @@ def save_modules_by_company(
     company_id: str,
     payload: CompanyModulesSaveRequest,
     db: Session = Depends(get_db),
+    admin_key: str = Depends(verify_admin_key),
 ):
     company = get_company_or_404(db, company_id)
 
@@ -239,6 +243,7 @@ def sync_modules_dictionary(
     company_id: str,
     payload: CompanyModulesSyncRequest,
     db: Session = Depends(get_db),
+    admin_key: str = Depends(verify_admin_key),
 ):
     company = get_company_or_404(db, company_id)
 

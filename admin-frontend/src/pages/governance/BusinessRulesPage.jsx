@@ -21,6 +21,13 @@ import {
 } from '../../services/businessRulesApi';
 import PageHeader from '../../components/ui/PageHeader';
 
+const ConfigSourceBadge = ({ source }) => {
+  if (source === 'EXPLICIT') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Configuração Específica</span>;
+  }
+  return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">Padrão do Sistema</span>;
+};
+
 export default function BusinessRulesPage() {
   const [searchParams] = useSearchParams();
   const tenantParam = searchParams.get('tenant');
@@ -455,7 +462,10 @@ export default function BusinessRulesPage() {
 
             {/* Composição do Faturamento */}
             <div className="p-4 rounded-lg bg-[#0E131F] border border-[#1E2535] space-y-4">
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Composição do Faturamento Líquido</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Composição do Faturamento Líquido</h4>
+                <ConfigSourceBadge source={config._source} />
+              </div>
               <p className="text-xs text-slate-400">Marque quais classificações entram no cálculo da receita e quais são desconsideradas nas consultas geradas pela IA.</p>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
@@ -613,7 +623,10 @@ export default function BusinessRulesPage() {
 
             {/* Parâmetros de Recebíveis */}
             <div className="p-4 rounded-lg bg-[#0E131F] border border-[#1E2535] space-y-4">
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Políticas de Contas a Receber (SE1)</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Políticas de Contas a Receber (SE1)</h4>
+                <ConfigSourceBadge source={config._source} />
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div>
@@ -668,7 +681,10 @@ export default function BusinessRulesPage() {
         {activeTab === 'estoque' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-bold text-white">Parâmetros de Gestão de Estoque (SB2 / SB1)</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Parâmetros de Gestão de Estoque (SB2 / SB1)</h3>
+                <ConfigSourceBadge source={config._source} />
+              </div>
               <p className="text-xs text-slate-400">Definição dos horizontes temporais para alerta de obsolescência, estoque crítico e ruptura.</p>
             </div>
 
@@ -779,7 +795,10 @@ export default function BusinessRulesPage() {
         {activeTab === 'ia_abc' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-bold text-white">Parâmetros de IA & Curva ABC</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Parâmetros de IA & Curva ABC</h3>
+                <ConfigSourceBadge source={config._source} />
+              </div>
               <p className="text-xs text-slate-400">Configure a distribuição percentual da Curva de Pareto (ABC) e tabelas financeiras prioritárias.</p>
             </div>
 
@@ -932,12 +951,13 @@ export default function BusinessRulesPage() {
                     <th className="px-4 py-3 font-semibold">Entidade</th>
                     <th className="px-4 py-3 font-semibold">Ação</th>
                     <th className="px-4 py-3 font-semibold">Detalhes</th>
+                    <th className="px-4 py-3 font-semibold">Trace ID</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1E2535]">
                   {auditList.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-4 py-6 text-center text-slate-500">Nenhum registro de auditoria encontrado.</td>
+                      <td colSpan="6" className="px-4 py-6 text-center text-slate-500">Nenhum registro de auditoria encontrado.</td>
                     </tr>
                   ) : (
                     auditList.map(a => (
@@ -960,6 +980,9 @@ export default function BusinessRulesPage() {
                           <div className="text-[11px] font-mono text-slate-400 max-w-md truncate">
                             {JSON.stringify(a.new_value || a.previous_value)}
                           </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[10px] text-slate-500">
+                          {a.trace_id || '—'}
                         </td>
                       </tr>
                     ))

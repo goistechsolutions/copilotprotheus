@@ -147,15 +147,27 @@ def create_business_domain(
         db.flush()
         
         if payload.modules:
+            from app.models.knowledge import ProtheusModuleMaster
             for m in payload.modules:
+                mod_sigla_upper = m.mod_sigla.strip().upper()
+                master_mod = db.query(ProtheusModuleMaster).filter(
+                    ProtheusModuleMaster.mod_code == m.mod_code,
+                    ProtheusModuleMaster.mod_sigla == mod_sigla_upper
+                ).first()
+                if not master_mod:
+                    db.rollback()
+                    raise HTTPException(status_code=400, detail=f"Módulo '{mod_sigla_upper}' com código '{m.mod_code}' não existe no catálogo master.")
+                    
                 db.add(BusinessDomainModule(
                     domain_code=code,
-                    mod_sigla=m.mod_sigla.strip().upper(),
+                    mod_sigla=mod_sigla_upper,
                     mod_code=m.mod_code,
                     is_primary=m.is_primary,
                 ))
         db.commit()
         return {"success": True, "message": f"Domínio '{code}' criado com sucesso."}
+    except HTTPException:
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
@@ -178,16 +190,28 @@ def update_business_domain(
         domain.active = payload.active
         
         if payload.modules is not None:
+            from app.models.knowledge import ProtheusModuleMaster
             db.query(BusinessDomainModule).filter(BusinessDomainModule.domain_code == domain.domain_code).delete()
             for m in payload.modules:
+                mod_sigla_upper = m.mod_sigla.strip().upper()
+                master_mod = db.query(ProtheusModuleMaster).filter(
+                    ProtheusModuleMaster.mod_code == m.mod_code,
+                    ProtheusModuleMaster.mod_sigla == mod_sigla_upper
+                ).first()
+                if not master_mod:
+                    db.rollback()
+                    raise HTTPException(status_code=400, detail=f"Módulo '{mod_sigla_upper}' com código '{m.mod_code}' não existe no catálogo master.")
+                    
                 db.add(BusinessDomainModule(
                     domain_code=domain.domain_code,
-                    mod_sigla=m.mod_sigla.strip().upper(),
+                    mod_sigla=mod_sigla_upper,
                     mod_code=m.mod_code,
                     is_primary=m.is_primary,
                 ))
         db.commit()
         return {"success": True, "message": f"Domínio '{domain.domain_code}' atualizado."}
+    except HTTPException:
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))

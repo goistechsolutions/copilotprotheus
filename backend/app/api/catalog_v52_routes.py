@@ -180,33 +180,7 @@ async def trigger_dictionary_snapshot(
     module_filter = [module.strip() for module in (req.modules or []) if module and module.strip()]
     if module_filter:
         from app.services.module_sync_resolver import resolve_modules_to_numeric_codes
-        try:
-            module_filter = resolve_modules_to_numeric_codes(db, req.tenant_id.strip(), module_filter)
-        except HTTPException:
-            # Fallback para mapeamento canônico Protheus caso o catálogo global ainda esteja vazio
-            FALLBACK_SIGLA_TO_CODE = {
-                "ATF": "1", "SIGAATF": "1",
-                "COM": "2", "SIGACOM": "2",
-                "CON": "3", "SIGACON": "3",
-                "EST": "4", "SIGAEST": "4",
-                "FAT": "5", "SIGAFAT": "5",
-                "FIN": "6", "SIGAFIN": "6",
-                "GPE": "7", "SIGAGPE": "7",
-                "FIS": "9", "SIGAFIS": "9",
-                "PCO": "11", "SIGAPCO": "11",
-                "TMS": "43", "SIGATMS": "43",
-                "CRM": "73", "SIGACRM": "73",
-            }
-            resolved = []
-            for m in module_filter:
-                token = m.strip().upper()
-                if token.isdigit():
-                    resolved.append(str(int(token)))
-                elif token in FALLBACK_SIGLA_TO_CODE:
-                    resolved.append(FALLBACK_SIGLA_TO_CODE[token])
-                else:
-                    raise HTTPException(status_code=400, detail=f"Módulo '{m}' não reconhecido. Use códigos numéricos (ex: 6 para SIGAFIN, 5 para SIGAFAT) ou siglas válidas.")
-            module_filter = resolved
+        module_filter = resolve_modules_to_numeric_codes(db, req.tenant_id.strip(), module_filter)
 
     snapshot_kwargs = {
         "tenant_id": req.tenant_id.strip(),

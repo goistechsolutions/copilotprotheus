@@ -268,7 +268,11 @@ def replace_company_modules(
                 continue
 
             m_sigla = item.module_code.strip().upper()   # campo do frontend = sigla
-            master = master_map.get(m_sigla, {})
+            
+            if m_sigla not in master_map:
+                raise HTTPException(status_code=400, detail=f"MODULE_NOT_FOUND: Módulo {m_sigla} não encontrado no catálogo mestre.")
+                
+            master = master_map[m_sigla]
             m_code = master.get("mod_code", 0)           # int do master
             m_name = master.get("mod_name") or m_sigla   # nome descritivo
 
@@ -359,19 +363,11 @@ def get_enabled_modules(db: Session, company_id: int | str, tenant_id: str) -> l
     except Exception as e:
         logger.debug(f"Sem módulos habilitados em {clean_tenant}: {e}")
 
-    # 2. Fallback: todos do master
-    try:
-        m_rows = db.execute(
-            text("SELECT mod_sigla FROM public.protheus_modules_master WHERE active = TRUE ORDER BY mod_code")
-        ).mappings().all()
-        enabled = [r["mod_sigla"].strip().upper() for r in m_rows if r.get("mod_sigla")]
-        if enabled:
-            return enabled
-    except Exception:
-        pass
-
-    # 3. Lista mínima hardcoded como último recurso
-    return ["SIGAFAT", "SIGAFIN", "SIGACOM", "SIGAEST", "SIGAPCP", "SIGAFIS", "SIGATMS", "SIGAGPE", "SIGAATF"]
+    # Sem fallback! Levantar erro explícito se não encontrar módulos.
+    raise HTTPException(
+        status_code=400, 
+        detail="Nenhum módulo habilitado ou contratado encontrado para este tenant."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

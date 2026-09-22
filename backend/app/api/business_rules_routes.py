@@ -1,4 +1,4 @@
-﻿"""
+"""
 backend/app/api/business_rules_routes.py
 
 Rotas REST do Business Rules Center (Portal de Regras de Negócio por Tenant):
@@ -15,7 +15,7 @@ import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -43,38 +43,38 @@ BUSINESS_RULES_METADATA = {
     "version": 1,
     "classifications": {
         "tes": [
-            {"value": "Venda", "label": "Venda", "directions": ["saida"]},
-            {"value": "Bonificação", "label": "Bonificação", "directions": ["saida", "entrada"]},
-            {"value": "Devolução", "label": "Devolução", "directions": ["saida", "entrada"]},
-            {"value": "Remessa", "label": "Remessa", "directions": ["saida", "entrada"]},
-            {"value": "Transferência", "label": "Transferência", "directions": ["saida", "entrada"]},
-            {"value": "Exportação", "label": "Exportação", "directions": ["saida"]},
-            {"value": "Compra", "label": "Compra", "directions": ["entrada"]},
-            {"value": "Consignação", "label": "Consignação", "directions": ["saida", "entrada"]},
-            {"value": "Mostruário", "label": "Mostruário", "directions": ["saida", "entrada"]},
-            {"value": "Outros", "label": "Outros", "directions": ["saida", "entrada"]},
+            {"value": "VENDA", "label": "Venda", "directions": ["saida"]},
+            {"value": "BONIFICACAO", "label": "Bonificação", "directions": ["saida", "entrada"]},
+            {"value": "DEVOLUCAO", "label": "Devolução", "directions": ["saida", "entrada"]},
+            {"value": "REMESSA", "label": "Remessa", "directions": ["saida", "entrada"]},
+            {"value": "TRANSFERENCIA", "label": "Transferência", "directions": ["saida", "entrada"]},
+            {"value": "EXPORTACAO", "label": "Exportação", "directions": ["saida"]},
+            {"value": "COMPRA", "label": "Compra", "directions": ["entrada"]},
+            {"value": "CONSIGNACAO", "label": "Consignação", "directions": ["saida", "entrada"]},
+            {"value": "MOSTRUARIO", "label": "Mostruário", "directions": ["saida", "entrada"]},
+            {"value": "OUTROS", "label": "Outros", "directions": ["saida", "entrada"]},
         ],
         "cfop": [
-            {"value": "Venda", "label": "Venda"},
-            {"value": "Devolução", "label": "Devolução"},
-            {"value": "Remessa", "label": "Remessa"},
-            {"value": "Transferência", "label": "Transferência"},
-            {"value": "Compra", "label": "Compra"},
-            {"value": "Outros", "label": "Outros"},
+            {"value": "VENDA", "label": "Venda"},
+            {"value": "DEVOLUCAO", "label": "Devolução"},
+            {"value": "REMESSA", "label": "Remessa"},
+            {"value": "TRANSFERENCIA", "label": "Transferência"},
+            {"value": "COMPRA", "label": "Compra"},
+            {"value": "OUTROS", "label": "Outros"},
         ],
     },
     "financialGroups": [
-        {"value": "Receita", "label": "Receita"},
-        {"value": "Custo", "label": "Custo"},
-        {"value": "Despesa", "label": "Despesa"},
-        {"value": "Investimento", "label": "Investimento"},
-        {"value": "Imposto", "label": "Imposto"},
-        {"value": "Operação Financeira", "label": "Operação Financeira"},
+        {"value": "RECEITA", "label": "Receita"},
+        {"value": "CUSTO", "label": "Custo"},
+        {"value": "DESPESA", "label": "Despesa"},
+        {"value": "INVESTIMENTO", "label": "Investimento"},
+        {"value": "IMPOSTO", "label": "Imposto"},
+        {"value": "OPERACAO_FINANCEIRA", "label": "Operação Financeira"},
     ],
     "cashFlowTables": ["SE1", "SE2", "SE5"],
     "defaults": {
-        "billing_included_classifications": ["Venda", "Exportação"],
-        "billing_excluded_classifications": ["Bonificação", "Remessa", "Transferência"],
+        "billing_included_classifications": ["VENDA", "EXPORTACAO"],
+        "billing_excluded_classifications": ["BONIFICACAO", "REMESSA", "TRANSFERENCIA"],
         "receivables_overdue_days": 30,
         "receivables_include_renegotiated": False,
         "receivables_include_provisional": True,
@@ -205,12 +205,14 @@ def list_tes_rules(
 @router.post("/tes", status_code=status.HTTP_201_CREATED)
 def create_or_update_tes_rule(
     payload: TesRuleCreate,
+    request: Request,
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     clean_tes = str(payload.tes).strip()
     rule_id = uuid.uuid4().hex
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
 
     existing = db.execute(text("""
         SELECT id, classification, description, active FROM public.business_rule_tes
@@ -228,7 +230,7 @@ def create_or_update_tes_rule(
             "desc": payload.description,
             "act": payload.active,
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "TES", "UPDATE", dict(existing), payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "TES", "UPDATE", dict(existing), payload.dict(), trace_id=trace_id)
     else:
         db.execute(text("""
             INSERT INTO public.business_rule_tes
@@ -244,7 +246,7 @@ def create_or_update_tes_rule(
             "desc": payload.description,
             "act": payload.active,
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "TES", "CREATE", None, payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "TES", "CREATE", None, payload.dict(), trace_id=trace_id)
 
     db.commit()
     return {"success": True, "message": f"TES {clean_tes} cadastrada/atualizada com sucesso."}
@@ -253,15 +255,17 @@ def create_or_update_tes_rule(
 @router.delete("/tes/{rule_id}")
 def delete_tes_rule(
     rule_id: str,
+    request: Request,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
     existing = db.execute(text("SELECT * FROM public.business_rule_tes WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_rule_tes WHERE id = :id"), {"id": rule_id})
-        BusinessRulesEngine.audit_change(db, tid, admin, "TES", "DELETE", dict(existing), None)
+        BusinessRulesEngine.audit_change(db, tid, admin, "TES", "DELETE", dict(existing), None, trace_id=trace_id)
         db.commit()
     return {"success": True, "message": "Regra de TES removida."}
 
@@ -292,12 +296,14 @@ def list_cfop_rules(
 @router.post("/cfop", status_code=status.HTTP_201_CREATED)
 def create_or_update_cfop_rule(
     payload: CfopRuleCreate,
+    request: Request,
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     clean_cfop = str(payload.cfop).strip()
     rule_id = uuid.uuid4().hex
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
 
     existing = db.execute(text("""
         SELECT id, classification FROM public.business_cfop_rules
@@ -309,7 +315,7 @@ def create_or_update_cfop_rule(
             "id": existing["id"],
             "cls": payload.classification.strip(),
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "CFOP", "UPDATE", dict(existing), payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "CFOP", "UPDATE", dict(existing), payload.dict(), trace_id=trace_id)
     else:
         db.execute(text("""
             INSERT INTO public.business_cfop_rules (id, tenant_id, cfop, classification, created_at)
@@ -320,7 +326,7 @@ def create_or_update_cfop_rule(
             "cfop": clean_cfop,
             "cls": payload.classification.strip(),
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "CFOP", "CREATE", None, payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "CFOP", "CREATE", None, payload.dict(), trace_id=trace_id)
 
     db.commit()
     return {"success": True, "message": f"CFOP {clean_cfop} cadastrado com sucesso."}
@@ -329,15 +335,17 @@ def create_or_update_cfop_rule(
 @router.delete("/cfop/{rule_id}")
 def delete_cfop_rule(
     rule_id: str,
+    request: Request,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
     existing = db.execute(text("SELECT * FROM public.business_cfop_rules WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_cfop_rules WHERE id = :id"), {"id": rule_id})
-        BusinessRulesEngine.audit_change(db, tid, admin, "CFOP", "DELETE", dict(existing), None)
+        BusinessRulesEngine.audit_change(db, tid, admin, "CFOP", "DELETE", dict(existing), None, trace_id=trace_id)
         db.commit()
     return {"success": True, "message": "Regra CFOP removida."}
 
@@ -368,12 +376,14 @@ def list_financial_natures(
 @router.post("/financial-natures", status_code=status.HTTP_201_CREATED)
 def create_financial_nature(
     payload: FinancialNatureCreate,
+    request: Request,
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     clean_code = str(payload.nature_code).strip()
     rule_id = uuid.uuid4().hex
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
 
     existing = db.execute(text("""
         SELECT id, nature_name, financial_group FROM public.business_financial_natures
@@ -390,7 +400,7 @@ def create_financial_nature(
             "nm": payload.nature_name.strip(),
             "grp": payload.financial_group.strip(),
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "NATUREZA_FINANCEIRA", "UPDATE", dict(existing), payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "NATUREZA_FINANCEIRA", "UPDATE", dict(existing), payload.dict(), trace_id=trace_id)
     else:
         db.execute(text("""
             INSERT INTO public.business_financial_natures
@@ -404,7 +414,7 @@ def create_financial_nature(
             "nm": payload.nature_name.strip(),
             "grp": payload.financial_group.strip(),
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "NATUREZA_FINANCEIRA", "CREATE", None, payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "NATUREZA_FINANCEIRA", "CREATE", None, payload.dict(), trace_id=trace_id)
 
     db.commit()
     return {"success": True, "message": f"Natureza {clean_code} salva com sucesso."}
@@ -413,15 +423,17 @@ def create_financial_nature(
 @router.delete("/financial-natures/{rule_id}")
 def delete_financial_nature(
     rule_id: str,
+    request: Request,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
     existing = db.execute(text("SELECT * FROM public.business_financial_natures WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_financial_natures WHERE id = :id"), {"id": rule_id})
-        BusinessRulesEngine.audit_change(db, tid, admin, "NATUREZA_FINANCEIRA", "DELETE", dict(existing), None)
+        BusinessRulesEngine.audit_change(db, tid, admin, "NATUREZA_FINANCEIRA", "DELETE", dict(existing), None, trace_id=trace_id)
         db.commit()
     return {"success": True, "message": "Natureza Financeira removida."}
 
@@ -452,6 +464,7 @@ def list_synonyms(
 @router.post("/synonyms", status_code=status.HTTP_201_CREATED)
 def create_synonym(
     payload: SynonymCreate,
+    request: Request,
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
@@ -459,6 +472,7 @@ def create_synonym(
     clean_src = payload.source_term.strip()
     clean_tgt = payload.target_term.strip()
     rule_id = uuid.uuid4().hex
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
 
     existing = db.execute(text("""
         SELECT id, target_term FROM public.business_synonyms
@@ -470,7 +484,7 @@ def create_synonym(
             "id": existing["id"],
             "tgt": clean_tgt,
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "SINÔNIMO", "UPDATE", dict(existing), payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "SINÔNIMO", "UPDATE", dict(existing), payload.dict(), trace_id=trace_id)
     else:
         db.execute(text("""
             INSERT INTO public.business_synonyms (id, tenant_id, source_term, target_term, created_at)
@@ -481,7 +495,7 @@ def create_synonym(
             "src": clean_src,
             "tgt": clean_tgt,
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "SINÔNIMO", "CREATE", None, payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "SINÔNIMO", "CREATE", None, payload.dict(), trace_id=trace_id)
 
     db.commit()
     return {"success": True, "message": f"Sinônimo '{clean_src}' -> '{clean_tgt}' salvo com sucesso."}
@@ -490,15 +504,17 @@ def create_synonym(
 @router.delete("/synonyms/{rule_id}")
 def delete_synonym(
     rule_id: str,
+    request: Request,
     tenant_id: str = Query(...),
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
     existing = db.execute(text("SELECT * FROM public.business_synonyms WHERE id = :id AND tenant_id = :tid"), {"id": rule_id, "tid": tid}).mappings().first()
     if existing:
         db.execute(text("DELETE FROM public.business_synonyms WHERE id = :id"), {"id": rule_id})
-        BusinessRulesEngine.audit_change(db, tid, admin, "SINÔNIMO", "DELETE", dict(existing), None)
+        BusinessRulesEngine.audit_change(db, tid, admin, "SINÔNIMO", "DELETE", dict(existing), None, trace_id=trace_id)
         db.commit()
     return {"success": True, "message": "Sinônimo removido."}
 
@@ -519,9 +535,10 @@ def get_module_config(
     if not cfg:
         # Retorna defaults
         return {
+            "_source": "DEFAULT",
             "tenant_id": tenant_id,
-            "billing_included_classifications": ["Venda", "Exportação"],
-            "billing_excluded_classifications": ["Bonificação", "Remessa", "Transferência"],
+            "billing_included_classifications": ["VENDA", "EXPORTACAO"],
+            "billing_excluded_classifications": ["BONIFICACAO", "REMESSA", "TRANSFERENCIA"],
             "receivables_overdue_days": 30,
             "receivables_include_renegotiated": False,
             "receivables_include_provisional": True,
@@ -535,6 +552,7 @@ def get_module_config(
         }
 
     res = dict(cfg)
+    res["_source"] = "EXPLICIT"
     for k in ["billing_included_classifications", "billing_excluded_classifications", "ai_cash_flow_tables"]:
         if isinstance(res.get(k), str):
             try:
@@ -547,15 +565,17 @@ def get_module_config(
 @router.put("/config")
 def update_module_config(
     payload: ModuleConfigUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin),
 ):
     tid = _authorize_business_rules(admin, payload.tenant_id, BUSINESS_RULES_WRITE_PERMISSION)
     existing = db.execute(text("SELECT * FROM public.business_module_configs WHERE tenant_id = :tid"), {"tid": tid}).mappings().first()
     cfg_id = existing["id"] if existing else uuid.uuid4().hex
+    trace_id = request.headers.get("x-trace-id", uuid.uuid4().hex)
 
-    b_inc = json.dumps(payload.billing_included_classifications or ["Venda", "Exportação"])
-    b_exc = json.dumps(payload.billing_excluded_classifications or ["Bonificação", "Remessa", "Transferência"])
+    b_inc = json.dumps(payload.billing_included_classifications or ["VENDA", "EXPORTACAO"])
+    b_exc = json.dumps(payload.billing_excluded_classifications or ["BONIFICACAO", "REMESSA", "TRANSFERENCIA"])
     ai_cf = json.dumps(payload.ai_cash_flow_tables or ["SE1", "SE2", "SE5"])
 
     if existing:
@@ -590,7 +610,7 @@ def update_module_config(
             "abc_c": payload.abc_curve_c_pct,
             "ai_cf": ai_cf,
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "CONFIGURAÇÃO_MÓDULOS", "UPDATE", dict(existing), payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "CONFIGURAÇÃO_MÓDULOS", "UPDATE", dict(existing), payload.dict(), trace_id=trace_id)
     else:
         db.execute(text("""
             INSERT INTO public.business_module_configs
@@ -617,7 +637,7 @@ def update_module_config(
             "abc_c": payload.abc_curve_c_pct,
             "ai_cf": ai_cf,
         })
-        BusinessRulesEngine.audit_change(db, tid, admin, "CONFIGURAÇÃO_MÓDULOS", "CREATE", None, payload.dict())
+        BusinessRulesEngine.audit_change(db, tid, admin, "CONFIGURAÇÃO_MÓDULOS", "CREATE", None, payload.dict(), trace_id=trace_id)
 
     db.commit()
     return {"success": True, "message": "Configurações de regras salvas com sucesso."}
@@ -633,7 +653,7 @@ def list_business_rules_audit(
 ):
     tid = _authorize_business_rules(admin, tenant_id, BUSINESS_RULES_READ_PERMISSION)
     rows = db.execute(text("""
-        SELECT id, user_id, event_date, rule_entity, action, previous_value, new_value
+        SELECT id, user_id, event_date, rule_entity, action, previous_value, new_value, trace_id
         FROM public.business_rule_audit
         WHERE tenant_id = :tid
         ORDER BY event_date DESC

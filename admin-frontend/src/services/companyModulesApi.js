@@ -13,9 +13,9 @@ function normalizeEnvironmentCode(environmentCode) {
 function normalizeModule(item = {}) {
   return {
     ...item,
-    module_code: String(item.module_code ?? item.mod_code ?? '').trim(),
-    module_sigla: String(item.module_sigla ?? item.mod_sigla ?? '').trim().toUpperCase(),
-    module_name: String(item.module_name ?? item.mod_name ?? item.module_sigla ?? item.mod_sigla ?? '').trim(),
+    module_code: String(item.module_code || '').trim().toUpperCase(),
+    mod_code: Number(item.mod_code || 0),
+    module_name: String(item.module_name || item.module_code || '').trim(),
   };
 }
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 backend/app/services/business_rules_engine.py
 
 Motor de Regras de Negócio por Tenant (Business Rules Center):
@@ -169,18 +169,22 @@ class BusinessRulesEngine:
         action: str,
         previous_value: Any = None,
         new_value: Any = None,
+        trace_id: Optional[str] = None
     ):
-        """Registra a alteração na tabela de auditoria."""
+        """Registra a alteração na tabela de auditoria com trace de requisição."""
         try:
+            # Garante que a coluna trace_id existe (evolução de schema)
+            db.execute(text("ALTER TABLE public.business_rule_audit ADD COLUMN IF NOT EXISTS trace_id VARCHAR(50);"))
+            
             audit_id = uuid.uuid4().hex
             prev_json = json.dumps(previous_value) if previous_value is not None else None
             new_json = json.dumps(new_value) if new_value is not None else None
 
             db.execute(text("""
                 INSERT INTO public.business_rule_audit
-                    (id, tenant_id, user_id, event_date, rule_entity, action, previous_value, new_value)
+                    (id, tenant_id, user_id, event_date, rule_entity, action, previous_value, new_value, trace_id)
                 VALUES
-                    (:id, :tenant_id, :user_id, NOW(), :rule_entity, :action, :previous_value, :new_value)
+                    (:id, :tenant_id, :user_id, NOW(), :rule_entity, :action, :previous_value, :new_value, :trace_id)
             """), {
                 "id": audit_id,
                 "tenant_id": str(tenant_id).lower(),
@@ -189,6 +193,7 @@ class BusinessRulesEngine:
                 "action": action,
                 "previous_value": prev_json,
                 "new_value": new_json,
+                "trace_id": trace_id,
             })
             db.commit()
         except Exception as exc:
