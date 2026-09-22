@@ -1,34 +1,34 @@
 import React from 'react';
-import { SparklesIcon } from './icons';
 
 interface EmptyConversationProps {
   onSelectPrompt: (prompt: string) => void;
 }
 
 export function EmptyConversation({ onSelectPrompt }: EmptyConversationProps) {
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Bom dia.';
-    if (hour < 18) return 'Boa tarde.';
-    return 'Boa noite.';
-  };
-
   const starterItems = [
     {
-      label: 'Fluxo de Caixa',
-      prompt: 'Projeção de fluxo de caixa e recebimentos dos próximos 30 dias',
+      label: 'Financeiro',
+      desc: 'Fluxo de caixa, recebíveis e atrasos',
+      icon: '💰',
+      prompt: 'Resuma a situação do Fluxo de Caixa e contas a receber dos próximos 30 dias',
     },
     {
       label: 'Vendas',
-      prompt: 'Faturamento acumulado do mês atual comparado por vendedor',
-    },
-    {
-      label: 'Clientes',
-      prompt: 'Clientes com títulos vencidos acima de 60 dias e risco de inadimplência',
+      desc: 'Faturamento e performance',
+      icon: '📈',
+      prompt: 'Resuma o faturamento acumulado do mês atual comparado por vendedor',
     },
     {
       label: 'Estoque',
-      prompt: 'Identificar produtos parados sem movimentação nos últimos 90 dias com saldo em estoque',
+      desc: 'Saldos e produtos sem giro',
+      icon: '📦',
+      prompt: 'Identifique produtos parados sem movimentação nos últimos 90 dias',
+    },
+    {
+      label: 'Fiscal',
+      desc: 'Impostos e retenções',
+      icon: '📄',
+      prompt: 'Resuma os valores de impostos retidos no período atual',
     },
   ];
 
@@ -42,73 +42,81 @@ export function EmptyConversation({ onSelectPrompt }: EmptyConversationProps) {
       margin: 'auto 0',
       textAlign: 'center',
       userSelect: 'none',
+      width: '100%'
     }} className="animate-fade-in">
-      {/* Brand Minimal */}
-      <div style={{ marginBottom: '32px' }}>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontWeight: 600,
-          fontSize: '18px',
-          color: 'var(--cprot-text-main)',
-        }}>
-          <SparklesIcon size={18} />
-          <span>Copilot Protheus</span>
-        </div>
-        <div style={{ fontSize: '13px', color: 'var(--cprot-text-muted)', marginTop: '4px' }}>
-          Inteligência Corporativa
-        </div>
-      </div>
 
-      {/* Saudação Central */}
-      <div style={{ marginBottom: '28px' }}>
+      <div style={{ marginBottom: '40px' }}>
         <h2 style={{
-          fontSize: '24px',
+          fontSize: '28px',
           fontWeight: 600,
-          margin: '0 0 6px 0',
+          margin: '0 0 12px 0',
           color: 'var(--cprot-text-main)',
+          letterSpacing: '-0.02em'
         }}>
-          {getGreeting()}
+          Bem-vindo ao Copilot Executivo
         </h2>
         <p style={{
-          fontSize: '15px',
+          fontSize: '16px',
           fontWeight: 400,
           margin: 0,
           color: 'var(--cprot-text-sub)',
+          lineHeight: '1.5',
+          maxWidth: '400px'
         }}>
-          O que deseja analisar hoje?
+          Analise dados Financeiros, Comerciais, <br />
+          Estoque, Compras, Fiscal e Controladoria.
         </p>
       </div>
 
-      {/* Lista de Opções em Texto Puro (Sem cards, sem caixas) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '240px' }}>
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(2, 1fr)', 
+        gap: '12px', 
+        width: '100%', 
+        maxWidth: '480px' 
+      }}>
         {starterItems.map((item) => (
           <button
             key={item.label}
             type="button"
             onClick={() => onSelectPrompt(item.prompt)}
             style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--cprot-text-sub)',
-              fontSize: '15px',
-              fontWeight: 400,
-              padding: '6px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              background: 'var(--cprot-surface)',
+              border: '1px solid var(--cprot-border)',
+              borderRadius: '16px',
+              padding: '16px',
               cursor: 'pointer',
-              transition: 'color 0.15s, transform 0.1s',
+              transition: 'background-color 0.2s, transform 0.1s',
               fontFamily: 'inherit',
+              textAlign: 'left'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--cprot-primary)';
-              e.currentTarget.style.transform = 'translateX(2px)';
+              e.currentTarget.style.backgroundColor = 'var(--cprot-surface-hover)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--cprot-text-sub)';
-              e.currentTarget.style.transform = 'translateX(0)';
+              e.currentTarget.style.backgroundColor = 'var(--cprot-surface)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.style.transform = 'translateY(1px)';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
             }}
           >
-            {item.label}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '18px' }}>{item.icon}</span>
+              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--cprot-text-main)' }}>
+                {item.label}
+              </span>
+            </div>
+            <span style={{ fontSize: '13px', color: 'var(--cprot-text-muted)' }}>
+              {item.desc}
+            </span>
           </button>
         ))}
       </div>

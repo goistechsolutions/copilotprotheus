@@ -18,22 +18,29 @@ export function ChatHeader({ onOpenMenu, onClose, isConnected = true }: ChatHead
 
   return (
     <header className="copilot-chat-header">
-      {/* Indicador de Conexão + Nome Minimal */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span 
-          style={{
-            display: 'inline-block',
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-            backgroundColor: isConnected ? 'var(--cprot-success)' : 'var(--cprot-text-muted)',
-            boxShadow: isConnected ? '0 0 6px var(--cprot-success)' : 'none',
-          }}
-          title={isConnected ? 'Oracle Conectado' : 'Desconectado'}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '15px', color: 'var(--cprot-text-main)' }}>
-          <SparklesIcon size={15} className="text-primary" />
-          <span>Copilot Protheus</span>
+      {/* Brand & Connection */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span 
+            style={{
+              display: 'inline-block',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: isConnected ? 'var(--cprot-success)' : 'var(--cprot-text-muted)',
+              boxShadow: isConnected ? '0 0 8px var(--cprot-success)' : 'none',
+            }}
+            title={isConnected ? 'Oracle Online' : 'Desconectado'}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '15px', color: 'var(--cprot-text-main)' }}>
+            <SparklesIcon size={15} />
+            <span>Copilot Executivo</span>
+          </div>
+          <span style={{ fontSize: '12px', color: 'var(--cprot-text-muted)' }}>
+            Assistente Corporativo de Negócios
+          </span>
         </div>
       </div>
 

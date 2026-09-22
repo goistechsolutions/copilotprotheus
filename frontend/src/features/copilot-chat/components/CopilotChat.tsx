@@ -6,7 +6,7 @@ import { ChatHeader } from './ChatHeader';
 import { Conversation } from './Conversation';
 import { ChatComposer } from './ChatComposer';
 import { SecondaryMenu } from './SecondaryMenu';
-import { HistoryDrawer } from './HistoryDrawer';
+import { Sidebar } from './Sidebar';
 
 export interface CopilotChatProps {
   context?: CopilotSessionContext;
@@ -22,7 +22,6 @@ export function CopilotChat({
   className = '',
 }: CopilotChatProps) {
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
   const {
     messages,
@@ -34,7 +33,6 @@ export function CopilotChat({
     selectConversation,
   } = useCopilotConversation(context);
 
-  // Manipulação de eventos customizados globais
   const handleOpenSettings = useCallback(() => {
     window.dispatchEvent(new CustomEvent('copilot:open-settings'));
   }, []);
@@ -45,52 +43,54 @@ export function CopilotChat({
 
   return (
     <div className={`copilot-chat-container ${className}`}>
-      {/* 10% Header */}
+      {/* HEADER */}
       <ChatHeader
         onOpenMenu={() => setIsMenuOpen((prev) => !prev)}
         onClose={onClose}
         isConnected={true}
       />
 
-      {/* Menu Secundário Suspenso */}
       <SecondaryMenu
         isOpen={isMenuOpen}
         onClose={() => setIsMenuOpen(false)}
         onNewConversation={startNewConversation}
-        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenHistory={() => {}}
         onOpenSettings={handleOpenSettings}
       />
 
-      {/* Drawer Temporário de Histórico */}
-      <HistoryDrawer
-        isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
-        currentConversationId={currentConversationId}
-        onSelectConversation={selectConversation}
-        onNewConversation={startNewConversation}
-        context={context}
-      />
+      {/* WORKSPACE (Sidebar + Conversation Area) */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        
+        <Sidebar 
+          currentConversationId={currentConversationId}
+          onSelectConversation={selectConversation}
+          onNewConversation={startNewConversation}
+          context={context}
+        />
 
-      {/* 80% Conversa / Estado Inicial */}
-      <Conversation
-        messages={messages}
-        conversationId={currentConversationId || undefined}
-        onSelectPrompt={handleSelectPrompt}
-        onOpenDashboard={onOpenDashboard}
-        onStopProcessing={stopProcessing}
-        onRetryLast={() => {
-          const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-          if (lastUser) sendMessage(lastUser.content);
-        }}
-      />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          {/* Conversation Area */}
+          <Conversation
+            messages={messages}
+            conversationId={currentConversationId || undefined}
+            onSelectPrompt={handleSelectPrompt}
+            onOpenDashboard={onOpenDashboard}
+            onStopProcessing={stopProcessing}
+            onRetryLast={() => {
+              const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+              if (lastUser) sendMessage(lastUser.content);
+            }}
+          />
 
-      {/* 10% Input */}
-      <ChatComposer
-        onSendMessage={sendMessage}
-        onStopProcessing={stopProcessing}
-        isProcessing={isProcessing}
-        hasMessages={messages.length > 0}
-      />
+          {/* INPUT BAR */}
+          <ChatComposer
+            onSendMessage={sendMessage}
+            onStopProcessing={stopProcessing}
+            isProcessing={isProcessing}
+            hasMessages={messages.length > 0}
+          />
+        </div>
+      </div>
     </div>
   );
 }
