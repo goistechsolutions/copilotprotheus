@@ -41,7 +41,8 @@ html:not(.dark) {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
   background-color: var(--cprot-bg);
   color: var(--cprot-text-main);
   overflow: hidden;
