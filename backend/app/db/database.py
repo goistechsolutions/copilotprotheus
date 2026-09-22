@@ -62,7 +62,12 @@ try:
 except Exception:
     pass
 
-engine_args = {"pool_pre_ping": True}
+engine_args = {
+    "pool_pre_ping": True,
+    "pool_size": 30,
+    "max_overflow": 50,
+    "pool_timeout": 60
+}
 if DATABASE_URL.startswith("sqlite"):
     from sqlalchemy.pool import StaticPool
     engine_args = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool}

@@ -19,12 +19,14 @@ export function Sidebar({
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
+  const contextKey = JSON.stringify(context || {});
+
   useEffect(() => {
     setLoading(true);
     fetchConversationList(context)
       .then((data) => setConversations(data))
       .finally(() => setLoading(false));
-  }, [context]);
+  }, [contextKey]);
 
   // Agrupamento simulado para 'Hoje' e 'Últimos 7 dias' baseados na data
   const groups = useMemo(() => {
