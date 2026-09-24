@@ -73,7 +73,15 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
       if (snapshot.length > 0) setMessages(snapshot);
       fetchConversationMessagesRemote(currentConversationId).then((loaded) => {
         if (loaded && loaded.length > 0) {
-          setMessages(loaded);
+          setMessages((prev) => {
+            // Preserva qualquer mensagem de processamento que tenha sido adicionada localmente
+            // enquanto a requisio de fetch estava em andamento.
+            const processingMsgs = prev.filter((m) => m.status === 'processing');
+            if (processingMsgs.length > 0) {
+              return [...loaded, ...processingMsgs];
+            }
+            return loaded;
+          });
           writeMessageSnapshot(context, currentConversationId, loaded);
         }
       }).catch(() => {});
