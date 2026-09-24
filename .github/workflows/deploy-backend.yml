@@ -104,6 +104,7 @@ jobs:
 
           printf '%s\n' \
             "SECRET_KEY=${{ secrets.SECRET_KEY }}" \
+            "JWT_SECRET=${{ secrets.JWT_SECRET || secrets.ADMIN_JWT_SECRET }}" \
             "DEBUG=false" \
             "ENVIRONMENT=production" \
             "" \

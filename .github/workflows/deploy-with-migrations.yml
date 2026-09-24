@@ -116,6 +116,7 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENVCMD'
           cat << 'EOF' | sed 's/^[ \t]*//' > ${{ env.DEPLOY_DIR }}/.env
             SECRET_KEY=${{ secrets.SECRET_KEY }}
+            JWT_SECRET=${{ secrets.JWT_SECRET || secrets.ADMIN_JWT_SECRET }}
             POSTGRES_DB=copilotprotheus
             POSTGRES_USER=copilot
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
