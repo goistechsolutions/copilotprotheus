@@ -548,29 +548,29 @@ async def sync_modules(
             db.execute(
                 text("""
                     INSERT INTO public.protheus_modules_master (
-                        mod_code,
-                        mod_sigla,
-                        mod_name,
+                        id,
+                        module_sigla,
+                        description,
                         active,
                         updated_at
                     )
                     VALUES (
-                        :mod_code,
-                        :mod_sigla,
-                        :mod_name,
+                        :id,
+                        :module_sigla,
+                        :description,
                         TRUE,
                         NOW()
                     )
-                    ON CONFLICT (mod_code) DO UPDATE
-                    SET mod_sigla = EXCLUDED.mod_sigla,
-                        mod_name  = EXCLUDED.mod_name,
+                    ON CONFLICT (id) DO UPDATE
+                    SET module_sigla = EXCLUDED.module_sigla,
+                        description  = EXCLUDED.description,
                         active    = EXCLUDED.active,
                         updated_at = NOW()
                 """),
                 {
-                    "mod_code": mod_code_int,
-                    "mod_sigla": str(item.get("mod_sigla", "")).strip().upper(),
-                    "mod_name": item.get("mod_name"),
+                    "id": mod_code_int,
+                    "module_sigla": str(item.get("mod_sigla", "")).strip().upper(),
+                    "description": item.get("mod_name"),
                 },
             )
             count += 1
@@ -692,18 +692,18 @@ async def import_protheus_modules(
             db.execute(
                 text("""
                     INSERT INTO public.protheus_modules_master
-                        (mod_code, mod_sigla, mod_name, active, updated_at)
-                    VALUES (:mod_code, :mod_sigla, :mod_name, TRUE, NOW())
-                    ON CONFLICT (mod_code) DO UPDATE SET
-                        mod_sigla = EXCLUDED.mod_sigla,
-                        mod_name = EXCLUDED.mod_name,
+                        (id, module_sigla, description, active, updated_at)
+                    VALUES (:id, :module_sigla, :description, TRUE, NOW())
+                    ON CONFLICT (id) DO UPDATE SET
+                        module_sigla = EXCLUDED.module_sigla,
+                        description = EXCLUDED.description,
                         active = TRUE,
                         updated_at = NOW()
                 """),
                 {
-                    "mod_code": code,
-                    "mod_sigla": sigla,
-                    "mod_name": description,
+                    "id": code,
+                    "module_sigla": sigla,
+                    "description": description,
                 },
             )
 
@@ -713,7 +713,7 @@ async def import_protheus_modules(
             text(f"""
                 UPDATE public.protheus_modules_master
                    SET active = FALSE, updated_at = NOW()
-                 WHERE mod_code NOT IN ({code_list})
+                 WHERE id NOT IN ({code_list})
             """)
         )
         db.commit()
@@ -745,16 +745,14 @@ def get_protheus_modules(
     modules = (
         db.query(ProtheusModuleMaster)
         .filter(ProtheusModuleMaster.active == True)
-        .order_by(ProtheusModuleMaster.mod_code)
+        .order_by(ProtheusModuleMaster.id)
         .all()
     )
     return {
         "modules": [
             {
-                "id":          str(m.id),
-                "mod_code":    m.mod_code,
-                "mod_sigla":   m.mod_sigla,
-                "mod_name":    m.mod_name,
+                "id":          m.id,
+                "module_sigla": m.module_sigla,
                 "description": m.description or ""
             }
             for m in modules
@@ -1015,17 +1013,17 @@ async def sync_schema(
                 c_mod_int = int(c_mod)
                 
                 existing = db.query(ProtheusModuleMaster).filter(
-                    ProtheusModuleMaster.mod_code == c_mod_int
+                    ProtheusModuleMaster.id == c_mod_int
                 ).first()
                 if existing:
-                    existing.mod_sigla = c_sigla or existing.mod_sigla
-                    existing.mod_name = n_mod or existing.mod_name
+                    existing.module_sigla = c_sigla or existing.module_sigla
+                    existing.description = n_mod or existing.description
                     existing.active      = True
                 else:
                     db.add(ProtheusModuleMaster(
-                        mod_code=c_mod_int,
-                        mod_sigla=c_sigla,
-                        mod_name=n_mod or c_sigla,
+                        id=c_mod_int,
+                        module_sigla=c_sigla,
+                        description=n_mod or c_sigla,
                         active=True
                     ))
             db.commit()
@@ -1051,11 +1049,11 @@ async def sync_schema(
     code_to_name = {}
 
     for m in master_rows:
-        module_code = str(m.mod_code).strip()
+        module_code = str(m.id).strip()
         if module_code not in selected_module_set:
             continue
-        m_sigla = (m.mod_sigla or "").strip().upper()
-        m_desc = (m.mod_name or m_sigla).strip().upper()
+        m_sigla = (m.module_sigla or "").strip().upper()
+        m_desc = (m.description or m_sigla).strip().upper()
         sigla_map[module_code] = m_sigla
         code_to_name[module_code] = m_desc
 

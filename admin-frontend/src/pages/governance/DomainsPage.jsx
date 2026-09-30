@@ -59,7 +59,7 @@ export default function DomainsPage() {
 
                 <div className="mb-4">
                   <span className="inline-block px-3 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-mono font-bold text-sm">
-                    {primaryMod ? primaryMod.mod_sigla : 'Sem Módulo'}
+                    {primaryMod ? primaryMod.moduleSigla : 'Sem Módulo'}
                   </span>
                   {d.modules?.length > 1 && (
                     <span className="ml-2 text-xs text-slate-500">+{d.modules.length - 1}</span>
@@ -96,3 +96,4 @@ export default function DomainsPage() {
     </div>
   );
 }
+

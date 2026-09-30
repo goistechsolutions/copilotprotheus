@@ -30,15 +30,15 @@ def resolve_modules_to_numeric_codes(db, tenant_schema: str, selected_modules: L
 
     sql = text("""
         SELECT DISTINCT
-            pm.mod_code::text AS modulo,
-            UPPER(BTRIM(COALESCE(pm.mod_sigla, ''))) AS codmod
+            pm.id::text AS modulo,
+            UPPER(BTRIM(COALESCE(pm.module_sigla, ''))) AS codmod
         FROM public.protheus_modules_master pm
         WHERE pm.active = TRUE
           AND (
-                pm.mod_code::text = ANY(CAST(:mods AS text[]))
-                OR UPPER(BTRIM(COALESCE(pm.mod_sigla, ''))) = ANY(CAST(:mods AS text[]))
+                pm.id::text = ANY(CAST(:mods AS text[]))
+                OR UPPER(BTRIM(COALESCE(pm.module_sigla, ''))) = ANY(CAST(:mods AS text[]))
               )
-        ORDER BY pm.mod_code::text
+        ORDER BY pm.id::text
     """)
 
     try:

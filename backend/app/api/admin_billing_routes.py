@@ -63,7 +63,7 @@ class ContractPayload(BaseModel):
 
 
 class ContractModulePayload(BaseModel):
-    module_ids: list[UUID] = Field(default_factory=list, max_length=500)
+    module_ids: list[int] = Field(default_factory=list, max_items=500)
 
 
 def _tenant_or_404(db: Session, tenant_id: str) -> Tenant:
@@ -197,11 +197,11 @@ def list_contract_modules(contract_id: UUID, db: Session = Depends(get_db), _adm
     if not db.query(TenantContract).filter(TenantContract.id == contract_id).first():
         raise HTTPException(status_code=404, detail="Contrato não encontrado.")
     rows = db.execute(text("""
-        SELECT tmc.id, tmc.module_id, tmc.status, pm.mod_code, pm.mod_sigla, pm.mod_name, pm.active
+        SELECT tmc.id, tmc.module_id, tmc.status, pm.module_sigla, pm.description, pm.active
         FROM public.tenant_module_contracts tmc
         JOIN public.protheus_modules_master pm ON pm.id = tmc.module_id
         WHERE tmc.contract_id = :contract_id
-        ORDER BY pm.mod_code
+        ORDER BY pm.id
     """), {"contract_id": str(contract_id)}).mappings().all()
     return {"items": [dict(row) for row in rows]}
 
@@ -228,7 +228,7 @@ def replace_contract_modules(contract_id: UUID, payload: ContractModulePayload, 
                 INSERT INTO public.tenant_module_contracts
                     (tenant_id, contract_id, module_id, status, created_at)
                 VALUES
-                    (:tenant_id, CAST(:contract_id AS uuid), CAST(:module_id AS uuid), 'active', CURRENT_TIMESTAMP)
+                    (:tenant_id, CAST(:contract_id AS uuid), :module_id, 'active', CURRENT_TIMESTAMP)
             """), {
                 "tenant_id": contract.tenant_id,
                 "contract_id": str(contract_id),

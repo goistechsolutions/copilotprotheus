@@ -1,0 +1,65 @@
+{
+  "status": "PASS",
+  "scope": "static consistency only; SQL was not run against PostgreSQL",
+  "checks": [
+    "SIGAFAT canonical seed present",
+    "module contract UUID-to-integer migration present",
+    "legacy module catalog preserved for rollback",
+    "tenant factory excludes table/field permission tables",
+    "analysis_id links dashboards to analyses",
+    "nullable company uniqueness made idempotent with PostgreSQL 15+ NULLS NOT DISTINCT",
+    "no DROP TABLE or DROP SCHEMA in UP migrations",
+    "transaction BEGIN/COMMIT counts balanced"
+  ],
+  "files": [
+    {
+      "file": "database/migrations/20260930_001_module_catalog_numeric_down.sql",
+      "bytes": 1953,
+      "sha256": "42bf1c3f6c009609a70d67d1e9d6bc47eee48c995fbae6a195084e394fa9d150",
+      "contains_drop_table": false,
+      "contains_drop_schema": false
+    },
+    {
+      "file": "database/migrations/20260930_001_module_catalog_numeric_up.sql",
+      "bytes": 6757,
+      "sha256": "97475d84bbb096b26bcd3759a2382723af0b45f48701d23d4ab580f6479cc42e",
+      "contains_drop_table": false,
+      "contains_drop_schema": false
+    },
+    {
+      "file": "database/migrations/20260930_002_tenant_schema_factory_down.sql",
+      "bytes": 176,
+      "sha256": "c85647fc2d74304af59d67158d5c2689475e90ef4904d9f9f7e6f2faf53bed35",
+      "contains_drop_table": false,
+      "contains_drop_schema": false
+    },
+    {
+      "file": "database/migrations/20260930_002_tenant_schema_factory_up.sql",
+      "bytes": 10681,
+      "sha256": "116efa5201bb1e2e93b5217840ec641127a5e63d4965b22de79802c9bc16530a",
+      "contains_drop_table": false,
+      "contains_drop_schema": false
+    },
+    {
+      "file": "database/migrations/20260930_003_migrate_tenant_metadata_down.sql",
+      "bytes": 228,
+      "sha256": "6c04b6dacf51ae1190ea857eb016fa137dd1152540bff67dc2c0c344aa3e47bb",
+      "contains_drop_table": false,
+      "contains_drop_schema": false
+    },
+    {
+      "file": "database/migrations/20260930_003_migrate_tenant_metadata_up.sql",
+      "bytes": 7747,
+      "sha256": "0416cf2cc0c2b9d7c8b5f58147970bcc4441e409b35b496fb8f6f3fad86d508b",
+      "contains_drop_table": false,
+      "contains_drop_schema": false
+    },
+    {
+      "file": "database/migrations/20260930_004_post_migration_verification.sql",
+      "bytes": 1904,
+      "sha256": "4521495f4fffcffe97839aad635854fc21b77c0b89560b8bbe5b4c16bbc17d04",
+      "contains_drop_table": false,
+      "contains_drop_schema": false
+    }
+  ]
+}

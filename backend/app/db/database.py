@@ -332,37 +332,14 @@ def ensure_public_tables(db, force: bool = False):
         """,
         """
         CREATE TABLE IF NOT EXISTS public.protheus_modules_master (
-            id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-            mod_code    INTEGER      NOT NULL,
-            mod_sigla   VARCHAR(30)  UNIQUE,
-            mod_name    VARCHAR(150) NOT NULL,
-            description TEXT,
-            active      BOOLEAN      NOT NULL DEFAULT TRUE,
-            created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-            updated_at  TIMESTAMPTZ,
-            UNIQUE(mod_code)
+            id           INTEGER      PRIMARY KEY,
+            module_sigla VARCHAR(30)  UNIQUE,
+            description  VARCHAR(255) NOT NULL,
+            active       BOOLEAN      NOT NULL DEFAULT TRUE,
+            created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            updated_at   TIMESTAMPTZ
         );
-        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_code INTEGER;
-        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS mod_sigla VARCHAR(30);
-        ALTER TABLE public.protheus_modules_master ADD COLUMN IF NOT EXISTS description TEXT;
-        DO $$
-        BEGIN
-            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'protheus_modules_master' AND column_name = 'module_name') THEN
-                ALTER TABLE public.protheus_modules_master RENAME COLUMN module_name TO mod_name;
-            END IF;
-            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'protheus_modules_master' AND column_name = 'module_code') THEN
-                -- Migra valores numéricos para a coluna canônica sem remover
-                -- a coluna legada; a limpeza deve ser uma migração explícita.
-                UPDATE public.protheus_modules_master
-                   SET mod_code = CASE
-                       WHEN module_code ~ '^[0-9]+$' THEN module_code::INTEGER
-                       ELSE mod_code
-                   END
-                 WHERE mod_code IS NULL;
-            END IF;
-        END $$;
-        CREATE INDEX IF NOT EXISTS idx_pmm_code   ON public.protheus_modules_master(mod_code);
-        CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(mod_sigla);
+        CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(module_sigla);
         """,
         """
         CREATE TABLE IF NOT EXISTS public.roles (
@@ -989,11 +966,11 @@ def _seed_bkl_initial_data(db):
         ]
         for mc, ms, mn in canonical_master:
             db.execute(text("""
-                INSERT INTO public.protheus_modules_master (mod_code, mod_sigla, mod_name, active, updated_at)
+                INSERT INTO public.protheus_modules_master (id, module_sigla, description, active, updated_at)
                 VALUES (:mc, :ms, :mn, TRUE, CURRENT_TIMESTAMP)
-                ON CONFLICT (mod_code) DO UPDATE
-                SET mod_sigla = EXCLUDED.mod_sigla,
-                    mod_name = EXCLUDED.mod_name,
+                ON CONFLICT (id) DO UPDATE
+                SET module_sigla = EXCLUDED.module_sigla,
+                    description = EXCLUDED.description,
                     active = TRUE,
                     updated_at = CURRENT_TIMESTAMP
             """), {"mc": mc, "ms": ms, "mn": mn})

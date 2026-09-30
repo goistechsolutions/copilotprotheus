@@ -82,7 +82,7 @@ export default function DomainDetailsPage() {
               <div className="flex flex-wrap gap-2">
                 {domain.modules?.map(m => (
                   <div key={m.id} className="px-4 py-2 rounded-lg bg-[#020817] border border-slate-800 font-mono text-cyan-300">
-                    {m.mod_sigla} <span className="text-slate-500 text-xs ml-2">({m.mod_code})</span>
+                    {m.moduleSigla} <span className="text-slate-500 text-xs ml-2">({m.moduleId})</span>
                   </div>
                 ))}
               </div>
@@ -100,3 +100,4 @@ export default function DomainDetailsPage() {
     </div>
   );
 }
+

@@ -81,11 +81,9 @@ class ProtheusModuleMaster(GlobalBase):
     __tablename__ = "protheus_modules_master"
     __table_args__ = {"schema": "public", "extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    mod_code = Column(Integer, nullable=False, unique=True)
-    mod_sigla = Column(String(30), unique=True)
-    mod_name = Column(String(150), nullable=False)
-    description = Column(Text)
+    id = Column(Integer, primary_key=True)
+    module_sigla = Column(String(32), unique=True, nullable=False)
+    description = Column(String(255), nullable=False)
     
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

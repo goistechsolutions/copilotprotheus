@@ -219,7 +219,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-[#2196F3]" /><span className="text-sm font-semibold text-white">Consultas por módulo Protheus</span></div>
             <span className="rounded border border-[#1E2535] bg-[#0F1117] px-2 py-1 text-[10px] text-[#94A3B8]">Últimas 24h</span>
           </div>
-          {loading ? <div className="space-y-4">{[...Array(4)].map((_, index) => <div key={index} className="space-y-1"><div className="h-3 w-20 animate-pulse rounded bg-[#1E2535]" /><div className="h-1.5 animate-pulse rounded bg-[#1E2535]" /></div>)}</div> : activityModules.length > 0 ? <div className="space-y-4">{activityModules.map((module, index) => <ActivityBar key={`${module.label || module.mod_sigla || index}`} label={module.label || module.mod_sigla || 'Módulo não identificado'} value={Number(module.value) || 0} max={maxActivity} />)}</div> : <div className="flex min-h-40 flex-col items-center justify-center text-center"><Database className="mb-3 h-9 w-9 text-[#334155]" /><p className="text-sm font-medium text-white">Distribuição por módulo indisponível</p><p className="mt-1 max-w-sm text-xs leading-5 text-[#94A3B8]">A API atual não retornou essa série. Nenhum módulo foi inventado para preencher o gráfico.</p></div>}
+          {loading ? <div className="space-y-4">{[...Array(4)].map((_, index) => <div key={index} className="space-y-1"><div className="h-3 w-20 animate-pulse rounded bg-[#1E2535]" /><div className="h-1.5 animate-pulse rounded bg-[#1E2535]" /></div>)}</div> : activityModules.length > 0 ? <div className="space-y-4">{activityModules.map((module, index) => <ActivityBar key={`${module.label || module.moduleSigla || index}`} label={module.label || module.moduleSigla || 'Módulo não identificado'} value={Number(module.value) || 0} max={maxActivity} />)}</div> : <div className="flex min-h-40 flex-col items-center justify-center text-center"><Database className="mb-3 h-9 w-9 text-[#334155]" /><p className="text-sm font-medium text-white">Distribuição por módulo indisponível</p><p className="mt-1 max-w-sm text-xs leading-5 text-[#94A3B8]">A API atual não retornou essa série. Nenhum módulo foi inventado para preencher o gráfico.</p></div>}
         </div>
 
         <div className="flex flex-col rounded-xl border border-[#1E2535] bg-[#161B27] p-5">
@@ -250,3 +250,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

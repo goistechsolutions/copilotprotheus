@@ -101,11 +101,11 @@ def resolve_global_module(
         row = db.execute(
             text("""
                 SELECT
-                    mod_code,
-                    mod_sigla,
-                    mod_name
+                    id AS mod_code,
+                    module_sigla AS mod_sigla,
+                    description AS mod_name
                 FROM public.protheus_modules_master
-                WHERE mod_code = :mod_code
+                WHERE id = :mod_code
                   AND active = TRUE
                 LIMIT 1
             """),
@@ -129,9 +129,9 @@ def resolve_global_module(
                 SELECT
                     bdm.mod_code,
                     bdm.mod_sigla,
-                    COALESCE(pm.mod_name, bdm.domain_code) AS mod_name
+                    COALESCE(pm.description, bdm.domain_code) AS mod_name
                 FROM public.business_domain_modules bdm
-                LEFT JOIN public.protheus_modules_master pm ON pm.mod_code = bdm.mod_code
+                LEFT JOIN public.protheus_modules_master pm ON pm.id = bdm.mod_code
                 WHERE (
                     UPPER(TRIM(bdm.domain_code)) = :token
                     OR UPPER(TRIM(bdm.mod_sigla)) = :token
@@ -157,11 +157,11 @@ def resolve_global_module(
         try:
             fallback_row = db.execute(
                 text("""
-                    SELECT mod_code, mod_sigla, mod_name
+                    SELECT id AS mod_code, module_sigla AS mod_sigla, description AS mod_name
                     FROM public.protheus_modules_master
-                    WHERE UPPER(TRIM(mod_sigla)) = :sigla
+                    WHERE UPPER(TRIM(module_sigla)) = :sigla
                       AND active = TRUE
-                    ORDER BY mod_code ASC
+                    ORDER BY id ASC
                     LIMIT 1
                 """),
                 {"sigla": canonical_sigla},
@@ -182,25 +182,25 @@ def resolve_global_module(
     row = db.execute(
         text("""
             SELECT
-                mod_code,
-                mod_sigla,
-                mod_name
+                id AS mod_code,
+                module_sigla AS mod_sigla,
+                description AS mod_name
             FROM public.protheus_modules_master
             WHERE active = TRUE
               AND (
-                    UPPER(TRIM(mod_sigla)) = :sigla
-                 OR UPPER(TRIM(mod_sigla)) = :token
-                 OR UPPER(TRIM(mod_sigla)) = 'SIGA' || :token
-                 OR UPPER(COALESCE(mod_name, '')) LIKE '%' || :token || '%'
+                    UPPER(TRIM(module_sigla)) = :sigla
+                 OR UPPER(TRIM(module_sigla)) = :token
+                 OR UPPER(TRIM(module_sigla)) = 'SIGA' || :token
+                 OR UPPER(COALESCE(description, '')) LIKE '%' || :token || '%'
               )
             ORDER BY
               CASE
-                WHEN UPPER(TRIM(mod_sigla)) = :sigla THEN 1
-                WHEN UPPER(TRIM(mod_sigla)) = 'SIGA' || :token THEN 2
-                WHEN UPPER(TRIM(mod_sigla)) = :token THEN 3
+                WHEN UPPER(TRIM(module_sigla)) = :sigla THEN 1
+                WHEN UPPER(TRIM(module_sigla)) = 'SIGA' || :token THEN 2
+                WHEN UPPER(TRIM(module_sigla)) = :token THEN 3
                 ELSE 4
               END,
-              mod_code ASC
+              id ASC
             LIMIT 1
         """),
         {"token": token, "sigla": target_sigla},

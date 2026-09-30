@@ -15,23 +15,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CompanyModuleAvailableItem(BaseModel):
-    module_id: Optional[str] = None
-    module_code: str = Field(..., min_length=1, max_length=30)
-    mod_code: int = Field(..., gt=0)
-    module_sigla: Optional[str] = None
-    module_name: str = Field(..., min_length=1, max_length=120)
-
+    id: int
+    module_sigla: str
+    description: str
 
 class CompanyModuleAssignedItem(BaseModel):
     company_id: int
     tenant_id: str
     company_name: Optional[str] = Field(None, description="Nome da empresa (company_info.company_name)")
     branch_code: Optional[str] = Field(None, max_length=60, description="Filial (company_info.branch_code)")
-    module_id: Optional[str] = None
-    module_code: str
-    mod_code: Optional[int] = None
-    module_sigla: Optional[str] = None
-    module_name: str
+    id: int
+    module_sigla: str
+    description: str
     enabled: bool = True
     contract_status: Optional[str] = "unlicensed"
     created_at: Optional[datetime] = None

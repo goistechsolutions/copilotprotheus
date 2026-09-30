@@ -11,11 +11,11 @@ function normalizeEnvironmentCode(environmentCode) {
 }
 
 function normalizeModule(item = {}) {
-  const moduleCode = String(item.module_code || '').trim().toUpperCase();
-  const modCode = Number(item.mod_code);
-  const moduleName = String(item.module_name || '').trim();
+  const moduleId = Number(item.moduleId);
+  const moduleSigla = String(item.moduleSigla || '').trim().toUpperCase();
+  const description = String(item.description || '').trim();
 
-  if (!moduleCode || !Number.isInteger(modCode) || modCode <= 0 || !moduleName) {
+  if (!Number.isInteger(moduleId) || moduleId <= 0 || !moduleSigla || !description) {
     const error = new Error('Resposta inválida do catálogo de módulos.');
     error.code = 'INVALID_MODULE_CATALOG_RESPONSE';
     throw error;
@@ -23,9 +23,9 @@ function normalizeModule(item = {}) {
 
   return {
     ...item,
-    module_code: moduleCode,
-    mod_code: modCode,
-    module_name: moduleName,
+    moduleId,
+    moduleSigla,
+    description,
   };
 }
 
@@ -48,12 +48,9 @@ export async function getCompanyModules(companyId) {
   };
 }
 
-export async function saveCompanyModules(companyId, modules) {
+export async function saveCompanyModules(companyId, moduleIds) {
   const payload = {
-    modules: modules.map((item) => ({
-      module_code: item.module_code,
-      enabled: !!item.enabled,
-    })),
+    moduleIds: moduleIds.map((id) => Number(id)),
   };
 
   const { data } = await api.post(`/api/companies/${companyId}/modules`, payload);

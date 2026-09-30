@@ -53,7 +53,7 @@ export default function CompanyModulesTab({ company }) {
 
       const assignedMap = {};
       for (const item of assigned) {
-        assignedMap[item.module_code] = !!item.enabled;
+        assignedMap[item.moduleId] = !!item.enabled;
       }
 
       setAvailableModules(available);
@@ -69,7 +69,7 @@ export default function CompanyModulesTab({ company }) {
     }
   }
 
-  function toggleModule(moduleCode) {
+  function toggleModule(moduleId) {
     setSelectedMap((prev) => ({
       ...prev,
       [moduleCode]: !prev[moduleCode],
@@ -79,7 +79,7 @@ export default function CompanyModulesTab({ company }) {
   function selectAll() {
     const next = {};
     for (const item of filteredModules) {
-      next[item.module_code] = true;
+      next[item.moduleId] = true;
     }
     setSelectedMap((prev) => ({ ...prev, ...next }));
   }
@@ -87,7 +87,7 @@ export default function CompanyModulesTab({ company }) {
   function clearAll() {
     const next = { ...selectedMap };
     for (const item of filteredModules) {
-      next[item.module_code] = false;
+      next[item.moduleId] = false;
     }
     setSelectedMap(next);
   }
@@ -99,11 +99,8 @@ export default function CompanyModulesTab({ company }) {
 
     try {
       const modules = availableModules
-        .filter((item) => !!selectedMap[item.module_code])
-        .map((item) => ({
-          module_code: item.module_code,
-          enabled: true,
-        }));
+        .filter((item) => !!selectedMap[item.moduleId])
+        .map((item) => item.moduleId);
 
       const res = await saveCompanyModules(companyId, modules);
 
@@ -143,8 +140,8 @@ export default function CompanyModulesTab({ company }) {
     if (!term) return availableModules;
 
     return availableModules.filter((item) => {
-      const code = item.module_code?.toLowerCase() || '';
-      const name = item.module_name?.toLowerCase() || '';
+      const code = String(item.moduleSigla || '').toLowerCase();
+      const name = item.description?.toLowerCase() || '';
       return code.includes(term) || name.includes(term);
     });
   }, [availableModules, filter]);
@@ -287,11 +284,11 @@ export default function CompanyModulesTab({ company }) {
 
             <tbody className="divide-y divide-slate-100 bg-white">
               {filteredModules.map((item) => {
-                const isChecked = !!selectedMap[item.module_code];
+                const isChecked = !!selectedMap[item.moduleId];
                 return (
                   <tr
-                    key={item.module_code}
-                    onClick={() => toggleModule(item.module_code)}
+                    key={item.moduleId}
+                    onClick={() => toggleModule(item.moduleId)}
                     className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${
                       isChecked ? 'bg-blue-50/20' : ''
                     }`}
@@ -300,7 +297,7 @@ export default function CompanyModulesTab({ company }) {
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={() => toggleModule(item.module_code)}
+                        onChange={() => toggleModule(item.moduleId)}
                         className="h-4 w-4 rounded border-slate-300 text-blue-600 cursor-pointer focus:ring-blue-500 focus:ring-offset-0"
                       />
                     </td>
@@ -308,11 +305,11 @@ export default function CompanyModulesTab({ company }) {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
                         isChecked ? 'bg-blue-100 text-blue-800 font-bold' : 'bg-slate-100 text-slate-700'
                       }`}>
-                        {item.module_code}
+                        {item.moduleId}
                       </span>
                     </td>
                     <td className="px-4 py-3.5 text-sm font-medium text-slate-700">
-                      {item.module_name}
+                      {item.description}
                     </td>
                   </tr>
                 );
@@ -340,3 +337,7 @@ export default function CompanyModulesTab({ company }) {
     </div>
   );
 }
+
+
+
+

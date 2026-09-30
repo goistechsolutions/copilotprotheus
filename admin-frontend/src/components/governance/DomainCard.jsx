@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 export default function DomainCard({ domain }) {
   const primaryMod = domain.modules?.find(m => m.is_primary) || domain.modules?.[0];
-  const modSigla = primaryMod ? primaryMod.mod_sigla : 'Sem Módulo';
+  const modSigla = primaryMod ? primaryMod.moduleSigla : 'Sem Módulo';
 
   return (
     <div className="rounded-2xl bg-[#0F172A] border border-slate-800 p-6 hover:border-cyan-500 transition flex flex-col justify-between">
@@ -39,3 +39,4 @@ function Stat({ icon, label, value }) {
     </div>
   );
 }
+
