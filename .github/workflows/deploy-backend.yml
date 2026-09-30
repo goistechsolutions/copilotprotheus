@@ -197,6 +197,10 @@ jobs:
             SQL_COUNT=0
             for sql_file in database/migrations/*.sql; do
               [ -f "$sql_file" ] || { echo "⚠️  Nenhum arquivo SQL encontrado em database/migrations/"; break; }
+              if [[ "$sql_file" == *_down.sql ]]; then
+                echo "Ignorando migration down: $sql_file"
+                continue
+              fi
               SQL_COUNT=$((SQL_COUNT + 1))
               BASENAME=$(basename "$sql_file")
               echo "→ Copiando $BASENAME para container..."
