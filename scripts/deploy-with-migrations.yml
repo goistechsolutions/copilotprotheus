@@ -1,0 +1,177 @@
+name: Deploy + DB Migrations
+
+on:
+  workflow_run:
+    workflows: ["Deploy Backend"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: 'Executar migrations SQL pendentes?'
+        required: false
+        default: true
+        type: boolean
+      wipe_database:
+        description: 'DESTRUTIVO: apagar o volume do banco e recriar do zero'
+        required: false
+        default: false
+        type: boolean
+      wipe_confirmation:
+        description: 'Para apagar o banco digite exatamente APAGAR-COPILOTPROTHEUS'
+        required: false
+        default: ''
+        type: string
+
+env:
+  DEPLOY_DIR: /root/copilotprotheus
+  BACKUP_DIR: /root/backups/copilotprotheus
+
+jobs:
+  lint:
+    name: Lint e validacao
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guarda de operacao destrutiva
+        env:
+          WIPE: ${{ github.event.inputs.wipe_database }}
+          CONFIRM: ${{ github.event.inputs.wipe_confirmation }}
+        run: |
+          if [ "$WIPE" = "true" ] && [ "$CONFIRM" != "APAGAR-COPILOTPROTHEUS" ]; then
+            echo "wipe_database exige wipe_confirmation = APAGAR-COPILOTPROTHEUS"
+            exit 1
+          fi
+
+      - name: Validar migrations
+        run: |
+          bash -n scripts/apply_migrations.sh
+          find database/migrations -maxdepth 1 -name '*.sql' ! -name '*_down.sql' | LC_ALL=C sort
+          test -z "$(find database/migrations -maxdepth 1 -name '*_down.sql' -newer scripts/apply_migrations.sh -print -quit)" || true
+
+      - name: Validar docker-compose.yml
+        run: |
+          printf '%s\n' CLOUDFLARE_TUNNEL_TOKEN=dummy POSTGRES_USER=dummy POSTGRES_PASSWORD=dummy \
+            POSTGRES_DB=dummy SECRET_KEY=dummy DATABASE_URL=postgresql://dummy:dummy@postgres:5432/dummy \
+            OPENAI_API_KEY=dummy CORS_ORIGINS=dummy ENVIRONMENT=ci LOG_LEVEL=INFO > .env
+          docker compose -f docker-compose.yml config --quiet
+
+  deploy:
+    name: Deploy VPS + Migrations
+    needs: lint
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/id_ed25519\n  IdentitiesOnly yes\n  ServerAliveInterval 30\n' \
+            "$VPS_HOST" "$VPS_USER" "$VPS_PORT" > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Copiar codigo para a VPS
+        run: |
+          ssh vps "mkdir -p '$DEPLOY_DIR' '$BACKUP_DIR'"
+          rsync -az --delete \
+            --exclude='.git' --exclude='.env' --exclude='node_modules' \
+            --exclude='*.pyc' --exclude='__pycache__' --exclude='backups' \
+            ./ "vps:$DEPLOY_DIR/"
+
+      - name: Criar .env na VPS
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET || secrets.ADMIN_JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          ADMIN_USER: ${{ secrets.ADMIN_USER }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_JWT_SECRET: ${{ secrets.ADMIN_JWT_SECRET }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+        run: |
+          umask 077
+          {
+            echo "SECRET_KEY=$SECRET_KEY"
+            echo "JWT_SECRET=$JWT_SECRET"
+            echo "POSTGRES_DB=copilotprotheus"
+            echo "POSTGRES_USER=copilot"
+            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+            echo "DATABASE_URL=postgresql://copilot:$POSTGRES_PASSWORD@postgres:5432/copilotprotheus"
+            echo "OPENAI_API_KEY=$OPENAI_API_KEY"
+            echo "GEMINI_API_KEY=$GEMINI_API_KEY"
+            echo "CLOUDFLARE_TUNNEL_TOKEN=$CLOUDFLARE_TUNNEL_TOKEN"
+            echo "ADMIN_USER=$ADMIN_USER"
+            echo "ADMIN_PASSWORD=$ADMIN_PASSWORD"
+            echo "ADMIN_JWT_SECRET=$ADMIN_JWT_SECRET"
+            echo "CORS_ORIGINS=$CORS_ORIGINS"
+            echo "ENVIRONMENT=production"
+            echo "LOG_LEVEL=INFO"
+          } > /tmp/app.env
+          ssh vps "cat > '$DEPLOY_DIR/.env' && chmod 600 '$DEPLOY_DIR/.env'" < /tmp/app.env
+          rm -f /tmp/app.env
+
+      - name: Backup e wipe (somente com confirmacao)
+        if: ${{ github.event.inputs.wipe_database == 'true' }}
+        run: |
+          ssh vps "cd '$DEPLOY_DIR' && docker compose exec -T db pg_dump -U copilot -d copilotprotheus -Fc > '$BACKUP_DIR/pre_wipe_\$(date +%Y%m%d_%H%M%S).dump' && docker compose down -v db"
+
+      - name: Subir banco
+        run: |
+          ssh vps "cd '$DEPLOY_DIR' && docker compose up -d db && sleep 8 && docker compose exec -T db pg_isready -U copilot -d copilotprotheus"
+
+      - name: Sincronizar senha do usuario copilot
+        env:
+          PW: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          ESC=${PW//\'/\'\'}
+          printf "ALTER USER copilot WITH PASSWORD '%s';\n" "$ESC" | \
+            ssh vps "cd '$DEPLOY_DIR' && docker compose exec -T db psql -U copilot -d copilotprotheus -X -q -v ON_ERROR_STOP=1"
+
+      - name: Aplicar migrations pendentes
+        if: ${{ github.event.inputs.run_migrations != 'false' }}
+        run: |
+          ssh vps "cd '$DEPLOY_DIR' && BACKUP_DIR='$BACKUP_DIR' bash scripts/apply_migrations.sh status && BACKUP_DIR='$BACKUP_DIR' bash scripts/apply_migrations.sh apply"
+
+      - name: Reiniciar containers
+        run: |
+          ssh vps "cd '$DEPLOY_DIR' && docker compose up -d --build --remove-orphans && docker compose ps"
+
+      - name: Health check
+        run: |
+          ssh vps "cd '$DEPLOY_DIR' && bash -s" <<'REMOTE'
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health || echo 000)
+            [ "$code" = "200" ] && { echo "Health OK"; exit 0; }
+            echo "Tentativa $i: HTTP $code"; sleep 10
+          done
+          docker compose logs backend --tail 80
+          exit 1
+          REMOTE
+
+      - name: Resumo
+        if: always()
+        run: |
+          {
+            echo "## Deploy"
+            echo "- Commit: ${{ github.sha }}"
+            echo "- Migrations: ${{ github.event.inputs.run_migrations || 'true' }}"
+            echo "- Wipe: ${{ github.event.inputs.wipe_database || 'false' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
