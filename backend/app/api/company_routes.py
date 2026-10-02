@@ -142,28 +142,26 @@ async def get_available_modules(
             mod_code_int = int(mod_code_raw) if mod_code_raw.isdigit() else 0
             seen.add(mod_sigla)
             items.append({
-                "module_id": None,
-                "module_code": mod_sigla,
-                "mod_code":  mod_code_int,
+                "id": mod_code_int,
                 "module_sigla": mod_sigla,
-                "module_name":  mod_name,
+                "description":  mod_name,
             })
 
             # ── Atualiza protheus_modules_master com os códigos reais do Protheus ──
             if mod_code_int > 0:
                 try:
                     existing = db.query(ProtheusModuleMaster).filter(
-                        ProtheusModuleMaster.mod_sigla == mod_sigla
+                        ProtheusModuleMaster.id == mod_code_int
                     ).first()
                     if existing:
-                        existing.mod_code = mod_code_int
-                        existing.mod_name = mod_name or existing.mod_name
+                        existing.module_sigla = mod_sigla or existing.module_sigla
+                        existing.description = mod_name or existing.description
                         existing.active   = True
                     else:
                         db.add(ProtheusModuleMaster(
-                            mod_code=mod_code_int,
-                            mod_sigla=mod_sigla,
-                            mod_name=mod_name,
+                            id=mod_code_int,
+                            module_sigla=mod_sigla,
+                            description=mod_name,
                             active=True
                         ))
                 except Exception as ex_upsert:
@@ -189,13 +187,11 @@ async def get_available_modules(
         "company_id": str(company_id),
         "items": [
             {
-                "module_id": str(m.id),
-                "module_code": m.mod_sigla,
-                "mod_code":  m.mod_code,
-                "module_sigla": m.mod_sigla,
-                "module_name":  m.mod_name or m.mod_sigla,
+                "id": m.id,
+                "module_sigla": m.module_sigla,
+                "description":  m.description or m.module_sigla,
             }
-            for m in master_mods if m.mod_sigla
+            for m in master_mods if m.module_sigla
         ],
     }
 

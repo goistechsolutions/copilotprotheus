@@ -161,8 +161,8 @@ def create_business_domain(
             for m in payload.modules:
                 mod_sigla_upper = m.mod_sigla.strip().upper()
                 master_mod = db.query(ProtheusModuleMaster).filter(
-                    ProtheusModuleMaster.mod_code == m.mod_code,
-                    ProtheusModuleMaster.mod_sigla == mod_sigla_upper
+                    ProtheusModuleMaster.id == m.mod_code,
+                    ProtheusModuleMaster.module_sigla == mod_sigla_upper
                 ).first()
                 if not master_mod:
                     db.rollback()
@@ -205,8 +205,8 @@ def update_business_domain(
             for m in payload.modules:
                 mod_sigla_upper = m.mod_sigla.strip().upper()
                 master_mod = db.query(ProtheusModuleMaster).filter(
-                    ProtheusModuleMaster.mod_code == m.mod_code,
-                    ProtheusModuleMaster.mod_sigla == mod_sigla_upper
+                    ProtheusModuleMaster.id == m.mod_code,
+                    ProtheusModuleMaster.module_sigla == mod_sigla_upper
                 ).first()
                 if not master_mod:
                     db.rollback()

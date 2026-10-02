@@ -70,3 +70,13 @@
 - Este diretório está vinculado ao repositório oficial no GitHub: **[goistechsolutions/copilotprotheus](https://github.com/goistechsolutions/copilotprotheus)** — branch `main`
 - Após **cada alteração de arquivo**, obrigatoriamente executar `git commit` seguido de `git push origin main`.
 - **Nunca** editar arquivos fora deste diretório. **Nunca** deixar alterações sem commit e push.
+
+---
+
+## 10. Arquitetura Multi-Tenant e Catálogo de Módulos (Novo Modelo)
+- O catálogo de módulos (\protheus_modules_master\) utiliza um \id\ numérico inteiro como chave primária, que corresponde ao código real do módulo no Protheus. Ele possui \module_sigla\ e \description\.
+- Nunca utilize ou assuma UUID para o id dos módulos, nem utilize campos antigos como \mod_code\ ou \mod_name\.
+- Cada tenant (empresa) possui seu próprio **schema físico** no PostgreSQL. 
+- Tabelas transacionais do Protheus não são replicadas. O schema do tenant abriga exclusivamente os metadados (\dictionary_tables\, \dictionary_fields\, \usiness_rules\, \documents\, \conversations\, \dashboards\, \nalyses\, etc).
+- **Não existem** mais tabelas de permissões individuais redundantes (\	enant_table_permissions\ ou \	enant_field_permissions\). O próprio \dictionary_tables\ e \dictionary_fields\ provisionado no schema do tenant funciona como a allowlist de acesso aos dados.
+

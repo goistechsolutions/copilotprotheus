@@ -218,22 +218,22 @@ class EntitlementGuard:
             text("""
                 SELECT
                     tmc.module_id::text AS module_id,
-                    pm.mod_code::text AS mod_code,
-                    pm.mod_sigla,
-                    pm.mod_name,
+                    pm.id::text AS mod_code,
+                    pm.module_sigla AS mod_sigla,
+                    pm.description AS mod_name,
                     tmc.status
                 FROM public.tenant_module_contracts tmc
                 JOIN public.protheus_modules_master pm
-                  ON pm.id::text = tmc.module_id::text
+                  ON pm.id = tmc.module_id
                 WHERE lower(btrim(tmc.tenant_id)) = :tenant_code
                   AND tmc.contract_id::text = :contract_id
                   AND lower(btrim(tmc.status)) IN ('active', 'enabled', 'allowed')
                   AND pm.active = TRUE
                   AND (
-                        pm.mod_code::text = CAST(:token AS text)
-                     OR upper(btrim(COALESCE(pm.mod_sigla, ''))) = CAST(:token AS text)
-                     OR upper(btrim(COALESCE(pm.mod_sigla, ''))) = 'SIGA' || CAST(:token AS text)
-                     OR upper(COALESCE(pm.mod_name, '')) LIKE '%' || CAST(:token AS text) || '%'
+                        pm.id::text = CAST(:token AS text)
+                     OR upper(btrim(COALESCE(pm.module_sigla, ''))) = CAST(:token AS text)
+                     OR upper(btrim(COALESCE(pm.module_sigla, ''))) = 'SIGA' || CAST(:token AS text)
+                     OR upper(COALESCE(pm.description, '')) LIKE '%' || CAST(:token AS text) || '%'
                   )
                 LIMIT 1
             """),

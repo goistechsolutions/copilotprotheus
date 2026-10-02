@@ -138,7 +138,7 @@ export default function CompanyDictionary({ company }) {
   }
 
   const moduleList = protheusModules.length > 0 
-    ? protheusModules.map(m => m.mod_sigla) 
+    ? protheusModules.map(m => m.moduleSigla) 
     : ['SIGAFAT', 'SIGAFIN', 'SIGACOM', 'SIGAEST', 'SIGAPCP', 'SIGACONT', 'SIGAFIS', 'SIGATMS', 'SIGAGPE', 'SIGAATF'];
 
   return (
@@ -268,3 +268,4 @@ export default function CompanyDictionary({ company }) {
     </div>
   );
 }
+

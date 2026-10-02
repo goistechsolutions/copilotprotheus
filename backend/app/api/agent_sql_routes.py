@@ -1045,9 +1045,9 @@ async def process_agent_task(task_id: str, payload: dict):
             try:
                 contracted_rows = db.execute(
                     text("""
-                        SELECT DISTINCT pm.mod_code::text
+                        SELECT DISTINCT pm.id::text
                         FROM public.tenant_module_contracts tmc
-                        JOIN public.protheus_modules_master pm ON pm.id::text = tmc.module_id::text
+                        JOIN public.protheus_modules_master pm ON pm.id = tmc.module_id
                         WHERE lower(btrim(tmc.tenant_id)) = :tenant_id
                           AND lower(btrim(tmc.status)) IN ('active', 'enabled', 'allowed')
                           AND pm.active = TRUE

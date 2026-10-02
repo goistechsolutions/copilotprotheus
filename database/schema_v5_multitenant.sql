@@ -24,18 +24,14 @@ CREATE TABLE IF NOT EXISTS public.plans (
 -- ─── CATÁLOGO GLOBAL DE MÓDULOS PROTHEUS ────────────────────────────────────
 -- Alimentado via: SELECT DISTINCT USR_MODULO, USR_CODMOD FROM SYS_USR_MODULE
 CREATE TABLE IF NOT EXISTS public.protheus_modules_master (
-    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    mod_code    INTEGER      NOT NULL,  -- USR_MODULO (1, 2, 3... 97)
-    mod_sigla   VARCHAR(30)  UNIQUE,    -- USR_CODMOD (SIGAFIN, SIGAFAT...)
-    mod_name    VARCHAR(150) NOT NULL,  -- Nome completo (SIGAFIN - Financeiro)
-    description TEXT,
-    active      BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ,
-    UNIQUE(mod_code)
+    id            INTEGER      PRIMARY KEY CHECK (id > 0),
+    module_sigla  VARCHAR(32)  NOT NULL UNIQUE CHECK (module_sigla = upper(module_sigla)),
+    description   VARCHAR(255) NOT NULL,
+    active        BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_pmm_code   ON public.protheus_modules_master(mod_code);
-CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(mod_sigla);
+CREATE INDEX IF NOT EXISTS idx_pmm_sigla  ON public.protheus_modules_master(module_sigla);
 
 -- ─── REGISTRO DE TENANTS ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.tenant_registry (
@@ -244,7 +240,7 @@ $$ LANGUAGE plpgsql;
 -- INSERT INICIAL: 54 módulos Protheus em public.protheus_modules_master
 -- Execute este bloco UMA VEZ após a criação do banco
 -- ═══════════════════════════════════════════════════════════════════════════
-INSERT INTO public.protheus_modules_master (mod_code, mod_sigla, mod_name) VALUES
+INSERT INTO public.protheus_modules_master (id, module_sigla, description) VALUES
   (1,  'SIGAATF', 'SIGAATF - Ativo Fixo'),
   (2,  'SIGAFAT', 'SIGAFAT - Faturamento'),
   (3,  'SIGACOM', 'SIGACOM - Compras / Suprimentos'),

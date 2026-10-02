@@ -1,0 +1,22 @@
+{
+  "package": "copilotprotheus_novo_modelo_20260930",
+  "files": [
+    "MAPEAMENTO_ARQUIVOS_NOVO_MODELO.md",
+    "README.md",
+    "VALIDACAO_ESTATICA.json",
+    "database/migrations/20260930_001_module_catalog_numeric_down.sql",
+    "database/migrations/20260930_001_module_catalog_numeric_up.sql",
+    "database/migrations/20260930_002_tenant_schema_factory_down.sql",
+    "database/migrations/20260930_002_tenant_schema_factory_up.sql",
+    "database/migrations/20260930_003_migrate_tenant_metadata_down.sql",
+    "database/migrations/20260930_003_migrate_tenant_metadata_up.sql",
+    "database/migrations/20260930_004_post_migration_verification.sql",
+    "scripts/map_new_model_references.sh"
+  ],
+  "module_contract": {
+    "id": 5,
+    "module_sigla": "SIGAFAT",
+    "description": "Vendas e Faturamento"
+  },
+  "validation": "static checks passed twice; not executed against PostgreSQL"
+}
