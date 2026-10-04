@@ -1,35 +1,12 @@
 {
-  "validation": "patch structure + Python syntax PASS",
   "files": [
     {
-      "file": "0001-backend.patch",
-      "sha256": "3810a976021129fd667f363438efd628239e9d9e41f05a135a5a601d67892b3f",
-      "bytes": 6079
-    },
-    {
-      "file": "0003-admin-frontend.patch",
-      "sha256": "90246972f8af72125f2a3f514b2ddf44747b31436e72888581f1188ee24deae6",
-      "bytes": 932
-    },
-    {
-      "file": "apply.sh",
-      "sha256": "2fe7105921ac5f87d735af221755ce59f90e6d80347a05f816eb48b00846ded7",
-      "bytes": 172
-    },
-    {
-      "file": "check_patches.py",
-      "sha256": "5056428b77acbe5f07b5cd432b26dda469ec66f0ecb58ff7c1a471fb510e3411",
-      "bytes": 330
-    },
-    {
       "file": "README.md",
-      "sha256": "53f62f3d799e5c1465940ea410ad32fc3a6c1fbdd5af03f7e20fa30b3b1122de",
-      "bytes": 246
+      "sha256": "f2ca129762c22fd6ae6efcab94b3d35b057dca759b04920ffa3a0c151e794138"
     },
     {
-      "file": "0002-frontend.patch",
-      "sha256": "49f8cce4ae88101eb5bd44d407d5630eb93d379d9e8e3833383e42670b514541",
-      "bytes": 2487
+      "file": "corrigir_e_validar.sh",
+      "sha256": "e9848d0a83de2f90e8be6df564dad7e07175e82cc353b990a2f10aa5e812cb09"
     }
   ]
 }

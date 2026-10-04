@@ -1,3 +1,1 @@
-# Patches v2
-
-Use `python3 check_patches.py /repo` e `./apply.sh /repo`. São add-only. Depois registre o router em `backend/app/main.py`, conecte dependências/pipeline reais, adote o hook v2 e instancie `createTenantApi` com o axios existente.
+Pacote para corrigir o hunk inválido do 0001-backend.patch e validar os patches.
