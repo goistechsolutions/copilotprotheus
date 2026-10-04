@@ -1,1 +1,0 @@
-Pacote para corrigir o hunk inválido do 0001-backend.patch e validar os patches.
