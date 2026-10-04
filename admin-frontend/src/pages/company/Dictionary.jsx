@@ -137,9 +137,7 @@ export default function CompanyDictionary({ company }) {
     );
   }
 
-  const moduleList = protheusModules.length > 0 
-    ? protheusModules.map(m => m.moduleSigla) 
-    : ['SIGAFAT', 'SIGAFIN', 'SIGACOM', 'SIGAEST', 'SIGAPCP', 'SIGACONT', 'SIGAFIS', 'SIGATMS', 'SIGAGPE', 'SIGAATF'];
+  const moduleList = protheusModules.map(m => m.moduleSigla);
 
   return (
     <div className="space-y-6">

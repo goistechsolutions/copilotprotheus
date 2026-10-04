@@ -6,12 +6,10 @@ import {
 import { 
   askCopilotQuery, 
   createNewConversationRemote, 
-  fetchConversationMessagesRemote, 
-  syncRemoteMessage 
+  fetchConversationMessagesRemote 
 } from '../services/copilotChatApi';
 
 const ACTIVE_CONV_STORAGE_PREFIX = 'cprot_active_conversation_id';
-const MESSAGE_SNAPSHOT_PREFIX = 'cprot_conversation_messages';
 
 function storageScope(context?: CopilotSessionContext): string {
   return [
@@ -28,73 +26,37 @@ function activeConversationKey(context?: CopilotSessionContext): string {
   return `${ACTIVE_CONV_STORAGE_PREFIX}:${storageScope(context)}`;
 }
 
-function messageSnapshotKey(context: CopilotSessionContext | undefined, conversationId: string): string {
-  return `${MESSAGE_SNAPSHOT_PREFIX}:${storageScope(context)}:${encodeURIComponent(conversationId)}`;
-}
-
-function readMessageSnapshot(context: CopilotSessionContext | undefined, conversationId: string): CopilotMessage[] {
-  try {
-    const saved = localStorage.getItem(messageSnapshotKey(context, conversationId));
-    const parsed = saved ? JSON.parse(saved) : [];
-    return Array.isArray(parsed) ? parsed.filter((message) => message?.status !== 'processing') : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeMessageSnapshot(context: CopilotSessionContext | undefined, conversationId: string, messages: CopilotMessage[]): void {
-  try {
-    const stableMessages = messages.filter((message) => message?.status !== 'processing');
-    localStorage.setItem(messageSnapshotKey(context, conversationId), JSON.stringify(stableMessages));
-  } catch {
-    // A falha de storage não pode impedir a conversa remota.
-  }
-}
-
 export function useCopilotConversation(context?: CopilotSessionContext) {
   const activeConversationStorageKey = activeConversationKey(context);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(() => {
     return localStorage.getItem(activeConversationStorageKey) || null;
   });
-  const [messages, setMessages] = useState<CopilotMessage[]>(() => {
-    const conversationId = localStorage.getItem(activeConversationStorageKey);
-    return conversationId ? readMessageSnapshot(context, conversationId) : [];
-  });
+  const [messages, setMessages] = useState<CopilotMessage[]>([]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const contextKey = JSON.stringify(context || {});
 
-  // Restaura imediatamente do snapshot; o backend continua sendo a fonte canônica.
+  // Restaura do backend que continua sendo a fonte canônica.
   useEffect(() => {
     if (currentConversationId) {
-      const snapshot = readMessageSnapshot(context, currentConversationId);
-      if (snapshot.length > 0) setMessages(snapshot);
       fetchConversationMessagesRemote(currentConversationId).then((loaded) => {
         if (loaded && loaded.length > 0) {
           setMessages((prev) => {
             // Preserva qualquer mensagem de processamento que tenha sido adicionada localmente
-            // enquanto a requisio de fetch estava em andamento.
+            // enquanto a requisicao de fetch estava em andamento.
             const processingMsgs = prev.filter((m) => m.status === 'processing');
             if (processingMsgs.length > 0) {
               return [...loaded, ...processingMsgs];
             }
             return loaded;
           });
-          writeMessageSnapshot(context, currentConversationId, loaded);
         }
       }).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentConversationId, contextKey]);
-
-  useEffect(() => {
-    if (currentConversationId && messages.length > 0) {
-      writeMessageSnapshot(context, currentConversationId, messages);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextKey, currentConversationId, messages]);
 
   const stopProcessing = useCallback(() => {
     if (abortControllerRef.current) {
@@ -117,16 +79,14 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
     stopProcessing();
     setCurrentConversationId(conversationId);
     localStorage.setItem(activeConversationStorageKey, conversationId);
-    const snapshot = readMessageSnapshot(context, conversationId);
-    setMessages(snapshot);
+    setMessages([]);
     try {
       const msgs = await fetchConversationMessagesRemote(conversationId);
       if (msgs.length > 0) {
         setMessages(msgs);
-        writeMessageSnapshot(context, conversationId, msgs);
       }
     } catch {
-      if (snapshot.length === 0) setMessages([]);
+      setMessages([]);
     }
   }, [activeConversationStorageKey, context, stopProcessing]);
 
@@ -158,7 +118,7 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
     const provMsg: CopilotMessage = {
       id: processingMessageId,
       role: 'assistant',
-      content: 'Consultando banco de dados Oracle...',
+      content: 'Processando...',
       status: 'processing',
       timestamp: new Date().toISOString(),
     };
@@ -166,14 +126,19 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
     setMessages((prev) => [...prev, userMsg, provMsg]);
     setIsProcessing(true);
 
-    // Sincroniza pergunta do usuário no backend
-    syncRemoteMessage(convId, 'user', text, { originPrompt: text });
-
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const response = await askCopilotQuery(text, context, controller.signal);
+      const response = await askCopilotQuery(convId, text, context, controller.signal);
+
+      const dbRef = response.dashboardId ? {
+        id: response.dashboardId,
+        analysisId: response.analysisId,
+        title: text,
+        originPrompt: text,
+        payload: response.dashboard
+      } : response.dashboard;
 
       // 3. Substitui mensagem provisória pela resposta definitiva
       const assistantMsg: CopilotMessage = {
@@ -182,7 +147,7 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
         content: response.content,
         status: 'done',
         timestamp: new Date().toISOString(),
-        dashboard: response.dashboard || null,
+        dashboard: dbRef || null,
         suggestions: response.suggestions || [],
       };
 
@@ -190,20 +155,13 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
         prev.map((m) => (m.id === processingMessageId ? assistantMsg : m))
       );
 
-      // Sincroniza resposta no backend
-      syncRemoteMessage(convId, 'assistant', response.content, {
-        originPrompt: text,
-        dashboard: response.dashboard,
-        suggestions: response.suggestions,
-      });
-
     } catch (err: any) {
       if (err.name === 'AbortError') return;
 
       const errorMsg: CopilotMessage = {
         id: processingMessageId,
         role: 'assistant',
-        content: err.message || 'Ocorreu um erro ao processar sua consulta.',
+        content: err.message || 'Ocorreu um erro ao processar sua consulta. Tente novamente.',
         status: 'error',
         errorCode: 'QUERY_EXECUTION_ERROR',
         timestamp: new Date().toISOString(),

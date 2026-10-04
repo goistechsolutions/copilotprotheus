@@ -71,3 +71,25 @@ export interface OpenDashboardDetail {
   dashboardId: string;
   dashboard?: CopilotDashboardReference;
 }
+
+export interface AnalysisContext {
+  analysisId: string;
+  presentation?: any;
+}
+
+export interface DashboardReference {
+  dashboardId: string;
+  analysisId: string;
+  title: string;
+  updatedAt?: string;
+  payload?: any;
+}
+
+export interface TurnResponse {
+  turnId: string;
+  content: string;
+  analysisId?: string;
+  dashboardId?: string;
+  presentation?: any;
+  suggestions?: string[];
+}

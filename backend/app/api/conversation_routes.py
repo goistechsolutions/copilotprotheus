@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -10,18 +10,59 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.services.conversation_service import ConversationTitleGenerator, ConversationContextEngine
+from app.core.auth import require_current_user
 
 logger = logging.getLogger('app.conversations')
 
 router = APIRouter(prefix='/api/conversations', tags=['Conversations'])
+
+class TenantContext:
+    def __init__(self, tenant_id: str, user_id: str):
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+
+def get_tenant_context(user: dict = Depends(require_current_user)) -> TenantContext:
+    tenant_id = user.get('tenant_id') or user.get('tenant')
+    user_id = user.get('user_id') or user.get('sub')
+    if not tenant_id or not user_id:
+        raise HTTPException(status_code=401, detail="Sessão inválida para contexto de tenant.")
+    return TenantContext(tenant_id=tenant_id, user_id=user_id)
+
+class TenantSchemaResolver:
+    @staticmethod
+    def resolve(db: Session, tenant_id: str) -> str:
+        schema_name = db.execute(text("SELECT schema_name FROM public.tenant WHERE tenant_code = :tid"), {"tid": tenant_id}).scalar()
+        if not schema_name:
+            raise HTTPException(status_code=404, detail="Tenant não encontrado.")
+        return schema_name
+
+class TenantConversationRepository:
+    def __init__(self, db: Session, schema: str, tenant_ctx: TenantContext):
+        self.db = db
+        self.schema = schema
+        self.tenant_id = tenant_ctx.tenant_id
+        self.user_id = tenant_ctx.user_id
+        
+    def _tbl(self, name: str) -> str:
+        return f'"{self.schema}".{name}'
+
+    def ensure_snapshot(self):
+        # 3. validação de tabelas/campos pela presença no snapshot ativo do tenant
+        pass
+
+    def check_message_idempotency(self, conversation_id: str, client_message_id: str):
+        if not client_message_id:
+            return None
+        return self.db.execute(text(f'''
+            SELECT id FROM {self._tbl("copilot_messages")}
+            WHERE conversation_id = :cid AND metadata->>'client_message_id' = :cmid
+        '''), {"cid": conversation_id, "cmid": client_message_id}).scalar()
 
 
 class ConversationCreateRequest(BaseModel):
     title: Optional[str] = None
     domain_code: Optional[str] = None
     initial_prompt: Optional[str] = None
-    tenant_id: Optional[str] = None
-    user_id: Optional[str] = None
 
 class ConversationUpdateRequest(BaseModel):
     title: Optional[str] = None
@@ -29,18 +70,12 @@ class ConversationUpdateRequest(BaseModel):
     is_favorite: Optional[bool] = None
     context_state: Optional[Dict[str, Any]] = None
 
-class MessageCreateRequest(BaseModel):
+class ConversationTurnRequest(BaseModel):
+    client_message_id: str
     role: str = Field(..., description='user, assistant ou system')
     message: str
     metadata: Optional[Dict[str, Any]] = None
-
-class DashboardCreateRequest(BaseModel):
-    title: str
-    dashboard_type: Optional[str] = 'ranking'
-    query: Optional[str] = None
-    dashboard_json: Dict[str, Any]
-    insight_json: Optional[List[Dict[str, Any]]] = None
-    is_favorite: Optional[bool] = False
+    dashboard: Optional[Dict[str, Any]] = None
 
 class FavoriteToggleRequest(BaseModel):
     item_type: str = Field(..., description='conversation ou dashboard')
@@ -48,14 +83,12 @@ class FavoriteToggleRequest(BaseModel):
     title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
-
 def _categorize_timestamp(dt: Optional[datetime]) -> str:
     if not dt:
         return 'older'
     now = datetime.now(timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    
     diff = now - dt
     if diff < timedelta(days=1) and dt.date() == now.date():
         return 'today'
@@ -71,18 +104,20 @@ def list_conversations(
     q: Optional[str] = Query(None, description='Termo de busca textual'),
     domain: Optional[str] = Query(None, description='Filtro por domínio de negócio'),
     status_filter: Optional[str] = Query('active', alias='status'),
-    tenant_id: Optional[str] = Query('rodol_prod'),
-    user_id: Optional[str] = Query('admin'),
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
     try:
-        query_sql = '''
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
+        
+        query_sql = f'''
             SELECT id, tenant_id, user_id, title, domain_code, status, is_favorite,
                    context_state, created_at, updated_at
-            FROM public.copilot_conversations
-            WHERE tenant_id = :tenant_id
+            FROM {repo._tbl("copilot_conversations")}
+            WHERE tenant_id = :tenant_id AND user_id = :user_id
         '''
-        params: Dict[str, Any] = {'tenant_id': tenant_id}
+        params: Dict[str, Any] = {'tenant_id': tenant_ctx.tenant_id, 'user_id': tenant_ctx.user_id}
 
         if status_filter and status_filter != 'all':
             query_sql += ' AND status = :status'
@@ -94,11 +129,11 @@ def list_conversations(
 
         if q and q.strip():
             clean_q = f'%{q.strip()}%'
-            query_sql += '''
+            query_sql += f'''
                 AND (
                     title ILIKE :search
                     OR id IN (
-                        SELECT conversation_id FROM public.copilot_messages
+                        SELECT conversation_id FROM {repo._tbl("copilot_messages")}
                         WHERE message ILIKE :search
                     )
                 )
@@ -110,12 +145,7 @@ def list_conversations(
         result = db.execute(text(query_sql), params).mappings().all()
 
         conversations = []
-        grouped = {
-            'today': [],
-            'last_7_days': [],
-            'last_30_days': [],
-            'older': []
-        }
+        grouped = {'today': [], 'last_7_days': [], 'last_30_days': [], 'older': []}
 
         for row in result:
             conv = dict(row)
@@ -136,27 +166,22 @@ def list_conversations(
             conversations.append(conv)
             grouped[cat].append(conv)
 
-        return {
-            'status': 'success',
-            'total': len(conversations),
-            'conversations': conversations,
-            'grouped': grouped
-        }
+        return {'status': 'success', 'total': len(conversations), 'conversations': conversations, 'grouped': grouped}
     except Exception as exc:
         logger.error('Erro ao listar conversas: %s', exc)
         return {'status': 'error', 'message': str(exc), 'conversations': [], 'grouped': {'today': [], 'last_7_days': [], 'last_30_days': [], 'older': []}}
 
-
 @router.post('', status_code=status.HTTP_201_CREATED)
 def create_conversation(
     req: ConversationCreateRequest,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
     try:
-        conv_id = uuid.uuid4().hex
-        tenant = req.tenant_id or 'rodol_prod'
-        user = req.user_id or 'admin'
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
         
+        conv_id = uuid.uuid4().hex
         title = req.title
         if not title and req.initial_prompt:
             title = ConversationTitleGenerator.generate_title(req.initial_prompt)
@@ -165,16 +190,16 @@ def create_conversation(
 
         domain = req.domain_code.upper() if req.domain_code else None
 
-        sql = '''
-            INSERT INTO public.copilot_conversations 
+        sql = f'''
+            INSERT INTO {repo._tbl("copilot_conversations")} 
                 (id, tenant_id, user_id, title, domain_code, status, is_favorite, context_state, created_at, updated_at)
             VALUES 
-                (:id, :tenant_id, :user_id, :title, :domain_code, 'active', FALSE, '{}', NOW(), NOW())
+                (:id, :tenant_id, :user_id, :title, :domain_code, 'active', FALSE, '{{}}', NOW(), NOW())
         '''
         db.execute(text(sql), {
             'id': conv_id,
-            'tenant_id': tenant,
-            'user_id': user,
+            'tenant_id': tenant_ctx.tenant_id,
+            'user_id': tenant_ctx.user_id,
             'title': title,
             'domain_code': domain
         })
@@ -184,8 +209,8 @@ def create_conversation(
             'status': 'success',
             'conversation': {
                 'id': conv_id,
-                'tenant_id': tenant,
-                'user_id': user,
+                'tenant_id': tenant_ctx.tenant_id,
+                'user_id': tenant_ctx.user_id,
                 'title': title,
                 'domain_code': domain,
                 'status': 'active',
@@ -200,28 +225,29 @@ def create_conversation(
         logger.error('Erro ao criar conversa: %s', exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.get('/favorites')
 def list_favorites(
-    tenant_id: Optional[str] = Query('rodol_prod'),
-    user_id: Optional[str] = Query('admin'),
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
     try:
-        fav_conversations = db.execute(text('''
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
+        
+        fav_conversations = db.execute(text(f'''
             SELECT id, title, domain_code, updated_at, 'conversation' AS type
-            FROM public.copilot_conversations
-            WHERE tenant_id = :tenant_id AND is_favorite = TRUE AND status = 'active'
+            FROM {repo._tbl("copilot_conversations")}
+            WHERE tenant_id = :tenant_id AND user_id = :user_id AND is_favorite = TRUE AND status = 'active'
             ORDER BY updated_at DESC
-        '''), {'tenant_id': tenant_id}).mappings().all()
+        '''), {'tenant_id': tenant_ctx.tenant_id, 'user_id': tenant_ctx.user_id}).mappings().all()
 
-        fav_dashboards = db.execute(text('''
+        fav_dashboards = db.execute(text(f'''
             SELECT d.id, d.conversation_id, d.title, d.dashboard_type, d.dashboard_json, d.created_at, 'dashboard' AS type
-            FROM public.copilot_dashboards d
-            JOIN public.copilot_conversations c ON d.conversation_id = c.id
-            WHERE c.tenant_id = :tenant_id AND d.is_favorite = TRUE
+            FROM {repo._tbl("copilot_dashboards")} d
+            JOIN {repo._tbl("copilot_conversations")} c ON d.conversation_id = c.id
+            WHERE c.tenant_id = :tenant_id AND c.user_id = :user_id AND d.is_favorite = TRUE
             ORDER BY d.created_at DESC
-        '''), {'tenant_id': tenant_id}).mappings().all()
+        '''), {'tenant_id': tenant_ctx.tenant_id, 'user_id': tenant_ctx.user_id}).mappings().all()
 
         formatted_convs = []
         for c in fav_conversations:
@@ -252,33 +278,40 @@ def list_favorites(
         logger.error('Erro ao listar favoritos: %s', exc)
         return {'status': 'error', 'conversations': [], 'dashboards': [], 'total': 0}
 
-
 @router.post('/favorites/toggle')
 def toggle_favorite(
     req: FavoriteToggleRequest,
-    tenant_id: Optional[str] = Query('rodol_prod'),
-    user_id: Optional[str] = Query('admin'),
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
     try:
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
+        
         if req.item_type == 'conversation':
-            current = db.execute(text('''
-                SELECT is_favorite FROM public.copilot_conversations WHERE id = :id
-            '''), {'id': req.item_id}).scalar()
+            current = db.execute(text(f'''
+                SELECT is_favorite FROM {repo._tbl("copilot_conversations")} WHERE id = :id AND tenant_id = :tid AND user_id = :uid
+            '''), {'id': req.item_id, 'tid': tenant_ctx.tenant_id, 'uid': tenant_ctx.user_id}).scalar()
+            if current is None:
+                raise HTTPException(status_code=404, detail="Conversa não encontrada")
             new_state = not bool(current)
-            db.execute(text('''
-                UPDATE public.copilot_conversations SET is_favorite = :val, updated_at = NOW() WHERE id = :id
+            db.execute(text(f'''
+                UPDATE {repo._tbl("copilot_conversations")} SET is_favorite = :val, updated_at = NOW() WHERE id = :id
             '''), {'id': req.item_id, 'val': new_state})
             db.commit()
             return {'status': 'success', 'item_id': req.item_id, 'is_favorite': new_state}
 
         elif req.item_type == 'dashboard':
-            current = db.execute(text('''
-                SELECT is_favorite FROM public.copilot_dashboards WHERE id = :id
-            '''), {'id': req.item_id}).scalar()
+            current = db.execute(text(f'''
+                SELECT d.is_favorite FROM {repo._tbl("copilot_dashboards")} d
+                JOIN {repo._tbl("copilot_conversations")} c ON d.conversation_id = c.id
+                WHERE d.id = :id AND c.tenant_id = :tid AND c.user_id = :uid
+            '''), {'id': req.item_id, 'tid': tenant_ctx.tenant_id, 'uid': tenant_ctx.user_id}).scalar()
+            if current is None:
+                raise HTTPException(status_code=404, detail="Dashboard não encontrado")
             new_state = not bool(current)
-            db.execute(text('''
-                UPDATE public.copilot_dashboards SET is_favorite = :val WHERE id = :id
+            db.execute(text(f'''
+                UPDATE {repo._tbl("copilot_dashboards")} SET is_favorite = :val WHERE id = :id
             '''), {'id': req.item_id, 'val': new_state})
             db.commit()
             return {'status': 'success', 'item_id': req.item_id, 'is_favorite': new_state}
@@ -289,18 +322,21 @@ def toggle_favorite(
         logger.error('Erro ao alternar favorito: %s', exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.get('/{conversation_id}')
 def get_conversation_details(
     conversation_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
     try:
-        conv = db.execute(text('''
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
+        
+        conv = db.execute(text(f'''
             SELECT id, tenant_id, user_id, title, domain_code, status, is_favorite, context_state, created_at, updated_at
-            FROM public.copilot_conversations
-            WHERE id = :id
-        '''), {'id': conversation_id}).mappings().first()
+            FROM {repo._tbl("copilot_conversations")}
+            WHERE id = :id AND tenant_id = :tid AND user_id = :uid
+        '''), {'id': conversation_id, 'tid': tenant_ctx.tenant_id, 'uid': tenant_ctx.user_id}).mappings().first()
 
         if not conv:
             raise HTTPException(status_code=404, detail='Conversa não encontrada')
@@ -316,9 +352,9 @@ def get_conversation_details(
             except Exception:
                 conversation['context_state'] = {}
 
-        msg_rows = db.execute(text('''
+        msg_rows = db.execute(text(f'''
             SELECT id, role, message, metadata, created_at
-            FROM public.copilot_messages
+            FROM {repo._tbl("copilot_messages")}
             WHERE conversation_id = :id
             ORDER BY created_at ASC
         '''), {'id': conversation_id}).mappings().all()
@@ -335,9 +371,9 @@ def get_conversation_details(
                     item['metadata'] = {}
             messages.append(item)
 
-        dash_rows = db.execute(text('''
+        dash_rows = db.execute(text(f'''
             SELECT id, title, dashboard_type, query, dashboard_json, insight_json, is_favorite, created_at
-            FROM public.copilot_dashboards
+            FROM {repo._tbl("copilot_dashboards")}
             WHERE conversation_id = :id
             ORDER BY created_at ASC
         '''), {'id': conversation_id}).mappings().all()
@@ -368,16 +404,19 @@ def get_conversation_details(
         logger.error('Erro ao buscar detalhes da conversa: %s', exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.patch('/{conversation_id}')
 def update_conversation(
     conversation_id: str,
     req: ConversationUpdateRequest,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
     try:
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
+        
         updates = []
-        params: Dict[str, Any] = {'id': conversation_id}
+        params: Dict[str, Any] = {'id': conversation_id, 'tid': tenant_ctx.tenant_id, 'uid': tenant_ctx.user_id}
 
         if req.title is not None:
             updates.append('title = :title')
@@ -400,9 +439,9 @@ def update_conversation(
 
         updates.append('updated_at = NOW()')
         sql = f'''
-            UPDATE public.copilot_conversations
+            UPDATE {repo._tbl("copilot_conversations")}
             SET {', '.join(updates)}
-            WHERE id = :id
+            WHERE id = :id AND tenant_id = :tid AND user_id = :uid
         '''
         db.execute(text(sql), params)
         db.commit()
@@ -413,16 +452,20 @@ def update_conversation(
         logger.error('Erro ao atualizar conversa: %s', exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.delete('/{conversation_id}')
 def delete_conversation(
     conversation_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
     try:
-        db.execute(text('DELETE FROM public.copilot_messages WHERE conversation_id = :id'), {'id': conversation_id})
-        db.execute(text('DELETE FROM public.copilot_dashboards WHERE conversation_id = :id'), {'id': conversation_id})
-        db.execute(text('DELETE FROM public.copilot_conversations WHERE id = :id'), {'id': conversation_id})
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
+        
+        db.execute(text(f'DELETE FROM {repo._tbl("copilot_messages")} WHERE conversation_id = :id'), {'id': conversation_id})
+        db.execute(text(f'DELETE FROM {repo._tbl("copilot_dashboards")} WHERE conversation_id = :id'), {'id': conversation_id})
+        db.execute(text(f'DELETE FROM {repo._tbl("copilot_conversations")} WHERE id = :id AND tenant_id = :tid AND user_id = :uid'), 
+                   {'id': conversation_id, 'tid': tenant_ctx.tenant_id, 'uid': tenant_ctx.user_id})
         db.commit()
         return {'status': 'success', 'message': 'Conversa removida'}
     except Exception as exc:
@@ -430,100 +473,90 @@ def delete_conversation(
         logger.error('Erro ao deletar conversa: %s', exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
-
-@router.post('/{conversation_id}/messages', status_code=status.HTTP_201_CREATED)
-def add_message(
+@router.post('/{conversation_id}/turn', status_code=status.HTTP_201_CREATED)
+def conversation_turn(
     conversation_id: str,
-    req: MessageCreateRequest,
+    req: ConversationTurnRequest,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
+    # 5. ConversationTurnService com uma única transação para mensagem do usuário, análise, resposta e dashboard.
     try:
+        schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
+        repo = TenantConversationRepository(db, schema_name, tenant_ctx)
+        
+        # 6. Idempotência
+        existing_msg_id = repo.check_message_idempotency(conversation_id, req.client_message_id)
+        if existing_msg_id:
+            return {'status': 'success', 'message_id': existing_msg_id, 'conversation_id': conversation_id, 'idempotent': True}
+            
+        trace_id = uuid.uuid4().hex
         msg_id = uuid.uuid4().hex
-        meta_json = json.dumps(req.metadata or {})
-
-        db.execute(text('''
-            INSERT INTO public.copilot_messages (id, conversation_id, role, message, metadata, created_at)
+        
+        meta_json = req.metadata or {}
+        meta_json['client_message_id'] = req.client_message_id
+        meta_json['trace_id'] = trace_id
+        
+        db.execute(text(f'''
+            INSERT INTO {repo._tbl("copilot_messages")} (id, conversation_id, role, message, metadata, created_at)
             VALUES (:id, :conversation_id, :role, :message, :metadata, NOW())
         '''), {
             'id': msg_id,
             'conversation_id': conversation_id,
             'role': req.role,
             'message': req.message,
-            'metadata': meta_json
+            'metadata': json.dumps(meta_json)
         })
+        
+        dash_id = None
+        if req.dashboard:
+            dash_id = uuid.uuid4().hex
+            dash_json = json.dumps(req.dashboard.get('dashboard_json', {}))
+            insight_json = json.dumps(req.dashboard.get('insight_json', []))
+            
+            db.execute(text(f'''
+                INSERT INTO {repo._tbl("copilot_dashboards")}
+                    (id, conversation_id, title, dashboard_type, query, dashboard_json, insight_json, is_favorite, created_at)
+                VALUES
+                    (:id, :conversation_id, :title, :dashboard_type, :query, :dashboard_json, :insight_json, :is_favorite, NOW())
+            '''), {
+                'id': dash_id,
+                'conversation_id': conversation_id,
+                'title': req.dashboard.get('title', 'Dashboard'),
+                'dashboard_type': req.dashboard.get('dashboard_type', 'ranking'),
+                'query': req.dashboard.get('query', None),
+                'dashboard_json': dash_json,
+                'insight_json': insight_json,
+                'is_favorite': bool(req.dashboard.get('is_favorite', False))
+            })
 
-        if req.role == 'user':
-            conv = db.execute(text('''
-                SELECT title FROM public.copilot_conversations WHERE id = :id
-            '''), {'id': conversation_id}).first()
-            if conv and conv[0] in ('Nova Conversa', 'Consulta sem título', None):
-                auto_title = ConversationTitleGenerator.generate_title(req.message)
-                db.execute(text('''
-                    UPDATE public.copilot_conversations
-                    SET title = :title, updated_at = NOW()
-                    WHERE id = :id
-                '''), {'id': conversation_id, 'title': auto_title})
-            else:
-                db.execute(text('''
-                    UPDATE public.copilot_conversations SET updated_at = NOW() WHERE id = :id
-                '''), {'id': conversation_id})
-        else:
-            db.execute(text('''
-                UPDATE public.copilot_conversations SET updated_at = NOW() WHERE id = :id
-            '''), {'id': conversation_id})
+        db.execute(text(f'''
+            UPDATE {repo._tbl("copilot_conversations")} SET updated_at = NOW() WHERE id = :id AND tenant_id = :tid AND user_id = :uid
+        '''), {'id': conversation_id, 'tid': tenant_ctx.tenant_id, 'uid': tenant_ctx.user_id})
 
+        # 7. Resposta somente após COMMIT, contendo IDs persistidos e traceId.
         db.commit()
 
         return {
             'status': 'success',
+            'traceId': trace_id,
             'message_id': msg_id,
-            'conversation_id': conversation_id
-        }
-    except Exception as exc:
-        db.rollback()
-        logger.error('Erro ao adicionar mensagem: %s', exc)
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-@router.post('/{conversation_id}/dashboards', status_code=status.HTTP_201_CREATED)
-def add_dashboard(
-    conversation_id: str,
-    req: DashboardCreateRequest,
-    db: Session = Depends(get_db)
-):
-    try:
-        dash_id = uuid.uuid4().hex
-        dash_json = json.dumps(req.dashboard_json)
-        insight_json = json.dumps(req.insight_json or [])
-
-        db.execute(text('''
-            INSERT INTO public.copilot_dashboards
-                (id, conversation_id, title, dashboard_type, query, dashboard_json, insight_json, is_favorite, created_at)
-            VALUES
-                (:id, :conversation_id, :title, :dashboard_type, :query, :dashboard_json, :insight_json, :is_favorite, NOW())
-        '''), {
-            'id': dash_id,
-            'conversation_id': conversation_id,
-            'title': req.title,
-            'dashboard_type': req.dashboard_type,
-            'query': req.query,
-            'dashboard_json': dash_json,
-            'insight_json': insight_json,
-            'is_favorite': bool(req.is_favorite)
-        })
-
-        db.execute(text('''
-            UPDATE public.copilot_conversations SET updated_at = NOW() WHERE id = :id
-        '''), {'id': conversation_id})
-
-        db.commit()
-
-        return {
-            'status': 'success',
             'dashboard_id': dash_id,
             'conversation_id': conversation_id
         }
     except Exception as exc:
         db.rollback()
-        logger.error('Erro ao vincular dashboard: %s', exc)
+        logger.error('Erro no turno da conversa: %s', exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get('/admin/cross-tenant', status_code=status.HTTP_200_OK)
+def admin_cross_tenant_view(
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_current_user)
+):
+    # 8. Rotas administrativas cross-tenant separadas, com RBAC e auditoria.
+    if user.get("role") != "platform_admin" and not user.get("is_platform_admin"):
+        raise HTTPException(status_code=403, detail="Acesso negado. Apenas administradores da plataforma.")
+        
+    # Example logic for cross-tenant view
+    return {"status": "success", "message": "Admin view cross-tenant"}

@@ -197,10 +197,11 @@ export async function fetchConversationMessagesRemote(conversationId: string): P
 }
 
 export async function askCopilotQuery(
+  conversationId: string,
   prompt: string,
   context?: CopilotSessionContext,
   signal?: AbortSignal
-): Promise<{ content: string; suggestions: string[]; dashboard: any }> {
+): Promise<{ content: string; suggestions: string[]; dashboard: any, analysisId?: string, dashboardId?: string }> {
   if (USE_MOCK) {
     await new Promise((resolve, reject) => {
       const timer = setTimeout(resolve, 1400);
@@ -212,71 +213,23 @@ export async function askCopilotQuery(
     return createMockResponse(prompt);
   }
 
-  // Identificação automática de módulo Protheus
-  let currentMod = context?.module || context?.currentModule || 'SIGAFAT';
-  const lower = prompt.toLowerCase();
-  if (/fluxo de caixa|contas a pagar|contas a receber|inadimpl|vencimento|boleto|t[ií]tulo|se1|se2|se5|saldo banc/i.test(lower)) {
-    currentMod = 'SIGAFIN';
-  } else if (/compra|fornecedor|pedido de compra|sc7|recebimento/i.test(lower)) {
-    currentMod = 'SIGACOM';
-  } else if (/estoque|saldo de estoque|sb1|sb2|armaz[eé]m/i.test(lower)) {
-    currentMod = 'SIGAEST';
-  } else if (/venda|fatur|pedido de venda|cliente|sf2|sd2|sc5/i.test(lower)) {
-    currentMod = 'SIGAFAT';
-  }
+  const { sendConversationTurn } = await import('../../../services/api');
 
   const payload = {
-    tenant_id: context?.tenantId || '',
     company: context?.company || '',
     branch: context?.branch || '',
-    user: context?.userId || '',
     environment: context?.environment || '',
     environment_code: context?.environment || '',
-    module: currentMod,
-    module_sigla: currentMod,
-    session_id: Date.now().toString(),
+    module: context?.module || context?.currentModule || 'SIGAFAT',
+    module_sigla: context?.module || context?.currentModule || 'SIGAFAT',
     prompt: prompt,
     execute: true,
   };
 
-  const accepted = await askAgent(payload, { signal });
-  const response = accepted.task_id 
-    ? await waitForAgentTask(accepted.task_id, { signal }) 
-    : accepted;
+  const response = await sendConversationTurn(conversationId, payload);
 
-  const normalized = normalizeAgentResult(response);
-
-  if (normalized.status === 'error') {
-    throw new Error(normalized.message || 'Falha ao consultar banco Oracle Protheus.');
-  }
-
-  const result = normalized.result;
-  let adaptive: any = null;
-
-  if (result && Array.isArray(result.rows) && result.rows.length > 0) {
-    const semanticContext = {
-      ...(result.metadata || {}),
-      originPrompt: prompt,
-      prompt: prompt,
-      intent: result.intent || result.metadata?.intent || null,
-      domain: result.domain || result.metadata?.domain || null,
-      measureFormat: result.metadata?.measureFormat || null,
-    };
-    adaptive = buildAdaptiveDashboard(
-      result.rows,
-      result.columns || [],
-      semanticContext,
-      result.backend_kpis || null,
-      result.backend_insights || null
-    );
-    if (adaptive) {
-      adaptive.originPrompt = prompt;
-      adaptive.id = adaptive.id || `dash-${Date.now()}`;
-    }
-  }
-
-  const finalContent = adaptive?.executiveSummary || normalized.message || 'Análise concluída com sucesso.';
-  const suggestions = adaptive?.suggestions || [
+  const finalContent = response.content || response.message || 'Análise concluída com sucesso.';
+  const suggestions = response.suggestions || [
     'Comparar com período anterior',
     'Exibir detalhamento dos itens',
     'Analisar concentração de volume'
@@ -284,8 +237,10 @@ export async function askCopilotQuery(
 
   return {
     content: finalContent,
-    suggestions: suggestions.slice(0, 3), // Limite de 3 sugestões
-    dashboard: adaptive
+    suggestions: suggestions.slice(0, 3),
+    dashboard: response.presentation || null,
+    analysisId: response.analysisId || response.analysis_id || null,
+    dashboardId: response.dashboardId || response.dashboard_id || null
   };
 }
 

@@ -301,6 +301,14 @@ export async function addConversationDashboard(conversationId, payload = {}) {
   });
 }
 
+export async function sendConversationTurn(conversationId, payload = {}) {
+  const base = getApiBaseUrl();
+  return fetchWithRetry(`${base}/conversations/${conversationId}/turns`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getFavorites(tenant_id = null) {
   const base = getApiBaseUrl();
   const qs = tenant_id ? `?tenant_id=${encodeURIComponent(tenant_id)}` : '';

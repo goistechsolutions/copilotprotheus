@@ -37,16 +37,12 @@ export default function InlineChatDashboard({ result, context, onNavigateToDashb
   const dimNames = dimensions.map(d => d.label).join(', ') || 'Nenhuma declarada';
   
   const handleExport = async () => {
-    if (!rows.length) return;
     setIsExporting(true);
     try {
       const payload = {
         title: 'Relatório Executivo Protheus',
-        tenant_code: context?.tenant_id,
-        environment_code: context?.environment,
         format: 'excel',
-        columns,
-        rows
+        analysisId: result?.analysisId || data?.analysisId || result?.id
       };
       const response = await exportStructuredReport(payload);
       if (response?.download_url) {

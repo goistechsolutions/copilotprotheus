@@ -14,7 +14,7 @@ import {
   Sparkles, ArrowLeft, RefreshCw, FileSpreadsheet, Printer, Bookmark, BookmarkCheck, MessageSquare,
   Lightbulb, AlertCircle
 } from 'lucide-react';
-import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
+
 import { humanizeColumnName } from '../../services/presentationIntelligence';
 import { formatDateBR } from '../../utils/formatDate';
 import { useDashboardStore } from '../../stores/useDashboardStore';
@@ -224,30 +224,10 @@ export default function DashboardRenderer({ payload }) {
   };
 
 
-  const handleRenderMock = () => {
-    const sampleRows = [
-      { F2_CLIENTE: 'ATACADAO S.A.', VALOR_FATURADO: 450000.00, F2_EMISSAO: '20260301', ESTADO: 'SP' },
-      { F2_CLIENTE: 'CARREFOUR COMERCIO', VALOR_FATURADO: 320000.00, F2_EMISSAO: '20260302', ESTADO: 'SP' },
-      { F2_CLIENTE: 'PAO DE ACUCAR', VALOR_FATURADO: 280000.00, F2_EMISSAO: '20260303', ESTADO: 'RJ' },
-      { F2_CLIENTE: 'ASSAI ATACADISTA', VALOR_FATURADO: 210000.00, F2_EMISSAO: '20260304', ESTADO: 'MG' },
-      { F2_CLIENTE: 'MERCADO LIVRE', VALOR_FATURADO: 180000.00, F2_EMISSAO: '20260305', ESTADO: 'PR' },
-      { F2_CLIENTE: 'MAGAZINE LUIZA', VALOR_FATURADO: 140000.00, F2_EMISSAO: '20260306', ESTADO: 'SP' },
-      { F2_CLIENTE: 'CASAS BAHIA', VALOR_FATURADO: 95000.00, F2_EMISSAO: '20260307', ESTADO: 'RS' },
-    ];
-    const sample = buildAdaptiveDashboard(sampleRows, ['F2_CLIENTE', 'VALOR_FATURADO', 'F2_EMISSAO', 'ESTADO']);
-    if (sample) setDashboard(sample);
-  };
-
   if (!payload) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-slate-400 p-8 text-center">
         <p className="mb-4">O Dashboard Engine aguarda instruções do Copiloto.</p>
-        <button 
-          onClick={handleRenderMock}
-          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 transition-colors font-medium text-sm"
-        >
-          Visualizar Demonstração Adaptativa
-        </button>
       </div>
     );
   }

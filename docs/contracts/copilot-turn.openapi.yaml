@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: Copilot Protheus Conversation API
+  version: 2.0.0
+paths:
+  /api/copilot/conversations:
+    post:
+      summary: Cria conversa no schema do tenant autenticado
+      responses:
+        '201': { description: Conversa criada }
+  /api/copilot/conversations/{conversationId}/turns:
+    post:
+      summary: Processa e persiste um turno em transação única
+      parameters:
+        - in: path
+          name: conversationId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TurnRequest'
+      responses:
+        '200':
+          description: Turno persistido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TurnResponse' }
+components:
+  schemas:
+    TurnRequest:
+      type: object
+      additionalProperties: false
+      required: [clientMessageId, content, context]
+      properties:
+        clientMessageId: { type: string, format: uuid }
+        content: { type: string, minLength: 1, maxLength: 10000 }
+        context:
+          type: object
+          additionalProperties: false
+          required: [companyId, environmentId, moduleSigla]
+          properties:
+            companyId: { type: string, format: uuid }
+            environmentId: { type: string, format: uuid }
+            moduleSigla: { type: string }
+    TurnResponse:
+      type: object
+      required: [conversationId, traceId, userMessage, assistantMessage, analysis]
+      properties:
+        conversationId: { type: string, format: uuid }
+        traceId: { type: string, format: uuid }
+        userMessage: { $ref: '#/components/schemas/Message' }
+        assistantMessage: { $ref: '#/components/schemas/Message' }
+        analysis: { $ref: '#/components/schemas/AnalysisContext' }
+        dashboard:
+          oneOf:
+            - { $ref: '#/components/schemas/DashboardReference' }
+            - { type: 'null' }
+    Message:
+      type: object
+      required: [id, role, content, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+        analysisId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+    AnalysisContext:
+      type: object
+      required: [analysisId, conversationId, sourceMessageId, validation, version, createdAt]
+      properties:
+        analysisId: { type: string, format: uuid }
+        conversationId: { type: string, format: uuid }
+        sourceMessageId: { type: string, format: uuid }
+        assistantMessageId: { type: [string, 'null'], format: uuid }
+        dataset: { type: object }
+        metrics: { type: object }
+        validation: { type: object }
+        insights: { type: array }
+        presentation: { type: object }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+    DashboardReference:
+      type: object
+      required: [dashboardId, analysisId]
+      properties:
+        dashboardId: { type: string, format: uuid }
+        analysisId: { type: string, format: uuid }
+        title: { type: string }

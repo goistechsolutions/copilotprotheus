@@ -68,11 +68,11 @@ export const useDashboardStore = create((set, get) => ({
     try {
       const res = await createConversation({
         title,
-        tenant_id: session?.tenantId || 'padrao',
-        user_id: session?.userId || 'default_user',
-        domain_code: session?.module || 'SIGAFAT',
+        tenant_id: session?.tenantId,
+        user_id: session?.userId,
+        domain_code: session?.module,
       });
-      const convId = res.conversation_id;
+      const convId = res.conversation_id || res.id;
       set({
         currentConversationId: convId,
         activeConversation: { id: convId, title, is_favorite: false },
@@ -83,14 +83,7 @@ export const useDashboardStore = create((set, get) => ({
       return convId;
     } catch (err) {
       console.error('Erro ao criar conversa no backend:', err);
-      const fallbackId = `conv_${Date.now()}`;
-      set({
-        currentConversationId: fallbackId,
-        activeConversation: { id: fallbackId, title, is_favorite: false },
-        currentDashboard: null,
-        chat: { messages: [], isOpen: true },
-      });
-      return fallbackId;
+      throw err;
     }
   },
 
@@ -112,18 +105,11 @@ export const useDashboardStore = create((set, get) => ({
           originPrompt: m.metadata?.originPrompt || '',
         }));
 
-        // Se houver dashboards vinculados, restaura o último gerado
-        let latestDashboard = null;
-        if (data.dashboards && data.dashboards.length > 0) {
-          const lastDash = data.dashboards[data.dashboards.length - 1];
-          latestDashboard = lastDash.dashboard_json || null;
-        }
-
         set({
           currentConversationId: conversationId,
           activeConversation: conv,
           chat: { messages, isOpen: true },
-          currentDashboard: latestDashboard,
+          currentDashboard: null, // Visual state resets; users open dashboards explicitly
         });
       }
     } catch (err) {

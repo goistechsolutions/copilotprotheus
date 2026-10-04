@@ -11,7 +11,7 @@ export default function Tables() {
   const [search, setSearch]           = useState('');
   const [loading, setLoading]         = useState(true);
   const [syncing, setSyncing]         = useState(false);
-  const [modulosInput, setModulosInput] = useState('SIGAFAT, SIGAFIN');
+  const [modulosInput, setModulosInput] = useState('');
   const [syncResult, setSyncResult]   = useState(null);
 
   useEffect(() => { fetchTenants(); }, []);
