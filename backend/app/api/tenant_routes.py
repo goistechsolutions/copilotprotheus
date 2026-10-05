@@ -213,8 +213,13 @@ def find_tenant_by_id_or_code(db: Session, tenant_id: str | int) -> Optional[Ten
     t = db.query(Tenant).filter(Tenant.tenant_code == t_str).first()
     if not t:
         t = db.query(Tenant).filter(Tenant.schema_name == t_str).first()
-    if not t and t_str.isdigit():
-        t = db.query(Tenant).filter(Tenant.id == int(t_str)).first()
+    if not t:
+        import uuid
+        try:
+            val_uuid = uuid.UUID(t_str)
+            t = db.query(Tenant).filter(Tenant.id == val_uuid).first()
+        except ValueError:
+            pass
     return t
 
 
@@ -270,12 +275,12 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
         "name": t.tenant_name,
         "schema_name": t.schema_name,
         "status": t.status,
-        "plan_code": t.plan_code,
-        "cnpj": t.cnpj,
-        "licenca_uso": t.licenca_uso,
-        "protheus_webapp_url": t.webapp_url,
-        "system_prompt": t.system_prompt,
-        "temperature": t.temperature,
+        "plan_code": getattr(t, "plan_code", None),
+        "cnpj": getattr(t, "cnpj", None),
+        "licenca_uso": getattr(t, "licenca_uso", None),
+        "protheus_webapp_url": getattr(t, "webapp_url", None),
+        "system_prompt": getattr(t, "system_prompt", None),
+        "temperature": getattr(t, "temperature", None),
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "connection": conn_obj if env_code else None
     }
@@ -346,24 +351,12 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
 async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     tenant = find_tenant_by_id_or_code(db, tenant_id)
     if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+        raise HTTPException(status_code=404, detail="Tenant no encontrado")
 
     if body.name:
         tenant.tenant_name = body.name
     if body.status:
         tenant.status = str(body.status).upper()
-    if body.plan_code:
-        tenant.plan_code = body.plan_code
-    if body.cnpj is not None:
-        tenant.cnpj = body.cnpj
-    if body.licenca_uso is not None:
-        tenant.licenca_uso = body.licenca_uso
-    if body.protheus_webapp_url is not None:
-        tenant.webapp_url = body.protheus_webapp_url
-    if body.system_prompt is not None:
-        tenant.system_prompt = body.system_prompt
-    if body.temperature is not None:
-        tenant.temperature = body.temperature
 
     db.commit()
     db.refresh(tenant)
@@ -373,11 +366,11 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
         db.execute(text("SELECT public.provision_tenant_schema(:tid)"), {"tid": tenant.id})
     db.commit()
 
-    # Materializa a licença assinada no contrato exigido pelo EntitlementGuard.
-    if body.licenca_uso is not None:
+    # Materializa a licena assinada no contrato exigido pelo EntitlementGuard.
+    if getattr(body, "licenca_uso", None) is not None:
         _sync_tenant_license_contract(db, tenant, clean_tenant, body.licenca_uso)
 
-    # Processa e valida conexão REST Protheus
+    # Processa e valida conexo REST Protheus
     conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
     if conn_info:
         await _sync_protheus_connection(db, clean_tenant, conn_info)
