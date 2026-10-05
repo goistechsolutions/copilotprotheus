@@ -127,3 +127,31 @@ def get_enabled_company_modules(db, tenant_id: str) -> list[str]:
     except Exception as e:
         logger.debug(f"Falha ao ler modulos do tenant {tenant_id}: {e}")
         return []
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from fastapi import HTTPException
+
+def get_company_or_404(db: Session, company_id) -> dict:
+    cid_str = str(company_id).strip()
+    reg = db.execute(
+        text("""
+            SELECT id, tenant_code, tenant_name, schema_name, status
+            FROM public.tenants
+            WHERE id::text = :cid OR tenant_code = :cid OR schema_name = :cid
+            LIMIT 1
+        """),
+        {"cid": cid_str}
+    ).mappings().first()
+    
+    if not reg:
+        raise HTTPException(status_code=404, detail="Empresa/Tenant não encontrado")
+    
+    return dict(reg)
+def get_enabled_modules(db, company_id, tenant_id: str) -> list[str]:
+    enabled = get_enabled_company_modules(db, tenant_id)
+    if not enabled:
+        raise HTTPException(
+            status_code=400, 
+            detail="Nenhum módulo habilitado ou contratado encontrado para este tenant."
+        )
+    return enabled
