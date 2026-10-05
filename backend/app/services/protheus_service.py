@@ -1,7 +1,7 @@
 """Fachada única para integração REST do Protheus.
 
 A conexão operacional é resolvida exclusivamente por
-``tenant_code + environment_code`` em ``public.protheus_rest_connections``.
+``tenant_code + environment_code`` em ``{tenant_code}.protheus_connections``.
 Consultas QueryRest são delegadas ao cliente OAuth2 central, que controla
 Bearer, renovação única após 401 e isolamento da conexão.
 """

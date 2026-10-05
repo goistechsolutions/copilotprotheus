@@ -110,7 +110,7 @@ PUBLIC_REQUIRED_TABLES = {
     "tenant_module_contracts",
     "audit_logs",
     "platform_audit_log",
-    "protheus_rest_connections",
+    
     "business_domains",
     "business_domain_modules",
     "business_intents",

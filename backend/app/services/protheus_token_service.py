@@ -93,40 +93,63 @@ def load_connection(
     tenant_code: str,
     environment_code: str,
 ) -> dict[str, Any]:
+    import json
+    from app.db.database import resolve_clean_tenant
     environment_code = _require_real_environment(environment_code)
-    row = db.execute(
-        text("""
-            SELECT
-                id,
-                tenant_code,
-                environment_code,
-                base_rest_url,
-                auth_mode,
-                protheus_username,
-                encrypted_protheus_password,
-                encrypted_access_token,
-                encrypted_refresh_token,
-                access_token_expires_at,
-                token_updated_at,
-                active
-            FROM public.protheus_rest_connections
-            WHERE tenant_code = :tenant_code
-              AND environment_code = :environment_code
-              AND active = TRUE
-            LIMIT 1
-        """),
-        {
-            "tenant_code": tenant_code,
-            "environment_code": environment_code,
-        },
-    ).mappings().first()
+    clean_tenant = resolve_clean_tenant(tenant_code)
+    try:
+        row = db.execute(
+            text(f"""
+                SELECT
+                    c.id,
+                    e.environment_code,
+                    c.base_rest_url,
+                    c.auth_mode,
+                    c.secret_ref,
+                    c.active
+                FROM "{clean_tenant}".protheus_connections c
+                JOIN "{clean_tenant}".environments e ON e.id = c.environment_id
+                WHERE e.environment_code = :environment_code
+                  AND c.active = TRUE
+                LIMIT 1
+            """),
+            {
+                "environment_code": environment_code,
+            },
+        ).mappings().first()
+    except Exception as e:
+        raise ValueError(f"Erro ao buscar conexo para {clean_tenant}/{environment_code}: {e}")
 
     if not row:
         raise ValueError(
-            f"conexão REST Protheus ativa não localizada para {tenant_code}/{environment_code}"
+            f"conexo REST Protheus ativa no localizada para {tenant_code}/{environment_code}"
         )
+        
+    sec_data = {}
+    if row["secret_ref"]:
+        try:
+            sec_data = json.loads(row["secret_ref"])
+        except:
+            pass
 
-    return _row_to_connection(row)
+    conn_dict = dict(row)
+    conn_dict["tenant_code"] = tenant_code
+    conn_dict["protheus_username"] = sec_data.get("protheus_username")
+    conn_dict["encrypted_protheus_password"] = sec_data.get("encrypted_protheus_password")
+    conn_dict["encrypted_access_token"] = sec_data.get("encrypted_access_token")
+    conn_dict["encrypted_refresh_token"] = sec_data.get("encrypted_refresh_token")
+    conn_dict["access_token_expires_at"] = sec_data.get("access_token_expires_at")
+    conn_dict["token_updated_at"] = sec_data.get("token_updated_at")
+
+    # The access_token_expires_at comes back as a string from JSON, we need datetime
+    if conn_dict["access_token_expires_at"] and isinstance(conn_dict["access_token_expires_at"], str):
+        from dateutil.parser import isoparse
+        try:
+            conn_dict["access_token_expires_at"] = isoparse(conn_dict["access_token_expires_at"])
+        except:
+            pass
+            
+    return _row_to_connection(conn_dict)
 
 
 def _build_expires_at(expires_in: int | str | None) -> datetime:
@@ -420,22 +443,50 @@ def invalidate_access_token(
     tenant_code: str,
     environment_code: str,
 ) -> None:
+    import json
+    from app.db.database import resolve_clean_tenant
     environment_code = _require_real_environment(environment_code)
-    db.execute(
-        text("""
-            UPDATE public.protheus_rest_connections
-            SET encrypted_access_token = NULL,
-                access_token_expires_at = NULL,
-                token_updated_at = NULL,
-                last_auth_error = 'access token invalidado após HTTP 401',
-                last_auth_status = 401,
-                updated_at = NOW()
-            WHERE tenant_code = :tenant_code
-              AND environment_code = :environment_code
-        """),
-        {
-            "tenant_code": tenant_code,
-            "environment_code": environment_code,
-        },
-    )
-    db.commit()
+    clean_tenant = resolve_clean_tenant(tenant_code)
+    
+    try:
+        row = db.execute(
+            text(f"""
+                SELECT c.id, c.secret_ref 
+                FROM "{clean_tenant}".protheus_connections c
+                JOIN "{clean_tenant}".environments e ON e.id = c.environment_id
+                WHERE e.environment_code = :environment_code
+            """),
+            {"environment_code": environment_code}
+        ).mappings().first()
+        
+        if not row:
+            return
+            
+        sec_data = {}
+        if row["secret_ref"]:
+            try:
+                sec_data = json.loads(row["secret_ref"])
+            except:
+                pass
+                
+        sec_data["encrypted_access_token"] = None
+        sec_data["access_token_expires_at"] = None
+        sec_data["token_updated_at"] = None
+        
+        db.execute(
+            text(f"""
+                UPDATE "{clean_tenant}".protheus_connections
+                SET secret_ref = :secret_ref,
+                    last_auth_error = 'access token invalidado após HTTP 401',
+                    last_auth_status = 401,
+                    updated_at = NOW()
+                WHERE id = :id
+            """),
+            {
+                "id": row["id"],
+                "secret_ref": json.dumps(sec_data)
+            }
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
