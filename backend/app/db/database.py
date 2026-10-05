@@ -337,7 +337,7 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
                 """
                 SELECT tenant_code, schema_name
                 FROM public.tenants
-                WHERE status = 'active'
+                WHERE UPPER(status) = 'ACTIVE'
                   AND (id = :id OR tenant_code = :tenant_code)
                 LIMIT 1
                 """
@@ -348,7 +348,7 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
                 """
                 SELECT tenant_code, schema_name
                 FROM public.tenants
-                WHERE status = 'active'
+                WHERE UPPER(status) = 'ACTIVE'
                   AND (tenant_code = :tenant_code OR schema_name = :schema_name)
                 LIMIT 1
                 """
