@@ -66,7 +66,7 @@ def _require_tenant_match(payload_tenant: str, current_user: dict, db: Session) 
     # comparação, sem aceitar qualquer UUID informado pelo cliente.
     try:
         row = db.execute(
-            text("SELECT tenant_code FROM public.tenant WHERE id::text = :tenant_id LIMIT 1"),
+            text("SELECT tenant_code FROM public.tenants WHERE id::text = :tenant_id LIMIT 1"),
             {"tenant_id": token_tenant},
         ).mappings().first()
     except Exception as exc:

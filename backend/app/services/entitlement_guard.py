@@ -525,7 +525,7 @@ class EntitlementGuard:
         tenant_row = db.execute(
             text("""
                 SELECT schema_name
-                FROM public.tenant
+                FROM public.tenants
                 WHERE lower(btrim(tenant_code)) = :tenant_code
                   AND status = 'active'
                 LIMIT 1

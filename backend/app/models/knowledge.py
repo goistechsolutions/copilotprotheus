@@ -23,7 +23,7 @@ from app.db.database import GlobalBase, TenantBase
 # ═══════════════════════════════════════════════════════════════
 
 class Tenant(GlobalBase):
-    """Corresponde a public.tenant"""
+    """Corresponde a public.tenants"""
     __tablename__ = "tenants"
     __table_args__ = {"schema": "public", "extend_existing": True}
 

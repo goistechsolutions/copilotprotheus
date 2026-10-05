@@ -428,11 +428,11 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
 
     try:
         if raw_tenant.isdigit():
-            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant WHERE id = :id OR tenant_code = :tc"), {"id": int(raw_tenant), "tc": raw_tenant}).mappings().first()
+            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenants WHERE id = :id OR tenant_code = :tc"), {"id": int(raw_tenant), "tc": raw_tenant}).mappings().first()
             if reg:
                 tenant_code = reg["schema_name"] or reg["tenant_code"]
         else:
-            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant WHERE tenant_code = :tc OR schema_name = :tc"), {"tc": raw_tenant}).mappings().first()
+            reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenants WHERE tenant_code = :tc OR schema_name = :tc"), {"tc": raw_tenant}).mappings().first()
             if reg:
                 tenant_code = reg["schema_name"] or reg["tenant_code"]
     except Exception:
@@ -446,7 +446,7 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
 
     # Registra o tenant antes do bootstrap do schema específico.
     db.execute(text("""
-        INSERT INTO public.tenant (tenant_code, tenant_name, schema_name, status)
+        INSERT INTO public.tenants (tenant_code, tenant_name, schema_name, status)
         VALUES (:tenant_code, :tenant_name, :schema_name, 'active')
         ON CONFLICT (tenant_code) DO UPDATE SET
             tenant_name = EXCLUDED.tenant_name,
@@ -513,7 +513,7 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
     }).first()
 
     upsert_tenant = text("""
-        INSERT INTO public.tenant (
+        INSERT INTO public.tenants (
             tenant_code, tenant_name, schema_name, status
         ) VALUES (
             :t_code, :c_name, :s_name, 'active'

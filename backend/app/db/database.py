@@ -336,7 +336,7 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
             query = text(
                 """
                 SELECT tenant_code, schema_name
-                FROM public.tenant
+                FROM public.tenants
                 WHERE status = 'active'
                   AND (id = :id OR tenant_code = :tenant_code)
                 LIMIT 1
@@ -347,7 +347,7 @@ def resolve_clean_tenant(db, tenant_id: str | int | None) -> str:
             query = text(
                 """
                 SELECT tenant_code, schema_name
-                FROM public.tenant
+                FROM public.tenants
                 WHERE status = 'active'
                   AND (tenant_code = :tenant_code OR schema_name = :schema_name)
                 LIMIT 1
@@ -430,20 +430,20 @@ def ensure_tenant_tables(db, clean_tenant: str):
     return
 def ensure_all_registered_tenant_schemas(db):
     """
-    Garante que todos os tenants cadastrados em public.tenant
+    Garante que todos os tenants cadastrados em public.tenants
     possuam seus schemas criados no PostgreSQL.
     """
     ensure_public_tables(db)
     tenant_ids = set()
     try:
-        res1 = db.execute(text("SELECT id, tenant_code FROM public.tenant"))
+        res1 = db.execute(text("SELECT id, tenant_code FROM public.tenants"))
         for row in res1.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]))
     except Exception:
         db.rollback()
     try:
-        res3 = db.execute(text("SELECT tenant_code, schema_name FROM public.tenant"))
+        res3 = db.execute(text("SELECT tenant_code, schema_name FROM public.tenants"))
         for row in res3.fetchall():
             if row[0]: tenant_ids.add(str(row[0]))
             if row[1]: tenant_ids.add(str(row[1]).replace("tenant_", ""))

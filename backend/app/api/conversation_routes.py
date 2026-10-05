@@ -31,7 +31,7 @@ def get_tenant_context(user: dict = Depends(require_current_user)) -> TenantCont
 class TenantSchemaResolver:
     @staticmethod
     def resolve(db: Session, tenant_id: str) -> str:
-        schema_name = db.execute(text("SELECT schema_name FROM public.tenant WHERE tenant_code = :tid"), {"tid": tenant_id}).scalar()
+        schema_name = db.execute(text("SELECT schema_name FROM public.tenants WHERE tenant_code = :tid"), {"tid": tenant_id}).scalar()
         if not schema_name:
             raise HTTPException(status_code=404, detail="Tenant não encontrado.")
         return schema_name

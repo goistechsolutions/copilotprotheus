@@ -232,7 +232,7 @@ async def get_tenants_metrics():
                 COALESCE(p.plan_name, 'Standard') AS plan_name,
                 COALESCE(p.max_queries_day, 500) AS max_queries_day,
                 COUNT(pal.id) AS queries_today
-            FROM public.tenant tr
+            FROM public.tenants tr
             LEFT JOIN public.plans p ON tr.plan_code = p.plan_code
             LEFT JOIN public.platform_audit_log pal 
                    ON pal.tenant_code = tr.tenant_code 

@@ -5,8 +5,8 @@ def get_effective_config(tenant_id, company_id=None):
     db = SessionLocal()
     try:
         tenant = db.execute(text("""
-            SELECT id, tenant_code, schema_name, frontend_domain, api_domain, status
-            FROM public.tenant
+            SELECT id, tenant_code, schema_name, status
+            FROM public.tenants
             WHERE tenant_code = :tenant_id
               AND status = 'active'
         """), {"tenant_id": tenant_id}).mappings().first()
@@ -39,8 +39,8 @@ def get_effective_config(tenant_id, company_id=None):
             "tenant": dict(tenant),
             "company": dict(company) if company else None,
             "schema_name": schema_name,
-            "effective_frontend_domain": effective.get("frontend_domain") if effective else None,
-            "effective_api_domain": effective.get("api_domain") if effective else None,
+            "effective_frontend_domain": None,
+            "effective_api_domain": None,
         }
     finally:
         db.close()

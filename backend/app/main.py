@@ -122,18 +122,6 @@ for o in cloudflare_origins:
     if o not in allowed_origins and "*" not in allowed_origins:
         allowed_origins.append(o)
 
-# Inicializa banco rapidamente apenas para pegar origens extras (se disponível)
-try:
-    from app.db.database import SessionLocal
-    from sqlalchemy import text
-    with SessionLocal() as db:
-        rows = db.execute(text("SELECT frontend_domain FROM public.tenant WHERE frontend_domain IS NOT NULL AND status = 'active'")).fetchall()
-        for row in rows:
-            domain = row[0].strip().rstrip("/")
-            if domain and domain not in allowed_origins:
-                allowed_origins.append(domain)
-except Exception as e:
-    logger.warning(f"Não foi possível carregar domínios do banco para CORS no startup: {e}")
 
 # Configura o Middleware Nativo do FastAPI/Starlette
 app.add_middleware(
@@ -227,7 +215,7 @@ async def dashboard_stats(
     recent_actions = []
 
     try:
-        tenants = db.execute(text("SELECT COUNT(*) FROM public.tenant WHERE status = 'active'")).scalar() or 0
+        tenants = db.execute(text("SELECT COUNT(*) FROM public.tenants WHERE status = 'active'")).scalar() or 0
     except Exception as e:
         logger.warning(f"Erro ao contar tenants: {e}")
 

@@ -55,7 +55,7 @@ def resolve_tenant_schema(db: Any, tenant_id: str) -> str:
     row = db.execute(
         text("""
             SELECT schema_name
-            FROM public.tenant
+            FROM public.tenants
             WHERE tenant_code = :tenant_id
               AND status = 'active'
             LIMIT 1
