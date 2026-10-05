@@ -322,7 +322,7 @@ BEGIN
       content text NOT NULL,
       token_count integer CHECK(token_count IS NULL OR token_count >= 0),
       embedding_model varchar(120),
-      embedding vector,
+      embedding public.vector,
       metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
       created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(document_id, chunk_order)
