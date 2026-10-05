@@ -8,11 +8,9 @@ import {
 import {
   createCfopRule,
   createFinancialNature,
-  createSynonym,
   createTesRule,
   deleteCfopRule,
   deleteFinancialNature,
-  deleteSynonym,
   deleteTesRule,
   getBusinessRulesData,
   getBusinessRulesMetadata,

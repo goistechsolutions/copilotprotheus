@@ -2,6 +2,52 @@ import api from '../api/axios';
 
 const basePath = '/api/admin/governance/business-rules';
 
+export async function getBusinessRulesMetadata() {
+  return {
+      version: 1,
+      classifications: {
+          tes: [
+              {value: "VENDA", label: "Venda", directions: ["saida"]},
+              {value: "BONIFICACAO", label: "Bonificação", directions: ["saida", "entrada"]},
+              {value: "DEVOLUCAO", label: "Devolução", directions: ["saida", "entrada"]},
+              {value: "REMESSA", label: "Remessa", directions: ["saida", "entrada"]},
+              {value: "TRANSFERENCIA", label: "Transferência", directions: ["saida", "entrada"]},
+              {value: "EXPORTACAO", label: "Exportação", directions: ["saida"]},
+              {value: "COMPRA", label: "Compra", directions: ["entrada"]},
+              {value: "CONSIGNACAO", label: "Consignação", directions: ["saida", "entrada"]},
+              {value: "MOSTRUARIO", label: "Mostruário", directions: ["saida", "entrada"]},
+              {value: "OUTROS", label: "Outros", directions: ["saida", "entrada"]},
+          ],
+          cfop: [
+              {value: "VENDA", label: "Venda"},
+              {value: "DEVOLUCAO", label: "Devolução"},
+              {value: "REMESSA", label: "Remessa"},
+              {value: "TRANSFERENCIA", label: "Transferência"},
+              {value: "COMPRA", label: "Compra"},
+              {value: "OUTROS", label: "Outros"},
+          ],
+      },
+      financialGroups: [
+          {value: "RECEITA", label: "Receita"},
+          {value: "CUSTO", label: "Custo"},
+          {value: "DESPESA", label: "Despesa"},
+          {value: "INVESTIMENTO", label: "Investimento"},
+          {value: "IMPOSTO", label: "Imposto"},
+          {value: "OPERACAO_FINANCEIRA", label: "Operação Financeira"},
+      ],
+      cashFlowTables: ["SE1", "SE2", "SE5"],
+      defaults: {
+          billing_included_classifications: ["VENDA", "EXPORTACAO"],
+          billing_excluded_classifications: ["BONIFICACAO", "REMESSA", "TRANSFERENCIA"],
+          receivables_overdue_days: 30,
+          receivables_include_renegotiated: false,
+          receivables_include_provisional: true,
+          stock_idle_days: 90,
+          stock_critical_days: 7,
+      }
+  };
+}
+
 export async function getBusinessRulesTenants() {
   const { data } = await api.get('/api/tenants');
   return data?.tenants || data || (data?.items ? data.items : []);
@@ -79,16 +125,6 @@ export async function createFinancialNature(tenantId, payload) {
 export async function deleteFinancialNature(tenantId, ruleId) {
   const { data } = await api.delete(`${basePath}/${ruleId}`, { params: { tenant_id: tenantId } });
   return data;
-}
-
-export async function createSynonym(tenantId, payload) {
-  // Deprecated here, handled by SemanticDictionaryPage
-  return null;
-}
-
-export async function deleteSynonym(tenantId, ruleId) {
-  // Deprecated here
-  return null;
 }
 
 export async function updateBusinessRulesConfig(tenantId, payload) {
