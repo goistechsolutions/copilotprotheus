@@ -93,6 +93,7 @@ class BusinessFieldAlias(TenantBase):
     business_name = Column(String(200), nullable=False)
     field_format = Column(String(50))
     field_description = Column(Text)
+    synonyms = Column(String(500))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 

@@ -70,6 +70,7 @@ class FieldAliasCreateUpdate(BaseModel):
     business_name: str
     field_format: Optional[str] = None
     field_description: Optional[str] = None
+    synonyms: Optional[str] = None
 
 class MetricCreateUpdate(BaseModel):
     tenant_id: str
@@ -739,3 +740,26 @@ def get_business_knowledge_health(
     except Exception as exc:
         logger.exception("Erro ao verificar saúde do conhecimento do tenant=%s", tenant_id)
         raise HTTPException(status_code=400, detail=str(exc))
+
+@router.put("/semantic-dictionary/{alias_id}")
+def update_field_alias(alias_id: int, payload: FieldAliasCreateUpdate, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    authorize_admin_access(admin, "governance:write", payload.tenant_id)
+    
+    # Needs tenant resolver
+    from app.services.tenant_resolver import set_tenant_context
+    from app.models.business_knowledge import BusinessFieldAlias
+    
+    set_tenant_context(db, payload.tenant_id)
+    alias = db.query(BusinessFieldAlias).filter(BusinessFieldAlias.id == alias_id).first()
+    if not alias:
+        raise HTTPException(status_code=404, detail="Alias nao encontrado no tenant informado")
+        
+    alias.field_name = payload.field_name
+    alias.business_name = payload.business_name
+    alias.field_format = payload.field_format
+    alias.field_description = payload.field_description
+    alias.synonyms = payload.synonyms
+    
+    db.commit()
+    db.refresh(alias)
+    return alias
