@@ -1,4 +1,5 @@
 BEGIN;
+CREATE SCHEMA IF NOT EXISTS public;
 
 CREATE TABLE public.schema_versions (
   version varchar(32) PRIMARY KEY,
