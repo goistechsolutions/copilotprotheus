@@ -275,14 +275,14 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
             tenant_code=clean_tenant,
             tenant_name=body.name or clean_tenant,
             schema_name=clean_tenant,
-            status=body.status or 'ACTIVE'
+            status=(body.status or 'ACTIVE').upper()
         )
         db.add(tenant)
         db.commit()
         db.refresh(tenant)
     else:
         tenant.tenant_name = body.name or tenant.tenant_name
-        tenant.status = body.status or tenant.status
+        tenant.status = str(body.status or tenant.status).upper()
         db.commit()
         db.refresh(tenant)
 
@@ -311,7 +311,7 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
     if body.name:
         tenant.tenant_name = body.name
     if body.status:
-        tenant.status = body.status
+        tenant.status = str(body.status).upper()
     if body.plan_code:
         tenant.plan_code = body.plan_code
     if body.cnpj is not None:
