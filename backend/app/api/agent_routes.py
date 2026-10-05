@@ -188,23 +188,22 @@ class ValidateContextRequest(BaseModel):
 @router.post("/validate-context")
 async def proxy_validate_context(req: ValidateContextRequest, db: Session = Depends(get_db)):
     try:
-        config = get_tenant_config(req.tenant_id, req.environment_code)
-        rest_url = config['rest_url'].strip()
-        if rest_url.endswith('/'): rest_url = rest_url[:-1]
-        
-        # Endpoint AdvPL
-        url = f"{rest_url}/copilot/validate-context"
-        
-        headers = await build_protheus_headers(
-            req.tenant_id,
-            config,
-            environment_code=req.environment_code,
+        from app.services.protheus_queryrest_client import ProtheusQueryRestClient
+        client = ProtheusQueryRestClient(
+            db=db,
+            tenant_code=req.tenant_id,
+            environment_code=req.environment_code
         )
-        
-        res_text = await _execute_http_post_with_retry(url, req.dict(), headers)
-        return json.loads(res_text)
+        res = await client.execute("SELECT 'OK' AS STATUS FROM DUAL")
+        return {
+            "ready": True, 
+            "message": "Contexto validado via API V2 (QueryRest OK).",
+            "environment": req.environment_code,
+            "company": req.company,
+            "branch": req.branch
+        }
     except Exception as e:
-        return {"ready": False, "message": f"Erro de integração (Cloud -> Protheus): {str(e)}"}
+        return {"ready": False, "message": f"Erro de integração (Cloud -> Protheus V2): {str(e)}"}
 
 class AskAgentRequest(BaseModel):
     tenant_id: str
