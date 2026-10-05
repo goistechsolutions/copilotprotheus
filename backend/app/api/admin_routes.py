@@ -1640,7 +1640,7 @@ def get_dashboard_stats(
     admin: str  = Depends(verify_admin),
 ):
     from datetime import datetime, timedelta, timezone
-    from app.models.knowledge import PlatformAuditLog, TenantRegistry, PlatformAdmin
+    from app.models.knowledge import PlatformAuditLog, Tenant, User
 
     total_logs = 0
     try:
@@ -1651,14 +1651,14 @@ def get_dashboard_stats(
 
     active_companies = 0
     try:
-        active_companies = db.query(TenantRegistry).filter(TenantRegistry.status == 'active').count()
+        active_companies = db.query(Tenant).filter(Tenant.status == 'ACTIVE').count()
     except Exception:
         try: db.rollback()
         except: pass
 
     total_users = 0
     try:
-        total_users = db.query(PlatformAdmin).count()
+        total_users = db.query(User).count()
     except Exception:
         try: db.rollback()
         except: pass
