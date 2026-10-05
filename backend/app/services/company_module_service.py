@@ -74,7 +74,7 @@ def get_tenant_module_setup(db, tenant_id: str) -> list[dict]:
 
     return result
 
-def replace_company_modules(db, tenant_id: str, enabled_siglas: list[str]) -> list[dict]:
+def replace_company_modules(db, company_id, tenant_id: str, payload) -> int:
     clean_tenant = resolve_clean_tenant(tenant_id)
     if not clean_tenant:
         raise HTTPException(status_code=404, detail="Tenant inválido")
@@ -84,28 +84,32 @@ def replace_company_modules(db, tenant_id: str, enabled_siglas: list[str]) -> li
         
         master_catalog = get_company_modules_catalog(db)
         
-        for sigla in enabled_siglas:
-            sigla = sigla.strip().upper()
+        for item in payload.modules:
+            sigla = str(getattr(item, "module_code", item[0] if isinstance(item, tuple) else item)).strip().upper()
             master = master_catalog.get(sigla)
             if not master:
-                continue
+                raise HTTPException(status_code=400, detail={"code": "MODULE_NOT_FOUND", "message": f"Module {sigla} not found"})
                 
             m_id = master["module_id"]
             db.execute(
-                text(f"""
+                text(f'''
                     INSERT INTO "{clean_tenant}".tenant_modules (module_id, enabled)
                     VALUES (:mid, true)
                     ON CONFLICT (module_id) DO UPDATE SET enabled = true
-                """),
+                '''),
                 {"mid": m_id}
             )
             
         db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao salvar módulos: {e}")
 
-    return get_tenant_module_setup(db, tenant_id)
+    return 1
+
 
 def get_enabled_company_modules(db, tenant_id: str) -> list[str]:
     clean_tenant = resolve_clean_tenant(tenant_id)
@@ -170,13 +174,24 @@ def list_companies(db, tenant_id=None):
     result = []
     for r in rows:
         t_code = r["tenant_code"]
+        clean = resolve_clean_tenant(t_code)
         
-        result.append({
-            "id": r["id"],
-            "tenant_id": t_code,
-            "tenant_name": r["tenant_name"],
-            "status": r["status"]
-        })
+        try:
+            c_rows = db.execute(text(f'SELECT id, company_code, branch_code, legal_name, tax_id, status FROM "{clean}".companies')).mappings().all()
+            for c in c_rows:
+                result.append({
+                    "id": c["id"],
+                    "tenant_id": t_code,
+                    "tenant_name": r["tenant_name"],
+                    "cnpj": c["tax_id"] or "",
+                    "razao_social": c["legal_name"],
+                    "protheus_empresa": c["company_code"],
+                    "protheus_filial": c["branch_code"],
+                    "status": c["status"]
+                })
+        except Exception:
+            pass
+
     return result
 
 def list_company_modules(db, company_id, tenant_id: str) -> list[dict]:

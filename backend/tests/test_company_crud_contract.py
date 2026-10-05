@@ -42,6 +42,7 @@ def test_list_companies_does_not_expose_tenant_id_as_company_id(monkeypatch):
         company_rows=[],
     )
     monkeypatch.setattr(company_module_service, "ensure_tenant_tables", lambda *_args: None)
+    monkeypatch.setattr(company_module_service, "resolve_clean_tenant", lambda tid: "tenant_fixture")
 
     result = company_module_service.list_companies(db)
 
@@ -65,28 +66,16 @@ def test_list_companies_keeps_real_company_info_id(monkeypatch):
         company_rows=[
             {
                 "id": 42,
-                "tenant_id": "tenant_fixture",
-                "cnpj": "",
-                "ie": None,
-                "razao_social": "Empresa Fixture",
-                "email": None,
-                "telefone": None,
-                "endereco": None,
-                "protheus_grupo": "tenant_fixture",
-                "protheus_empresa": "01",
-                "protheus_unidade": "01",
-                "protheus_filial": "0101",
-                "protheus_ambientes": "c8te0u_prod",
-                "protheus_usuario": None,
-                "protheus_rest_url": None,
-                "webapp_url": None,
-                "status": "ativa",
-                "created_at": None,
-                "updated_at": None,
+                "company_code": "01",
+                "branch_code": "0101",
+                "legal_name": "Empresa Fixture",
+                "tax_id": "",
+                "status": "ACTIVE"
             }
         ],
     )
     monkeypatch.setattr(company_module_service, "ensure_tenant_tables", lambda *_args: None)
+    monkeypatch.setattr(company_module_service, "resolve_clean_tenant", lambda tid: "tenant_fixture")
 
     result = company_module_service.list_companies(db)
 
@@ -106,7 +95,7 @@ class _ModuleWriteDB:
         self.calls.append((sql, params or {}))
         if "FROM public.protheus_modules_master" in sql:
             return _FakeResult([
-                {"mod_code": 2, "mod_sigla": "SIGACOM", "mod_name": "Compras"},
+                {"id": 2, "module_sigla": "SIGACOM", "description": "Compras"},
             ])
         return _FakeResult([])
 
@@ -120,6 +109,7 @@ class _ModuleWriteDB:
 def test_replace_company_modules_refreshes_active_contract_scope(monkeypatch):
     db = _ModuleWriteDB()
     monkeypatch.setattr(company_module_service, "ensure_tenant_tables", lambda *_args: None)
+    monkeypatch.setattr(company_module_service, "resolve_clean_tenant", lambda tid: "tenant_fixture")
     payload = CompanyModulesSaveRequest(
         modules=[{"module_code": "SIGACOM", "enabled": True}],
     )
@@ -133,7 +123,7 @@ def test_replace_company_modules_refreshes_active_contract_scope(monkeypatch):
 
     sql = "\n".join(statement for statement, _ in db.calls)
     assert saved == 1
-    assert 'INSERT INTO "tenant_fixture".protheus_modules' in sql
+    assert 'INSERT INTO "tenant_fixture".tenant_modules' in sql
     assert "DELETE FROM public.tenant_module_contracts" not in sql
     assert "INSERT INTO public.tenant_module_contracts" not in sql
     assert db.commits == 1
@@ -143,6 +133,7 @@ def test_replace_company_modules_refreshes_active_contract_scope(monkeypatch):
 def test_replace_company_modules_rejects_module_outside_global_catalog(monkeypatch):
     db = _ModuleWriteDB()
     monkeypatch.setattr(company_module_service, "ensure_tenant_tables", lambda *_args: None)
+    monkeypatch.setattr(company_module_service, "resolve_clean_tenant", lambda tid: "tenant_fixture")
     payload = CompanyModulesSaveRequest(
         modules=[{"module_code": "SIGAINVALIDO", "enabled": True}],
     )
