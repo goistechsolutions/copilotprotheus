@@ -353,9 +353,9 @@ def ensure_public_tables(db, force: bool = False):
         
         INSERT INTO public.roles (role_code, role_name, scope_level)
         VALUES 
-            ('tenant_admin', 'Administrador do Tenant', 'tenant'),
-            ('tenant_user', 'Usuário Padrão', 'tenant'),
-            ('platform_admin', 'Administrador da Plataforma', 'platform')
+            ('tenant_admin', 'Administrador do Tenant', 'TENANT'),
+            ('tenant_user', 'Usuário Padrão', 'TENANT'),
+            ('platform_admin', 'Administrador da Plataforma', 'PLATFORM')
         ON CONFLICT (role_code) DO NOTHING;
         """,
         """
