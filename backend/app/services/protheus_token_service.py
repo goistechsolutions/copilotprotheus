@@ -96,7 +96,7 @@ def load_connection(
     import json
     from app.db.database import resolve_clean_tenant
     environment_code = _require_real_environment(environment_code)
-    clean_tenant = resolve_clean_tenant(tenant_code)
+    clean_tenant = resolve_clean_tenant(db, tenant_code)
     try:
         row = db.execute(
             text(f"""
@@ -412,13 +412,31 @@ async def get_valid_access_token(
             else connection.get("encrypted_refresh_token")
         )
 
+        # Busca secret_ref atual
+        from app.db.database import resolve_clean_tenant
+        clean_tenant = resolve_clean_tenant(db, connection["tenant_code"])
+        row = db.execute(
+            text(f"SELECT secret_ref FROM \"{clean_tenant}\".protheus_connections WHERE id = :id"),
+            {"id": connection["id"]}
+        ).mappings().first()
+        
+        import json
+        sec_data = {}
+        if row and row["secret_ref"]:
+            try:
+                sec_data = json.loads(row["secret_ref"])
+            except:
+                pass
+                
+        sec_data["encrypted_access_token"] = encrypted_access
+        sec_data["encrypted_refresh_token"] = encrypted_refresh_val
+        sec_data["access_token_expires_at"] = new_token.expires_at.isoformat() if new_token.expires_at else None
+        sec_data["token_updated_at"] = _utcnow().isoformat()
+        
         db.execute(
-            text("""
-                UPDATE public.protheus_rest_connections
-                SET encrypted_access_token = :access_token,
-                    encrypted_refresh_token = :refresh_token,
-                    access_token_expires_at = :expires_at,
-                    token_updated_at = NOW(),
+            text(f"""
+                UPDATE "{clean_tenant}".protheus_connections
+                SET secret_ref = :secret_ref,
                     last_auth_error = NULL,
                     last_auth_status = NULL,
                     last_success_at = NOW(),
@@ -427,9 +445,7 @@ async def get_valid_access_token(
             """),
             {
                 "id": connection["id"],
-                "access_token": encrypted_access,
-                "refresh_token": encrypted_refresh_val,
-                "expires_at": new_token.expires_at,
+                "secret_ref": json.dumps(sec_data)
             },
         )
         db.commit()
@@ -446,7 +462,7 @@ def invalidate_access_token(
     import json
     from app.db.database import resolve_clean_tenant
     environment_code = _require_real_environment(environment_code)
-    clean_tenant = resolve_clean_tenant(tenant_code)
+    clean_tenant = resolve_clean_tenant(db, tenant_code)
     
     try:
         row = db.execute(

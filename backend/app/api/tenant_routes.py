@@ -113,7 +113,7 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: di
     import json
     from app.db.database import resolve_clean_tenant
     
-    clean_tenant = resolve_clean_tenant(tenant_code)
+    clean_tenant = resolve_clean_tenant(db, tenant_code)
     env_code = conn_info["env_code"]
     rest_url = conn_info["rest_url"]
     username = conn_info["username"]
@@ -193,7 +193,7 @@ async def _sync_protheus_connection(db: Session, tenant_code: str, conn_info: di
         "auth": auth_mode,
         "sec_ref": json.dumps(new_secret)
     })
-    db.commit()
+    db.flush()
 
     try:
         invalidate_access_token(db, clean_tenant, env_code)
@@ -227,7 +227,7 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
     from app.db.database import resolve_clean_tenant
     import json
     import datetime
-    clean_tenant = resolve_clean_tenant(t.tenant_code)
+    clean_tenant = resolve_clean_tenant(db, t.tenant_code)
     try:
         conn = db.execute(text(f"""
             SELECT 
@@ -323,26 +323,30 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
             status=(body.status or 'ACTIVE').upper()
         )
         db.add(tenant)
-        db.commit()
-        db.refresh(tenant)
+        db.flush()
     else:
         tenant.tenant_name = body.name or tenant.tenant_name
         tenant.status = str(body.status or tenant.status).upper()
+        db.flush()
+
+    try:
+        # Garante o schema isolado
+        db.execute(text("SELECT public.provision_tenant_schema(:tid)"), {"tid": tenant.id})
+
+        # Materializa a licenca assinada no contrato exigido pelo EntitlementGuard.
+        if body.licenca_uso is not None:
+            _sync_tenant_license_contract(db, tenant, clean_tenant, body.licenca_uso)
+
+        # Processa e valida conexao REST Protheus
+        conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
+        if conn_info:
+            await _sync_protheus_connection(db, clean_tenant, conn_info)
+
         db.commit()
         db.refresh(tenant)
-
-    # Garante o schema isolado
-    db.execute(text("SELECT public.provision_tenant_schema(:tid)"), {"tid": tenant.id})
-    db.commit()
-
-    # Materializa a licença assinada no contrato exigido pelo EntitlementGuard.
-    if body.licenca_uso is not None:
-        _sync_tenant_license_contract(db, tenant, clean_tenant, body.licenca_uso)
-
-    # Processa e valida conexão REST Protheus
-    conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
-    if conn_info:
-        await _sync_protheus_connection(db, clean_tenant, conn_info)
+    except Exception as e:
+        db.rollback()
+        raise e
 
     return _to_tenant_dict(db, tenant)
 
@@ -361,7 +365,7 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
     db.commit()
     db.refresh(tenant)
 
-    clean_tenant = resolve_clean_tenant(tenant.tenant_code)
+    clean_tenant = tenant.schema_name
     if clean_tenant and clean_tenant != "public":
         db.execute(text("SELECT public.provision_tenant_schema(:tid)"), {"tid": tenant.id})
     db.commit()

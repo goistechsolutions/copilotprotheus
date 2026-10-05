@@ -39,7 +39,7 @@ BEGIN
   EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.companies (
+    CREATE TABLE IF NOT EXISTS %I.companies (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_code varchar(32) NOT NULL,
       branch_code varchar(32) NOT NULL,
@@ -54,7 +54,7 @@ BEGIN
   $ddl$, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.environments (
+    CREATE TABLE IF NOT EXISTS %I.environments (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       environment_code varchar(64) NOT NULL UNIQUE,
       environment_name varchar(160) NOT NULL,
@@ -65,7 +65,7 @@ BEGIN
   $ddl$, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.protheus_connections (
+    CREATE TABLE IF NOT EXISTS %I.protheus_connections (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       environment_id uuid NOT NULL REFERENCES %I.environments(id) ON DELETE CASCADE,
       base_rest_url text NOT NULL,
@@ -82,7 +82,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.user_company_access (
+    CREATE TABLE IF NOT EXISTS %I.user_company_access (
       user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
       company_id uuid NOT NULL REFERENCES %I.companies(id) ON DELETE CASCADE,
       environment_id uuid NOT NULL REFERENCES %I.environments(id) ON DELETE CASCADE,
@@ -92,7 +92,7 @@ BEGIN
   $ddl$, v_schema, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.tenant_modules (
+    CREATE TABLE IF NOT EXISTS %I.tenant_modules (
       module_id integer PRIMARY KEY REFERENCES public.protheus_modules_master(id),
       enabled boolean NOT NULL DEFAULT true,
       provisioned_at timestamptz NOT NULL DEFAULT now()
@@ -108,7 +108,7 @@ BEGIN
   ) USING p_tenant_id;
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_rule_sets (
+    CREATE TABLE IF NOT EXISTS %I.business_rule_sets (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       rule_set_code varchar(100) NOT NULL UNIQUE,
       name varchar(160) NOT NULL,
@@ -124,7 +124,7 @@ BEGIN
   $ddl$, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_rule_tes (
+    CREATE TABLE IF NOT EXISTS %I.business_rule_tes (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       rule_set_id uuid NOT NULL REFERENCES %I.business_rule_sets(id) ON DELETE CASCADE,
       tes_code varchar(16) NOT NULL,
@@ -143,7 +143,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_cfop_rules (
+    CREATE TABLE IF NOT EXISTS %I.business_cfop_rules (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       rule_set_id uuid NOT NULL REFERENCES %I.business_rule_sets(id) ON DELETE CASCADE,
       cfop_code varchar(16) NOT NULL,
@@ -160,7 +160,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_financial_natures (
+    CREATE TABLE IF NOT EXISTS %I.business_financial_natures (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       rule_set_id uuid NOT NULL REFERENCES %I.business_rule_sets(id) ON DELETE CASCADE,
       nature_code varchar(64) NOT NULL,
@@ -176,7 +176,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_revenue_configs (
+    CREATE TABLE IF NOT EXISTS %I.business_revenue_configs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id uuid REFERENCES %I.companies(id) ON DELETE CASCADE,
       included_classifications jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -191,7 +191,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_receivable_configs (
+    CREATE TABLE IF NOT EXISTS %I.business_receivable_configs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id uuid REFERENCES %I.companies(id) ON DELETE CASCADE,
       overdue_days integer NOT NULL DEFAULT 30 CHECK(overdue_days >= 0),
@@ -207,7 +207,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_inventory_configs (
+    CREATE TABLE IF NOT EXISTS %I.business_inventory_configs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id uuid REFERENCES %I.companies(id) ON DELETE CASCADE,
       stock_idle_days integer CHECK(stock_idle_days IS NULL OR stock_idle_days >= 0),
@@ -223,7 +223,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_abc_configs (
+    CREATE TABLE IF NOT EXISTS %I.business_abc_configs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id uuid REFERENCES %I.companies(id) ON DELETE CASCADE,
       class_a_pct numeric(8,4) NOT NULL,
@@ -241,7 +241,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.business_synonyms (
+    CREATE TABLE IF NOT EXISTS %I.business_synonyms (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       source_term varchar(200) NOT NULL,
       target_term varchar(200) NOT NULL,
@@ -253,7 +253,7 @@ BEGIN
   $ddl$, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.dictionary_snapshots (
+    CREATE TABLE IF NOT EXISTS %I.dictionary_snapshots (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       environment_id uuid NOT NULL REFERENCES %I.environments(id),
       module_id integer NOT NULL REFERENCES %I.tenant_modules(module_id),
@@ -266,7 +266,7 @@ BEGIN
   $ddl$, v_schema, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.dictionary_tables (
+    CREATE TABLE IF NOT EXISTS %I.dictionary_tables (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       snapshot_id uuid NOT NULL REFERENCES %I.dictionary_snapshots(id) ON DELETE CASCADE,
       table_code varchar(32) NOT NULL,
@@ -280,7 +280,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.dictionary_fields (
+    CREATE TABLE IF NOT EXISTS %I.dictionary_fields (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       table_id uuid NOT NULL REFERENCES %I.dictionary_tables(id) ON DELETE CASCADE,
       field_name varchar(100) NOT NULL,
@@ -297,7 +297,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.documents (
+    CREATE TABLE IF NOT EXISTS %I.documents (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       visibility varchar(32) NOT NULL,
       title varchar(300) NOT NULL,
@@ -315,7 +315,7 @@ BEGIN
   $ddl$, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.document_chunks (
+    CREATE TABLE IF NOT EXISTS %I.document_chunks (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       document_id uuid NOT NULL REFERENCES %I.documents(id) ON DELETE CASCADE,
       chunk_order integer NOT NULL CHECK(chunk_order >= 0),
@@ -330,7 +330,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.memories (
+    CREATE TABLE IF NOT EXISTS %I.memories (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id uuid REFERENCES %I.companies(id) ON DELETE CASCADE,
       visibility varchar(32) NOT NULL,
@@ -348,7 +348,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.copilot_conversations (
+    CREATE TABLE IF NOT EXISTS %I.copilot_conversations (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid NOT NULL REFERENCES public.users(id),
       title varchar(300),
@@ -362,7 +362,7 @@ BEGIN
   $ddl$, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.copilot_messages (
+    CREATE TABLE IF NOT EXISTS %I.copilot_messages (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       conversation_id uuid NOT NULL REFERENCES %I.copilot_conversations(id) ON DELETE CASCADE,
       role varchar(16) NOT NULL CHECK(role IN ('user','assistant','system','tool')),
@@ -376,7 +376,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.copilot_analyses (
+    CREATE TABLE IF NOT EXISTS %I.copilot_analyses (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       conversation_id uuid NOT NULL REFERENCES %I.copilot_conversations(id) ON DELETE CASCADE,
       source_message_id uuid NOT NULL REFERENCES %I.copilot_messages(id),
@@ -410,7 +410,7 @@ BEGIN
   );
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.copilot_dashboards (
+    CREATE TABLE IF NOT EXISTS %I.copilot_dashboards (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       conversation_id uuid NOT NULL REFERENCES %I.copilot_conversations(id) ON DELETE CASCADE,
       analysis_id uuid NOT NULL REFERENCES %I.copilot_analyses(id) ON DELETE RESTRICT,
@@ -425,7 +425,7 @@ BEGIN
   $ddl$, v_schema, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.copilot_sessions (
+    CREATE TABLE IF NOT EXISTS %I.copilot_sessions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
       active_conversation_id uuid REFERENCES %I.copilot_conversations(id) ON DELETE SET NULL,
@@ -435,7 +435,7 @@ BEGIN
   $ddl$, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.copilot_favorites (
+    CREATE TABLE IF NOT EXISTS %I.copilot_favorites (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
       item_type varchar(32) NOT NULL,
@@ -448,7 +448,7 @@ BEGIN
   $ddl$, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.copilot_events (
+    CREATE TABLE IF NOT EXISTS %I.copilot_events (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
       conversation_id uuid REFERENCES %I.copilot_conversations(id) ON DELETE SET NULL,
@@ -462,7 +462,7 @@ BEGIN
   $ddl$, v_schema, v_schema, v_schema, v_schema);
 
   EXECUTE format($ddl$
-    CREATE TABLE %I.agent_query_audit (
+    CREATE TABLE IF NOT EXISTS %I.agent_query_audit (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
       company_id uuid REFERENCES %I.companies(id) ON DELETE SET NULL,
@@ -480,14 +480,14 @@ BEGIN
     )
   $ddl$, v_schema, v_schema, v_schema, v_schema, v_schema);
 
-  EXECUTE format('CREATE INDEX idx_%s_messages_conversation_created ON %I.copilot_messages(conversation_id, created_at)', v_schema, v_schema);
-  EXECUTE format('CREATE INDEX idx_%s_messages_analysis ON %I.copilot_messages(analysis_id)', v_schema, v_schema);
-  EXECUTE format('CREATE INDEX idx_%s_analyses_conversation_created ON %I.copilot_analyses(conversation_id, created_at)', v_schema, v_schema);
-  EXECUTE format('CREATE INDEX idx_%s_dashboards_conversation ON %I.copilot_dashboards(conversation_id)', v_schema, v_schema);
-  EXECUTE format('CREATE INDEX idx_%s_events_trace ON %I.copilot_events(trace_id)', v_schema, v_schema);
-  EXECUTE format('CREATE INDEX idx_%s_query_audit_created ON %I.agent_query_audit(created_at)', v_schema, v_schema);
-  EXECUTE format('CREATE INDEX idx_%s_dictionary_tables_snapshot ON %I.dictionary_tables(snapshot_id)', v_schema, v_schema);
-  EXECUTE format('CREATE INDEX idx_%s_dictionary_fields_table ON %I.dictionary_fields(table_id)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_messages_conversation_created ON %I.copilot_messages(conversation_id, created_at)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_messages_analysis ON %I.copilot_messages(analysis_id)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_analyses_conversation_created ON %I.copilot_analyses(conversation_id, created_at)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_dashboards_conversation ON %I.copilot_dashboards(conversation_id)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_events_trace ON %I.copilot_events(trace_id)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_query_audit_created ON %I.agent_query_audit(created_at)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_dictionary_tables_snapshot ON %I.dictionary_tables(snapshot_id)', v_schema, v_schema);
+  EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_dictionary_fields_table ON %I.dictionary_fields(table_id)', v_schema, v_schema);
 
   UPDATE public.tenants
      SET status='ACTIVE', provisioned_at=now(), updated_at=now()
