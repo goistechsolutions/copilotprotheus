@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.admin_security import require_admin
+from app.core.admin_security import require_admin, authorize_admin_access
 from app.db.database import get_db, ensure_tenant_tables, resolve_clean_tenant
 from app.models.business_knowledge import (
     BusinessDomain,
