@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
-import PageHeader from '../components/PageHeader';
+import PageHeader from '../components/ui/PageHeader';
 import { Search, Plus, Edit2, Building, Trash2, ChevronRight, Loader2, Save, ArrowRight } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 

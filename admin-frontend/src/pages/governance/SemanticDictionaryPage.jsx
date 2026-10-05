@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from '../../api/axios';
-import PageHeader from '../../components/PageHeader';
+import PageHeader from '../../components/ui/PageHeader';
 import { Search, Plus, Trash2, Edit2, AlertCircle, RefreshCw, ChevronDown, BookOpen } from 'lucide-react';
 
 export default function SemanticDictionaryPage() {

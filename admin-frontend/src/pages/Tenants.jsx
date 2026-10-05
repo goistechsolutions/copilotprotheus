@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import api from '../api/axios';
-import PageHeader from '../components/PageHeader';
-import DataTable from '../components/DataTable';
-import Badge from '../components/Badge';
+import PageHeader from '../components/ui/PageHeader';
+import DataTable from '../components/ui/DataTable';
+import Badge from '../components/ui/Badge';
 import { Plus, Edit2, RefreshCw, Building2, ShieldCheck, AlertTriangle, Save, Loader2, Server, Database, Key } from 'lucide-react';
 
 const EMPTY = {
