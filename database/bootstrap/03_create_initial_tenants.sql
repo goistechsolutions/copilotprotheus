@@ -1,0 +1,10 @@
+-- Edite e revise antes de executar. Não contém dados corporativos simulados.
+-- Exemplo de uso após cadastrar um tenant real:
+--
+-- INSERT INTO public.tenants(tenant_code, tenant_name, schema_name, status)
+-- VALUES (:tenant_code, :tenant_name, :schema_name, 'PENDING')
+-- RETURNING id;
+--
+-- SELECT public.provision_tenant_schema(:tenant_id);
+--
+-- Não deixe placeholders em produção.
