@@ -11,7 +11,7 @@ import jwt
 
 from app.db.database import get_db, resolve_clean_tenant
 from app.models.knowledge import (
-    Company, LicensePlan, AgentQueryAudit,
+    Company, AgentQueryAudit,
     ProtheusModuleMaster, TenantContract
 )
 from app.schemas.company import (

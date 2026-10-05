@@ -38,17 +38,6 @@ class Tenant(GlobalBase):
 
 
 
-class Plan(GlobalBase):
-    __tablename__ = "plans"
-    __table_args__ = {"schema": "public", "extend_existing": True}
-
-    plan_code = Column(String(50), primary_key=True)
-    plan_name = Column(String(150), nullable=False)
-    max_users = Column(Integer, default=5)
-    max_queries_day = Column(Integer, default=500)
-    modules_allowed = Column(JSONB, default=list)
-    active = Column(Boolean, default=True)
-
 
 class PlatformAdmin(GlobalBase):
     __tablename__ = "platform_admins"
@@ -218,22 +207,6 @@ class Connector(GlobalBase):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
 
-class LicensePlan(GlobalBase):
-    """Corresponde a public.license_plans"""
-    __tablename__ = "license_plans"
-    __table_args__ = {"schema": "public", "extend_existing": True}
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    plan_code = Column(String(60), nullable=False, unique=True)
-    plan_name = Column(String(150), nullable=False)
-    billing_cycle = Column(String(20), nullable=False, default="monthly")
-    query_limit = Column(Integer)
-    concurrent_sessions_limit = Column(Integer)
-    overage_mode = Column(String(20), nullable=False, default="block")
-    active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True))
-
 class TenantContract(GlobalBase):
     """Corresponde a public.tenant_contracts"""
     __tablename__ = "tenant_contracts"
@@ -250,6 +223,20 @@ class TenantContract(GlobalBase):
     concurrent_sessions_override = Column(Integer)
     overage_mode_override = Column(String(20))
     notes = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True))
+
+class Plan(GlobalBase):
+    """Corresponde a public.plans"""
+    __tablename__ = "plans"
+    __table_args__ = {"schema": "public", "extend_existing": True}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_code = Column(String(64), nullable=False, unique=True)
+    plan_name = Column(String(160), nullable=False)
+    query_limit = Column(Integer)
+    concurrent_sessions_limit = Column(Integer)
+    active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
 

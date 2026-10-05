@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.api.admin_routes import verify_admin
 from app.db.database import get_db
-from app.models.knowledge import LicensePlan, ProtheusModuleMaster, Tenant, TenantContract
+from app.models.knowledge import Plan, ProtheusModuleMaster, Tenant, TenantContract
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +36,8 @@ def list_tenant_options(db: Session = Depends(get_db), _admin: str = Depends(ver
 class PlanPayload(BaseModel):
     plan_code: str = Field(min_length=2, max_length=60, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
     plan_name: str = Field(min_length=2, max_length=150)
-    billing_cycle: str = Field(default="monthly", pattern=r"^(monthly|quarterly|annual|one_time)$")
     query_limit: int | None = Field(default=None, ge=0)
     concurrent_sessions_limit: int | None = Field(default=None, ge=1)
-    overage_mode: str = Field(default="block", pattern=r"^(block|allow|charge|overage)$")
     active: bool = True
 
 
@@ -74,8 +72,8 @@ def _tenant_or_404(db: Session, tenant_id: str) -> Tenant:
     return tenant
 
 
-def _plan_or_404(db: Session, plan_id: UUID) -> LicensePlan:
-    plan = db.query(LicensePlan).filter(LicensePlan.id == plan_id).first()
+def _plan_or_404(db: Session, plan_id: UUID) -> Plan:
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plano não encontrado.")
     return plan
@@ -83,13 +81,13 @@ def _plan_or_404(db: Session, plan_id: UUID) -> LicensePlan:
 
 @router.get("/license-plans")
 def list_license_plans(db: Session = Depends(get_db), _admin: str = Depends(verify_admin)):
-    plans = db.query(LicensePlan).order_by(LicensePlan.plan_code).all()
+    plans = db.query(Plan).order_by(Plan.plan_code).all()
     return {"items": [
         {
             "id": str(plan.id), "plan_code": plan.plan_code, "plan_name": plan.plan_name,
-            "billing_cycle": plan.billing_cycle, "query_limit": plan.query_limit,
+            "query_limit": plan.query_limit,
             "concurrent_sessions_limit": plan.concurrent_sessions_limit,
-            "overage_mode": plan.overage_mode, "active": plan.active,
+            "active": plan.active,
             "created_at": plan.created_at, "updated_at": plan.updated_at,
         } for plan in plans
     ]}
@@ -97,9 +95,9 @@ def list_license_plans(db: Session = Depends(get_db), _admin: str = Depends(veri
 
 @router.post("/license-plans", status_code=status.HTTP_201_CREATED)
 def create_license_plan(payload: PlanPayload, db: Session = Depends(get_db), _admin: str = Depends(verify_admin)):
-    if db.query(LicensePlan).filter(LicensePlan.plan_code == payload.plan_code).first():
+    if db.query(Plan).filter(Plan.plan_code == payload.plan_code).first():
         raise HTTPException(status_code=409, detail="Código de plano já cadastrado.")
-    plan = LicensePlan(**payload.model_dump())
+    plan = Plan(**payload.model_dump())
     db.add(plan)
     db.commit()
     db.refresh(plan)
@@ -109,7 +107,7 @@ def create_license_plan(payload: PlanPayload, db: Session = Depends(get_db), _ad
 @router.put("/license-plans/{plan_id}")
 def update_license_plan(plan_id: UUID, payload: PlanPayload, db: Session = Depends(get_db), _admin: str = Depends(verify_admin)):
     plan = _plan_or_404(db, plan_id)
-    conflict = db.query(LicensePlan).filter(LicensePlan.plan_code == payload.plan_code, LicensePlan.id != plan_id).first()
+    conflict = db.query(Plan).filter(Plan.plan_code == payload.plan_code, Plan.id != plan_id).first()
     if conflict:
         raise HTTPException(status_code=409, detail="Código de plano já cadastrado.")
     for key, value in payload.model_dump().items():
@@ -130,7 +128,7 @@ def delete_license_plan(plan_id: UUID, db: Session = Depends(get_db), _admin: st
 
 @router.get("/contracts")
 def list_contracts(tenant_id: str | None = None, db: Session = Depends(get_db), _admin: str = Depends(verify_admin)):
-    query = db.query(TenantContract, LicensePlan.plan_code, LicensePlan.plan_name).outerjoin(LicensePlan, LicensePlan.id == TenantContract.plan_id)
+    query = db.query(TenantContract, Plan.plan_code, Plan.plan_name).outerjoin(Plan, Plan.id == TenantContract.plan_id)
     if tenant_id:
         clean = str(tenant_id).strip().lower()
         query = query.filter(TenantContract.tenant_id == clean)
