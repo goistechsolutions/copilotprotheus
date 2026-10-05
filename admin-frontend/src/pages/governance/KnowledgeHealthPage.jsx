@@ -182,7 +182,12 @@ export default function KnowledgeHealthPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {item.missing_tables?.length > 0 ? (
+                      {item.error === 'DOMAIN_CATALOG_MISMATCH' ? (
+                        <div className="text-red-400 text-[11px] bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-md inline-block">
+                          <span className="font-bold">DOMAIN_CATALOG_MISMATCH</span>
+                          <div className="mt-0.5 text-[#8892A4]">Módulo(s) ausente(s) no contrato: {item.missing_modules?.join(', ')}</div>
+                        </div>
+                      ) : item.missing_tables?.length > 0 ? (
                         <span className="text-red-400 text-[11px] font-mono">
                           {item.missing_tables.join(', ')}
                         </span>
