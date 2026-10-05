@@ -215,8 +215,8 @@ def launch(request: Request):
             .filter(Tenant.tenant_code == tenant_id, Tenant.status == "active")
             .first()
         )
-        if tenant and tenant.webapp_url:
-            launch_url = str(tenant.webapp_url).strip()
+        if tenant:
+            launch_url = "https://erp.goistech.com.br"  # Default / Placeholder
     finally:
         db.close()
 

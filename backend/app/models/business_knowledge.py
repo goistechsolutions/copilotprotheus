@@ -32,15 +32,12 @@ class BusinessDomain(GlobalBase):
 
 
 class BusinessDomainModule(GlobalBase):
-    """Mapeamento explícito entre Domínios de Negócio e Módulos Oficiais do Protheus."""
     __tablename__ = "business_domain_modules"
     __table_args__ = {"schema": "public", "extend_existing": True}
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    domain_code = Column(String(50), ForeignKey("public.business_domains.domain_code", ondelete="CASCADE"), nullable=False, index=True)
-    mod_sigla = Column(String(30), nullable=False, index=True)
-    mod_code = Column(Integer, nullable=False, index=True)
-    is_primary = Column(Boolean, default=True, nullable=False)
+    domain_code = Column(String(64), ForeignKey("public.business_domains.domain_code", ondelete="CASCADE"), primary_key=True, nullable=False, index=True)
+    module_id = Column(Integer, ForeignKey("public.protheus_modules_master.id"), primary_key=True, nullable=False)
+    is_primary = Column(Boolean, default=False, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 

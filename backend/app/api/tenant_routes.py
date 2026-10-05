@@ -90,18 +90,18 @@ def extract_connection_info(body: TenantCreate | TenantUpdate, db: Optional[Sess
         "auth_mode": str(auth).strip()
     }
 
-def _sync_tenant_license_contract(db: Session, tenant: Tenant, tenant_schema: str) -> None:
+def _sync_tenant_license_contract(db: Session, tenant, tenant_schema: str, licenca_uso: str = None) -> None:
     """Sincroniza somente a licença JWT explicitamente salva no cadastro."""
-    if not tenant.licenca_uso:
+    if not licenca_uso:
         return
     try:
         sync_license_entitlement(
             db,
             tenant_code=tenant.tenant_code,
             tenant_schema=tenant_schema,
-            plan_code=tenant.plan_code,
+            plan_code=None,
             license_token=tenant.licenca_uso,
-            cnpj=tenant.cnpj,
+            cnpj=None,
         )
     except ValueError as exc:
         db.rollback()
@@ -275,13 +275,7 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
             tenant_code=clean_tenant,
             tenant_name=body.name or clean_tenant,
             schema_name=clean_tenant,
-            status=body.status or 'active',
-            plan_code=body.plan_code,
-            cnpj=body.cnpj,
-            licenca_uso=body.licenca_uso,
-            webapp_url=body.protheus_webapp_url,
-            system_prompt=body.system_prompt,
-            temperature=body.temperature,
+            status=body.status or 'ACTIVE'
         )
         db.add(tenant)
         db.commit()
@@ -289,21 +283,16 @@ async def create_tenant(body: TenantCreate, db: Session = Depends(get_db), _admi
     else:
         tenant.tenant_name = body.name or tenant.tenant_name
         tenant.status = body.status or tenant.status
-        tenant.plan_code = body.plan_code or tenant.plan_code
-        tenant.cnpj = body.cnpj or tenant.cnpj
-        tenant.licenca_uso = body.licenca_uso or tenant.licenca_uso
-        tenant.webapp_url = body.protheus_webapp_url or tenant.webapp_url
-        tenant.system_prompt = body.system_prompt or tenant.system_prompt
-        tenant.temperature = body.temperature if body.temperature is not None else tenant.temperature
         db.commit()
         db.refresh(tenant)
 
     # Garante o schema isolado
-    ensure_tenant_tables(db, clean_tenant)
+    db.execute(text("SELECT public.provision_tenant_schema(:tid)"), {"tid": tenant.id})
+    db.commit()
 
     # Materializa a licença assinada no contrato exigido pelo EntitlementGuard.
     if body.licenca_uso is not None:
-        _sync_tenant_license_contract(db, tenant, clean_tenant)
+        _sync_tenant_license_contract(db, tenant, clean_tenant, body.licenca_uso)
 
     # Processa e valida conexão REST Protheus
     conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)
@@ -341,11 +330,12 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, db: Session = Depend
 
     clean_tenant = resolve_clean_tenant(tenant.tenant_code)
     if clean_tenant and clean_tenant != "public":
-        ensure_tenant_tables(db, clean_tenant)
+        db.execute(text("SELECT public.provision_tenant_schema(:tid)"), {"tid": tenant.id})
+    db.commit()
 
     # Materializa a licença assinada no contrato exigido pelo EntitlementGuard.
     if body.licenca_uso is not None:
-        _sync_tenant_license_contract(db, tenant, clean_tenant)
+        _sync_tenant_license_contract(db, tenant, clean_tenant, body.licenca_uso)
 
     # Processa e valida conexão REST Protheus
     conn_info = extract_connection_info(body, db=db, tenant_code=clean_tenant)

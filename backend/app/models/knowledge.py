@@ -24,33 +24,18 @@ from app.db.database import GlobalBase, TenantBase
 
 class Tenant(GlobalBase):
     """Corresponde a public.tenant"""
-    __tablename__ = "tenant"
+    __tablename__ = "tenants"
     __table_args__ = {"schema": "public", "extend_existing": True}
 
-    id = Column(Integer, primary_key=True)
-    tenant_code = Column(String(50), unique=True, nullable=False)
-    tenant_name = Column(String(150), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_code = Column(String(64), unique=True, nullable=False)
+    tenant_name = Column(String(200), nullable=False)
     schema_name = Column(String(63), unique=True, nullable=False)
-    cnpj = Column(String(20))
-    webapp_url = Column(Text)
-    apirest_url = Column(Text)
-    frontend_domain = Column(Text)
-    protheus_user = Column(String(100))
-    encrypted_protheus_password = Column(String(255))
-    protheus_ambientes = Column(String(100), default=" ")
-    status = Column(String(20), nullable=False, default="provisioning")
-    system_prompt = Column(Text)
-    temperature = Column(Numeric(3, 2), default=0.20)
-    licenca_uso = Column(Text)
-    plan_code = Column(String(50))
-    contract_info = Column(JSONB)
-    api_access_info = Column(JSONB)
-    version = Column(String(50))
-    agent_permissions = Column(JSONB)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    status = Column(String(24), nullable=False, default="ACTIVE")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     provisioned_at = Column(TIMESTAMP(timezone=True))
-    decommissioned_at = Column(TIMESTAMP(timezone=True))
+
 
 
 class Plan(GlobalBase):
