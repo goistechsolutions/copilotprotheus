@@ -1,143 +1,97 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
-import {
-  Building, Plus, Edit2, Trash2, Save, X,
-  Search, ChevronRight, Globe, Loader2
-} from 'lucide-react';
-import PageHeader from '../components/ui/PageHeader';
+import PageHeader from '../components/PageHeader';
+import { Search, Plus, Edit2, Building, Trash2, ChevronRight, Loader2, Save, ArrowRight } from 'lucide-react';
+import { useApi } from '../hooks/useApi';
 
 const EMPTY = {
-  cnpj:'', razao_social:'', ie:'', email:'', telefone:'', endereco:'',
-  protheus_grupo:'', protheus_empresa:'', protheus_unidade:'', protheus_filial:'',
-  protheus_ambientes:'', protheus_usuario:'', protheus_password:'',
-  protheus_rest_url:'', webapp_url:'', status:'ativa',
-  tenant_id:''
+  company_code: '',
+  branch_code: '',
+  legal_name: '',
+  tax_id: '',
+  status: 'ACTIVE'
 };
 
-function Field({ label, name, form, onChange, type='text', placeholder='', span=false, mono=false }) {
-  return (
-    <div className={span ? 'md:col-span-2' : ''}>
-      <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">{label}</label>
-      <input
-        type={type} value={form[name] || ''}
-        onChange={e => onChange(name, e.target.value)}
-        placeholder={placeholder}
-        className={`w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm placeholder-[#8892A4]/40 focus:outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/20 transition-all ${
-          mono ? 'font-mono' : ''
-        }`}
-      />
-    </div>
-  );
-}
-
-function SectionTitle({ children }) {
-  return (
-    <div className="md:col-span-2 flex items-center gap-3 mt-2">
-      <span className="text-[#8892A4] text-[10px] font-bold uppercase tracking-[0.15em]">{children}</span>
-      <div className="flex-1 h-px bg-[#1E2535]" />
-    </div>
-  );
-}
-
-function formatApiError(error) {
-  const detail = error?.response?.data?.detail;
-  if (Array.isArray(detail)) {
-    return detail.map(item => {
-      if (typeof item === 'string') return item;
-      const location = Array.isArray(item?.loc) ? item.loc.join('.') : '';
-      return [location, item?.msg].filter(Boolean).join(': ') || JSON.stringify(item);
-    }).join('; ');
-  }
-  if (detail && typeof detail === 'object') return detail.message || JSON.stringify(detail);
-  return detail || error?.message || 'Falha ao salvar empresa.';
-}
-
-function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
-  const [form, setForm] = useState(isNew ? EMPTY : { ...company });
+function CompanyModal({ company, isNew, selectedTenant, onClose, onSaved }) {
+  const [form, setForm] = useState(isNew ? { ...EMPTY } : {
+    company_code: company.protheus_empresa || company.company_code || '',
+    branch_code: company.protheus_filial || company.branch_code || '',
+    legal_name: company.razao_social || company.legal_name || '',
+    tax_id: company.cnpj || company.tax_id || '',
+    status: company.status || 'ACTIVE'
+  });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
-  const change = (name, val) => setForm(p => ({ ...p, [name]: val }));
+  const change = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const f = ({ label, name, required, placeholder }) => (
+    <div>
+      <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">
+        {label} {required && <span className="text-[#2196F3]">*</span>}
+      </label>
+      <input
+        type="text" required={required} placeholder={placeholder}
+        value={form[name] || ''} onChange={e => change(name, e.target.value)}
+        className="w-full bg-[#0F1117] border border-[#1E2535] text-white text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#2196F3] focus:ring-1 focus:ring-[#2196F3]/50 transition-all"
+      />
+    </div>
+  );
 
-  const save = async (e) => {
-    e.preventDefault(); setSaving(true); setErr('');
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setErr('');
     try {
       const payload = {
-        ...form,
-        // O schema FastAPI exige os nomes canônicos. Mantemos os campos
-        // legados do formulário para compatibilidade com o restante do CRUD.
-        company_code: form.company_code || form.protheus_empresa,
-        company_name: form.company_name || form.razao_social,
+        tenant_id: selectedTenant,
+        ...form
       };
-      if (isNew) await axios.post('/api/companies', payload);
-      else       await axios.put(`/api/companies/${form.id}`, payload);
+      
+      if (isNew) {
+        await axios.post('/api/companies', payload);
+      } else {
+        await axios.put(`/api/companies/${company.id}`, payload);
+      }
       onSaved();
-    } catch (e) { setErr(formatApiError(e)); }
-    finally { setSaving(false); }
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message || 'Erro ao salvar empresa.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-
-  const f = (props) => <Field form={form} onChange={change} {...props} />;
-
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center overflow-y-auto py-8 px-4">
-      <div className="bg-[#161B27] border border-[#1E2535] rounded-2xl w-full max-w-2xl shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2535]">
-          <h2 className="text-white font-semibold">{isNew ? 'Nova Empresa' : 'Editar Empresa'}</h2>
-          <button onClick={onClose} className="text-[#8892A4] hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+    <div className="fixed inset-0 z-50 bg-[#0F1117]/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
+        <div className="p-5 border-b border-[#1E2535] flex justify-between items-center bg-[#1A202C]">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Building className="w-5 h-5 text-[#2196F3]" />
+            {isNew ? 'Nova Empresa/Filial' : 'Editar Empresa/Filial'}
+          </h2>
+          <button onClick={onClose} className="text-[#8892A4] hover:text-white transition-colors">&times;</button>
         </div>
 
-        <form onSubmit={save} className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleSave} className="p-6 overflow-y-auto">
+          <div className="space-y-4">
+            {f({ label: 'Razão Social', name: 'legal_name', required: true })}
+            {f({ label: 'CNPJ (Tax ID)', name: 'tax_id' })}
 
-            <SectionTitle>Dados Cadastrais</SectionTitle>
-            {f({ label:'CNPJ', name:'cnpj', placeholder:'00.000.000/0001-00', mono:true })}
-            {f({ label:'IE', name:'ie', placeholder:'Inscrição Estadual' })}
-            {f({ label:'Razão Social', name:'razao_social', placeholder:'Empresa Ltda', span:true })}
-            {f({ label:'E-mail', name:'email', type:'email', placeholder:'contato@empresa.com' })}
-            {f({ label:'Telefone', name:'telefone', placeholder:'(11) 99999-9999' })}
-            {f({ label:'Endereço', name:'endereco', span:true })}
-
-            <SectionTitle>Configurações Protheus</SectionTitle>
-            <div className="md:col-span-2">
-              <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Tenant Vinculado *</label>
-              <select
-                value={form.tenant_id || ''}
-                onChange={e => change('tenant_id', e.target.value)}
-                className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#2196F3] transition-all"
-              >
-                <option value="">Selecione um Tenant...</option>
-                {tenants.map(t => (
-                  <option key={t.id} value={t.tenant_code || t.code || t.id}>{t.tenant_name || t.name} ({t.tenant_code || t.code || t.id})</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-2 gap-4">
+              {f({ label: 'Empresa Protheus (Ex: 01)', name: 'company_code', required: true })}
+              {f({ label: 'Filial Protheus (Ex: 0101)', name: 'branch_code', required: true })}
             </div>
-            {f({ label:'Grupo', name:'protheus_grupo', placeholder:'T1', mono:true })}
-            {f({ label:'Empresa', name:'protheus_empresa', placeholder:'01', mono:true })}
-            {f({ label:'Unidade', name:'protheus_unidade', placeholder:'01', mono:true })}
-            {f({ label:'Filial', name:'protheus_filial', placeholder:'0101', mono:true })}
-            {f({ label:'Ambientes', name:'protheus_ambientes', placeholder:'producao,hml', mono:true, span:true })}
-            {f({ label:'Usuário REST', name:'protheus_usuario', placeholder:'admin' })}
-            {f({ label:'Senha REST', name:'protheus_password', type:'password', placeholder: isNew ? 'Obrigatória' : (form.has_password ? 'Senha configurada (em branco = manter)' : 'Em branco = manter') })}
-            {f({ label:'URL REST (API)', name:'protheus_rest_url', placeholder:'http://ip:porta/rest', span:true, mono:true })}
-            {f({ label:'URL WebApp', name:'webapp_url', placeholder:'http://ip:porta/webapp', span:true, mono:true })}
-
-            <SectionTitle>Status</SectionTitle>
 
             <div>
               <label className="block text-[#8892A4] text-[10px] font-semibold uppercase tracking-wider mb-1.5">Status</label>
               <select
-                value={form.status || 'ativa'}
+                value={form.status || 'ACTIVE'}
                 onChange={e => change('status', e.target.value)}
                 className="w-full bg-[#0F1117] border border-[#1E2535] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#2196F3] transition-all"
               >
-                <option value="ativa">Ativa</option>
-                <option value="inativa">Inativa</option>
-                <option value="suspensa">Suspensa</option>
+                <option value="ACTIVE">Ativa</option>
+                <option value="INACTIVE">Inativa</option>
+                <option value="SUSPENDED">Suspensa</option>
               </select>
             </div>
           </div>
@@ -152,7 +106,7 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
               Cancelar
             </button>
             <button type="submit" disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 text-sm bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white font-semibold rounded-lg disabled:opacity-50 transition-all">
+              className="flex items-center gap-2 px-5 py-2 text-sm bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white font-semibold rounded-lg disabled:opacity-50 transition-all shadow-lg shadow-[#1565C0]/20">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               {saving ? 'Salvando...' : 'Salvar'}
             </button>
@@ -165,114 +119,160 @@ function CompanyModal({ company, tenants, onClose, onSaved, isNew }) {
 
 export default function Companies() {
   const navigate = useNavigate();
+  const { data: tenantsData, loading: loadingTenants } = useApi('/api/tenants');
   const [companies, setCompanies] = useState([]);
-  const [tenants, setTenants]     = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState('');
-  const [modal, setModal]         = useState(null); // null | 'new' | company
+  const [selectedTenant, setSelectedTenant] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [modal, setModal] = useState(null);
 
-  const fetchData = async () => {
+  const tenants = Array.isArray(tenantsData) ? tenantsData : (tenantsData?.items ?? tenantsData?.tenants ?? []);
+
+  useEffect(() => {
+    if (tenants.length > 0 && !selectedTenant) {
+      setSelectedTenant(tenants[0].tenant_code);
+    }
+  }, [tenants, selectedTenant]);
+
+  const fetchCompanies = async () => {
+    if (!selectedTenant) return;
+    setLoading(true);
     try {
-      const cRes = await axios.get('/api/companies').catch(() => null);
-      const tRes = await axios.get('/api/tenants').catch(() => null);
-      if (cRes) setCompanies(Array.isArray(cRes.data) ? cRes.data : cRes.data?.items ?? []);
-      if (tRes) setTenants(Array.isArray(tRes.data) ? tRes.data : tRes.data?.items ?? []);
+      const res = await axios.get(`/api/companies?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      setCompanies(Array.isArray(res.data) ? res.data : res.data?.items ?? []);
     } catch (err) {
-      console.error("Erro ao carregar dados:", err);
+      console.error("Erro ao carregar companies do tenant:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchCompanies();
+  }, [selectedTenant]);
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
-    if (!confirm('Excluir esta empresa?')) return;
-    try { await axios.delete(`/api/companies/${id}`); fetchData(); } catch {}
+    if (!window.confirm('Tem certeza que deseja excluir esta empresa do escopo?')) return;
+    try {
+      await axios.delete(`/api/companies/${id}?tenant_id=${encodeURIComponent(selectedTenant)}`);
+      fetchCompanies();
+    } catch (err) {
+      alert("Erro ao excluir: " + (err.response?.data?.detail || err.message));
+    }
   };
 
   const filtered = companies.filter(c => {
     const q = search.toLowerCase();
-    return !q || c.razao_social?.toLowerCase().includes(q) || c.cnpj?.includes(q);
+    const name = (c.razao_social || c.legal_name || '').toLowerCase();
+    const cnpj = (c.cnpj || c.tax_id || '').toLowerCase();
+    return !q || name.includes(q) || cnpj.includes(q);
   });
 
-  const initials = (c) => (c.razao_social || c.name || 'CP').slice(0, 2).toUpperCase();
+  const initials = (c) => (c.razao_social || c.legal_name || 'CP').slice(0, 2).toUpperCase();
 
   return (
     <div>
       <PageHeader
-        title="Empresas SaaS"
-        description="Empresas conectadas ao ambiente multitenant Protheus."
+        title="Empresas por Tenant"
+        description="Gerencie as empresas e filiais importadas dentro do escopo (schema) de cada Tenant."
         actions={
-          <button onClick={() => setModal('new')}
-            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white text-sm font-medium rounded-lg transition-all shadow-lg shadow-[#1565C0]/20">
-            <Plus className="w-4 h-4" /> Nova Empresa
+          <button onClick={() => setModal('new')} disabled={!selectedTenant}
+            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-[#1565C0] to-[#2196F3] text-white text-sm font-medium rounded-lg transition-all shadow-lg shadow-[#1565C0]/20 disabled:opacity-50">
+            <Plus className="w-4 h-4" /> Nova Empresa/Filial
           </button>
         }
       />
 
-      {/* Search */}
+      {/* Tenant Selector */}
+      <div className="bg-[#161B27] border border-[#1E2535] rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-white text-sm font-semibold mb-1">Selecionar Tenant</h3>
+          <p className="text-[#8892A4] text-xs">A lista de empresas é restrita ao schema do tenant selecionado.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedTenant}
+            onChange={(e) => setSelectedTenant(e.target.value)}
+            disabled={loadingTenants}
+            className="w-full sm:w-64 bg-[#0F1117] border border-[#1E2535] text-white text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#2196F3] transition-all"
+          >
+            <option value="" disabled>Selecione um tenant...</option>
+            {tenants.map(t => (
+              <option key={t.tenant_code} value={t.tenant_code}>{t.tenant_name || t.tenant_code}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="relative mb-4 max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8892A4]" />
         <input
           value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nome ou CNPJ..."
+          placeholder="Buscar empresa ou CNPJ..."
           className="w-full bg-[#161B27] border border-[#1E2535] rounded-lg pl-9 pr-4 py-2 text-white text-sm placeholder-[#8892A4]/50 focus:outline-none focus:border-[#2196F3] transition-all"
         />
       </div>
 
-      {loading ? (
+      {loading || loadingTenants ? (
         <div className="flex items-center justify-center h-40">
           <div className="w-6 h-6 border-2 border-[#2196F3] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : !selectedTenant ? (
+         <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-[#1E2535] rounded-xl bg-[#161B27]/50">
+           <p className="text-[#8892A4] text-sm">Selecione um tenant acima para visualizar as empresas.</p>
+         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(c => (
-            <div key={c.id}
-              onClick={() => navigate(`/companies/${c.id}`)}
-              className="group flex items-center justify-between bg-[#161B27] border border-[#1E2535] hover:border-[#2196F3]/40 rounded-xl px-4 py-3 cursor-pointer transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#1565C0]/30 to-[#2196F3]/20 border border-[#1565C0]/30 flex items-center justify-center shrink-0">
-                  <span className="text-[#60A5FA] text-xs font-bold">{initials(c)}</span>
-                </div>
-                <div>
-                  <div className="text-white text-sm font-medium group-hover:text-[#60A5FA] transition-colors">{c.razao_social}</div>
-                  <div className="text-[#8892A4] text-xs">
-                    Grupo: <span className="font-mono">{c.protheus_grupo || '—'}</span>
-                    {c.cnpj && <> · CNPJ: <span className="font-mono">{c.cnpj}</span></>}
+          {filtered.map(c => {
+            const legalName = c.razao_social || c.legal_name || '-';
+            const taxId = c.cnpj || c.tax_id;
+            const emp = c.protheus_empresa || c.company_code || '-';
+            const fil = c.protheus_filial || c.branch_code || '-';
+            const isActive = (c.status || '').toUpperCase() === 'ACTIVE' || c.status === 'ativa';
+
+            return (
+              <div key={c.id}
+                onClick={() => navigate(`/companies/${c.id}`)}
+                className="group flex items-center justify-between bg-[#161B27] border border-[#1E2535] hover:border-[#2196F3]/40 rounded-xl px-4 py-3 cursor-pointer transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#1565C0]/30 to-[#2196F3]/20 border border-[#1565C0]/30 flex items-center justify-center shrink-0">
+                    <span className="text-[#60A5FA] text-xs font-bold">{initials(c)}</span>
+                  </div>
+                  <div>
+                    <div className="text-white text-sm font-medium group-hover:text-[#60A5FA] transition-colors">{legalName}</div>
+                    <div className="text-[#8892A4] text-xs flex items-center gap-2">
+                      <span>Emp: <span className="font-mono text-white/70">{emp}</span></span>
+                      <span>Filial: <span className="font-mono text-white/70">{fil}</span></span>
+                      {taxId && <span>CNPJ: <span className="font-mono text-white/70">{taxId}</span></span>}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-3">
-                {c.protheus_rest_url && (
-                  <span className="hidden sm:flex items-center gap-1 text-[#2196F3] text-xs">
-                    <Globe className="w-3 h-3" /> REST
+                <div className="flex items-center gap-3">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                    isActive
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-[#1E2535] text-[#8892A4] border-[#1E2535]'
+                  }`}>
+                    {isActive ? 'Ativa' : 'Inativa'}
                   </span>
-                )}
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                  c.status === 'ativa'
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-[#1E2535] text-[#8892A4] border-[#1E2535]'
-                }`}>
-                  {c.status === 'ativa' ? 'Ativa' : c.status || 'Inativa'}
-                </span>
-                <button
-                  onClick={e => { e.stopPropagation(); setModal(c); }}
-                  className="p-1.5 text-[#8892A4] hover:text-[#2196F3] hover:bg-[#1565C0]/10 rounded-md transition-all">
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={e => handleDelete(e, c.id)}
-                  className="p-1.5 text-[#8892A4] hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-                <ChevronRight className="w-4 h-4 text-[#8892A4] group-hover:text-[#2196F3] transition-colors" />
+                  <button
+                    onClick={e => { e.stopPropagation(); setModal(c); }}
+                    className="p-1.5 text-[#8892A4] hover:text-[#2196F3] hover:bg-[#1565C0]/10 rounded-md transition-all">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={e => handleDelete(e, c.id)}
+                    className="p-1.5 text-[#8892A4] hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <ChevronRight className="w-4 h-4 text-[#8892A4] group-hover:text-[#2196F3] transition-colors" />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {filtered.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -281,7 +281,7 @@ export default function Companies() {
               </div>
               <p className="text-white text-sm font-medium mb-1">Nenhuma empresa encontrada</p>
               <p className="text-[#8892A4] text-xs max-w-xs">
-                {search ? 'Tente outro termo de busca.' : 'Clique em "Nova Empresa" para começar.'}
+                {search ? 'Tente outro termo de busca.' : 'Clique em "Nova Empresa" para adicionar no tenant atual.'}
               </p>
             </div>
           )}
@@ -292,9 +292,9 @@ export default function Companies() {
         <CompanyModal
           company={modal === 'new' ? null : modal}
           isNew={modal === 'new'}
-          tenants={tenants}
+          selectedTenant={selectedTenant}
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); fetchData(); }}
+          onSaved={() => { setModal(null); fetchCompanies(); }}
         />
       )}
     </div>
