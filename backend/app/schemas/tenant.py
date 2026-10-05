@@ -67,7 +67,6 @@ class TenantCreate(BaseModel):
     status: str = "ACTIVE"
     plan_code: Optional[str] = None
     licenca_uso: Optional[str] = None
-    protheus_webapp_url: Optional[str] = None
     system_prompt: Optional[str] = None
     temperature: Optional[float] = Field(default=0.2, ge=0.0, le=1.0)
     connection: Optional[ProtheusConnectionPayload] = None
@@ -101,7 +100,6 @@ class TenantUpdate(BaseModel):
     status: Optional[str] = None
     plan_code: Optional[str] = None
     licenca_uso: Optional[str] = None
-    protheus_webapp_url: Optional[str] = None
     system_prompt: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     connection: Optional[ProtheusConnectionPayload] = None
@@ -123,8 +121,6 @@ class TenantResponse(BaseModel):
     id: str
     name: Optional[str] = None
     tenant_code: Optional[str] = None
-    connection: Optional[Dict[str, Any]] = None
-    protheus_webapp_url: Optional[str] = None
     system_prompt: Optional[str] = None
     temperature: Optional[float] = None
     status: Optional[str] = None
