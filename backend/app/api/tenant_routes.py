@@ -200,7 +200,7 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
             access_token_expires_at,
             active
         FROM public.protheus_rest_connections 
-        WHERE tenant_code = :tc AND active = TRUE 
+        WHERE tenant_code = :tc AND status = 'ACTIVE' 
         ORDER BY id DESC 
         LIMIT 1
     """), {"tc": t.tenant_code}).mappings().first()
@@ -232,7 +232,7 @@ def _to_tenant_dict(db: Session, t: Tenant) -> dict:
         "connection": conn_obj,
         "system_prompt": t.system_prompt,
         "temperature": float(t.temperature) if t.temperature is not None else 0.2,
-        "status": t.status or "active",
+        "status": t.status or "ACTIVE",
         "plan_code": t.plan_code,
         "cnpj": t.cnpj,
         "licenca_uso": t.licenca_uso,

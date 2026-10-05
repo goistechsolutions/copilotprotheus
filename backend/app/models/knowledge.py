@@ -86,7 +86,7 @@ class User(GlobalBase):
     email = Column(String(180), nullable=False, unique=True)
     full_name = Column(String(180), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    status = Column(String(20), nullable=False, default="active")
+    status = Column(String(20), nullable=False, default="ACTIVE")
     is_platform_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
@@ -145,7 +145,7 @@ class Company(TenantBase):
     protheus_rest_url = Column(Text)
     protheus_usuario = Column(String(100))
     encrypted_protheus_password = Column(Text)
-    status = Column(String(20), default="active")
+    status = Column(String(20), default="ACTIVE")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
@@ -196,7 +196,7 @@ class Environment(GlobalBase):
     env_name = Column(String(120), nullable=False)
     api_base_url = Column(String(500))
     middleware_route = Column(String(500))
-    status = Column(String(20), nullable=False, default="active")
+    status = Column(String(20), nullable=False, default="ACTIVE")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
 
@@ -214,7 +214,7 @@ class Connector(GlobalBase):
     base_url = Column(String(500))
     auth_type = Column(String(50))
     secret_ref = Column(String(200))
-    status = Column(String(20), nullable=False, default="active")
+    status = Column(String(20), nullable=False, default="ACTIVE")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True))
 
@@ -243,7 +243,7 @@ class TenantContract(GlobalBase):
     tenant_id = Column(String(100), nullable=False, index=True)
     plan_id = Column(UUID(as_uuid=True), ForeignKey("public.license_plans.id"))
     contract_code = Column(String(80), nullable=False, unique=True)
-    contract_status = Column(String(20), nullable=False, default="active")
+    contract_status = Column(String(20), nullable=False, default="ACTIVE")
     starts_at = Column(DATE, nullable=False)
     ends_at = Column(DATE)
     query_limit_override = Column(Integer)
@@ -278,7 +278,7 @@ class ConcurrentSession(GlobalBase):
     session_key = Column(String(120), nullable=False, unique=True)
     started_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     expires_at = Column(TIMESTAMP(timezone=True))
-    session_status = Column(String(20), nullable=False, default="active")
+    session_status = Column(String(20), nullable=False, default="ACTIVE")
 
 
 class AuditLog(GlobalBase):

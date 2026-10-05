@@ -64,7 +64,7 @@ class TenantCreate(BaseModel):
     name: Optional[str] = None
     tenant_code: Optional[str] = None
     cnpj: Optional[str] = None
-    status: str = "active"
+    status: str = "ACTIVE"
     plan_code: Optional[str] = None
     licenca_uso: Optional[str] = None
     protheus_webapp_url: Optional[str] = None
