@@ -206,7 +206,7 @@ async def dashboard_stats(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    """Métricas gerais do painel admin EliteCorp"""
+    """Metricas gerais do painel admin EliteCorp"""
     tenants = 0
     users = 0
     rag_docs = 0
@@ -215,29 +215,16 @@ async def dashboard_stats(
     recent_actions = []
 
     try:
-        tenants = db.execute(text("SELECT COUNT(*) FROM public.tenants WHERE status = 'active'")).scalar() or 0
+        tenants = db.execute(text("SELECT COUNT(*) FROM public.tenants WHERE status = 'ACTIVE'")).scalar() or 0
     except Exception as e:
         logger.warning(f"Erro ao contar tenants: {e}")
+        db.rollback()
 
     try:
         users = db.execute(text("SELECT COUNT(*) FROM public.users")).scalar() or 0
     except Exception as e:
         logger.warning(f"Erro ao contar users: {e}")
-
-    try:
-        # Assuming public.documents is the correct canonical source for rag docs globally, or querying tenant specific later
-        rag_docs = db.execute(text("SELECT COUNT(*) FROM public.documents")).scalar() or 0
-    except Exception as e:
-        logger.warning(f"Erro ao contar documents: {e}")
-
-    try:
-        today = datetime.utcnow().date()
-        conversations = db.execute(
-            text("SELECT COUNT(DISTINCT id) FROM public.copilot_conversations WHERE DATE(created_at) = :today"),
-            {"today": today}
-        ).scalar() or 0
-    except Exception as e:
-        logger.warning(f"Erro ao contar conversas: {e}")
+        db.rollback()
 
     uptime_seconds = time.time() - APP_START_TIME
     uptime_str = f"{int(uptime_seconds // 3600)}h {int((uptime_seconds % 3600) // 60)}m"
@@ -252,6 +239,7 @@ async def dashboard_stats(
         "activity_by_module": activity_by_module,
         "recent_actions": recent_actions,
     }
+
 
 # Proxy for Adminer
 @app.api_route("/adminer/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"])
