@@ -284,7 +284,7 @@ export default function BusinessRulesPage() {
     { id: 'estoque', label: 'Estoque', icon: Package },
     { id: 'fiscal', label: 'Fiscal', icon: FileText },
     { id: 'ia_abc', label: 'IA & Curva ABC', icon: BrainCircuit },
-    { id: 'sinonimos', label: 'Sinônimos', icon: BookOpen },
+    
     { id: 'auditoria', label: 'Auditoria', icon: History },
   ];
 
@@ -881,60 +881,6 @@ export default function BusinessRulesPage() {
         )}
 
         {/* 7. ABA SINÔNIMOS */}
-        {activeTab === 'sinonimos' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-white">Dicionário de Sinônimos Empresariais</h3>
-                <p className="text-xs text-slate-400">Substituição automática de jargões e termos customizados da empresa para o vocabulário padrão do Protheus.</p>
-              </div>
-              <button
-                onClick={() => setShowAddSynonymModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition"
-              >
-                <Plus className="w-3.5 h-3.5" /> Adicionar Sinônimo
-              </button>
-            </div>
-
-            <div className="border border-[#1E293B] rounded-lg overflow-hidden">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-[#0F172A] text-slate-400 border-b border-[#1E293B]">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Termo do Usuário (Entrada)</th>
-                    <th className="px-4 py-3 font-semibold"></th>
-                    <th className="px-4 py-3 font-semibold">Termo Protheus (Substituição)</th>
-                    <th className="px-4 py-3 font-semibold text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1E293B]">
-                  {synonymsList.length === 0 ? (
-                    <tr>
-                      <td colSpan="4" className="px-4 py-6 text-center text-slate-500">Nenhum sinônimo configurado.</td>
-                    </tr>
-                  ) : (
-                    synonymsList.map(s => (
-                      <tr key={s.id} className="hover:bg-[#0F172A]/50">
-                        <td className="px-4 py-3 font-semibold text-amber-300">"{s.source_term}"</td>
-                        <td className="px-4 py-3 text-slate-500">➔</td>
-                        <td className="px-4 py-3 font-semibold text-cyan-400">"{s.target_term}"</td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => handleDeleteSynonym(s.id)}
-                            className="p-1 text-slate-400 hover:text-red-400 transition"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* 8. ABA AUDITORIA */}
         {activeTab === 'auditoria' && (
           <div className="space-y-6">
             <div>
