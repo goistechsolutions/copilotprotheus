@@ -96,7 +96,7 @@ class CompanyModulesSyncResponse(BaseModel):
 
 
 class CompanyListItem(BaseModel):
-    id: int
+    id: str
     tenant_id: str
     company_code: Optional[str] = Field(None, description="Código Protheus da empresa")
     branch_code: Optional[str] = Field(None, description="Código Protheus da filial")

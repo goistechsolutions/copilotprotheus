@@ -166,7 +166,7 @@ def list_companies(db, tenant_id=None):
     sql = "SELECT id, tenant_code, tenant_name, status, created_at, updated_at FROM public.tenants WHERE 1=1"
     params = {}
     if tenant_id:
-        sql += " AND (tenant_code = :tenant_id OR schema_name = :tenant_id)"
+        sql += " AND (tenant_code = :tenant_id OR schema_name = :tenant_id OR id::text = :tenant_id)"
         params["tenant_id"] = tenant_id
 
     sql += " ORDER BY tenant_name"

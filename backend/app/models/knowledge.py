@@ -61,7 +61,7 @@ class ProtheusModuleMaster(GlobalBase):
     
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class User(GlobalBase):
@@ -78,7 +78,7 @@ class User(GlobalBase):
     status = Column(String(20), nullable=False, default="ACTIVE")
     is_platform_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class Role(GlobalBase):
@@ -187,7 +187,7 @@ class Environment(GlobalBase):
     middleware_route = Column(String(500))
     status = Column(String(20), nullable=False, default="ACTIVE")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class Connector(GlobalBase):
     """Corresponde a public.connectors"""
@@ -205,7 +205,7 @@ class Connector(GlobalBase):
     secret_ref = Column(String(200))
     status = Column(String(20), nullable=False, default="ACTIVE")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class TenantContract(GlobalBase):
     """Corresponde a public.tenant_contracts"""
@@ -224,7 +224,7 @@ class TenantContract(GlobalBase):
     overage_mode_override = Column(String(20))
     notes = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class Plan(GlobalBase):
     """Corresponde a public.plans"""
@@ -238,7 +238,7 @@ class Plan(GlobalBase):
     concurrent_sessions_limit = Column(Integer)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class QueryUsageCounter(GlobalBase):
     """Corresponde a public.query_usage_counters"""
@@ -252,7 +252,7 @@ class QueryUsageCounter(GlobalBase):
     total_queries = Column(Integer, nullable=False, default=0)
     blocked_queries = Column(Integer, nullable=False, default=0)
     overage_queries = Column(Integer, nullable=False, default=0)
-    updated_at = Column(TIMESTAMP(timezone=True))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class ConcurrentSession(GlobalBase):
     """Corresponde a public.concurrent_sessions"""

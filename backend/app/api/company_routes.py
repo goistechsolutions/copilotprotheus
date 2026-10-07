@@ -517,8 +517,19 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
             "url": payload.protheus_rest_url,
             "sec": json.dumps(sec_data)
         })
-        
-    db.commit()
+
+        try:
+            users = db.execute(text("SELECT id FROM public.users")).fetchall()
+            for u in users:
+                db.execute(text(f"""
+                    INSERT INTO "{clean_tenant}".user_company_access (user_id, company_id, environment_id)
+                    VALUES (:uid, :cid, :eid)
+                    ON CONFLICT DO NOTHING
+                """), {"uid": u[0], "cid": company_id, "eid": env_id})
+        except Exception as e:
+            pass
+
+        db.commit()
     
     now = datetime.now()
     return {

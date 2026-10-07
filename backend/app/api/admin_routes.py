@@ -1496,7 +1496,7 @@ def create_user(
         raise HTTPException(status_code=409, detail="E-mail ja cadastrado.")
 
     new_user = User(
-        tenant_id    =clean_tenant,
+        tenant_id    =tenant.id,
         email        =req.email.strip().lower(),
         full_name    =req.full_name.strip(),
         password_hash=_hash(req.password),
@@ -1564,16 +1564,27 @@ def delete_user(
 # ─────────────────────────────────────────────────────────────
 
 class RoleCreateUpdate(BaseModel):
-    role_code:   str
-    role_name:   str
-    scope_level: str = "tenant"   # platform | tenant | company
+    role_code:   str | None = None
+    role_name:   str | None = None
+    name:        str | None = None
+    tenant_id:   str | None = "default"
+    permissions: list[str] = []
+    scope_level: str = "TENANT"   # platform | tenant | company
 
 
 @router.get("/roles")
 def list_roles(db: Session = Depends(get_db), admin: str = Depends(verify_admin)):
     roles = db.query(Role).order_by(Role.role_code).all()
     return [
-        {"id": str(r.id), "role_code": r.role_code, "role_name": r.role_name, "scope_level": r.scope_level}
+        {
+            "id": str(r.id), 
+            "role_code": r.role_code, 
+            "role_name": r.role_name, 
+            "name": r.role_name, 
+            "scope_level": r.scope_level,
+            "tenant_id": "default",
+            "permissions": []
+        }
         for r in roles
     ]
 
@@ -1584,9 +1595,11 @@ def create_role(
     db: Session = Depends(get_db),
     admin: str  = Depends(verify_admin),
 ):
-    if db.query(Role).filter(Role.role_code == req.role_code).first():
-        raise HTTPException(status_code=409, detail=f"role_code '{req.role_code}' ja existe.")
-    db.add(Role(role_code=req.role_code, role_name=req.role_name, scope_level=req.scope_level))
+    rc = req.role_code or (req.name.upper() if req.name else "UNKNOWN")
+    rn = req.role_name or req.name or "Unknown"
+    if db.query(Role).filter(Role.role_code == rc).first():
+        raise HTTPException(status_code=409, detail=f"role_code '{rc}' ja existe.")
+    db.add(Role(role_code=rc, role_name=rn, scope_level=req.scope_level))
     db.commit()
     return {"success": True}
 
