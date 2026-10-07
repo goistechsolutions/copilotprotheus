@@ -1,18 +1,18 @@
-import sys
+import re
 
-def patch(filename):
-    with open(filename, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-        
-    for i, line in enumerate(lines):
-        if 'for sql_file in database/migrations/*.sql; do' in line:
-            if 'continue' not in lines[i+2]:
-                lines.insert(i+2, '              if [[ "$sql_file" == *_down.sql ]]; then\n                echo "Ignorando migration down: $sql_file"\n                continue\n              fi\n')
-                break
+with open('backend/app/api/company_routes.py', 'r', encoding='utf-8') as f:
+    lines = f.readlines()
 
-    with open(filename, 'w', encoding='utf-8', newline='\n') as f:
-        f.writelines(lines)
+for i, line in enumerate(lines):
+    if line.startswith("        users = db.execute(text(\"SELECT id FROM public.users")).fetchall()"):
+        lines[i] = "            " + line.strip() + "\n"
+    elif line.startswith("        for u in users:"):
+        lines[i] = "            " + line.strip() + "\n"
+    elif line.startswith("            db.execute(text(f\"\"\""):
+        if 'user_company_access' in lines[i+1]:
+            lines[i] = "                " + line.strip() + "\n"
+    elif line.startswith("                    INSERT INTO \"{clean_tenant}\".user_company_access"):
+        lines[i] = "                    " + line.strip() + "\n"
 
-patch('.github/workflows/deploy-backend.yml')
-patch('.github/workflows/deploy-with-migrations.yml')
-print('Done!')
+# wait, it's safer to just rewrite the block!
+
