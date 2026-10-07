@@ -6,8 +6,6 @@
 name: DB Health Check
 
 on:
-  schedule:
-    - cron: '0 10 * * *'   # 07:00 BRT todos os dias
   workflow_dispatch:
 
 jobs:

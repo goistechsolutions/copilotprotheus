@@ -18,7 +18,13 @@ on:
       - 'requirements.txt'
       - '.github/workflows/deploy-backend.yml'
 
-  workflow_dispatch:   # permite rodar manualmente pelo GitHub
+  workflow_dispatch:
+    inputs:
+      deploy_vps:
+        description: 'Executar deploy em VPS remota (SSH)?'
+        required: false
+        default: false
+        type: boolean
 
 env:
   PYTHON_VERSION: '3.11'
@@ -70,12 +76,14 @@ jobs:
           done
 
   # ---------------------------------------------------------------------------
-  # JOB 2: Deploy na VPS via SSH
+  # JOB 2: Deploy VPS (Desativado: Backend roda localmente via Cloudflare Tunnel)
+  # Disponível apenas para acionamento manual se uma VPS for provisionada
   # ---------------------------------------------------------------------------
-  deploy:
-    name: 🚀 Deploy VPS
+  deploy-vps:
+    name: 🚀 Deploy VPS (Manual)
     runs-on: ubuntu-latest
     needs: test
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_vps == true
     timeout-minutes: 20
     environment: production
 
@@ -92,45 +100,6 @@ jobs:
         run: |
           ssh-keyscan -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      # -------------------------------------------------------------------------
-      # FIX 1: Usar printf em vez de heredoc com aspas simples.
-      # Heredoc << 'ENVCMD' bloqueia a expansão de ${{ secrets.* }} pelo runner.
-      # Com printf, as variáveis são expandidas pelo GitHub Actions ANTES do SSH.
-      # -------------------------------------------------------------------------
-      - name: Criar .env na VPS
-        run: |
-          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "mkdir -p /root/copilotprotheus && chmod 700 /root/copilotprotheus"
-
-          printf '%s\n' \
-            "SECRET_KEY=${{ secrets.SECRET_KEY }}" \
-            "JWT_SECRET=${{ secrets.JWT_SECRET || secrets.ADMIN_JWT_SECRET }}" \
-            "DEBUG=false" \
-            "ENVIRONMENT=production" \
-            "" \
-            "# PostgreSQL" \
-            "POSTGRES_HOST=db" \
-            "POSTGRES_PORT=5432" \
-            "POSTGRES_DB=copilotprotheus" \
-            "POSTGRES_USER=copilot" \
-            "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" \
-            "DATABASE_URL=postgresql://copilot:${{ secrets.POSTGRES_PASSWORD }}@db:5432/copilotprotheus" \
-            "" \
-            "# OpenAI" \
-            "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
-            "OPENAI_MODEL=gpt-4o" \
-            "" \
-            "# Gemini" \
-            "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
-            "" \
-            "# Cloudflare" \
-            "CLOUDFLARE_TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" \
-            "" \
-            "# CORS" \
-            "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}" \
-          | ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cat > /root/copilotprotheus/.env && chmod 600 /root/copilotprotheus/.env && echo '✅ .env criado'"
-
       - name: Sincronizar código para VPS
         run: |
           rsync -avz --delete \
@@ -143,148 +112,3 @@ jobs:
             -e "ssh -p ${{ secrets.VPS_PORT || 22 }}" \
             ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/root/copilotprotheus/
 
-      # -------------------------------------------------------------------------
-      # FIX 2: Copiar cada SQL para dentro do container antes de executar psql.
-      # O redirecionamento < "$sql_file" falha silenciosamente quando o arquivo
-      # está no host e o container não tem acesso ao path do host.
-      # Usando docker cp + psql -f /tmp/migration.sql dentro do container.
-      # -------------------------------------------------------------------------
-      - name: Executar deploy e migrations
-        run: |
-          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'DEPLOYCMD'
-            set -Eeuo pipefail
-            cd /root/copilotprotheus
-
-            echo "📦 Parando containers antigos..."
-            docker compose down --remove-orphans || true
-
-            # Compose usa container_name fixo para o banco. O down pode não
-            # remover um container criado por outro project name. O backup já
-            # ocorreu no job anterior; remover somente o container PostgreSQL
-            # preserva o volume nomeado e evita conflito de nome.
-            if docker inspect copilot-protheus-db >/dev/null 2>&1; then
-              DB_IMAGE=$(docker inspect --format '{{.Config.Image}}' copilot-protheus-db)
-              case "$DB_IMAGE" in
-                *postgres*|*copilotprotheus-db*)
-                  echo "🧹 Removendo container PostgreSQL órfão; volume será preservado..."
-                  docker rm -f copilot-protheus-db
-                  ;;
-                *)
-                  echo "❌ /copilot-protheus-db está ocupado por imagem não PostgreSQL: $DB_IMAGE"
-                  exit 1
-                  ;;
-              esac
-            fi
-
-            echo "🏗️ Build da imagem..."
-            docker compose build --no-cache
-
-            echo "🗃️ Subindo apenas o banco de dados..."
-            docker compose up -d db
-
-            echo "⏳ Aguardando PostgreSQL aceitar conexões..."
-            for i in $(seq 1 15); do
-              docker compose exec -T db pg_isready -U copilot -d copilotprotheus </dev/null && break
-              echo "  tentativa $i/15..."
-              sleep 2
-            done
-
-            echo "🔄 Executando migrations SQL..."
-            
-            echo "=== Validando acesso ao banco ==="
-            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U copilot -d copilotprotheus -c "SELECT current_database(), current_user;" </dev/null
-
-            SQL_COUNT=0
-            for sql_file in database/migrations/*.sql; do
-              [ -f "$sql_file" ] || { echo "⚠️  Nenhum arquivo SQL encontrado em database/migrations/"; break; }
-              if [[ "$sql_file" == *_down.sql ]]; then
-                echo "Ignorando migration down: $sql_file"
-                continue
-              fi
-              SQL_COUNT=$((SQL_COUNT + 1))
-              BASENAME=$(basename "$sql_file")
-              echo "→ Copiando $BASENAME para container..."
-              docker cp "$sql_file" "$(docker compose ps -q db)":/tmp/"$BASENAME"
-              echo "→ Aplicando $BASENAME..."
-              docker compose exec -T db psql \
-                -v ON_ERROR_STOP=1 \
-                -U copilot \
-                -d copilotprotheus \
-                -f /tmp/"$BASENAME" </dev/null
-              echo "  ✅ $BASENAME aplicado"
-            done
-            echo "📊 Total de migrations processadas: $SQL_COUNT"
-
-            echo "🚀 Subindo todos os serviços..."
-            docker compose up -d
-
-            echo "⏳ Aguardando inicialização..."
-            sleep 10
-
-            echo "✅ Status dos containers:"
-            docker compose ps
-
-            echo "📋 Logs recentes:"
-            docker compose logs --tail=20
-          DEPLOYCMD
-
-      - name: Health check da API
-        run: |
-          echo "Aguardando 15s para a API inicializar..."
-          sleep 15
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 30 \
-            "${{ secrets.API_HEALTH_URL || 'https://api.copilotprotheus.com.br/health' }}" || echo "000")
-          echo "HTTP Status: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "000" ]; then
-            echo "⚠️ API respondeu com status $HTTP_CODE (pode ser normal no primeiro deploy)"
-          else
-            echo "✅ API operacional"
-          fi
-        continue-on-error: true
-
-      - name: Notificar conclusão
-        if: always()
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "✅ Deploy concluído com sucesso em $(date)"
-          else
-            echo "❌ Deploy falhou em $(date)"
-          fi
-
-  # ---------------------------------------------------------------------------
-  # JOB 3: Backup do PostgreSQL antes de migrations (apenas segundas e sextas)
-  # ---------------------------------------------------------------------------
-  backup-db:
-    name: 🗄️ Backup PostgreSQL
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    timeout-minutes: 10
-
-    steps:
-      - name: Configurar chave SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
-
-      - name: Adicionar VPS ao known_hosts
-        run: |
-          ssh-keyscan -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Realizar backup pg_dump
-        run: |
-          ssh -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'BACKUPCMD'
-            set -e
-            BACKUP_DIR="/root/copilotprotheus/backups"
-            mkdir -p "$BACKUP_DIR"
-            BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql.gz"
-            docker compose exec -T db pg_dump \
-              -U copilot copilotprotheus | gzip > "$BACKUP_FILE"
-            echo "✅ Backup criado: $BACKUP_FILE"
-            # Mantém apenas os 7 backups mais recentes
-            ls -t "$BACKUP_DIR"/backup_*.sql.gz | tail -n +8 | xargs -r rm
-            echo "📦 Backups disponíveis:"
-            ls -lh "$BACKUP_DIR"
-          BACKUPCMD
-        continue-on-error: true

@@ -15,10 +15,6 @@
 name: 🚀 Deploy + DB Migrations
 
 on:
-  workflow_run:
-    workflows: ["Deploy Backend"]
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       run_migrations:
