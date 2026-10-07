@@ -45,6 +45,9 @@ function CompanyModal({ company, isNew, selectedTenant, onClose, onSaved }) {
     try {
       const payload = {
         tenant_id: selectedTenant,
+        company_name: form.legal_name,
+        razao_social: form.legal_name,
+        cnpj: form.tax_id,
         ...form
       };
       
@@ -55,7 +58,9 @@ function CompanyModal({ company, isNew, selectedTenant, onClose, onSaved }) {
       }
       onSaved();
     } catch (error) {
-      setErr(error.response?.data?.detail || error.message || 'Erro ao salvar empresa.');
+      const raw = error.response?.data?.detail || error.message || 'Erro ao salvar empresa.';
+      const msg = typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw.map(i => i.msg || JSON.stringify(i)).join('; ') : JSON.stringify(raw));
+      setErr(msg);
     } finally {
       setSaving(false);
     }

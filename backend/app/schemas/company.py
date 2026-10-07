@@ -13,9 +13,10 @@ Colunas de referência em models/knowledge.py → class Company:
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union, Any
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ─── Base ─────────────────────────────────────────────────────────────────────
@@ -23,6 +24,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class CompanyBase(BaseModel):
     # Identificação Protheus
     company_code: Optional[str] = Field(None, max_length=60, description="Código de empresa Protheus (ex: 01)")
+    legal_name: Optional[str] = Field(None, max_length=255)
+    tax_id: Optional[str] = Field(None, max_length=30)
     branch_code: Optional[str] = Field(None, max_length=60, description="Código de filial Protheus (ex: 0101)")
     company_name: Optional[str] = Field(None, max_length=200, description="Nome fantasia / label de exibição")
 
@@ -58,10 +61,24 @@ class CompanyBase(BaseModel):
 # ─── Create ───────────────────────────────────────────────────────────────────
 
 class CompanyCreate(CompanyBase):
-    """Criação de empresa — company_code e company_name são obrigatórios."""
+    """Criação de empresa — company_code é obrigatório. company_name aceita legal_name/razao_social."""
     company_code: str = Field(..., min_length=1, max_length=60)
-    company_name: str = Field(..., min_length=1, max_length=200)
+    company_name: Optional[str] = Field(None, max_length=200)
     protheus_password: Optional[str] = Field(None, description="Senha em claro — será criptografada pelo backend")
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_name_fallbacks(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("company_name"):
+                data["company_name"] = data.get("legal_name") or data.get("razao_social") or data.get("company_code")
+            if not data.get("legal_name"):
+                data["legal_name"] = data.get("company_name") or data.get("razao_social")
+            if not data.get("tax_id"):
+                data["tax_id"] = data.get("cnpj")
+            if not data.get("cnpj"):
+                data["cnpj"] = data.get("tax_id")
+        return data
 
 
 # ─── Update ───────────────────────────────────────────────────────────────────
@@ -97,7 +114,7 @@ class CompanyUpdate(BaseModel):
 
 class CompanyResponse(CompanyBase):
     """Resposta pública — NUNCA retorna encrypted_protheus_password."""
-    id: int
+    id: Union[int, str, UUID]
     has_password: Optional[bool] = Field(False, description="Indica se a empresa possui senha configurada")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
