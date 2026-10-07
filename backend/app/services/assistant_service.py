@@ -108,7 +108,27 @@ class AssistantService:
         answer = ""
         backend_used = getattr(settings, "llm_backend", "gemini")
 
-        if str(backend_used).lower() in ("ollama", "local"):
+        if str(backend_used).lower() == "openai":
+            from app.services.openai_client import ask_openai
+            try:
+                answer = await asyncio.wait_for(
+                    ask_openai(
+                        question=question,
+                        protheus_data=protheus_data if protheus_data else None,
+                        intent=intent,
+                        context=context,
+                        history=history
+                    ),
+                    timeout=settings.timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                answer = "A IA Local excedeu o tempo limite."
+                status_audit = "T"
+            except Exception as e:
+                logger.error("[Assistant] Falha no OpenAI local: %s", e)
+                answer = "Erro na IA Local OpenAI Compatible."
+                status_audit = "E"
+        elif str(backend_used).lower() in ("ollama", "local"):
             from app.services.ollama_client import ask_llm
             try:
                 answer = await asyncio.wait_for(
@@ -266,7 +286,24 @@ class AssistantService:
         # 5. Generate Answer via stream generator
         full_answer = []
         target_backend = getattr(settings, "llm_backend", "gemini").lower()
-        if target_backend == "ollama":
+        if target_backend == "openai":
+            from app.services.openai_client import stream_openai
+            try:
+                async for token in stream_openai(
+                    question=question,
+                    protheus_data=protheus_data if protheus_data else None,
+                    intent=intent,
+                    context=context,
+                    history=history
+                ):
+                    full_answer.append(token)
+                    yield token
+            except Exception as e:
+                logger.error("[Assistant Stream] Erro no stream OpenAI: %s", e)
+                error_message = "Erro ao se conectar na IA local via OpenAI Compatible API."
+                full_answer.append(error_message)
+                yield error_message
+        elif target_backend == "ollama":
             from app.services.ollama_client import stream_llm
             try:
                 async for token in stream_llm(

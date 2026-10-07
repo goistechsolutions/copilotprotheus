@@ -14,7 +14,7 @@ _REAL_ENVIRONMENT_ERROR = (
 class ProtheusConnectionPayload(BaseModel):
     """Conexão operacional resolvida exclusivamente por tenant e ambiente."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     environment_code: str = Field(..., min_length=1, max_length=100)
     base_rest_url: str = Field(..., min_length=1, max_length=500)
@@ -58,7 +58,7 @@ class ProtheusConnectionPayload(BaseModel):
 class TenantCreate(BaseModel):
     """Payload cadastral de criação, com conexão opcional e estruturada."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     id: Optional[str] = Field(default=None, description="Slug único")
     name: Optional[str] = None
@@ -92,7 +92,7 @@ class TenantCreate(BaseModel):
 class TenantUpdate(BaseModel):
     """Payload parcial de atualização cadastral e/ou de conexão."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     name: Optional[str] = None
     tenant_code: Optional[str] = None

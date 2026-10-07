@@ -447,11 +447,11 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
     # Registra o tenant antes do bootstrap do schema específico.
     db.execute(text("""
         INSERT INTO public.tenants (tenant_code, tenant_name, schema_name, status)
-        VALUES (:tenant_code, :tenant_name, :schema_name, 'active')
+        VALUES (:tenant_code, :tenant_name, :schema_name, 'ACTIVE')
         ON CONFLICT (tenant_code) DO UPDATE SET
             tenant_name = EXCLUDED.tenant_name,
             schema_name = EXCLUDED.schema_name,
-            status = 'active',
+            status = 'ACTIVE',
             updated_at = NOW()
     """), {
         "tenant_code": clean_tenant,
