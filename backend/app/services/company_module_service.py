@@ -160,6 +160,7 @@ def get_enabled_modules(db, company_id, tenant_id: str) -> list[str]:
         )
     return enabled
 
+
 def list_companies(db, tenant_id=None):
     from sqlalchemy import text
     sql = "SELECT id, tenant_code, tenant_name, status, created_at, updated_at FROM public.tenants WHERE 1=1"
@@ -174,9 +175,22 @@ def list_companies(db, tenant_id=None):
     result = []
     for r in rows:
         t_code = r["tenant_code"]
-        clean = resolve_clean_tenant(t_code)
-        
+        from app.db.database import resolve_clean_tenant
         try:
+            clean = resolve_clean_tenant(db, t_code)
+        except Exception:
+            clean = t_code
+
+        try:
+            # Pega o primeiro ambiente e conexao
+            env_row = db.execute(text(f'SELECT id, environment_code, environment_name FROM "{clean}".environments LIMIT 1')).mappings().first()
+            conn_row = None
+            if env_row:
+                conn_row = db.execute(text(f'SELECT base_rest_url, auth_mode, secret_ref FROM "{clean}".protheus_connections WHERE environment_id = :eid LIMIT 1'), {"eid": env_row["id"]}).mappings().first()
+            
+            env_code = env_row["environment_code"] if env_row else ""
+            rest_url = conn_row["base_rest_url"] if conn_row else ""
+            
             c_rows = db.execute(text(f'SELECT id, company_code, branch_code, legal_name, tax_id, status FROM "{clean}".companies')).mappings().all()
             for c in c_rows:
                 result.append({
@@ -187,12 +201,15 @@ def list_companies(db, tenant_id=None):
                     "razao_social": c["legal_name"],
                     "protheus_empresa": c["company_code"],
                     "protheus_filial": c["branch_code"],
+                    "protheus_ambientes": env_code,
+                    "protheus_rest_url": rest_url,
                     "status": c["status"]
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            print("Erro ao listar empresas do tenant", clean, e)
 
     return result
+
 
 def list_company_modules(db, company_id, tenant_id: str) -> list[dict]:
     return get_tenant_module_setup(db, tenant_id)

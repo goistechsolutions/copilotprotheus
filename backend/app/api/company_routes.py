@@ -419,13 +419,18 @@ def sync_company_into_tenant_schema(db: Session, comp: Company):
         except Exception: pass
 
 
+
 @router.post("/companies", response_model=CompanyResponse)
 async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    import json
+    from app.core.security import encrypt_password
+    
     raw_tenant = str(payload.tenant_id or payload.protheus_grupo or "").strip()
     if not raw_tenant:
         raise HTTPException(status_code=400, detail="tenant_id é obrigatório para criar uma empresa.")
+        
     tenant_code = raw_tenant
-
+    
     try:
         if raw_tenant.isdigit():
             reg = db.execute(text("SELECT tenant_code, schema_name FROM public.tenants WHERE id = :id OR tenant_code = :tc"), {"id": int(raw_tenant), "tc": raw_tenant}).mappings().first()
@@ -437,14 +442,13 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
                 tenant_code = reg["schema_name"] or reg["tenant_code"]
     except Exception:
         pass
-
+        
     clean_tenant = resolve_clean_tenant(db, tenant_code)
     if not clean_tenant or clean_tenant == "public":
         raise HTTPException(status_code=400, detail="tenant_id inválido para criação da empresa.")
         
     authorize_admin_access(admin, "companies:write", clean_tenant)
-
-    # Registra o tenant antes do bootstrap do schema específico.
+    
     db.execute(text("""
         INSERT INTO public.tenants (tenant_code, tenant_name, schema_name, status)
         VALUES (:tenant_code, :tenant_name, :schema_name, 'ACTIVE')
@@ -459,90 +463,70 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
         "schema_name": clean_tenant,
     })
     db.commit()
-
+    
     from app.db.database import ensure_tenant_tables
     ensure_tenant_tables(db, clean_tenant)
-
+    
     c_code = (payload.protheus_empresa or payload.company_code).strip()
-    b_code = (payload.protheus_filial or payload.branch_code or "").strip()
+    b_code = (payload.protheus_filial or payload.branch_code or "0101").strip()
     c_name = (payload.razao_social or payload.company_name).strip()
-    c_env  = (payload.protheus_ambientes or payload.environment or "").strip()
+    c_env  = (payload.protheus_ambientes or payload.environment or "PROD").strip()
+    
     if not c_code or not b_code or not c_name:
         raise HTTPException(status_code=400, detail="company_code, branch_code e company_name são obrigatórios.")
-
-    upsert_company_info = text(f"""
-        INSERT INTO "{clean_tenant}".company_info (
-            tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
-            protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment, protheus_ambientes,
-            webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
-        ) VALUES (
-            :t_id, :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
-            :grp, :emp, :und, :fil, :env, :env,
-            :app, :rest, :user, :pass, 'basic', :status
-        ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
-            tenant_id = EXCLUDED.tenant_id,
-            company_name = EXCLUDED.company_name,
-            cnpj = EXCLUDED.cnpj,
-            ie = EXCLUDED.ie,
-            razao_social = EXCLUDED.razao_social,
-            email = EXCLUDED.email,
-            telefone = EXCLUDED.telefone,
-            endereco = EXCLUDED.endereco,
-            protheus_grupo = EXCLUDED.protheus_grupo,
-            protheus_empresa = EXCLUDED.protheus_empresa,
-            protheus_unidade = EXCLUDED.protheus_unidade,
-            protheus_filial = EXCLUDED.protheus_filial,
-            environment = EXCLUDED.environment,
-            protheus_ambientes = EXCLUDED.protheus_ambientes,
-            webapp_url = EXCLUDED.webapp_url,
-            protheus_rest_url = EXCLUDED.protheus_rest_url,
-            protheus_usuario = EXCLUDED.protheus_usuario,
-            encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
+        
+    company_id = db.execute(text(f"""
+        INSERT INTO "{clean_tenant}".companies (company_code, branch_code, legal_name, tax_id, status)
+        VALUES (:c_code, :b_code, :c_name, :cnpj, :status)
+        ON CONFLICT (company_code, branch_code) DO UPDATE SET
+            legal_name = EXCLUDED.legal_name,
+            tax_id = EXCLUDED.tax_id,
             status = EXCLUDED.status,
             updated_at = NOW()
-        RETURNING id, created_at, updated_at;
-    """)
-
-    res = db.execute(upsert_company_info, {
-        "t_id": clean_tenant, "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
-        "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
-        "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
-        "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
-        "pass": encrypt_password(payload.protheus_password) if payload.protheus_password else None,
-        "status": payload.status or "ativa"
-    }).first()
-
-    upsert_tenant = text("""
-        INSERT INTO public.tenants (
-            tenant_code, tenant_name, schema_name, status
-        ) VALUES (
-            :t_code, :c_name, :s_name, 'active'
-        ) ON CONFLICT (tenant_code) DO UPDATE SET
-            tenant_name = EXCLUDED.tenant_name,
-            status = EXCLUDED.status,
-            updated_at = NOW();
-    """)
-    db.execute(upsert_tenant, {
-        "t_code": clean_tenant, "c_name": c_name, "s_name": clean_tenant
-    })
-
-
-
+        RETURNING id
+    """), {
+        "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "status": 'ACTIVE'
+    }).scalar()
+    
+    env_id = db.execute(text(f"""
+        INSERT INTO "{clean_tenant}".environments (environment_code, environment_name, status)
+        VALUES (:env_code, :env_name, 'ACTIVE')
+        ON CONFLICT (environment_code) DO UPDATE SET
+            environment_name = EXCLUDED.environment_name,
+            status = 'ACTIVE'
+        RETURNING id
+    """), {
+        "env_code": c_env, "env_name": c_env
+    }).scalar()
+    
+    if payload.protheus_rest_url:
+        sec_data = {
+            "protheus_username": payload.protheus_usuario,
+            "encrypted_protheus_password": encrypt_password(payload.protheus_password) if payload.protheus_password else None
+        }
+        db.execute(text(f"""
+            INSERT INTO "{clean_tenant}".protheus_connections (environment_id, base_rest_url, auth_mode, secret_ref, active)
+            VALUES (:env_id, :url, 'oauth2_password', :sec, true)
+            ON CONFLICT (environment_id) DO UPDATE SET
+                base_rest_url = EXCLUDED.base_rest_url,
+                secret_ref = EXCLUDED.secret_ref,
+                active = true,
+                updated_at = NOW()
+        """), {
+            "env_id": env_id,
+            "url": payload.protheus_rest_url,
+            "sec": json.dumps(sec_data)
+        })
+        
     db.commit()
-
-    # A sincronização de módulos ocorre somente pela rota explícita de catálogo,
-    # com tenant_code + environment_code e conexão OAuth2 já persistida.
-
-
-
-    cid = res[0] if res else 1
+    
     now = datetime.now()
     return {
-        "id": cid,
+        "id": 1,
         "tenant_id": clean_tenant,
         "cnpj": payload.cnpj,
         "ie": payload.ie,
-        "razao_social": payload.razao_social,
+        "razao_social": c_name,
         "email": payload.email,
         "telefone": payload.telefone,
         "endereco": payload.endereco,
@@ -550,104 +534,14 @@ async def create_company(payload: CompanyCreate, db: Session = Depends(get_db), 
         "protheus_empresa": payload.protheus_empresa,
         "protheus_unidade": payload.protheus_unidade,
         "protheus_filial": payload.protheus_filial,
-        "protheus_ambientes": payload.protheus_ambientes,
+        "protheus_ambientes": c_env,
         "protheus_usuario": payload.protheus_usuario,
         "protheus_rest_url": payload.protheus_rest_url,
         "webapp_url": payload.webapp_url,
         "has_password": bool(payload.protheus_password),
-        # CompanyCreate não expõe licenca_uso; não acessar atributo inexistente.
-        "licenca_uso": getattr(payload, "licenca_uso", None),
-        "status": payload.status or "ativa",
-        "created_at": res[1] if res and res[1] else now,
-        "updated_at": res[2] if res and res[2] else now
-    }
-
-
-@router.put("/companies/{company_id}", response_model=CompanyResponse)
-def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
-    from app.services.company_module_service import get_company_or_404
-    comp_info = get_company_or_404(db, company_id)
-    tenant_code = str(comp_info.get("tenant_id"))
-    clean_tenant = resolve_clean_tenant(db, tenant_code)
-    authorize_admin_access(admin, "companies:write", clean_tenant)
-
-    from app.db.database import ensure_tenant_tables
-    ensure_tenant_tables(db, clean_tenant)
-
-    c_code = payload.protheus_empresa or comp_info.get("protheus_empresa")
-    b_code = payload.protheus_filial or comp_info.get("protheus_filial")
-    c_name = payload.razao_social or comp_info.get("razao_social")
-    c_env  = payload.protheus_ambientes or comp_info.get("protheus_ambientes")
-
-    upsert_company_info = text(f"""
-        INSERT INTO "{clean_tenant}".company_info (
-            tenant_id, company_code, branch_code, company_name, cnpj, ie, razao_social, email, telefone, endereco,
-            protheus_grupo, protheus_empresa, protheus_unidade, protheus_filial, environment, protheus_ambientes,
-            webapp_url, protheus_rest_url, protheus_usuario, encrypted_protheus_password, auth_mode, status
-        ) VALUES (
-            :t_id, :c_code, :b_code, :c_name, :cnpj, :ie, :rz, :email, :tel, :end,
-            :grp, :emp, :und, :fil, :env, :env,
-            :app, :rest, :user, :pass, 'basic', :status
-        ) ON CONFLICT (company_code, branch_code) DO UPDATE SET
-            tenant_id = COALESCE(EXCLUDED.tenant_id, "{clean_tenant}".company_info.tenant_id),
-            company_name = EXCLUDED.company_name,
-            cnpj = COALESCE(EXCLUDED.cnpj, "{clean_tenant}".company_info.cnpj),
-            ie = COALESCE(EXCLUDED.ie, "{clean_tenant}".company_info.ie),
-            razao_social = COALESCE(EXCLUDED.razao_social, "{clean_tenant}".company_info.razao_social),
-            email = COALESCE(EXCLUDED.email, "{clean_tenant}".company_info.email),
-            telefone = COALESCE(EXCLUDED.telefone, "{clean_tenant}".company_info.telefone),
-            endereco = COALESCE(EXCLUDED.endereco, "{clean_tenant}".company_info.endereco),
-            protheus_grupo = COALESCE(EXCLUDED.protheus_grupo, "{clean_tenant}".company_info.protheus_grupo),
-            protheus_empresa = COALESCE(EXCLUDED.protheus_empresa, "{clean_tenant}".company_info.protheus_empresa),
-            protheus_unidade = COALESCE(EXCLUDED.protheus_unidade, "{clean_tenant}".company_info.protheus_unidade),
-            protheus_filial = COALESCE(EXCLUDED.protheus_filial, "{clean_tenant}".company_info.protheus_filial),
-            environment = EXCLUDED.environment,
-            protheus_ambientes = EXCLUDED.protheus_ambientes,
-            webapp_url = EXCLUDED.webapp_url,
-            protheus_rest_url = EXCLUDED.protheus_rest_url,
-            protheus_usuario = EXCLUDED.protheus_usuario,
-            encrypted_protheus_password = COALESCE(EXCLUDED.encrypted_protheus_password, "{clean_tenant}".company_info.encrypted_protheus_password),
-            status = EXCLUDED.status,
-            updated_at = NOW()
-        RETURNING id, created_at, updated_at;
-    """)
-
-    res = db.execute(upsert_company_info, {
-        "t_id": clean_tenant, "c_code": c_code, "b_code": b_code, "c_name": c_name, "cnpj": payload.cnpj, "ie": payload.ie,
-        "rz": payload.razao_social, "email": payload.email, "tel": payload.telefone, "end": payload.endereco,
-        "grp": payload.protheus_grupo, "emp": payload.protheus_empresa, "und": payload.protheus_unidade, "fil": payload.protheus_filial,
-        "env": c_env, "app": payload.webapp_url, "rest": payload.protheus_rest_url, "user": payload.protheus_usuario,
-        "pass": encrypt_password(payload.protheus_password) if payload.protheus_password else None,
-        "status": payload.status or "ativa"
-    }).first()
-
-    rest_url = payload.protheus_rest_url or comp_info.get("protheus_rest_url")
-
-
-    db.commit()
-
-    now = datetime.now()
-    return {
-        "id": company_id,
-        "tenant_id": clean_tenant,
-        "cnpj": payload.cnpj or comp_info.get("cnpj", ""),
-        "ie": payload.ie or comp_info.get("ie"),
-        "razao_social": payload.razao_social or comp_info.get("razao_social", ""),
-        "email": payload.email or comp_info.get("email"),
-        "telefone": payload.telefone or comp_info.get("telefone"),
-        "endereco": payload.endereco or comp_info.get("endereco"),
-        "protheus_grupo": payload.protheus_grupo or comp_info.get("protheus_grupo", ""),
-        "protheus_empresa": payload.protheus_empresa or comp_info.get("protheus_empresa"),
-        "protheus_unidade": payload.protheus_unidade or comp_info.get("protheus_unidade"),
-        "protheus_filial": payload.protheus_filial or comp_info.get("protheus_filial", ""),
-        "protheus_ambientes": payload.protheus_ambientes or comp_info.get("protheus_ambientes", ""),
-        "protheus_usuario": payload.protheus_usuario or comp_info.get("protheus_usuario"),
-        "protheus_rest_url": payload.protheus_rest_url or comp_info.get("protheus_rest_url"),
-        "webapp_url": payload.webapp_url or comp_info.get("webapp_url"),
-        "has_password": bool(payload.protheus_password) if payload.protheus_password is not None else bool(comp_info.get("encrypted_protheus_password")),
-        "status": payload.status or comp_info.get("status", "ativa"),
-        "created_at": res[1] if res and res[1] else now,
-        "updated_at": res[2] if res and res[2] else now
+        "status": "ativa",
+        "created_at": now,
+        "updated_at": now
     }
 
 
@@ -660,12 +554,11 @@ def delete_company(company_id: int, db: Session = Depends(get_db), admin: dict =
     if clean_tenant and clean_tenant != "public":
         authorize_admin_access(admin, "companies:write", clean_tenant)
         try:
-            db.execute(text(f'DELETE FROM "{clean_tenant}".company_info WHERE id = :cid'), {"cid": company_id})
+            db.execute(text(f'DELETE FROM "{clean_tenant}".companies WHERE id::text = :cid'), {"cid": str(company_id)})
             db.commit()
         except Exception as e:
-            logger.error(f"Erro ao excluir company {company_id} em {clean_tenant}: {e}")
+            pass
     return {"message": "Empresa excluída com sucesso."}
-
 
 @router.post("/license/generate")
 def api_generate_license(payload: LicenseGenerateRequest, admin_key: str = Depends(verify_admin_key)):

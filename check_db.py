@@ -1,1 +1,13 @@
-﻿import sys; sys.path.append('backend'); from app.db.database import SessionLocal; from sqlalchemy import text; db = SessionLocal(); print(db.execute(text('SELECT tenant_code, environment_code, auth_mode, base_rest_url FROM public.protheus_rest_connections LIMIT 1')).mappings().all())
+import psycopg2
+
+dsn = "postgresql://postgres:senha_local@localhost:5435/copilot"
+conn = psycopg2.connect(dsn)
+cur = conn.cursor()
+
+cur.execute("SELECT tenant_code, schema_name FROM public.tenants")
+print("Tenants:", cur.fetchall())
+
+cur.execute("SELECT id, company_code, branch_code, legal_name, tax_id, status FROM rodol.companies")
+print("Companies:", cur.fetchall())
+
+conn.close()
