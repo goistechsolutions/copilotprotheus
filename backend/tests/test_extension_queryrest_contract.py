@@ -143,8 +143,31 @@ def test_extension_context_reaches_queryrest_with_explicit_environment(monkeypat
 
     import app.db.database
     import app.core.rate_limit
+    import app.services.entitlement_guard
+    from app.services.entitlement_guard import EntitlementDecision
     monkeypatch.setattr(app.db.database, "ensure_tenant_tables", lambda *_: None)
     monkeypatch.setattr(app.core.rate_limit, "check_tenant_rate_limit", lambda *_: {})
+    monkeypatch.setattr(
+        app.services.entitlement_guard.EntitlementGuard,
+        "authorize",
+        lambda *_, **__: EntitlementDecision(
+            allowed=True,
+            mode="enforce",
+            tenant_code="rodol_prod",
+            environment_code="c8te0u_prod",
+            module_code="5",
+        ),
+    )
+    monkeypatch.setattr(
+        app.services.entitlement_guard.EntitlementGuard,
+        "reserve",
+        lambda *_, **__: None,
+    )
+    monkeypatch.setattr(
+        app.services.entitlement_guard.EntitlementGuard,
+        "release_session",
+        lambda *_, **__: None,
+    )
     agent_sql_routes.AGENT_TASKS.clear()
     payload = {
         "query": "listar clientes",
