@@ -271,37 +271,63 @@ def _seed_bkl_initial_data(db):
                         VALUES (:int_id, :table_code, :required, :priority)
                     """), {"int_id": int_id, "table_code": table_code, "required": required, "priority": priority})
 
-        # 4. Mapeamento Semântico: Domínios de Negócio x Módulos Protheus Oficiais
-        # (domain_code, mod_sigla, mod_code, is_primary)
-        # protheus_modules_master é o master data oficial; business_domains é a camada semântica.
-        domain_modules = [
-            ("FINANCEIRO", "SIGAFIN", 6, True),
-            ("VENDAS", "SIGAFAT", 5, True),
-            ("COMPRAS", "SIGACOM", 2, True),
-            ("ESTOQUE", "SIGAEST", 4, True),
-            ("FISCAL", "SIGAFIS", 9, True),
-            ("CONTROLADORIA", "SIGACTB", 34, True),
-        ]
-        for dc, sigla, mcode, is_prim in domain_modules:
-            db.execute(text("""
-                INSERT INTO public.business_domain_modules (domain_code, mod_sigla, mod_code, is_primary)
-                VALUES (:dc, :sigla, :mcode, :is_prim)
-                ON CONFLICT (domain_code, mod_sigla) DO UPDATE
-                SET mod_code = EXCLUDED.mod_code, is_primary = EXCLUDED.is_primary
-            """), {"dc": dc, "sigla": sigla, "mcode": mcode, "is_prim": is_prim})
-
-        # 5. Saneamento do Catálogo Oficial Protheus (protheus_modules_master)
-        # Garante que mod_code 5 seja sempre SIGAFAT e mod_code 2 seja SIGACOM
+        # 4. Saneamento do Catálogo Oficial Protheus (protheus_modules_master)
         canonical_master = [
-            (1, "SIGAATF", "Ativo Fixo"),
-            (2, "SIGACOM", "Compras"),
-            (4, "SIGAEST", "Estoque e Custos"),
-            (5, "SIGAFAT", "Faturamento"),
-            (6, "SIGAFIN", "Financeiro"),
-            (7, "SIGAGPE", "Gestão de Pessoal"),
-            (9, "SIGAFIS", "Livros Fiscais"),
-            (10, "SIGAPCP", "Planejamento e Controle da Produção"),
-            (34, "SIGACTB", "Contabilidade Gerencial"),
+            (1,  'SIGAATF', 'SIGAATF - Ativo Fixo'),
+            (2,  'SIGACOM', 'SIGACOM - Compras / Suprimentos'),
+            (4,  'SIGAEST', 'SIGAEST - Estoque e Custos'),
+            (5,  'SIGAFAT', 'SIGAFAT - Faturamento'),
+            (6,  'SIGAFIN', 'SIGAFIN - Financeiro'),
+            (7,  'SIGAGPE', 'SIGAGPE - Gestão de Pessoal'),
+            (8,  'SIGAMNT', 'SIGAMNT - Manutenção de Ativos'),
+            (9,  'SIGAFIS', 'SIGAFIS - Livros Fiscais'),
+            (10, 'SIGAPCP', 'SIGAPCP - Planejamento e Controle da Produção'),
+            (11, 'SIGACRM', 'SIGACRM - Gestão de Relacionamento (CRM)'),
+            (12, 'SIGAPLN', 'SIGAPLN - Planejamento e Orçamento'),
+            (13, 'SIGAADV', 'SIGAADV - Administração de Vendas'),
+            (14, 'SIGAPEG', 'SIGAPEG - Pecúlio e Pensões'),
+            (15, 'SIGAAGR', 'SIGAAGR - Agronegócio'),
+            (16, 'SIGAPON', 'SIGAPON - Ponto Eletrônico'),
+            (17, 'SIGAMDT', 'SIGAMDT - Medicina e Segurança do Trabalho'),
+            (18, 'SIGAQHT', 'SIGAQHT - Qualidade / Hotelaria'),
+            (19, 'SIGAQMT', 'SIGAQMT - Metrologia'),
+            (20, 'SIGAQDO', 'SIGAQDO - Documentação da Qualidade'),
+            (21, 'SIGAQIP', 'SIGAQIP - Inspeção de Processos'),
+            (22, 'SIGAQIE', 'SIGAQIE - Inspeção de Entradas'),
+            (23, 'SIGAFSP', 'SIGAFSP - Fast Service / Posto de Combustível'),
+            (24, 'SIGAPAT', 'SIGAPAT - Patrimônio / Ativo Fixo'),
+            (25, 'SIGAVEC', 'SIGAVEC - Veículos'),
+            (26, 'SIGAEC',  'SIGAEC - Easy Construction'),
+            (27, 'SIGAACD', 'SIGAACD - Automação Coleta de Dados'),
+            (28, 'SIGATMS', 'SIGATMS - Gestão de Transportes (TMS)'),
+            (29, 'SIGAWMS', 'SIGAWMS - Gestão de Armazém (WMS)'),
+            (30, 'SIGAPMS', 'SIGAPMS - Gestão de Projetos (PMS)'),
+            (31, 'SIGACDB', 'SIGACDB - Código de Barras / Automação'),
+            (32, 'SIGAERM', 'SIGAERM - Risk Management'),
+            (33, 'SIGAEIC', 'SIGAEIC - Easy Import Control (Importação)'),
+            (34, 'SIGACTB', 'SIGACTB - Contabilidade Gerencial'),
+            (35, 'SIGAEFF', 'SIGAEFF - Easy Foreign Finance'),
+            (36, 'SIGAECO', 'SIGAECO - Easy Accounting / Contabilidade Câmbio'),
+            (37, 'SIGAEDC', 'SIGAEDC - Easy Data Collection'),
+            (38, 'SIGAEPO', 'SIGAEPO - Easy Purchase Order'),
+            (39, 'SIGASFC', 'SIGASFC - Shop Floor Control (Chão de Fábrica)'),
+            (40, 'SIGAPLS', 'SIGAPLS - Planos de Saúde'),
+            (41, 'SIGACTL', 'SIGACTL - Controle de Locação'),
+            (42, 'SIGAGVA', 'SIGAGVA - Gestão de Varejo'),
+            (43, 'SIGATAC', 'SIGATAC - Gestão de Acervos / Módulos Especiais'),
+            (44, 'SIGAOMS', 'SIGAOMS - Order Management System'),
+            (45, 'SIGAAMB', 'SIGAAMB - Gestão Ambiental'),
+            (46, 'SIGANCM', 'SIGANCM - Nomenclatura Comum do Mercosul'),
+            (47, 'SIGAGCC', 'SIGAGCC - Gestão de Contratos de Concessão'),
+            (48, 'SIGAGSP', 'SIGAGSP - Gestão do Setor Público'),
+            (49, 'SIGAGTP', 'SIGAGTP - Gestão de Transporte de Passageiros'),
+            (52, 'SIGOFI',  'SIGOFI - Oficina / Concessionárias'),
+            (53, 'SIGATFP', 'SIGATFP - Gestão de Frota / Passagens'),
+            (56, 'SIGAGCV', 'SIGAGCV - Gestão de Cargas e Veículos'),
+            (84, 'SIGACFG', 'SIGACFG - Configurador'),
+            (85, 'SIGAEEC', 'SIGAEEC - Easy Export Control (Exportação)'),
+            (88, 'SIGAESP', 'SIGAESP - Específico / Customizados'),
+            (97, 'SIGAFWD', 'SIGAFWD - Framework / Arquitetura'),
         ]
         for mc, ms, mn in canonical_master:
             db.execute(text("""
@@ -313,6 +339,24 @@ def _seed_bkl_initial_data(db):
                     active = TRUE,
                     updated_at = CURRENT_TIMESTAMP
             """), {"mc": mc, "ms": ms, "mn": mn})
+
+        # 5. Mapeamento Semântico: Domínios de Negócio x Módulos Protheus Oficiais
+        # (domain_code, module_id, is_primary)
+        domain_modules = [
+            ("FINANCEIRO", 6, True),      # SIGAFIN
+            ("VENDAS", 5, True),          # SIGAFAT
+            ("COMPRAS", 2, True),         # SIGACOM
+            ("ESTOQUE", 4, True),         # SIGAEST
+            ("FISCAL", 9, True),          # SIGAFIS
+            ("CONTROLADORIA", 34, True),  # SIGACTB
+        ]
+        for dc, mod_id, is_prim in domain_modules:
+            db.execute(text("""
+                INSERT INTO public.business_domain_modules (domain_code, module_id, is_primary)
+                VALUES (:dc, :mod_id, :is_prim)
+                ON CONFLICT (domain_code, module_id) DO UPDATE
+                SET is_primary = EXCLUDED.is_primary
+            """), {"dc": dc, "mod_id": mod_id, "is_prim": is_prim})
     except Exception as exc:
         print(f"[DB] Aviso ao semear BKL inicial: {exc}")
 

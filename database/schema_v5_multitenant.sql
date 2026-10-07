@@ -242,15 +242,14 @@ $$ LANGUAGE plpgsql;
 -- ═══════════════════════════════════════════════════════════════════════════
 INSERT INTO public.protheus_modules_master (id, module_sigla, description) VALUES
   (1,  'SIGAATF', 'SIGAATF - Ativo Fixo'),
-  (2,  'SIGAFAT', 'SIGAFAT - Faturamento'),
-  (3,  'SIGACOM', 'SIGACOM - Compras / Suprimentos'),
+  (2,  'SIGACOM', 'SIGACOM - Compras / Suprimentos'),
   (4,  'SIGAEST', 'SIGAEST - Estoque e Custos'),
-  (5,  'SIGAFIN', 'SIGAFIN - Financeiro'),
-  (6,  'SIGAFIS', 'SIGAFIS - Livros Fiscais'),
+  (5,  'SIGAFAT', 'SIGAFAT - Faturamento'),
+  (6,  'SIGAFIN', 'SIGAFIN - Financeiro'),
   (7,  'SIGAGPE', 'SIGAGPE - Gestão de Pessoal'),
-  (8,  'SIGAPCP', 'SIGAPCP - Planejamento e Controle da Produção'),
-  (9,  'SIGAMNT', 'SIGAMNT - Manutenção de Ativos'),
-  (10, 'SIGOFI',  'SIGOFI  - Oficina'),
+  (8,  'SIGAMNT', 'SIGAMNT - Manutenção de Ativos'),
+  (9,  'SIGAFIS', 'SIGAFIS - Livros Fiscais'),
+  (10, 'SIGAPCP', 'SIGAPCP - Planejamento e Controle da Produção'),
   (11, 'SIGACRM', 'SIGACRM - Gestão de Relacionamento (CRM)'),
   (12, 'SIGAPLN', 'SIGAPLN - Planejamento e Orçamento'),
   (13, 'SIGAADV', 'SIGAADV - Administração de Vendas'),
@@ -266,7 +265,7 @@ INSERT INTO public.protheus_modules_master (id, module_sigla, description) VALUE
   (23, 'SIGAFSP', 'SIGAFSP - Fast Service / Posto de Combustível'),
   (24, 'SIGAPAT', 'SIGAPAT - Patrimônio / Ativo Fixo'),
   (25, 'SIGAVEC', 'SIGAVEC - Veículos'),
-  (26, 'SIGAEC',  'SIGAEC  - Easy Construction'),
+  (26, 'SIGAEC',  'SIGAEC - Easy Construction'),
   (27, 'SIGAACD', 'SIGAACD - Automação Coleta de Dados'),
   (28, 'SIGATMS', 'SIGATMS - Gestão de Transportes (TMS)'),
   (29, 'SIGAWMS', 'SIGAWMS - Gestão de Armazém (WMS)'),
@@ -274,7 +273,7 @@ INSERT INTO public.protheus_modules_master (id, module_sigla, description) VALUE
   (31, 'SIGACDB', 'SIGACDB - Código de Barras / Automação'),
   (32, 'SIGAERM', 'SIGAERM - Risk Management'),
   (33, 'SIGAEIC', 'SIGAEIC - Easy Import Control (Importação)'),
-  (34, 'SIGAEEC', 'SIGAEEC - Easy Export Control (Exportação)'),
+  (34, 'SIGACTB', 'SIGACTB - Contabilidade Gerencial'),
   (35, 'SIGAEFF', 'SIGAEFF - Easy Foreign Finance'),
   (36, 'SIGAECO', 'SIGAECO - Easy Accounting / Contabilidade Câmbio'),
   (37, 'SIGAEDC', 'SIGAEDC - Easy Data Collection'),
@@ -290,15 +289,17 @@ INSERT INTO public.protheus_modules_master (id, module_sigla, description) VALUE
   (47, 'SIGAGCC', 'SIGAGCC - Gestão de Contratos de Concessão'),
   (48, 'SIGAGSP', 'SIGAGSP - Gestão do Setor Público'),
   (49, 'SIGAGTP', 'SIGAGTP - Gestão de Transporte de Passageiros'),
+  (52, 'SIGOFI',  'SIGOFI - Oficina / Concessionárias'),
   (53, 'SIGATFP', 'SIGATFP - Gestão de Frota / Passagens'),
   (56, 'SIGAGCV', 'SIGAGCV - Gestão de Cargas e Veículos'),
   (84, 'SIGACFG', 'SIGACFG - Configurador'),
+  (85, 'SIGAEEC', 'SIGAEEC - Easy Export Control (Exportação)'),
   (88, 'SIGAESP', 'SIGAESP - Específico / Customizados'),
   (97, 'SIGAFWD', 'SIGAFWD - Framework / Arquitetura')
-ON CONFLICT (mod_code) DO UPDATE SET
-  mod_sigla = EXCLUDED.mod_sigla,
-  mod_name  = EXCLUDED.mod_name,
-  updated_at = NOW();
+ON CONFLICT (id) DO UPDATE SET
+  module_sigla = EXCLUDED.module_sigla,
+  description  = EXCLUDED.description,
+  updated_at   = NOW();
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- COMENTÁRIOS DESCRITIVOS

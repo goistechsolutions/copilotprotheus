@@ -109,12 +109,18 @@ def list_business_domains(
             GROUP BY bi.domain_code
         """)).fetchall())
 
+        from app.models.knowledge import ProtheusModuleMaster
+        master_map = {m.id: m for m in db.query(ProtheusModuleMaster).all()}
+
         mods_by_domain: Dict[str, List[Dict[str, Any]]] = {}
         for m in modules:
+            master = master_map.get(m.module_id)
             mods_by_domain.setdefault(m.domain_code, []).append({
-                "id": m.id,
-                "mod_sigla": m.mod_sigla,
-                "mod_code": m.mod_code,
+                "id": m.module_id,
+                "module_id": m.module_id,
+                "mod_sigla": master.module_sigla if master else "",
+                "mod_code": m.module_id,
+                "description": master.description if master else "",
                 "is_primary": m.is_primary,
             })
             
@@ -171,8 +177,7 @@ def create_business_domain(
                     
                 db.add(BusinessDomainModule(
                     domain_code=code,
-                    mod_sigla=mod_sigla_upper,
-                    mod_code=m.mod_code,
+                    module_id=master_mod.id,
                     is_primary=m.is_primary,
                 ))
         db.commit()
@@ -215,8 +220,7 @@ def update_business_domain(
                     
                 db.add(BusinessDomainModule(
                     domain_code=domain.domain_code,
-                    mod_sigla=mod_sigla_upper,
-                    mod_code=m.mod_code,
+                    module_id=master_mod.id,
                     is_primary=m.is_primary,
                 ))
         db.commit()
