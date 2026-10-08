@@ -465,7 +465,7 @@ CANONICAL_MODULES_QUERY = """SELECT DISTINCT
         ELSE 'Outros'        
     END AS NOME_MODULO         
 FROM SYS_USR_MODULE         
-WHERE D_E_L_E_T_ <> '*'         
+WHERE R_E_C_D_E_L_ = 0         
 ORDER BY USR_MODULO"""
 
 
@@ -505,7 +505,22 @@ async def sync_modules(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
     
-    environment_code = require_environment_code(payload)
+    raw_env = payload.get("environment_code") or payload.get("protheus_ambiente") or payload.get("ambiente")
+    clean_tenant = secure_clean_tenant(tenant_id)
+    active_env = None
+    try:
+        active_env = db.execute(text(f"""
+            SELECT e.environment_code
+            FROM "{clean_tenant}".protheus_connections c
+            JOIN "{clean_tenant}".environments e ON e.id = c.environment_id
+            WHERE c.active = TRUE
+            ORDER BY CASE WHEN e.environment_code = :env THEN 0 ELSE 1 END, c.updated_at DESC
+            LIMIT 1
+        """), {"env": str(raw_env or "").strip()}).scalar()
+    except Exception:
+        pass
+
+    environment_code = active_env or require_environment_code(payload)
 
     try:
         logger.info("sync_modules_context tenant=%s environment=%s", tenant_id, environment_code)
@@ -516,18 +531,7 @@ async def sync_modules(
             environment_code=environment_code
         )
         
-        result_data = await client.execute(
-            """
-            SELECT DISTINCT
-                TRIM(USR_CODMOD) AS mod_sigla,
-                USR_MODULO AS mod_code,
-                USR_NOME AS mod_name
-            FROM SYS_USR_MODULE
-            WHERE D_E_L_E_T_ <> '*'
-            ORDER BY USR_MODULO
-            """,
-            method="POST"
-        )
+        result_data = await client.execute(CANONICAL_MODULES_QUERY, method="POST")
         
         if isinstance(result_data, dict):
             result_data = result_data.get("items") or result_data.get("data", [])
@@ -536,13 +540,19 @@ async def sync_modules(
 
         count = 0
         for item in result_data:
-            if not item.get("mod_code"):
+            c_mod = item.get("CODIGO_MODULO") or item.get("codigo_modulo") or item.get("mod_code") or item.get("MOD_CODE")
+            c_sigla = item.get("CODIGO_TABELA") or item.get("codigo_tabela") or item.get("mod_sigla") or item.get("MOD_SIGLA")
+            c_nome = item.get("NOME_MODULO") or item.get("nome_modulo") or item.get("mod_name") or item.get("MOD_NAME")
+            if not c_mod:
                 continue
 
             try:
-                mod_code_int = int(item["mod_code"])
+                mod_code_int = int(c_mod)
             except ValueError:
                 continue
+
+            sigla_str = str(c_sigla or "").strip().upper()
+            desc_str = str(c_nome or sigla_str or f"Módulo {mod_code_int}").strip()
 
             db.execute(
                 text("""
@@ -563,13 +573,13 @@ async def sync_modules(
                     ON CONFLICT (id) DO UPDATE
                     SET module_sigla = EXCLUDED.module_sigla,
                         description  = EXCLUDED.description,
-                        active    = EXCLUDED.active,
-                        updated_at = NOW()
+                        active       = EXCLUDED.active,
+                        updated_at   = NOW()
                 """),
                 {
                     "id": mod_code_int,
-                    "module_sigla": str(item.get("mod_sigla", "")).strip().upper(),
-                    "description": item.get("mod_name"),
+                    "module_sigla": sigla_str,
+                    "description": desc_str,
                 },
             )
             count += 1
@@ -977,11 +987,25 @@ async def sync_schema(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id e obrigatorio.")
         
-    environment_code = require_environment_code(payload)
+    raw_env = payload.get("environment_code") or payload.get("protheus_ambiente") or payload.get("ambiente")
+    clean_tenant = secure_clean_tenant(str(tenant_id))
+    active_env = None
+    try:
+        active_env = db.execute(text(f"""
+            SELECT e.environment_code
+            FROM "{clean_tenant}".protheus_connections c
+            JOIN "{clean_tenant}".environments e ON e.id = c.environment_id
+            WHERE c.active = TRUE
+            ORDER BY CASE WHEN e.environment_code = :env THEN 0 ELSE 1 END, c.updated_at DESC
+            LIMIT 1
+        """), {"env": str(raw_env or "").strip()}).scalar()
+    except Exception:
+        pass
+
+    environment_code = active_env or require_environment_code(payload)
 
     import re
     from app.db.database import ensure_tenant_tables
-    clean_tenant = secure_clean_tenant(str(tenant_id))
     if clean_tenant and clean_tenant != "public":
         ensure_tenant_tables(db, clean_tenant)
         db.execute(text(f'SET search_path TO "{clean_tenant}", public'))
@@ -1199,90 +1223,178 @@ async def sync_schema(
         clean_tenant = secure_clean_tenant(str(tenant_id))
         ensure_tenant_tables(db, clean_tenant)
 
-        for selected_code in selected_module_codes:
-            db.execute(
-                text(f'DELETE FROM "{clean_tenant}".dictionary_fields WHERE table_code IN (SELECT table_code FROM "{clean_tenant}".dictionary_tables WHERE module_code = :module_code)'),
-                {"module_code": str(selected_code)},
-            )
-            db.execute(
-                text(f'DELETE FROM "{clean_tenant}".dictionary_tables WHERE module_code = :module_code'),
-                {"module_code": str(selected_code)},
-            )
+        has_snapshot_col = db.execute(text(f"""
+            SELECT 1 FROM information_schema.columns
+             WHERE table_schema = :s AND table_name = 'dictionary_tables' AND column_name = 'snapshot_id'
+             LIMIT 1
+        """), {"s": clean_tenant}).scalar()
 
-        for chave, meta in schema_dict.items():
-            mod_val = meta.get("x2_modulo", "")
-            mod_int = int(mod_val) if mod_val.isdigit() else 0
-            mod_sigla = meta.get("codmod") or mod_val
-            
-            comp_row = db.execute(text(f'SELECT id, company_code FROM "{clean_tenant}".company_info ORDER BY id ASC LIMIT 1')).first()
-            comp_id = comp_row[0] if comp_row else None
-            comp_code = str(comp_row[1]).strip() if comp_row and comp_row[1] is not None else None
-            module_code = str(mod_int) if mod_int else mod_sigla
-            physical_name = str(meta.get("tabela", "") or "").strip()
+        if has_snapshot_col:
+            env_id = db.execute(text(f'SELECT id FROM "{clean_tenant}".environments WHERE environment_code = :env LIMIT 1'), {"env": environment_code}).scalar()
+            if not env_id:
+                env_id = db.execute(text(f'''
+                    INSERT INTO "{clean_tenant}".environments (environment_code, environment_name, status)
+                    VALUES (:e, :e, 'ACTIVE')
+                    ON CONFLICT (environment_code) DO UPDATE SET status = 'ACTIVE'
+                    RETURNING id
+                '''), {"e": environment_code}).scalar()
 
-            # V6: dictionary_tables é o snapshot autoritativo do Tenant.
-            db.execute(
-                text(f"""
-                    INSERT INTO "{clean_tenant}".dictionary_tables
-                    (tenant_id, company_id, company_code,
-                     table_code, table_name, physical_name, module_code, description)
-                    VALUES (:tenant_id, :cid, :company_code,
-                            :table_code, :table_name, :physical_name, :module_code, :description)
-                    ON CONFLICT (tenant_id, company_id, table_code)
-                    DO UPDATE SET
-                        company_id = EXCLUDED.company_id,
-                        company_code = EXCLUDED.company_code,
-                        table_code = EXCLUDED.table_code,
-                        physical_name = EXCLUDED.physical_name,
-                        module_code = EXCLUDED.module_code,
-                        description = EXCLUDED.description,
-                        active_flag = TRUE,
-                        updated_at = NOW()
-                """),
-                {
-                    "tenant_id": clean_tenant,
-                    "cid": comp_id,
-                    "company_code": comp_code,
-                    "table_code": chave,
-                    "table_name": chave,
-                    "physical_name": physical_name,
-                    "module_code": module_code,
-                    "description": meta.get("nome", "")
-                }
-            )
+            tables_by_mod = {}
+            for chave, meta in schema_dict.items():
+                mod_val = meta.get("x2_modulo", "")
+                mod_int = int(mod_val) if str(mod_val).isdigit() else 0
+                tables_by_mod.setdefault(mod_int, []).append((chave, meta))
 
-            # V6: dictionary_fields mantém o mesmo escopo do registro SX2 pai.
-            campos_list = meta.get("campos", [])
-            for c in campos_list:
+            for mod_int, mod_tables in tables_by_mod.items():
+                effective_mod = mod_int if mod_int > 0 else 1
+                try:
+                    db.execute(text(f'INSERT INTO "{clean_tenant}".tenant_modules (module_id) VALUES (:m) ON CONFLICT (module_id) DO NOTHING'), {"m": effective_mod})
+                except Exception:
+                    pass
+
+                snap_code = f"SNAP_{effective_mod}_{environment_code}"
+                snap_id = db.execute(text(f'''
+                    INSERT INTO "{clean_tenant}".dictionary_snapshots (environment_id, module_id, snapshot_code, status, activated_at)
+                    VALUES (:env_id, :mod_id, :code, 'ACTIVE', NOW())
+                    ON CONFLICT (snapshot_code) DO UPDATE SET status = 'ACTIVE', activated_at = NOW()
+                    RETURNING id
+                '''), {"env_id": env_id, "mod_id": effective_mod, "code": snap_code}).scalar()
+
+                for chave, meta in mod_tables:
+                    phys_name = str(meta.get("tabela", "") or chave).strip()
+                    desc_name = str(meta.get("nome", "") or chave).strip()
+                    table_id = db.execute(text(f'''
+                        INSERT INTO "{clean_tenant}".dictionary_tables
+                        (snapshot_id, table_code, table_name, physical_name, business_name, description, active)
+                        VALUES (:snap_id, :code, :name, :phys, :bname, :desc, TRUE)
+                        ON CONFLICT (snapshot_id, table_code) DO UPDATE
+                        SET table_name = EXCLUDED.table_name,
+                            physical_name = EXCLUDED.physical_name,
+                            business_name = EXCLUDED.business_name,
+                            description = EXCLUDED.description,
+                            active = TRUE
+                        RETURNING id
+                    '''), {
+                        "snap_id": snap_id,
+                        "code": chave,
+                        "name": chave,
+                        "phys": phys_name,
+                        "bname": desc_name,
+                        "desc": desc_name,
+                    }).scalar()
+
+                    for c in meta.get("campos", []):
+                        c_nome = str(c.get("campo", "") or "").strip().upper()
+                        if not c_nome:
+                            continue
+                        c_desc = str(c.get("descricao", "") or c_nome).strip()
+                        c_tipo = str(c.get("tipo", "") or "").strip()
+                        c_tam = str(c.get("tamanho", "") or "")
+                        db.execute(text(f'''
+                            INSERT INTO "{clean_tenant}".dictionary_fields
+                            (table_id, field_name, business_name, description, field_type, display_format, active)
+                            VALUES (:table_id, :fname, :bname, :desc, :ftype, :disp, TRUE)
+                            ON CONFLICT (table_id, field_name) DO UPDATE
+                            SET business_name = EXCLUDED.business_name,
+                                description = EXCLUDED.description,
+                                field_type = EXCLUDED.field_type,
+                                display_format = EXCLUDED.display_format,
+                                active = TRUE
+                        '''), {
+                            "table_id": table_id,
+                            "fname": c_nome,
+                            "bname": c_desc,
+                            "desc": c_desc,
+                            "ftype": c_tipo,
+                            "disp": c_tam,
+                        })
+        else:
+            for selected_code in selected_module_codes:
+                db.execute(
+                    text(f'DELETE FROM "{clean_tenant}".dictionary_fields WHERE table_code IN (SELECT table_code FROM "{clean_tenant}".dictionary_tables WHERE module_code = :module_code)'),
+                    {"module_code": str(selected_code)},
+                )
+                db.execute(
+                    text(f'DELETE FROM "{clean_tenant}".dictionary_tables WHERE module_code = :module_code'),
+                    {"module_code": str(selected_code)},
+                )
+
+            for chave, meta in schema_dict.items():
+                mod_val = meta.get("x2_modulo", "")
+                mod_int = int(mod_val) if mod_val.isdigit() else 0
+                mod_sigla = meta.get("codmod") or mod_val
+                
+                comp_row = None
+                try:
+                    comp_row = db.execute(text(f'SELECT id, company_code FROM "{clean_tenant}".company_info ORDER BY id ASC LIMIT 1')).first()
+                except Exception:
+                    pass
+                comp_id = comp_row[0] if comp_row else None
+                comp_code = str(comp_row[1]).strip() if comp_row and comp_row[1] is not None else None
+                module_code = str(mod_int) if mod_int else mod_sigla
+                physical_name = str(meta.get("tabela", "") or "").strip()
+
                 db.execute(
                     text(f"""
-                        INSERT INTO "{clean_tenant}".dictionary_fields
-                        (tenant_id, company_id,
-                         table_code, table_name, field_name, title, field_type, length_num, decimal_num)
-                        VALUES (:tenant_id, :cid,
-                                :table_code, :table_name, :field_name, :title, :field_type, :length_num, :decimal_num)
-                        ON CONFLICT (tenant_id, company_id, table_code, field_name)
+                        INSERT INTO "{clean_tenant}".dictionary_tables
+                        (tenant_id, company_id, company_code,
+                         table_code, table_name, physical_name, module_code, description)
+                        VALUES (:tenant_id, :cid, :company_code,
+                                :table_code, :table_name, :physical_name, :module_code, :description)
+                        ON CONFLICT (tenant_id, company_id, table_code)
                         DO UPDATE SET
                             company_id = EXCLUDED.company_id,
+                            company_code = EXCLUDED.company_code,
                             table_code = EXCLUDED.table_code,
-                            title = EXCLUDED.title,
-                            field_type = EXCLUDED.field_type,
-                            length_num = EXCLUDED.length_num,
-                            decimal_num = EXCLUDED.decimal_num,
+                            physical_name = EXCLUDED.physical_name,
+                            module_code = EXCLUDED.module_code,
+                            description = EXCLUDED.description,
+                            active_flag = TRUE,
                             updated_at = NOW()
                     """),
                     {
                         "tenant_id": clean_tenant,
                         "cid": comp_id,
+                        "company_code": comp_code,
                         "table_code": chave,
                         "table_name": chave,
-                        "field_name": str(c.get("campo", "") or "").strip().upper(),
-                        "title": c.get("descricao", ""),
-                        "field_type": c.get("tipo", ""),
-                        "length_num": int(c.get("tamanho") or 0) or None,
-                        "decimal_num": int(c.get("decimal") or 0) or None
+                        "physical_name": physical_name,
+                        "module_code": module_code,
+                        "description": meta.get("nome", "")
                     }
                 )
+
+                campos_list = meta.get("campos", [])
+                for c in campos_list:
+                    db.execute(
+                        text(f"""
+                            INSERT INTO "{clean_tenant}".dictionary_fields
+                            (tenant_id, company_id,
+                             table_code, table_name, field_name, title, field_type, length_num, decimal_num)
+                            VALUES (:tenant_id, :cid,
+                                    :table_code, :table_name, :field_name, :title, :field_type, :length_num, :decimal_num)
+                            ON CONFLICT (tenant_id, company_id, table_code, field_name)
+                            DO UPDATE SET
+                                company_id = EXCLUDED.company_id,
+                                table_code = EXCLUDED.table_code,
+                                title = EXCLUDED.title,
+                                field_type = EXCLUDED.field_type,
+                                length_num = EXCLUDED.length_num,
+                                decimal_num = EXCLUDED.decimal_num,
+                                updated_at = NOW()
+                        """),
+                        {
+                            "tenant_id": clean_tenant,
+                            "cid": comp_id,
+                            "table_code": chave,
+                            "table_name": chave,
+                            "field_name": str(c.get("campo", "") or "").strip().upper(),
+                            "title": c.get("descricao", ""),
+                            "field_type": c.get("tipo", ""),
+                            "length_num": int(c.get("tamanho") or 0) or None,
+                            "decimal_num": int(c.get("decimal") or 0) or None
+                        }
+                    )
         db.commit()
 
         return {
@@ -1302,7 +1414,8 @@ async def sync_schema(
 @router.get("/schemas")
 def get_schemas(
     tenant_id: str,
-    company_id: Optional[int] = None,
+    environment_code: Optional[str] = None,
+    company_id: Optional[str] = None,
     db: Session = Depends(get_db),
     admin: str = Depends(verify_admin),
 ):
@@ -1312,6 +1425,75 @@ def get_schemas(
         if not clean_tenant or clean_tenant == "public":
             raise HTTPException(status_code=400, detail="tenant_id inválido.")
         ensure_tenant_tables(db, clean_tenant)
+
+        has_snapshot_col = db.execute(text(f"""
+            SELECT 1 FROM information_schema.columns
+             WHERE table_schema = :s AND table_name = 'dictionary_tables' AND column_name = 'snapshot_id'
+             LIMIT 1
+        """), {"s": clean_tenant}).scalar()
+
+        if has_snapshot_col:
+            table_rows = db.execute(text(f'''
+                SELECT dt.id,
+                       COALESCE(pm.id, 0) AS mod_code,
+                       COALESCE(pm.module_sigla, '') AS mod_sigla,
+                       dt.table_code AS chave,
+                       COALESCE(dt.physical_name, dt.table_name, dt.table_code) AS tabela,
+                       COALESCE(dt.business_name, dt.description, dt.table_name, dt.table_code) AS nome
+                  FROM "{clean_tenant}".dictionary_tables dt
+                  LEFT JOIN "{clean_tenant}".dictionary_snapshots ds ON ds.id = dt.snapshot_id
+                  LEFT JOIN public.protheus_modules_master pm ON pm.id = ds.module_id
+                 WHERE dt.active = TRUE
+                 ORDER BY mod_sigla, dt.table_code
+            ''')).mappings().all()
+
+            field_rows = db.execute(text(f'''
+                SELECT df.table_id, df.field_name,
+                       COALESCE(df.business_name, df.description, df.field_name) AS title,
+                       df.field_type, df.display_format
+                  FROM "{clean_tenant}".dictionary_fields df
+                 WHERE df.active = TRUE
+                 ORDER BY df.field_name
+            ''')).mappings().all()
+
+            fields_by_table_id: dict[str, list[dict]] = {}
+            for row in field_rows:
+                tid = str(row["table_id"])
+                fields_by_table_id.setdefault(tid, []).append({
+                    "campo": row["field_name"],
+                    "descricao": row["title"] or "",
+                    "tipo": row["field_type"] or "",
+                    "tamanho": row.get("display_format") or "",
+                    "decimal": 0,
+                })
+
+            schemas_list = []
+            for row in table_rows:
+                tid = str(row["id"])
+                schemas_list.append({
+                    "id": str(row["id"]),
+                    "modulo": row["mod_sigla"] or str(row["mod_code"]) or "",
+                    "mod_code": row["mod_code"],
+                    "mod_sigla": row["mod_sigla"],
+                    "chave": row["chave"],
+                    "tabela": row["tabela"],
+                    "nome": row["nome"],
+                    "company_id": str(company_id) if company_id else None,
+                    "company_code": None,
+                    "campos_count": len(fields_by_table_id.get(tid, [])),
+                    "campos": fields_by_table_id.get(tid, []),
+                    "indices": [],
+                    "compartilhamento": {},
+                })
+
+            return {
+                "schemas": schemas_list,
+                "source": "dictionary_tables",
+                "tenant": clean_tenant,
+                "company_id": company_id,
+                "total": len(schemas_list),
+            }
+
         scope = "AND dt.company_id = :company_id" if company_id is not None else ""
         params = {"tenant_id": clean_tenant}
         if company_id is not None:
@@ -1338,13 +1520,17 @@ def get_schemas(
              ORDER BY df.table_code, df.field_name
         '''), params).mappings().all()
 
-        index_rows = db.execute(text(f'''
-            SELECT di.table_code, di.index_order, di.nickname, di.expression
-              FROM "{clean_tenant}".dictionary_indexes di
-             WHERE di.tenant_id = :tenant_id
-               {"AND di.company_id = :company_id" if company_id is not None else ""}
-             ORDER BY di.table_code, di.index_order
-        '''), params).mappings().all()
+        index_rows = []
+        try:
+            index_rows = db.execute(text(f'''
+                SELECT di.table_code, di.index_order, di.nickname, di.expression
+                  FROM "{clean_tenant}".dictionary_indexes di
+                 WHERE di.tenant_id = :tenant_id
+                   {"AND di.company_id = :company_id" if company_id is not None else ""}
+                 ORDER BY di.table_code, di.index_order
+            '''), params).mappings().all()
+        except Exception:
+            pass
 
         fields_by_table: dict[str, list[dict]] = {}
         for row in field_rows:
@@ -1368,6 +1554,7 @@ def get_schemas(
             table_code = str(row["chave"]).upper()
             schemas_list.append({
                 "id": row["id"],
+                "modulo": row.get("mod_code") or "",
                 "mod_code": row["mod_code"],
                 "mod_sigla": None,
                 "chave": row["chave"],

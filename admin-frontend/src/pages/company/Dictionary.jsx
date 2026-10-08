@@ -19,15 +19,16 @@ export default function CompanyDictionary({ company }) {
   }, [company]);
 
   const resolveEnvironmentCode = async (comp) => {
-    let env = comp?.environment_code || comp?.protheus_ambiente || comp?.protheus_ambientes || comp?.ambiente || comp?.environment;
-    if (!env && comp?.tenant_id) {
+    if (comp?.tenant_id) {
       try {
         const res = await axios.get(`/api/tenants/${comp.tenant_id}`);
-        env = res.data?.environment_code || res.data?.connection?.environment_code;
+        const tenantEnv = res.data?.connection?.environment_code || res.data?.environment_code;
+        if (tenantEnv) return String(tenantEnv).trim();
       } catch (err) {
         console.warn("Não foi possível buscar environment_code do tenant:", err);
       }
     }
+    const env = comp?.environment_code || comp?.protheus_ambiente || comp?.protheus_ambientes || comp?.ambiente || comp?.environment;
     return String(env || '').trim();
   };
 

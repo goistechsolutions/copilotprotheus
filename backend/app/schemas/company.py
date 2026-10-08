@@ -42,8 +42,8 @@ class CompanyBase(BaseModel):
     protheus_empresa: Optional[str] = Field(None, max_length=20)
     protheus_unidade: Optional[str] = Field(None, max_length=20)
     protheus_filial: Optional[str] = Field("0101", max_length=30)
-    environment: Optional[str] = Field("producao", max_length=60)
-    protheus_ambientes: Optional[str] = Field("producao", max_length=100)
+    environment: Optional[str] = Field(None, max_length=60)
+    protheus_ambientes: Optional[str] = Field(None, max_length=100)
     protheus_rest_url: Optional[str] = None
     webapp_url: Optional[str] = Field(None, description="URL WebApp / admin Protheus")
     protheus_usuario: Optional[str] = Field(None, max_length=100)

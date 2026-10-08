@@ -184,6 +184,24 @@ def list_companies(db, tenant_id=None):
 
         try:
             c_rows = db.execute(text(f'SELECT id, company_code, branch_code, legal_name, tax_id, status FROM "{clean}".companies')).mappings().all()
+            
+            # Buscar conexão ativa e ambiente do tenant
+            active_conn = None
+            try:
+                active_conn = db.execute(text(f'''
+                    SELECT e.environment_code, c.base_rest_url
+                    FROM "{clean}".protheus_connections c
+                    JOIN "{clean}".environments e ON e.id = c.environment_id
+                    WHERE c.active = TRUE
+                    ORDER BY c.updated_at DESC
+                    LIMIT 1
+                ''')).mappings().first()
+            except Exception:
+                pass
+
+            env_code = active_conn["environment_code"] if active_conn else ""
+            rest_url = active_conn["base_rest_url"] if active_conn else ""
+
             for c in c_rows:
                 result.append({
                     "id": c["id"],
@@ -193,8 +211,8 @@ def list_companies(db, tenant_id=None):
                     "razao_social": c.get("legal_name") or "",
                     "protheus_empresa": c.get("company_code") or "",
                     "protheus_filial": c.get("branch_code") or "",
-                    "protheus_ambientes": c.get("protheus_ambientes") or "",
-                    "protheus_rest_url": c.get("protheus_rest_url") or "",
+                    "protheus_ambientes": env_code,
+                    "protheus_rest_url": rest_url,
                     "status": c.get("status") or "ACTIVE"
                 })
         except Exception as e:

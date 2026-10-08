@@ -118,11 +118,40 @@ def load_connection(
             },
         ).mappings().first()
     except Exception as e:
-        raise ValueError(f"Erro ao buscar conexo para {clean_tenant}/{environment_code}: {e}")
+        raise ValueError(f"Erro ao buscar conexão para {clean_tenant}/{environment_code}: {e}")
+
+    if not row:
+        try:
+            fallback_row = db.execute(
+                text(f"""
+                    SELECT
+                        c.id,
+                        e.environment_code,
+                        c.base_rest_url,
+                        c.auth_mode,
+                        c.secret_ref,
+                        c.active
+                    FROM "{clean_tenant}".protheus_connections c
+                    JOIN "{clean_tenant}".environments e ON e.id = c.environment_id
+                    WHERE c.active = TRUE
+                    ORDER BY c.updated_at DESC
+                    LIMIT 1
+                """)
+            ).mappings().first()
+            if fallback_row:
+                logger.warning(
+                    "Conexão para ambiente '%s' não encontrada no tenant '%s'. Utilizando ambiente ativo '%s'.",
+                    environment_code,
+                    tenant_code,
+                    fallback_row["environment_code"]
+                )
+                row = fallback_row
+        except Exception:
+            pass
 
     if not row:
         raise ValueError(
-            f"conexo REST Protheus ativa no localizada para {tenant_code}/{environment_code}"
+            f"conexão REST Protheus ativa não localizada para {tenant_code}/{environment_code}"
         )
         
     sec_data = {}
