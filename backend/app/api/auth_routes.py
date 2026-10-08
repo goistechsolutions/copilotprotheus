@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app.db.database import get_db
+from app.db.database import get_db, resolve_clean_tenant
 from app.models.knowledge import User, Role, Tenant
 from pydantic import BaseModel
 from typing import List, Optional
@@ -108,11 +109,50 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
             detail="Credenciais inválidas",
         )
         
-    if not user.is_platform_admin and user.tenant_id != req.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Usuário não pertence a este tenant",
-        )
+    target_tenant_code = req.tenant_id
+    if not user.is_platform_admin:
+        req_tid = str(req.tenant_id).strip().lower()
+        user_tid = str(user.tenant_id).strip().lower() if user.tenant_id else ""
+        
+        tenant_match = False
+        if req_tid == user_tid:
+            tenant_match = True
+            # Tentar obter tenant_code amigável se user_tid for UUID
+            t_row = db.execute(text("SELECT tenant_code FROM public.tenants WHERE id::text = :tid OR LOWER(tenant_code) = :tid"), {"tid": user_tid}).first()
+            if t_row and t_row[0]:
+                target_tenant_code = t_row[0]
+        else:
+            t_row = db.execute(text("""
+                SELECT id, tenant_code, schema_name
+                FROM public.tenants
+                WHERE (id::text = :user_tid OR LOWER(tenant_code) = :user_tid)
+                  AND (id::text = :req_tid OR LOWER(tenant_code) = :req_tid OR LOWER(schema_name) = :req_tid)
+            """), {"user_tid": user_tid, "req_tid": req_tid}).first()
+            if t_row:
+                tenant_match = True
+                target_tenant_code = t_row[1]
+
+        if not tenant_match:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuário não pertence a este tenant",
+            )
+
+        # Auto-provisionamento de user_company_access se o tenant tiver companies/environments
+        try:
+            clean_tenant = resolve_clean_tenant(db, target_tenant_code)
+            companies = db.execute(text(f'SELECT id FROM "{clean_tenant}".companies WHERE status = \'ACTIVE\'')).fetchall()
+            environments = db.execute(text(f'SELECT id FROM "{clean_tenant}".environments WHERE status = \'ACTIVE\'')).fetchall()
+            for comp in companies:
+                for env in environments:
+                    db.execute(text(f"""
+                        INSERT INTO "{clean_tenant}".user_company_access (user_id, company_id, environment_id)
+                        VALUES (:uid, :cid, :eid)
+                        ON CONFLICT DO NOTHING
+                    """), {"uid": user.id, "cid": comp[0], "eid": env[0]})
+            db.commit()
+        except Exception:
+            pass
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = datetime.utcnow() + access_token_expires
@@ -128,7 +168,7 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
 
     to_encode = {
         "sub": user.email,
-        "tenant_id": req.tenant_id if user.is_platform_admin else str(user.tenant_id),
+        "tenant_id": target_tenant_code if not user.is_platform_admin else req.tenant_id,
         "user_id": str(user.id),
         "role": primary_role,
         "exp": expire,

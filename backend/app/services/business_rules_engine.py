@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger("app.business_rules_engine")
 
+from app.db.database import resolve_clean_tenant
+
 class BusinessRulesEngine:
     @staticmethod
     def apply_synonyms(prompt: str, tenant_id: str, db: Session) -> str:
@@ -27,15 +29,19 @@ class BusinessRulesEngine:
             return clean_prompt
 
         try:
-            rows = db.execute(text("""
+            try:
+                clean_tenant = resolve_clean_tenant(db, tenant_id)
+            except Exception:
+                clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id)).lower()
+
+            rows = db.execute(text(f"""
                 SELECT source_term, target_term
-                FROM public.business_synonyms
-                WHERE tenant_id = :tenant_id
-            """), {"tenant_id": str(tenant_id).lower()}).fetchall()
+                FROM "{clean_tenant}".business_synonyms
+                WHERE active = TRUE
+            """), {}).fetchall()
 
             for source, target in rows:
                 if source and target:
-                    # Substituição segura de palavras inteiras (case-insensitive)
                     pattern = re.compile(rf"\b{re.escape(source.strip())}\b", re.IGNORECASE)
                     clean_prompt = pattern.sub(target.strip(), clean_prompt)
         except Exception as exc:
@@ -45,7 +51,7 @@ class BusinessRulesEngine:
 
     @staticmethod
     def get_tenant_rules(tenant_id: str, db: Session) -> Dict[str, Any]:
-        """Carrega todas as regras de negócio ativas para o tenant."""
+        """Carrega todas as regras de negócio ativas para o schema do tenant (V2)."""
         rules = {
             "tes_sales": [],
             "tes_bonus": [],
@@ -58,53 +64,81 @@ class BusinessRulesEngine:
         if not tenant_id:
             return rules
 
-        tid = str(tenant_id).lower()
         try:
-            # 1. TES
-            tes_rows = db.execute(text("""
-                SELECT tes, direction, classification, description, active
-                FROM public.business_rule_tes
-                WHERE tenant_id = :tid AND active = TRUE
-            """), {"tid": tid}).mappings().all()
+            try:
+                clean_tenant = resolve_clean_tenant(db, tenant_id)
+            except Exception:
+                clean_tenant = re.sub(r'[^a-zA-Z0-9_]', '', str(tenant_id)).lower()
 
-            for r in tes_rows:
-                tes_code = str(r["tes"]).strip()
-                classification = str(r["classification"] or "").lower()
-                rules["tes_all"].append(dict(r))
-                if "venda" in classification:
-                    rules["tes_sales"].append(tes_code)
-                elif "bonifica" in classification:
-                    rules["tes_bonus"].append(tes_code)
-                elif "devolu" in classification:
-                    rules["tes_devolution"].append(tes_code)
+            # 1. TES
+            try:
+                tes_rows = db.execute(text(f"""
+                    SELECT tes_code AS tes, direction, classification_code AS classification,
+                           affects_gross_revenue, affects_net_revenue, affects_abc, revenue_effect, active
+                    FROM "{clean_tenant}".business_rule_tes
+                    WHERE active = TRUE
+                """)).mappings().all()
+
+                for r in tes_rows:
+                    tes_code = str(r["tes"]).strip()
+                    classification = str(r["classification"] or "").lower()
+                    rules["tes_all"].append(dict(r))
+                    if "venda" in classification or "exporta" in classification:
+                        rules["tes_sales"].append(tes_code)
+                    elif "bonifica" in classification:
+                        rules["tes_bonus"].append(tes_code)
+                    elif "devolu" in classification:
+                        rules["tes_devolution"].append(tes_code)
+            except Exception as tes_err:
+                logger.debug("Aviso ao ler business_rule_tes de %s: %s", clean_tenant, tes_err)
 
             # 2. CFOP
-            cfop_rows = db.execute(text("""
-                SELECT cfop, classification
-                FROM public.business_cfop_rules
-                WHERE tenant_id = :tid
-            """), {"tid": tid}).mappings().all()
-            rules["cfop_rules"] = [dict(r) for r in cfop_rows]
+            try:
+                cfop_rows = db.execute(text(f"""
+                    SELECT cfop_code AS cfop, classification_code AS classification,
+                           affects_revenue, affects_inventory, affects_tax
+                    FROM "{clean_tenant}".business_cfop_rules
+                    WHERE active = TRUE
+                """)).mappings().all()
+                rules["cfop_rules"] = [dict(r) for r in cfop_rows]
+            except Exception as cfop_err:
+                logger.debug("Aviso ao ler business_cfop_rules de %s: %s", clean_tenant, cfop_err)
 
             # 3. Naturezas Financeiras
-            nat_rows = db.execute(text("""
-                SELECT nature_code, nature_name, financial_group
-                FROM public.business_financial_natures
-                WHERE tenant_id = :tid
-            """), {"tid": tid}).mappings().all()
-            rules["financial_natures"] = [dict(r) for r in nat_rows]
+            try:
+                nat_rows = db.execute(text(f"""
+                    SELECT nature_code, nature_name, financial_group
+                    FROM "{clean_tenant}".business_financial_natures
+                    WHERE active = TRUE
+                """)).mappings().all()
+                rules["financial_natures"] = [dict(r) for r in nat_rows]
+            except Exception as nat_err:
+                logger.debug("Aviso ao ler business_financial_natures de %s: %s", clean_tenant, nat_err)
 
             # 4. Parâmetros / Configurações do Módulo
-            cfg = db.execute(text("""
-                SELECT billing_included_classifications, billing_excluded_classifications,
-                       receivables_overdue_days, receivables_include_renegotiated, receivables_include_provisional,
-                       stock_idle_days, stock_critical_days, stock_rupture_days,
-                       abc_curve_a_pct, abc_curve_b_pct, abc_curve_c_pct, ai_cash_flow_tables
-                FROM public.business_module_configs
-                WHERE tenant_id = :tid
-            """), {"tid": tid}).mappings().first()
-            if cfg:
-                rules["module_config"] = dict(cfg)
+            try:
+                rev = db.execute(text(f'SELECT included_classifications, excluded_classifications FROM "{clean_tenant}".business_revenue_configs WHERE active = TRUE ORDER BY version DESC LIMIT 1')).mappings().first()
+                rec = db.execute(text(f'SELECT overdue_days, include_renegotiated, include_provisional FROM "{clean_tenant}".business_receivable_configs WHERE active = TRUE ORDER BY version DESC LIMIT 1')).mappings().first()
+                inv = db.execute(text(f'SELECT stock_idle_days, stock_critical_days, stock_rupture_days FROM "{clean_tenant}".business_inventory_configs WHERE active = TRUE ORDER BY version DESC LIMIT 1')).mappings().first()
+                abc = db.execute(text(f'SELECT class_a_pct, class_b_pct, class_c_pct FROM "{clean_tenant}".business_abc_configs WHERE active = TRUE ORDER BY version DESC LIMIT 1')).mappings().first()
+
+                cfg_dict = {
+                    "billing_included_classifications": rev["included_classifications"] if rev else ["VENDA", "EXPORTACAO"],
+                    "billing_excluded_classifications": rev["excluded_classifications"] if rev else ["BONIFICACAO", "REMESSA", "TRANSFERENCIA"],
+                    "receivables_overdue_days": rec["overdue_days"] if rec else 30,
+                    "receivables_include_renegotiated": rec["include_renegotiated"] if rec else False,
+                    "receivables_include_provisional": rec["include_provisional"] if rec else True,
+                    "stock_idle_days": inv["stock_idle_days"] if inv else 90,
+                    "stock_critical_days": inv["stock_critical_days"] if inv else 7,
+                    "stock_rupture_days": inv["stock_rupture_days"] if inv else 0,
+                    "abc_curve_a_pct": float(abc["class_a_pct"]) if abc else 80.0,
+                    "abc_curve_b_pct": float(abc["class_b_pct"]) if abc else 15.0,
+                    "abc_curve_c_pct": float(abc["class_c_pct"]) if abc else 5.0,
+                    "ai_cash_flow_tables": ["SE1", "SE2", "SE5"],
+                }
+                rules["module_config"] = cfg_dict
+            except Exception as cfg_err:
+                logger.debug("Aviso ao ler configs do tenant %s: %s", clean_tenant, cfg_err)
 
         except Exception as exc:
             logger.warning("Erro ao carregar regras de negócio do tenant %s: %s", tenant_id, exc)

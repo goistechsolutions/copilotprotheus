@@ -603,7 +603,161 @@ def delete_business_dashboard(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-# ── 6. REGRAS DE NEGÓCIO ───────────────────────────────────────────
+# ── 6. REGRAS DE NEGÓCIO (NOVA ESTRUTURA NORMALIZADA MULTI-TENANT) ────────
+
+def _ensure_tenant_business_rule_tables(db: Session, clean_tenant: str):
+    """Garante que o schema do tenant contenha todas as tabelas normalizadas de regras de negócio."""
+    try:
+        db.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_rules (
+                id bigserial PRIMARY KEY,
+                intent_code varchar(100) NOT NULL DEFAULT 'GLOBAL',
+                rule_type varchar(100) NOT NULL,
+                rule_json jsonb NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now()
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_rule_sets (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                rule_set_code varchar(100) NOT NULL UNIQUE,
+                name varchar(160) NOT NULL,
+                status varchar(24) NOT NULL DEFAULT 'ACTIVE',
+                version integer NOT NULL DEFAULT 1,
+                valid_from timestamptz,
+                valid_to timestamptz,
+                created_by uuid,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now()
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_rule_tes (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                rule_set_id uuid NOT NULL REFERENCES "{clean_tenant}".business_rule_sets(id) ON DELETE CASCADE,
+                tes_code varchar(16) NOT NULL,
+                direction varchar(16) NOT NULL,
+                classification_code varchar(64) NOT NULL,
+                affects_gross_revenue boolean NOT NULL DEFAULT false,
+                affects_net_revenue boolean NOT NULL DEFAULT false,
+                affects_abc boolean NOT NULL DEFAULT false,
+                revenue_effect varchar(16) NOT NULL DEFAULT 'IGNORE',
+                active boolean NOT NULL DEFAULT true,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE(rule_set_id, tes_code, direction)
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_cfop_rules (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                rule_set_id uuid NOT NULL REFERENCES "{clean_tenant}".business_rule_sets(id) ON DELETE CASCADE,
+                cfop_code varchar(16) NOT NULL,
+                classification_code varchar(64) NOT NULL,
+                operation_type varchar(32),
+                affects_revenue boolean NOT NULL DEFAULT false,
+                affects_inventory boolean NOT NULL DEFAULT false,
+                affects_tax boolean NOT NULL DEFAULT false,
+                active boolean NOT NULL DEFAULT true,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE(rule_set_id, cfop_code)
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_financial_natures (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                rule_set_id uuid NOT NULL REFERENCES "{clean_tenant}".business_rule_sets(id) ON DELETE CASCADE,
+                nature_code varchar(64) NOT NULL,
+                nature_name varchar(200),
+                financial_group varchar(64) NOT NULL,
+                cashflow_type varchar(32),
+                affects_result boolean NOT NULL DEFAULT true,
+                active boolean NOT NULL DEFAULT true,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE(rule_set_id, nature_code)
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_revenue_configs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                company_id uuid,
+                included_classifications jsonb NOT NULL DEFAULT '[]'::jsonb,
+                excluded_classifications jsonb NOT NULL DEFAULT '[]'::jsonb,
+                version integer NOT NULL DEFAULT 1,
+                active boolean NOT NULL DEFAULT true,
+                created_by uuid,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE NULLS NOT DISTINCT(company_id, version)
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_receivable_configs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                company_id uuid,
+                overdue_days integer NOT NULL DEFAULT 30,
+                include_renegotiated boolean NOT NULL DEFAULT false,
+                include_provisional boolean NOT NULL DEFAULT false,
+                version integer NOT NULL DEFAULT 1,
+                active boolean NOT NULL DEFAULT true,
+                created_by uuid,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE NULLS NOT DISTINCT(company_id, version)
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_inventory_configs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                company_id uuid,
+                stock_idle_days integer NOT NULL DEFAULT 90,
+                stock_critical_days integer NOT NULL DEFAULT 7,
+                stock_rupture_days integer NOT NULL DEFAULT 0,
+                version integer NOT NULL DEFAULT 1,
+                active boolean NOT NULL DEFAULT true,
+                created_by uuid,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE NULLS NOT DISTINCT(company_id, version)
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_abc_configs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                company_id uuid,
+                class_a_pct numeric(5,2) NOT NULL DEFAULT 70.00,
+                class_b_pct numeric(5,2) NOT NULL DEFAULT 20.00,
+                class_c_pct numeric(5,2) NOT NULL DEFAULT 10.00,
+                version integer NOT NULL DEFAULT 1,
+                active boolean NOT NULL DEFAULT true,
+                created_by uuid,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE NULLS NOT DISTINCT(company_id, version)
+            );
+            CREATE TABLE IF NOT EXISTS "{clean_tenant}".business_synonyms (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                source_term varchar(100) NOT NULL,
+                target_term varchar(100) NOT NULL,
+                active boolean NOT NULL DEFAULT true,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE(source_term, target_term)
+            );
+        """))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning(f"Aviso ao garantir tabelas de regras no tenant {clean_tenant}: {exc}")
+
+
+def _get_or_create_default_rule_set(db: Session, clean_tenant: str) -> str:
+    """Retorna o ID do conjunto de regras ativo padrão do tenant, criando-o se não existir."""
+    row = db.execute(text(f"""
+        SELECT id FROM "{clean_tenant}".business_rule_sets
+        WHERE status = 'ACTIVE'
+        ORDER BY version DESC, created_at ASC
+        LIMIT 1
+    """)).first()
+    if row:
+        return str(row[0])
+    
+    rs_id = db.execute(text(f"""
+        INSERT INTO "{clean_tenant}".business_rule_sets (rule_set_code, name, status, version)
+        VALUES ('DEFAULT', 'Regras Padrão de Negócio', 'ACTIVE', 1)
+        RETURNING id
+    """)).scalar()
+    db.commit()
+    return str(rs_id)
+
+
 @router.get("/business-rules")
 def list_business_rules(
     tenant_id: str,
@@ -613,17 +767,189 @@ def list_business_rules(
 ):
     try:
         clean_tenant = resolve_clean_tenant(db, tenant_id)
-        ensure_tenant_tables(db, clean_tenant)
-        scope = "WHERE intent_code = :icode" if intent_code else ""
-        params = {"icode": intent_code.strip().lower()} if intent_code else {}
-        rows = db.execute(text(f"""
-            SELECT id, intent_code, rule_type, rule_json, created_at
-            FROM "{clean_tenant}".business_rules
-            {scope}
-            ORDER BY intent_code, rule_type
-        """), params).mappings().all()
-        return [dict(r) for r in rows]
+        _ensure_tenant_business_rule_tables(db, clean_tenant)
+
+        all_rules: List[Dict[str, Any]] = []
+
+        # 1. TES Rules (business_rule_tes)
+        try:
+            tes_rows = db.execute(text(f"""
+                SELECT id, tes_code, direction, classification_code,
+                       affects_gross_revenue, affects_net_revenue, affects_abc,
+                       revenue_effect, active, created_at
+                FROM "{clean_tenant}".business_rule_tes
+                ORDER BY tes_code
+            """)).mappings().all()
+
+            for r in tes_rows:
+                direction_str = "saida" if str(r["direction"]).upper() in ("OUTBOUND", "SAIDA") else "entrada"
+                rule_type = "tes_saida" if direction_str == "saida" else "tes_entrada"
+                rule_json = {
+                    "id": str(r["id"]),
+                    "tes": r["tes_code"],
+                    "direction": direction_str,
+                    "classification": r["classification_code"],
+                    "description": "",
+                    "affects_gross_revenue": bool(r["affects_gross_revenue"]),
+                    "affects_net_revenue": bool(r["affects_net_revenue"]),
+                    "affects_abc": bool(r["affects_abc"]),
+                    "revenue_effect": r["revenue_effect"],
+                    "status": "Ativo" if r["active"] else "Inativo",
+                    "active": bool(r["active"]),
+                }
+                all_rules.append({
+                    "id": str(r["id"]),
+                    "intent_code": "GLOBAL",
+                    "rule_type": rule_type,
+                    "rule_json": rule_json,
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                })
+        except Exception as e:
+            logger.warning(f"Aviso ao ler business_rule_tes para {clean_tenant}: {e}")
+
+        # 2. CFOP Rules (business_cfop_rules)
+        try:
+            cfop_rows = db.execute(text(f"""
+                SELECT id, cfop_code, classification_code, operation_type,
+                       affects_revenue, affects_inventory, affects_tax, active, created_at
+                FROM "{clean_tenant}".business_cfop_rules
+                ORDER BY cfop_code
+            """)).mappings().all()
+
+            for r in cfop_rows:
+                rule_json = {
+                    "id": str(r["id"]),
+                    "cfop": r["cfop_code"],
+                    "classification": r["classification_code"],
+                    "operation_type": r["operation_type"],
+                    "affects_revenue": bool(r["affects_revenue"]),
+                    "affects_inventory": bool(r["affects_inventory"]),
+                    "affects_tax": bool(r["affects_tax"]),
+                    "active": bool(r["active"]),
+                }
+                all_rules.append({
+                    "id": str(r["id"]),
+                    "intent_code": "GLOBAL",
+                    "rule_type": rule_type if False else "cfop",
+                    "rule_json": rule_json,
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                })
+        except Exception as e:
+            logger.warning(f"Aviso ao ler business_cfop_rules para {clean_tenant}: {e}")
+
+        # 3. Naturezas Financeiras (business_financial_natures)
+        try:
+            nat_rows = db.execute(text(f"""
+                SELECT id, nature_code, nature_name, financial_group, cashflow_type,
+                       affects_result, active, created_at
+                FROM "{clean_tenant}".business_financial_natures
+                ORDER BY nature_code
+            """)).mappings().all()
+
+            for r in nat_rows:
+                rule_json = {
+                    "id": str(r["id"]),
+                    "nature_code": r["nature_code"],
+                    "nature_name": r["nature_name"] or "",
+                    "financial_group": r["financial_group"],
+                    "cashflow_type": r["cashflow_type"],
+                    "affects_result": bool(r["affects_result"]),
+                    "active": bool(r["active"]),
+                }
+                all_rules.append({
+                    "id": str(r["id"]),
+                    "intent_code": "GLOBAL",
+                    "rule_type": "natureza_financeira",
+                    "rule_json": rule_json,
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                })
+        except Exception as e:
+            logger.warning(f"Aviso ao ler business_financial_natures para {clean_tenant}: {e}")
+
+        # 4. Configurações Globais (business_revenue_configs, etc.)
+        try:
+            rev_row = db.execute(text(f"""
+                SELECT included_classifications, excluded_classifications, updated_at
+                FROM "{clean_tenant}".business_revenue_configs
+                WHERE active = TRUE
+                ORDER BY version DESC, updated_at DESC LIMIT 1
+            """)).mappings().first()
+
+            rec_row = db.execute(text(f"""
+                SELECT overdue_days, include_renegotiated, include_provisional, updated_at
+                FROM "{clean_tenant}".business_receivable_configs
+                WHERE active = TRUE
+                ORDER BY version DESC, updated_at DESC LIMIT 1
+            """)).mappings().first()
+
+            inv_row = db.execute(text(f"""
+                SELECT stock_idle_days, stock_critical_days, stock_rupture_days, updated_at
+                FROM "{clean_tenant}".business_inventory_configs
+                WHERE active = TRUE
+                ORDER BY version DESC, updated_at DESC LIMIT 1
+            """)).mappings().first()
+
+            abc_row = db.execute(text(f"""
+                SELECT class_a_pct, class_b_pct, class_c_pct, updated_at
+                FROM "{clean_tenant}".business_abc_configs
+                WHERE active = TRUE
+                ORDER BY version DESC, updated_at DESC LIMIT 1
+            """)).mappings().first()
+
+            has_explicit = bool(rev_row or rec_row or inv_row or abc_row)
+            config_json = {
+                "billing_included_classifications": rev_row["included_classifications"] if rev_row else ["VENDA", "EXPORTACAO"],
+                "billing_excluded_classifications": rev_row["excluded_classifications"] if rev_row else ["BONIFICACAO", "REMESSA", "TRANSFERENCIA"],
+                "receivables_overdue_days": rec_row["overdue_days"] if rec_row else 30,
+                "receivables_include_renegotiated": bool(rec_row["include_renegotiated"]) if rec_row else False,
+                "receivables_include_provisional": bool(rec_row["include_provisional"]) if rec_row else True,
+                "stock_idle_days": inv_row["stock_idle_days"] if inv_row else 90,
+                "stock_critical_days": inv_row["stock_critical_days"] if inv_row else 7,
+                "stock_rupture_days": inv_row["stock_rupture_days"] if inv_row else 0,
+                "abc_curve_a_pct": float(abc_row["class_a_pct"]) if abc_row else 80.0,
+                "abc_curve_b_pct": float(abc_row["class_b_pct"]) if abc_row else 15.0,
+                "abc_curve_c_pct": float(abc_row["class_c_pct"]) if abc_row else 5.0,
+                "ai_cash_flow_tables": ["SE1", "SE2", "SE5"],
+                "_source": "EXPLICIT" if has_explicit else "DEFAULT",
+            }
+            all_rules.append({
+                "id": "config",
+                "intent_code": "GLOBAL",
+                "rule_type": "config",
+                "rule_json": config_json,
+                "created_at": None,
+            })
+        except Exception as e:
+            logger.warning(f"Aviso ao ler configs de regras para {clean_tenant}: {e}")
+
+        # 5. Tabela genérica business_rules (se houver regras customizadas salvas)
+        try:
+            scope = "WHERE intent_code = :icode" if intent_code else ""
+            params = {"icode": intent_code.strip().lower()} if intent_code else {}
+            br_rows = db.execute(text(f"""
+                SELECT id, intent_code, rule_type, rule_json, created_at
+                FROM "{clean_tenant}".business_rules
+                {scope}
+                ORDER BY intent_code, rule_type
+            """), params).mappings().all()
+            for r in br_rows:
+                if r["rule_type"] not in ("tes_saida", "tes_entrada", "cfop", "natureza_financeira", "config"):
+                    all_rules.append({
+                        "id": str(r["id"]),
+                        "intent_code": r["intent_code"],
+                        "rule_type": r["rule_type"],
+                        "rule_json": r["rule_json"] if isinstance(r["rule_json"], dict) else json.loads(r["rule_json"]),
+                        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                    })
+        except Exception as e:
+            logger.warning(f"Aviso ao ler business_rules legada para {clean_tenant}: {e}")
+
+        if intent_code:
+            all_rules = [r for r in all_rules if r.get("intent_code", "").lower() == intent_code.strip().lower() or r.get("intent_code") == "GLOBAL"]
+
+        return all_rules
     except Exception as exc:
+        logger.exception("Erro ao listar regras de negócio")
         raise HTTPException(status_code=400, detail=str(exc))
 
 
@@ -635,7 +961,157 @@ def create_business_rule(
 ):
     try:
         clean_tenant = resolve_clean_tenant(db, payload.tenant_id)
-        ensure_tenant_tables(db, clean_tenant)
+        _ensure_tenant_business_rule_tables(db, clean_tenant)
+        rule_set_id = _get_or_create_default_rule_set(db, clean_tenant)
+
+        rtype = payload.rule_type.strip().lower()
+        rjson = payload.rule_json or {}
+
+        if rtype in ("tes_saida", "tes_entrada"):
+            tes_code = str(rjson.get("tes", "")).strip().upper()
+            direction = "OUTBOUND" if (rtype == "tes_saida" or rjson.get("direction") == "saida") else "INBOUND"
+            classification = str(rjson.get("classification", "")).strip().upper()
+            affects_gross = classification in ("VENDA", "EXPORTACAO")
+            affects_net = classification in ("VENDA", "EXPORTACAO")
+            affects_abc = classification in ("VENDA", "EXPORTACAO")
+            revenue_effect = "ADD" if classification in ("VENDA", "EXPORTACAO") else ("SUBTRACT" if classification == "DEVOLUCAO" else "IGNORE")
+
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".business_rule_tes
+                    (rule_set_id, tes_code, direction, classification_code,
+                     affects_gross_revenue, affects_net_revenue, affects_abc,
+                     revenue_effect, active)
+                VALUES
+                    (:rsid, :tes, :direction, :cls, :gross, :net, :abc, :reveff, true)
+                ON CONFLICT (rule_set_id, tes_code, direction)
+                DO UPDATE SET
+                    classification_code = EXCLUDED.classification_code,
+                    affects_gross_revenue = EXCLUDED.affects_gross_revenue,
+                    affects_net_revenue = EXCLUDED.affects_net_revenue,
+                    affects_abc = EXCLUDED.affects_abc,
+                    revenue_effect = EXCLUDED.revenue_effect,
+                    active = true,
+                    updated_at = now()
+            """), {
+                "rsid": rule_set_id,
+                "tes": tes_code,
+                "direction": direction,
+                "cls": classification,
+                "gross": affects_gross,
+                "net": affects_net,
+                "abc": affects_abc,
+                "reveff": revenue_effect,
+            })
+
+        elif rtype == "cfop":
+            cfop_code = str(rjson.get("cfop", "")).strip().upper()
+            classification = str(rjson.get("classification", "")).strip().upper()
+
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".business_cfop_rules
+                    (rule_set_id, cfop_code, classification_code, active)
+                VALUES
+                    (:rsid, :cfop, :cls, true)
+                ON CONFLICT (rule_set_id, cfop_code)
+                DO UPDATE SET
+                    classification_code = EXCLUDED.classification_code,
+                    active = true,
+                    updated_at = now()
+            """), {
+                "rsid": rule_set_id,
+                "cfop": cfop_code,
+                "cls": classification,
+            })
+
+        elif rtype == "natureza_financeira":
+            nature_code = str(rjson.get("nature_code", "")).strip().upper()
+            nature_name = str(rjson.get("nature_name", "")).strip()
+            financial_group = str(rjson.get("financial_group", "")).strip().upper()
+
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".business_financial_natures
+                    (rule_set_id, nature_code, nature_name, financial_group, active)
+                VALUES
+                    (:rsid, :ncode, :nname, :fgroup, true)
+                ON CONFLICT (rule_set_id, nature_code)
+                DO UPDATE SET
+                    nature_name = EXCLUDED.nature_name,
+                    financial_group = EXCLUDED.financial_group,
+                    active = true,
+                    updated_at = now()
+            """), {
+                "rsid": rule_set_id,
+                "ncode": nature_code,
+                "nname": nature_name,
+                "fgroup": financial_group,
+            })
+
+        elif rtype == "config":
+            company_id = db.execute(text(f'SELECT id FROM "{clean_tenant}".companies LIMIT 1')).scalar()
+
+            inc_cls = rjson.get("billing_included_classifications", ["VENDA", "EXPORTACAO"])
+            exc_cls = rjson.get("billing_excluded_classifications", ["BONIFICACAO", "REMESSA", "TRANSFERENCIA"])
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".business_revenue_configs
+                    (company_id, included_classifications, excluded_classifications, active)
+                VALUES
+                    (:cid, CAST(:inc AS jsonb), CAST(:exc AS jsonb), true)
+                ON CONFLICT (company_id, version)
+                DO UPDATE SET
+                    included_classifications = EXCLUDED.included_classifications,
+                    excluded_classifications = EXCLUDED.excluded_classifications,
+                    updated_at = now()
+            """), {"cid": company_id, "inc": json.dumps(inc_cls), "exc": json.dumps(exc_cls)})
+
+            odays = int(rjson.get("receivables_overdue_days", 30))
+            reneg = bool(rjson.get("receivables_include_renegotiated", False))
+            prov = bool(rjson.get("receivables_include_provisional", True))
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".business_receivable_configs
+                    (company_id, overdue_days, include_renegotiated, include_provisional, active)
+                VALUES
+                    (:cid, :odays, :reneg, :prov, true)
+                ON CONFLICT (company_id, version)
+                DO UPDATE SET
+                    overdue_days = EXCLUDED.overdue_days,
+                    include_renegotiated = EXCLUDED.include_renegotiated,
+                    include_provisional = EXCLUDED.include_provisional,
+                    updated_at = now()
+            """), {"cid": company_id, "odays": odays, "reneg": reneg, "prov": prov})
+
+            idle = int(rjson.get("stock_idle_days", 90))
+            crit = int(rjson.get("stock_critical_days", 7))
+            rupt = int(rjson.get("stock_rupture_days", 0))
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".business_inventory_configs
+                    (company_id, stock_idle_days, stock_critical_days, stock_rupture_days, active)
+                VALUES
+                    (:cid, :idle, :crit, :rupt, true)
+                ON CONFLICT (company_id, version)
+                DO UPDATE SET
+                    stock_idle_days = EXCLUDED.stock_idle_days,
+                    stock_critical_days = EXCLUDED.stock_critical_days,
+                    stock_rupture_days = EXCLUDED.stock_rupture_days,
+                    updated_at = now()
+            """), {"cid": company_id, "idle": idle, "crit": crit, "rupt": rupt})
+
+            ca = float(rjson.get("abc_curve_a_pct", 80.0))
+            cb = float(rjson.get("abc_curve_b_pct", 15.0))
+            cc = float(rjson.get("abc_curve_c_pct", 5.0))
+            db.execute(text(f"""
+                INSERT INTO "{clean_tenant}".business_abc_configs
+                    (company_id, class_a_pct, class_b_pct, class_c_pct, active)
+                VALUES
+                    (:cid, :ca, :cb, :cc, true)
+                ON CONFLICT (company_id, version)
+                DO UPDATE SET
+                    class_a_pct = EXCLUDED.class_a_pct,
+                    class_b_pct = EXCLUDED.class_b_pct,
+                    class_c_pct = EXCLUDED.class_c_pct,
+                    updated_at = now()
+            """), {"cid": company_id, "ca": ca, "cb": cb, "cc": cc})
+
+        # Registra também na tabela genérica business_rules para histórico e compatibilidade
         db.execute(text(f"""
             INSERT INTO "{clean_tenant}".business_rules
                 (intent_code, rule_type, rule_json)
@@ -646,24 +1122,48 @@ def create_business_rule(
             "rtype": payload.rule_type.strip(),
             "rjson": json.dumps(payload.rule_json),
         })
+
         db.commit()
         return {"success": True, "message": "Regra de negócio salva."}
     except Exception as exc:
         db.rollback()
+        logger.exception("Erro ao salvar regra de negócio")
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.delete("/business-rules/{rule_id}")
 def delete_business_rule(
-    rule_id: int,
+    rule_id: str,
     tenant_id: str,
     db: Session = Depends(get_db),
     admin: str = Depends(require_admin),
 ):
     try:
         clean_tenant = resolve_clean_tenant(db, tenant_id)
-        ensure_tenant_tables(db, clean_tenant)
-        db.execute(text(f'DELETE FROM "{clean_tenant}".business_rules WHERE id = :id'), {"id": rule_id})
+        _ensure_tenant_business_rule_tables(db, clean_tenant)
+
+        # Deleta em todas as tabelas potenciais pelo id (UUID ou serial)
+        try:
+            db.execute(text(f'DELETE FROM "{clean_tenant}".business_rule_tes WHERE id::text = :id'), {"id": rule_id})
+        except Exception:
+            pass
+        try:
+            db.execute(text(f'DELETE FROM "{clean_tenant}".business_cfop_rules WHERE id::text = :id'), {"id": rule_id})
+        except Exception:
+            pass
+        try:
+            db.execute(text(f'DELETE FROM "{clean_tenant}".business_financial_natures WHERE id::text = :id'), {"id": rule_id})
+        except Exception:
+            pass
+        try:
+            db.execute(text(f'DELETE FROM "{clean_tenant}".business_synonyms WHERE id::text = :id'), {"id": rule_id})
+        except Exception:
+            pass
+        try:
+            db.execute(text(f'DELETE FROM "{clean_tenant}".business_rules WHERE id::text = :id'), {"id": rule_id})
+        except Exception:
+            pass
+
         db.commit()
         return {"success": True, "message": "Regra removida."}
     except Exception as exc:

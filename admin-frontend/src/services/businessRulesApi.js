@@ -64,8 +64,14 @@ export async function getBusinessRulesData(tenantId) {
   const financialNatures = rules.filter(r => r.rule_type === 'natureza_financeira').map(r => ({ id: r.id, ...r.rule_json }));
   const configRule = rules.find(r => r.rule_type === 'config');
   
+  const totalRules = tesSaida.length + tesEntrada.length + cfop.length + financialNatures.length;
+  const dates = rules.map(r => r.created_at).filter(Boolean);
+  const lastUpdate = dates.length > 0 ? dates.sort().reverse()[0] : null;
+
   return {
     overview: {
+        total_active_rules: totalRules,
+        last_update: lastUpdate,
         tes_count: tesSaida.length + tesEntrada.length,
         cfop_count: cfop.length,
         nature_count: financialNatures.length,
