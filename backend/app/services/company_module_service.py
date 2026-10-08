@@ -184,18 +184,21 @@ def list_companies(db, tenant_id=None):
 
         try:
             c_rows = db.execute(text(f'SELECT id, company_code, branch_code, legal_name, tax_id, status FROM "{clean}".companies')).mappings().all()
+            if not c_rows:
+                continue
             
             # Buscar conexão ativa e ambiente do tenant
             active_conn = None
             try:
-                active_conn = db.execute(text(f'''
+                active_conn_rows = db.execute(text(f'''
                     SELECT e.environment_code, c.base_rest_url
                     FROM "{clean}".protheus_connections c
                     JOIN "{clean}".environments e ON e.id = c.environment_id
                     WHERE c.active = TRUE
                     ORDER BY c.updated_at DESC
                     LIMIT 1
-                ''')).mappings().first()
+                ''')).mappings().all()
+                active_conn = active_conn_rows[0] if active_conn_rows else None
             except Exception:
                 pass
 

@@ -94,7 +94,7 @@ CREATE TABLE public.tenant_contracts (
 
 CREATE TABLE public.protheus_modules_master (
   id integer PRIMARY KEY,
-  module_sigla varchar(32) NOT NULL UNIQUE,
+  module_sigla varchar(32) NOT NULL,
   description varchar(200) NOT NULL,
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
