@@ -1,0 +1,726 @@
+From 4d721d8e1333ae3e8303aae72d43f71249384e74 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 05:14:54 +0000
+Subject: [PATCH] =?UTF-8?q?fix(security):=20P0=20=E2=80=94=20auth=20nas=20?=
+ =?UTF-8?q?rotas=20do=20agente,=20valida=20final=5Fsql=20(sqlglot/Oracle),?=
+ =?UTF-8?q?=20fail-fast=20de=20segredos,=20CORS=20sem=20wildcard?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- agent_routes: Depends(require_current_user); tenant/user derivados do JWT; /usage exige admin com escopo de tenant
+- execute-query valida e executa exatamente o final_sql (antes validava apenas sql_preview)
+- core/sql_guard.py: SELECT-only, 1 instrução, sem DDL/DML/DCL, sem DBMS_*/UTL_*, sem comentários/db link, D_E_L_E_T_ como coluna
+- remove fallbacks de JWT_SECRET/ADMIN_JWT_SECRET (core/secret_env.py); X-Admin-Key aceita só ADMIN_PASSWORD (tempo constante)
+- CORS: ignora '*', remove allow_origin_regex aberto com credenciais
+- powerbi/leonardo: require_admin no router
+- testes: 34 novos (sql_guard + regressões P0)
+---
+ backend/app/api/agent_routes.py       |  66 ++++++++++--
+ backend/app/api/auth_routes.py        |   3 +-
+ backend/app/api/company_routes.py     |  20 ++--
+ backend/app/api/leonardo_routes.py    |   5 +-
+ backend/app/api/powerbi_routes.py     |   3 +-
+ backend/app/core/auth.py              |   3 +-
+ backend/app/core/secret_env.py        |  22 ++++
+ backend/app/core/sql_guard.py         | 114 +++++++++++++++++++++
+ backend/app/main.py                   |  13 ++-
+ backend/app/services/agent_service.py |  16 ++-
+ backend/requirements.txt              |   1 +
+ backend/tests/test_p0_security.py     | 139 ++++++++++++++++++++++++++
+ backend/tests/test_sql_guard.py       |  53 ++++++++++
+ 13 files changed, 416 insertions(+), 42 deletions(-)
+ create mode 100644 backend/app/core/secret_env.py
+ create mode 100644 backend/app/core/sql_guard.py
+ create mode 100644 backend/tests/test_p0_security.py
+ create mode 100644 backend/tests/test_sql_guard.py
+
+diff --git a/backend/app/api/agent_routes.py b/backend/app/api/agent_routes.py
+index f522025..6401498 100644
+--- a/backend/app/api/agent_routes.py
++++ b/backend/app/api/agent_routes.py
+@@ -1,4 +1,5 @@
+ from fastapi import APIRouter, Depends, HTTPException
++import logging
+ from sqlalchemy.orm import Session
+ from pydantic import BaseModel
+ from typing import Optional, List
+@@ -10,9 +11,24 @@ from app.db.database import get_db
+ from app.services.agent_service import AgentValidator
+ from app.services.protheus_service import _execute_http_post_with_retry, get_tenant_config, build_protheus_headers
+ from app.models.knowledge import Tenant, AgentQueryAudit, QueryUsageCounter
++from app.core.auth import require_current_user
++from app.core.admin_security import require_admin, authorize_admin_access
+ 
++logger = logging.getLogger("app.agent_routes")
++
++# Todas as rotas exigem autenticação; /usage usa credencial administrativa (ver abaixo).
+ router = APIRouter(prefix="/agent", tags=["agent-execution"])
+ 
++
++def _enforce_token_tenant(current_user: dict, requested_tenant: str) -> str:
++    """O tenant efetivo vem do JWT; o enviado no corpo só pode coincidir com ele."""
++    token_tenant = str(current_user.get("tenant_id") or current_user.get("tenantId") or "").strip()
++    if not token_tenant:
++        raise HTTPException(status_code=401, detail="JWT sem tenant_id.")
++    if token_tenant.lower() != str(requested_tenant or "").strip().lower():
++        raise HTTPException(status_code=403, detail="O tenant do JWT não corresponde ao tenant da requisição.")
++    return token_tenant
++
+ class TableUsed(BaseModel):
+     table_id: str
+     snapshot_id: str
+@@ -39,7 +55,13 @@ class ExecuteQueryRequest(ValidateQueryRequest):
+     final_sql: str
+ 
+ @router.post("/validate-query")
+-def validate_query(req: ValidateQueryRequest, db: Session = Depends(get_db)):
++def validate_query(
++    req: ValidateQueryRequest,
++    db: Session = Depends(get_db),
++    current_user: dict = Depends(require_current_user),
++):
++    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
++    req.user_id = str(current_user.get("user_id") or "") or None
+     validator = AgentValidator(db)
+     result = validator.validate_query(req.dict())
+     
+@@ -60,16 +82,23 @@ def validate_query(req: ValidateQueryRequest, db: Session = Depends(get_db)):
+         )
+         db.add(audit)
+         db.commit()
+-    except Exception as e:
++    except Exception:
+         db.rollback()
+-        
++        logger.exception("Falha ao gravar auditoria de validate-query (tenant=%s)", req.tenant_id)
++
+     return result
+ 
+ @router.post("/execute-query")
+-async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db)):
+-    # 1. Validate again (or trust validate endpoint, but safe to re-validate)
++async def execute_query(
++    req: ExecuteQueryRequest,
++    db: Session = Depends(get_db),
++    current_user: dict = Depends(require_current_user),
++):
++    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
++    req.user_id = str(current_user.get("user_id") or "") or None
++    # 1. Valida o SQL que será de fato executado (final_sql) — nunca apenas o preview.
+     validator = AgentValidator(db)
+-    validation = validator.validate_query(req.dict())
++    validation = validator.validate_query({**req.dict(), "sql_preview": req.final_sql})
+     
+     if not validation["allowed"]:
+         raise HTTPException(status_code=403, detail=validation["blocked_reason"])
+@@ -149,11 +178,18 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
+         except:
+             db.rollback()
+             
+-        raise HTTPException(status_code=500, detail=str(e))
++        logger.exception("Falha na execução QueryRest (tenant=%s)", req.tenant_id)
++        raise HTTPException(status_code=502, detail="Falha ao executar a consulta no Protheus.")
+ 
+ @router.get("/usage/{tenant_id}/{period_ref}")
+-def get_usage(tenant_id: str, period_ref: str, db: Session = Depends(get_db)):
++def get_usage(
++    tenant_id: str,
++    period_ref: str,
++    db: Session = Depends(get_db),
++    admin: dict = Depends(require_admin),
++):
+     # period_ref expected as 'YYYY-MM'
++    authorize_admin_access(admin, "audit:read", tenant_id)
+     try:
+         t_str = str(tenant_id or '').strip()
+         tenant = db.query(Tenant).filter(Tenant.tenant_code == t_str).first()
+@@ -186,7 +222,12 @@ class ValidateContextRequest(BaseModel):
+     session_id: Optional[str] = None
+ 
+ @router.post("/validate-context")
+-async def proxy_validate_context(req: ValidateContextRequest, db: Session = Depends(get_db)):
++async def proxy_validate_context(
++    req: ValidateContextRequest,
++    db: Session = Depends(get_db),
++    current_user: dict = Depends(require_current_user),
++):
++    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
+     try:
+         from app.services.protheus_queryrest_client import ProtheusQueryRestClient
+         client = ProtheusQueryRestClient(
+@@ -216,7 +257,12 @@ class AskAgentRequest(BaseModel):
+     prompt: str
+ 
+ @router.post("/ask")
+-async def proxy_ask_agent(req: AskAgentRequest, db: Session = Depends(get_db)):
++async def proxy_ask_agent(
++    req: AskAgentRequest,
++    db: Session = Depends(get_db),
++    current_user: dict = Depends(require_current_user),
++):
++    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
+     try:
+         config = get_tenant_config(req.tenant_id, req.environment_code)
+         rest_url = config['rest_url'].strip()
+diff --git a/backend/app/api/auth_routes.py b/backend/app/api/auth_routes.py
+index 21d6780..b32202a 100644
+--- a/backend/app/api/auth_routes.py
++++ b/backend/app/api/auth_routes.py
+@@ -8,6 +8,7 @@ from typing import List, Optional
+ import hashlib
+ import uuid
+ import jwt
++from app.core.secret_env import get_required_secret
+ from datetime import datetime, timedelta
+ import os
+ 
+@@ -88,7 +89,7 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
+     except ValueError:
+         raise HTTPException(status_code=400, detail="UUID inválido")
+ 
+-JWT_SECRET = os.getenv("JWT_SECRET", "super_seguro")
++JWT_SECRET = get_required_secret("JWT_SECRET")
+ ALGORITHM = "HS256"
+ ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 horas
+ 
+diff --git a/backend/app/api/company_routes.py b/backend/app/api/company_routes.py
+index fce3f42..5bf5038 100644
+--- a/backend/app/api/company_routes.py
++++ b/backend/app/api/company_routes.py
+@@ -40,7 +40,8 @@ from app.services.queryrest_service import queryrest_exec_tenant
+ from app.services.sync_dictionary_v52 import run_snapshot
+ from app.core.config import settings
+ from app.core.security import encrypt_password
+-from app.core.admin_security import authorize_admin_access, require_admin
++from app.core.admin_security import authorize_admin_access, require_admin, _decode_admin_token
++import hmac
+ 
+ logger = logging.getLogger("app.api.company_routes")
+ 
+@@ -54,21 +55,20 @@ def verify_admin_key(
+     x_admin_key: Optional[str] = Header(None),
+     admin_token: Optional[str] = Cookie(None)
+ ):
+-    # 1. Permite acesso direto para sessões autenticadas no Painel Admin (cookie JWT)
++    # 1. Sessão do Painel Admin (cookie JWT) — mesma validação de require_admin (iss/exp/iat, segredo >= 32).
+     if admin_token:
+         try:
+-            jwt_secret = os.getenv("ADMIN_JWT_SECRET") or "elitecorp-admin-secret-change-in-prod"
+-            payload = jwt.decode(admin_token, jwt_secret, algorithms=["HS256"])
++            payload = _decode_admin_token(admin_token)
+             if payload.get("sub") == "admin":
+                 return "admin"
+-        except Exception:
++        except (jwt.InvalidTokenError, ValueError):
+             pass
+ 
+-    # 2. Permite acesso via X-Admin-Key header para requisições externas/scripts
+-    admin_pass = os.getenv("ADMIN_PASSWORD", "")
+-    jwt_secret = getattr(settings, 'jwt_secret', '') or os.getenv("ADMIN_JWT_SECRET", "") or os.getenv("JWT_SECRET", "")
+-    if x_admin_key and ((admin_pass and x_admin_key == admin_pass) or (jwt_secret and x_admin_key == jwt_secret)):
+-        return x_admin_key
++    # 2. X-Admin-Key para scripts: somente ADMIN_PASSWORD, em tempo constante.
++    #    Segredos de assinatura (JWT_SECRET/ADMIN_JWT_SECRET) NUNCA são aceitos como chave.
++    admin_pass = os.getenv("ADMIN_PASSWORD", "").strip()
++    if x_admin_key and admin_pass and hmac.compare_digest(x_admin_key.strip(), admin_pass):
++        return "admin-key"
+ 
+     raise HTTPException(
+         status_code=status.HTTP_401_UNAUTHORIZED,
+diff --git a/backend/app/api/leonardo_routes.py b/backend/app/api/leonardo_routes.py
+index 8f6fc04..7b3b838 100644
+--- a/backend/app/api/leonardo_routes.py
++++ b/backend/app/api/leonardo_routes.py
+@@ -1,10 +1,11 @@
+ """Leonardo AI — geração de imagens para o Copilot Protheus."""
+-from fastapi import APIRouter, HTTPException
++from app.core.admin_security import require_admin
++from fastapi import APIRouter, HTTPException, Depends
+ from pydantic import BaseModel
+ from typing import Optional, List
+ import httpx, os, asyncio
+ 
+-router = APIRouter(prefix="/api/leonardo", tags=["leonardo"])
++router = APIRouter(prefix="/api/leonardo", tags=["leonardo"], dependencies=[Depends(require_admin)])
+ 
+ LEO_KEY  = os.getenv("LEONARDO_API_KEY", "")
+ LEO_BASE = "https://cloud.leonardo.ai/api/rest/v1"
+diff --git a/backend/app/api/powerbi_routes.py b/backend/app/api/powerbi_routes.py
+index ef59c81..a173b72 100644
+--- a/backend/app/api/powerbi_routes.py
++++ b/backend/app/api/powerbi_routes.py
+@@ -1,10 +1,11 @@
+ """Power BI Embedded — embed token + dataset refresh."""
++from app.core.admin_security import require_admin
+ from fastapi import APIRouter, HTTPException, Depends
+ from pydantic import BaseModel
+ from typing import Optional
+ import httpx, os
+ 
+-router = APIRouter(prefix="/api/powerbi", tags=["powerbi"])
++router = APIRouter(prefix="/api/powerbi", tags=["powerbi"], dependencies=[Depends(require_admin)])
+ 
+ PBI_TENANT   = os.getenv("POWERBI_TENANT_ID", "")
+ PBI_CLIENT   = os.getenv("POWERBI_CLIENT_ID", "")
+diff --git a/backend/app/core/auth.py b/backend/app/core/auth.py
+index 994cbf1..4abe631 100644
+--- a/backend/app/core/auth.py
++++ b/backend/app/core/auth.py
+@@ -1,12 +1,13 @@
+ import os
+ import jwt
++from app.core.secret_env import get_required_secret
+ from fastapi import HTTPException, Security, Cookie, Request, status
+ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+ from typing import Optional
+ 
+ security = HTTPBearer(auto_error=False)
+ 
+-JWT_SECRET = os.getenv("JWT_SECRET", "copilot-protheus-dev-secret-change-me")
++JWT_SECRET = get_required_secret("JWT_SECRET")
+ JWT_ALGORITHM = "HS256"
+ 
+ 
+diff --git a/backend/app/core/secret_env.py b/backend/app/core/secret_env.py
+new file mode 100644
+index 0000000..85cd39f
+--- /dev/null
++++ b/backend/app/core/secret_env.py
+@@ -0,0 +1,22 @@
++"""Leitura obrigatória de segredos: sem fallback embutido no código (fail-fast)."""
++import os
++
++_WEAK_VALUES = {
++    "super_seguro",
++    "copilot-protheus-dev-secret-change-me",
++    "elitecorp-admin-secret-change-in-prod",
++    "changeme",
++    "change-me",
++    "secret",
++}
++
++
++def get_required_secret(name: str, min_len: int = 32) -> str:
++    value = os.environ.get(name, "").strip()
++    if not value:
++        raise RuntimeError(f"Variável de ambiente obrigatória ausente: {name}")
++    if len(value) < min_len:
++        raise RuntimeError(f"{name} deve ter pelo menos {min_len} caracteres.")
++    if value.lower() in _WEAK_VALUES:
++        raise RuntimeError(f"{name} usa um valor conhecido/inseguro; gere um segredo aleatório.")
++    return value
+diff --git a/backend/app/core/sql_guard.py b/backend/app/core/sql_guard.py
+new file mode 100644
+index 0000000..5d7d19e
+--- /dev/null
++++ b/backend/app/core/sql_guard.py
+@@ -0,0 +1,114 @@
++"""Guard determinístico de SQL somente leitura (dialeto Oracle / Protheus QueryRest).
++
++Regras (fail-closed: qualquer dúvida bloqueia):
++  1. exatamente uma instrução;
++  2. raiz SELECT (com ou sem WITH) ou UNION/INTERSECT/EXCEPT de SELECTs;
++  3. nenhum nó de escrita/DDL/DCL/comando em qualquer ponto da árvore;
++  4. sem comentários, ';' ou '@' (db link) fora de literais;
++  5. sem SELECT ... INTO e sem FOR UPDATE;
++  6. sem funções de pacotes perigosos (DBMS_*, UTL_*, SYS.*);
++  7. sem SELECT * / alias.*;
++  8. filtro D_E_L_E_T_ presente como coluna (não basta aparecer em literal/comentário);
++  9. opcionalmente, todas as tabelas dentro de ``allowed_tables`` (allowlist do tenant).
++"""
++from __future__ import annotations
++
++import re
++from dataclasses import dataclass
++from typing import Iterable, Optional
++
++import sqlglot
++from sqlglot import exp
++from sqlglot.errors import SqlglotError
++
++_FORBIDDEN_NODES = tuple(
++    getattr(exp, name)
++    for name in (
++        "Insert", "Update", "Delete", "Merge", "Create", "Drop", "Alter",
++        "TruncateTable", "Command", "Grant", "Revoke", "Set", "Use",
++        "Commit", "Rollback", "Transaction", "Into", "Lock", "Pragma",
++    )
++    if hasattr(exp, name)
++)
++_FORBIDDEN_FUNC_PREFIXES = ("DBMS_", "UTL_", "SYS.", "SYS_", "APEX_", "OWA_")
++_STRING_LITERAL = re.compile(r"'(?:[^']|'')*'")
++
++
++@dataclass(frozen=True)
++class SqlVerdict:
++    allowed: bool
++    reason: Optional[str] = None
++
++
++def _block(reason: str) -> SqlVerdict:
++    return SqlVerdict(False, reason)
++
++
++def validate_readonly_oracle_sql(
++    sql: str,
++    *,
++    require_delet_filter: bool = True,
++    allowed_tables: Optional[Iterable[str]] = None,
++) -> SqlVerdict:
++    text = (sql or "").strip()
++    if not text:
++        return _block("invalid_sql")
++
++    # 4. Checagem textual fora de literais (aspas simples).
++    outside_literals = _STRING_LITERAL.sub("''", text)
++    if ";" in outside_literals:
++        return _block("multiple_statements")
++    if "--" in outside_literals or "/*" in outside_literals:
++        return _block("comments_forbidden")
++    if "@" in outside_literals:
++        return _block("db_link_forbidden")
++
++    try:
++        statements = [s for s in sqlglot.parse(text, read="oracle") if s is not None]
++    except SqlglotError:
++        return _block("invalid_sql")
++    if len(statements) != 1:
++        return _block("multiple_statements")
++    tree = statements[0]
++
++    # 2. Raiz precisa ser consulta.
++    if not isinstance(tree, (exp.Select, exp.Union, exp.Subquery)):
++        return _block("not_select")
++
++    # 3/5/6. Varredura de nós e funções.
++    for node in tree.walk():
++        node = node[0] if isinstance(node, tuple) else node
++        if isinstance(node, _FORBIDDEN_NODES):
++            return _block("forbidden_sql")
++        if isinstance(node, (exp.Anonymous, exp.Func)):
++            name = (node.name or node.sql_name() or "").upper()
++            if name.startswith(_FORBIDDEN_FUNC_PREFIXES):
++                return _block("forbidden_function")
++        if isinstance(node, exp.Dot):
++            if node.sql(dialect="oracle").upper().startswith(_FORBIDDEN_FUNC_PREFIXES):
++                return _block("forbidden_function")
++
++    # 7. SELECT * / alias.*  (COUNT(*) continua permitido).
++    for star in tree.find_all(exp.Star):
++        parent = star.parent
++        if isinstance(parent, exp.Select):
++            return _block("select_star_forbidden")
++        if isinstance(parent, exp.Column) and isinstance(parent.parent, exp.Select):
++            return _block("select_star_forbidden")
++
++    # 8. D_E_L_E_T_ como coluna real.
++    if require_delet_filter and not any(
++        col.name.upper() == "D_E_L_E_T_" for col in tree.find_all(exp.Column)
++    ):
++        return _block("missing_delet_filter")
++
++    # 9. Allowlist de tabelas (CTEs próprias não contam como tabela física).
++    if allowed_tables is not None:
++        allowed = {str(t).strip().upper() for t in allowed_tables}
++        ctes = {cte.alias_or_name.upper() for cte in tree.find_all(exp.CTE)}
++        for table in tree.find_all(exp.Table):
++            name = (table.name or "").upper()
++            if name and name != "DUAL" and name not in ctes and name not in allowed:
++                return _block("table_not_allowed")
++
++    return SqlVerdict(True)
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 536803d..b8567d8 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -100,11 +100,11 @@ async def correlation_id_middleware(request, call_next):
+         reset_correlation_id(context_token)
+ 
+ # Configuração de CORS com suporte a domínios do Cloudflare e ambiente local
+-cors_origins_env = os.getenv("CORS_ORIGIN", "*")
+-if cors_origins_env == "*":
+-    allowed_origins = []
+-else:
+-    allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
++cors_origins_env = os.getenv("CORS_ORIGIN", "")
++# Wildcard é ignorado: com allow_credentials=True ele permitiria qualquer origem autenticada.
++allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip() and o.strip() != "*"]
++if "*" in cors_origins_env:
++    logging.getLogger("app.main").warning("CORS_ORIGIN='*' ignorado; defina origens explícitas.")
+ 
+ cloudflare_origins = [
+     "https://copilot.elitecorp.tec.br",
+@@ -118,7 +118,7 @@ cloudflare_origins = [
+     "http://localhost:8000"
+ ]
+ for o in cloudflare_origins:
+-    if o not in allowed_origins and "*" not in allowed_origins:
++    if o not in allowed_origins:
+         allowed_origins.append(o)
+ 
+ 
+@@ -126,7 +126,6 @@ for o in cloudflare_origins:
+ app.add_middleware(
+     CORSMiddleware,
+     allow_origins=allowed_origins,
+-    allow_origin_regex="https?://.*" if cors_origins_env == "*" else None,
+     allow_credentials=True,
+     allow_methods=["*"],
+     allow_headers=["*"]
+diff --git a/backend/app/services/agent_service.py b/backend/app/services/agent_service.py
+index cc832f5..00cb423 100644
+--- a/backend/app/services/agent_service.py
++++ b/backend/app/services/agent_service.py
+@@ -1,5 +1,6 @@
+ import re
+ from datetime import datetime
++from app.core.sql_guard import validate_readonly_oracle_sql
+ from sqlalchemy.orm import Session
+ import uuid
+ import logging
+@@ -23,7 +24,8 @@ class AgentValidator:
+         user_id = payload.get("user_id")
+         tables_used = payload.get("tables_used", [])
+         fields_used = payload.get("fields_used", [])
+-        sql_preview = payload.get("sql_preview", "")
++        # Valida SEMPRE o SQL que será executado: final_sql tem precedência sobre sql_preview.
++        sql_preview = payload.get("final_sql") or payload.get("sql_preview", "")
+ 
+         try:
+             cid = uuid.UUID(contract_id) if contract_id else None
+@@ -72,15 +74,9 @@ class AgentValidator:
+ 
+         # Step E: Regras de segurança SQL
+         upper_sql = sql_preview.upper()
+-        forbidden_tokens = ["UPDATE ", "INSERT ", "DELETE ", "DROP ", "ALTER ", "EXEC ", "CREATE "]
+-        if any(token in upper_sql for token in forbidden_tokens):
+-            return self._block("forbidden_sql")
+-
+-        if "SELECT *" in upper_sql:
+-            return self._block("select_star_forbidden")
+-
+-        if "D_E_L_E_T_" not in upper_sql:
+-            return self._block("missing_delet_filter")
++        verdict = validate_readonly_oracle_sql(sql_preview)
++        if not verdict.allowed:
++            return self._block(verdict.reason or "forbidden_sql")
+ 
+         # Step F: Volume
+         limit_apply = {"row_limit": 100 if "WHERE" not in upper_sql else 1000}
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 4166b1b..6614b04 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -22,3 +22,4 @@ jax>=0.4.26
+ jaxlib>=0.4.26
+ numpy>=1.26.0
+ python-multipart>=0.0.9
++sqlglot>=25.0.0
+diff --git a/backend/tests/test_p0_security.py b/backend/tests/test_p0_security.py
+new file mode 100644
+index 0000000..250b3ba
+--- /dev/null
++++ b/backend/tests/test_p0_security.py
+@@ -0,0 +1,139 @@
++"""Regressões P0: autenticação do agente, tenant do token, final_sql validado, segredos e X-Admin-Key."""
++import importlib
++from unittest.mock import MagicMock
++
++import pytest
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from app.api import agent_routes
++from app.core.auth import require_current_user
++from app.db.database import get_db
++
++GOOD_SQL = "SELECT E1_NUM FROM SE1010 WHERE D_E_L_E_T_ <> '*'"
++BODY = {"tenant_id": "tenant_a", "environment_code": "prd", "sql_preview": GOOD_SQL}
++
++
++def _fake_db():
++    db = MagicMock()
++    db.query.return_value.filter.return_value.count.return_value = 0
++    return db
++
++
++@pytest.fixture
++def app_factory():
++    def make(user=None):
++        app = FastAPI()
++        app.include_router(agent_routes.router, prefix="/api")
++        app.dependency_overrides[get_db] = _fake_db
++        if user is not None:
++            app.dependency_overrides[require_current_user] = lambda: user
++        return TestClient(app)
++    return make
++
++
++@pytest.mark.parametrize("path,body", [
++    ("/api/agent/validate-query", BODY),
++    ("/api/agent/execute-query", {**BODY, "final_sql": GOOD_SQL}),
++    ("/api/agent/validate-context", {"tenant_id": "tenant_a", "environment_code": "prd", "company": "01", "branch": "01", "user": "u"}),
++    ("/api/agent/ask", {"tenant_id": "tenant_a", "environment_code": "prd", "company": "01", "branch": "01", "user": "u", "request_id": "r", "prompt": "p"}),
++])
++def test_agent_routes_require_authentication(app_factory, path, body):
++    assert app_factory().post(path, json=body).status_code == 401
++
++
++def test_usage_requires_admin(app_factory):
++    assert app_factory().get("/api/agent/usage/tenant_a/2026-10").status_code == 401
++
++
++def test_tenant_in_body_must_match_token(app_factory):
++    client = app_factory({"tenant_id": "tenant_b", "user_id": "u1"})
++    r = client.post("/api/agent/execute-query", json={**BODY, "final_sql": GOOD_SQL})
++    assert r.status_code == 403
++
++
++def test_execute_validates_final_sql_not_preview(app_factory, monkeypatch):
++    calls = []
++
++    async def fake_post(*a, **k):
++        calls.append(a)
++        return "[]"
++
++    monkeypatch.setattr(agent_routes, "_execute_http_post_with_retry", fake_post)
++    monkeypatch.setattr(agent_routes, "get_tenant_config", lambda *a, **k: {"rest_url": "https://x"})
++
++    async def fake_headers(*a, **k):
++        return {}
++
++    monkeypatch.setattr(agent_routes, "build_protheus_headers", fake_headers)
++    client = app_factory({"tenant_id": "tenant_a", "user_id": "u1"})
++
++    # preview inocente, final_sql malicioso -> deve bloquear e NÃO chamar o Protheus
++    evil = {**BODY, "final_sql": "DELETE FROM SE1010"}
++    assert client.post("/api/agent/execute-query", json=evil).status_code == 403
++    assert calls == []
++
++    # SQL legítimo passa e é exatamente o executado
++    ok = client.post("/api/agent/execute-query", json={**BODY, "final_sql": GOOD_SQL})
++    assert ok.status_code == 200 and len(calls) == 1
++    assert calls[0][1] == {"cQuery": GOOD_SQL}
++
++
++def test_user_id_comes_from_token_not_body(app_factory, monkeypatch):
++    seen = {}
++    real = agent_routes.AgentValidator.validate_query
++
++    def spy(self, payload):
++        seen.update(payload)
++        return real(self, payload)
++
++    monkeypatch.setattr(agent_routes.AgentValidator, "validate_query", spy)
++    client = app_factory({"tenant_id": "tenant_a", "user_id": "11111111-1111-1111-1111-111111111111"})
++    client.post("/api/agent/validate-query", json={**BODY, "user_id": "99999999-9999-9999-9999-999999999999"})
++    assert seen["user_id"] == "11111111-1111-1111-1111-111111111111"
++
++
++# ---- segredos fail-fast
++def test_required_secret_rules(monkeypatch):
++    from app.core.secret_env import get_required_secret
++    monkeypatch.delenv("X_SECRET", raising=False)
++    with pytest.raises(RuntimeError):
++        get_required_secret("X_SECRET")
++    monkeypatch.setenv("X_SECRET", "curto")
++    with pytest.raises(RuntimeError):
++        get_required_secret("X_SECRET")
++    monkeypatch.setenv("X_SECRET", "copilot-protheus-dev-secret-change-me")
++    with pytest.raises(RuntimeError):
++        get_required_secret("X_SECRET")
++    monkeypatch.setenv("X_SECRET", "a" * 40)
++    assert get_required_secret("X_SECRET") == "a" * 40
++
++
++# ---- X-Admin-Key
++def test_admin_key_rejects_signing_secret(monkeypatch):
++    from fastapi import HTTPException
++    from app.api import company_routes
++    monkeypatch.setenv("ADMIN_PASSWORD", "senha-admin-longa-123")
++    monkeypatch.setenv("JWT_SECRET", "j" * 40)
++    monkeypatch.setenv("ADMIN_JWT_SECRET", "k" * 40)
++    with pytest.raises(HTTPException):
++        company_routes.verify_admin_key(x_admin_key="j" * 40, admin_token=None)
++    with pytest.raises(HTTPException):
++        company_routes.verify_admin_key(x_admin_key="k" * 40, admin_token=None)
++    assert company_routes.verify_admin_key(x_admin_key="senha-admin-longa-123", admin_token=None)
++
++
++# ---- CORS
++def test_cors_does_not_reflect_arbitrary_origin():
++    from app.main import app
++    client = TestClient(app)
++    evil = client.options(
++        "/api/agent/ask/v2",
++        headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"},
++    )
++    assert "access-control-allow-origin" not in {k.lower() for k in evil.headers}
++    good = client.options(
++        "/api/agent/ask/v2",
++        headers={"Origin": "https://copilot.elitecorp.tec.br", "Access-Control-Request-Method": "POST"},
++    )
++    assert good.headers.get("access-control-allow-origin") == "https://copilot.elitecorp.tec.br"
+diff --git a/backend/tests/test_sql_guard.py b/backend/tests/test_sql_guard.py
+new file mode 100644
+index 0000000..6a3ebaf
+--- /dev/null
++++ b/backend/tests/test_sql_guard.py
+@@ -0,0 +1,53 @@
++import pytest
++
++from app.core.sql_guard import validate_readonly_oracle_sql as guard
++
++OK = [
++    "SELECT E1_CLIENTE, SUM(E1_SALDO) AS T FROM SE1010 WHERE D_E_L_E_T_ <> '*' GROUP BY E1_CLIENTE",
++    "WITH x AS (SELECT A1_COD FROM SA1010 WHERE D_E_L_E_T_ = ' ') SELECT A1_COD FROM x",
++    "SELECT COUNT(*) FROM SE1010 WHERE D_E_L_E_T_ <> '*'",
++    "SELECT E1_NUM FROM SE1010 WHERE D_E_L_E_T_ <> '*' ORDER BY E1_NUM FETCH FIRST 10 ROWS ONLY",
++    "SELECT E1_NUM FROM (SELECT E1_NUM FROM SE1010 WHERE D_E_L_E_T_ <> '*' ORDER BY E1_NUM) WHERE ROWNUM <= 5",
++]
++
++BAD = {
++    "UPDATE SE1010 SET D_E_L_E_T_='*'": "not_select",
++    "SELECT 1 FROM DUAL WHERE D_E_L_E_T_=' ';\nUPDATE\tSE1010 SET E1_SALDO=0": "multiple_statements",
++    "MERGE INTO SE1010 t USING DUAL ON (1=1) WHEN MATCHED THEN UPDATE SET t.E1_SALDO=0": "not_select",
++    "TRUNCATE TABLE SE1010": "not_select",
++    "BEGIN DELETE FROM SE1010; END;": "multiple_statements",
++    "GRANT ALL ON SE1010 TO PUBLIC": "not_select",
++    "SELECT * FROM SE1010 WHERE D_E_L_E_T_ <> '*'": "select_star_forbidden",
++    "SELECT S.* FROM SE1010 S WHERE S.D_E_L_E_T_ <> '*'": "select_star_forbidden",
++    "SELECT DBMS_XMLGEN.GETXML('x') FROM DUAL WHERE D_E_L_E_T_=' '": "forbidden_function",
++    "SELECT E1_NUM FROM SE1010 WHERE D_E_L_E_T_ <> '*' -- x": "comments_forbidden",
++    "SELECT E1_NUM FROM SE1010 /* x */ WHERE D_E_L_E_T_ <> '*'": "comments_forbidden",
++    "SELECT E1_NUM FROM SE1010 WHERE E1_X = 'D_E_L_E_T_'": "missing_delet_filter",
++    "SELECT E1_NUM FROM SE1010 WHERE D_E_L_E_T_ <> '*' FOR UPDATE": "forbidden_sql",
++    "SELECT E1_NUM INTO v FROM SE1010 WHERE D_E_L_E_T_ <> '*'": "forbidden_sql",
++    "SELECT E1_NUM FROM SE1010@remote WHERE D_E_L_E_T_ <> '*'": "db_link_forbidden",
++    "": "invalid_sql",
++}
++
++
++@pytest.mark.parametrize("sql", OK)
++def test_allows_readonly_selects(sql):
++    assert guard(sql).allowed, guard(sql)
++
++
++@pytest.mark.parametrize("sql,reason", BAD.items())
++def test_blocks_dangerous_sql(sql, reason):
++    verdict = guard(sql)
++    assert not verdict.allowed
++    assert verdict.reason == reason
++
++
++def test_semicolon_inside_literal_is_not_a_second_statement():
++    assert guard("SELECT E1_NUM FROM SE1010 WHERE D_E_L_E_T_ <> '*' AND E1_HIST = 'a;b'").allowed
++
++
++def test_table_allowlist():
++    sql = "SELECT E1_NUM FROM SA6010 WHERE D_E_L_E_T_ <> '*'"
++    assert guard(sql, allowed_tables={"SA6010"}).allowed
++    v = guard(sql, allowed_tables={"SE1010"})
++    assert not v.allowed and v.reason == "table_not_allowed"
+-- 
+2.43.0
+
