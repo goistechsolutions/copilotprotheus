@@ -166,6 +166,7 @@ class ProtheusQueryRestClient:
             response = await self._send(url, token, query, method=method, payload=payload)
 
         if response.status_code >= 400:
+            logger.error("[QueryRest HTTP %s] SQL: %s | Response: %s", response.status_code, query, response.text[:300])
             remote_error = _extract_remote_error(response)
             detail = f"Falha na execução do QueryRest Protheus (HTTP {response.status_code})."
             if remote_error:
@@ -198,6 +199,7 @@ class ProtheusQueryRestClient:
             correlation_id,
             method.upper(),
         )
+        logger.info("[QueryRest SQL Request] %s", query)
 
         request_method = method.upper()
         async with httpx.AsyncClient(

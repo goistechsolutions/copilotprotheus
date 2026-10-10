@@ -220,6 +220,53 @@ def auto_fix_delet_filters(sql: str) -> str:
     return sql_stripped + f" WHERE {injected}"
 
 
+def auto_fix_protheus_dates(sql: str) -> str:
+    """
+    Converte construções incompatíveis de datas (EXTRACT, YEAR, MONTH) em colunas VARCHAR2(8)
+    do Protheus para a sintaxe nativa Oracle/Protheus baseada em strings 'YYYYMMDD'.
+    """
+    if not sql or not isinstance(sql, str):
+        return sql
+
+    # 0. SYSDATE combined: EXTRACT(MONTH/YEAR FROM col) = EXTRACT(MONTH/YEAR FROM SYSDATE)
+    p0a = r"EXTRACT\s*\(\s*YEAR\s+FROM\s+([A-Za-z0-9_.]+)\s*\)\s*=\s*EXTRACT\s*\(\s*YEAR\s+FROM\s+SYSDATE\s*\)\s+AND\s+EXTRACT\s*\(\s*MONTH\s+FROM\s+\1\s*\)\s*=\s*EXTRACT\s*\(\s*MONTH\s+FROM\s+SYSDATE\s*\)"
+    sql = re.sub(p0a, r"SUBSTR(\1, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM')", sql, flags=re.IGNORECASE)
+
+    p0b = r"EXTRACT\s*\(\s*MONTH\s+FROM\s+([A-Za-z0-9_.]+)\s*\)\s*=\s*EXTRACT\s*\(\s*MONTH\s+FROM\s+SYSDATE\s*\)\s+AND\s+EXTRACT\s*\(\s*YEAR\s+FROM\s+\1\s*\)\s*=\s*EXTRACT\s*\(\s*YEAR\s+FROM\s+SYSDATE\s*\)"
+    sql = re.sub(p0b, r"SUBSTR(\1, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM')", sql, flags=re.IGNORECASE)
+
+    # 1. YEAR and MONTH combined with literal numbers
+    p1 = r"EXTRACT\s*\(\s*YEAR\s+FROM\s+([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{4})\s+AND\s+EXTRACT\s*\(\s*MONTH\s+FROM\s+\1\s*\)\s*=\s*(\d{1,2})"
+    def r1(m):
+        col, y, mo = m.group(1), m.group(2), m.group(3).zfill(2)
+        return f"{col} LIKE '{y}{mo}%'"
+    sql = re.sub(p1, r1, sql, flags=re.IGNORECASE)
+
+    p2 = r"EXTRACT\s*\(\s*MONTH\s+FROM\s+([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{1,2})\s+AND\s+EXTRACT\s*\(\s*YEAR\s+FROM\s+\1\s*\)\s*=\s*(\d{4})"
+    def r2(m):
+        col, mo, y = m.group(1), m.group(2).zfill(2), m.group(3)
+        return f"{col} LIKE '{y}{mo}%'"
+    sql = re.sub(p2, r2, sql, flags=re.IGNORECASE)
+
+    # 2. Standalone EXTRACT(YEAR FROM col) = YYYY
+    p3 = r"EXTRACT\s*\(\s*YEAR\s+FROM\s+([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{4})"
+    sql = re.sub(p3, r"\1 LIKE '\2%'", sql, flags=re.IGNORECASE)
+
+    # 3. Standalone EXTRACT(MONTH FROM col) = M
+    p4 = r"EXTRACT\s*\(\s*MONTH\s+FROM\s+([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{1,2})"
+    def r4(m):
+        col, mo = m.group(1), m.group(2).zfill(2)
+        return f"SUBSTR({col}, 5, 2) = '{mo}'"
+    sql = re.sub(p4, r4, sql, flags=re.IGNORECASE)
+
+    # 4. YEAR(col) and MONTH(col)
+    sql = re.sub(r"\bYEAR\s*\(\s*([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{4})", r"\1 LIKE '\2%'", sql, flags=re.IGNORECASE)
+    sql = re.sub(r"\bMONTH\s*\(\s*([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{1,2})", lambda m: f"SUBSTR({m.group(1)}, 5, 2) = '{m.group(2).zfill(2)}'", sql, flags=re.IGNORECASE)
+
+    return sql
+
+
+
 def _split_select_items(body: str) -> list[str]:
     """Separa itens do SELECT sem quebrar funções, CASE ou literais."""
     items: list[str] = []

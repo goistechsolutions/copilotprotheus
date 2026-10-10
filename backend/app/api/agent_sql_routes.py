@@ -38,6 +38,7 @@ from app.services.protheus_context_service import (
     CatalogValidationError,
     auto_fix_delet_filters,
     auto_fix_oracle_limit,
+    auto_fix_protheus_dates,
     build_protheus_context,
     mask_sensitive_rows,
     validate_query_security,
@@ -373,7 +374,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 15. PROIBIÇÃO ABSOLUTA DE ALUCINAÇÃO DE CAMPOS: Você está INVENTANDO campos que não existem no dicionário. NUNCA crie colunas começando com "X" (ex: F2_XCLIENT, F2_X_COND, C5_XNOME, C5_XVEND, C6_XDESC) tentando trazer descrições. Se o usuário pedir o nome do cliente ou fornecedor, mas a tabela de clientes/fornecedores não estiver no snapshot, USE APENAS O CÓDIGO (ex: C5_VEND1, F2_CLIENTE). A invenção de campos inexistentes quebra o AppServer do Protheus. Use a sintaxe INNER JOIN ao invés de apenas JOIN para maior clareza.
 17. CONSULTAS GERENCIAIS AGRUPADAS: Se o pedido contiver "agrupado", "agrupando", "por vendedor", "por produto", "por subgrupo", "mensal", "por mês" ou combinação equivalente, a resposta DEVE ser uma agregação SQL real. Selecione cada dimensão solicitada, uma métrica física financeira/quantitativa autorizada usando SUM/COUNT/AVG e inclua no GROUP BY todas as dimensões não agregadas. Nunca trate campos de mês, ano, data, código, filial, empresa, identificador ou número como métrica financeira. Não retorne linhas transacionais detalhadas quando a solicitação exigir consolidação. Se não existir no snapshot um campo físico autorizado para a métrica ou uma dimensão solicitada, não substitua por outro campo: informe que a análise não pode ser construída com o catálogo disponível.
 18. COERÊNCIA DO RESULTADO: Para análise mensal do ano, a consulta deve retornar uma coluna de período/mês e uma métrica agregada por mês; para vendedor e subgrupo, deve retornar as respectivas dimensões e a métrica agregada. O alias da métrica deve ser explícito, por exemplo SUM(campo_físico) AS VALOR_TOTAL, sem reutilizar alias ou códigos como valor.
-16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão a conversão falhará e o banco retornará erro 500 no QueryRest. Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\'). Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'.
+16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use EXTRACT(YEAR/MONTH FROM ...), YEAR(), MONTH(), TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão o Oracle retornará erro ORA-30076 (Internal Server Error 500 no QueryRest). Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\') ou SF2.F2_EMISSAO LIKE TO_CHAR(SYSDATE, \'YYYYMM\') || \'%\'. Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'.
 19. PROIBIÇÃO DE CAMPOS DE DATA INVENTADOS (ANO_EMISSAO, MES_EMISSAO, ETC.): NUNCA use ou invente identificadores como ANO_EMISSAO, MES_EMISSAO, DATA_EMISSAO ou DT_EMISSAO no SELECT, WHERE ou GROUP BY. Não existem tais campos no Protheus; o uso deles causa bloqueio imediato pelo RBAC (ENTITLEMENT_DENIED). Para agrupar ou filtrar por mês/ano, use SEMPRE SUBSTR(alias.CAMPO_DATA, 1, 6) AS MES_ANO e use essa mesma expressão SUBSTR(...) no GROUP BY. Para comparar mês atual com anterior, use SUBSTR(alias.CAMPO_DATA, 1, 6) IN (TO_CHAR(ADD_MONTHS(SYSDATE, -1), \'YYYYMM\'), TO_CHAR(SYSDATE, \'YYYYMM\')).
 20. SINTAXE GROUP BY NO ORACLE: O banco Oracle NÃO aceita aliases da cláusula SELECT na cláusula GROUP BY. Qualquer expressão projetada (como SUBSTR(...) ou cálculo) DEVE ser repetida de forma idêntica no GROUP BY. Exemplo correto: SELECT SUBSTR(SF2.F2_EMISSAO, 1, 6) AS MES_ANO, SUM(SD2.D2_TOTAL) AS TOTAL ... GROUP BY SUBSTR(SF2.F2_EMISSAO, 1, 6). NUNCA faça 'GROUP BY MES_ANO'.
 21. PREFERÊNCIA DE NOMES E QUANTIDADE DE PEDIDOS EM AGRUPAMENTOS:
@@ -468,7 +469,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
         except Exception as r_err:
             logger.warning("Falha ao carregar regras de negocio do tenant %s: %s", tenant_id, r_err)
 
-    user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}{tenant_rules_instruction}"
+    user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}{tenant_rules_instruction} (Lembre-se: campos de data Protheus são VARCHAR2(8) 'YYYYMMDD', NUNCA use EXTRACT/YEAR/MONTH, use SUBSTR ou LIKE)."
 
     backend_mode = getattr(settings, "llm_backend", "gemini")
     raw_response = ""
@@ -579,6 +580,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 
     clean_sql = auto_fix_oracle_limit(clean_sql)
     clean_sql = auto_fix_delet_filters(clean_sql)
+    clean_sql = auto_fix_protheus_dates(clean_sql)
     return clean_sql
 
 
@@ -1378,6 +1380,7 @@ async def process_agent_task(task_id: str, payload: dict):
 
             sql = auto_fix_oracle_limit(sql)
             sql = auto_fix_delet_filters(sql)
+            sql = auto_fix_protheus_dates(sql)
             try:
                 validate_query_security(sql=sql, **validation_args)
             except HTTPException as exc:
@@ -1457,6 +1460,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 )
                 sql = auto_fix_oracle_limit(sql)
                 sql = auto_fix_delet_filters(sql)
+                sql = auto_fix_protheus_dates(sql)
                 _validate_query_domain(str(prompt), sql, domain=query_domain)
                 validate_query_security(sql=sql, **validation_args)
 
