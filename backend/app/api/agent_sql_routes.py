@@ -409,6 +409,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
             "  * Se a tabela SA3 CONSTAR explicitamente no snapshot autorizado acima: faça INNER JOIN com SA3010 SA3 via SF2.F2_VEND1 = SA3.A3_COD (ou SC5.C5_VEND1 = SA3.A3_COD) com SA3.D_E_L_E_T_ <> '*' e projete SA3.A3_NOME AS VENDEDOR e SF2.F2_VEND1 AS COD_VENDEDOR. "
             "  * Se a tabela SA3 NÃO CONSTAR no snapshot autorizado acima: é TERMINANTEMENTE PROIBIDO fazer JOIN com SA3 ou usar campos A3_*! Projete EXCLUSIVAMENTE SF2.F2_VEND1 AS COD_VENDEDOR diretamente da tabela SF2. "
             "- Para faturamento acumulado por vendedor ou totais de vendas gerais, consulte APENAS a tabela SF2 (SF2010 SF2), sem JOIN com SD2, pois SF2 já contém o total faturado F2_VALBRUT e a quantidade de documentos F2_DOC. NUNCA faça JOIN com SD2 a menos que o usuário peça especificamente produtos, itens ou TES. "
+            "- A TABELA SF2 NÃO POSSUI CAMPO DE TES (O CAMPO F2_TES NÃO EXISTE). Para filtrar notas normais em SF2, use EXCLUSIVAMENTE SF2.F2_TIPO = 'N'. NUNCA utilize F2_TES! "
             "- NUNCA USE OS CAMPOS INEXISTENTES F2_NUM NEM D2_NUM! Os campos reais do Protheus são F2_DOC e D2_DOC. Se precisar fazer JOIN com SD2, a sintaxe OBRIGATÓRIA é: SF2.F2_FILIAL = SD2.D2_FILIAL AND SF2.F2_DOC = SD2.D2_DOC AND SF2.F2_SERIE = SD2.D2_SERIE. "
             "- FILTRO TEMPORAL (MÊS ATUAL): Se a pergunta pedir 'mês atual' ou período atual, filtre SEMPRE: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM') ou SF2.F2_EMISSAO LIKE TO_CHAR(SYSDATE, 'YYYYMM') || '%'. NUNCA use EXTRACT. "
             "- Selecione OBRIGATORIAMENTE a quantidade de pedidos faturados: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS. "
@@ -660,6 +661,73 @@ def _table_families_from_sql(sql: str) -> set[str]:
             if compact.startswith(family):
                 families.add(family)
     return families
+
+
+def _select_prompt_tables(prompt: str, domain: str | None, context: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Filtra e ranqueia as tabelas do contexto para o prompt do LLM,
+    evitando estouro da janela de contexto e garantindo que as tabelas
+    mais pertinentes ao pedido do usuário estejam presentes com todos os campos.
+    """
+    if not context:
+        return []
+    if not domain:
+        return context[:8]
+
+    domain_families = _DOMAIN_TABLE_FAMILIES.get(domain, set())
+    domain_items = [
+        item for item in context
+        if _table_families_from_context([item]).intersection(domain_families)
+    ]
+    if not domain_items:
+        return context[:5]
+
+    prompt_norm = unicodedata.normalize("NFKD", str(prompt or "").lower())
+    prompt_norm = prompt_norm.encode("ascii", "ignore").decode("ascii")
+    scored = []
+    for item in domain_items:
+        t = item.get("table", {})
+        code = str(t.get("table_code", "")).upper()
+        name = str(t.get("table_name", "")).upper()
+        score = 0
+
+        # Tabelas nucleares por domínio ganham prioridade
+        if code in ("SF2", "SD2", "SF1", "SD1", "SE1", "SE2"):
+            score += 20
+        elif code in ("SA1", "SA2", "SA3", "SB1", "SC5", "SC6"):
+            score += 10
+        else:
+            score += 5
+
+        # Match com código ou nome da tabela
+        if code.lower() in prompt_norm or name.lower() in prompt_norm:
+            score += 30
+
+        # Termos de faturamento / vendas
+        for w in ("fatur", "venda", "saida", "vend", "mes atual"):
+            if w in prompt_norm and code in ("SF2", "SD2", "SA3"):
+                score += 25
+        # Termos de pedidos de venda
+        for w in ("pedido", "pedidos", "carteira"):
+            if w in prompt_norm and code in ("SC5", "SC6"):
+                score += 25
+        # Termos financeiros
+        for w in ("receber", "recebimento", "inadimpl", "titulo", "vencid", "caixa", "saldo"):
+            if w in prompt_norm and code in ("SE1", "SE5"):
+                score += 25
+        for w in ("pagar", "pagamento"):
+            if w in prompt_norm and code in ("SE2", "SE5"):
+                score += 25
+        # Termos de compras
+        for w in ("compra", "forneced", "entrada"):
+            if w in prompt_norm and code in ("SF1", "SD1", "SA2"):
+                score += 25
+
+        scored.append((score, item))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:5]]
+
 
 
 
@@ -1291,19 +1359,12 @@ async def process_agent_task(task_id: str, payload: dict):
 
             if query_domain:
                 domain_families = _DOMAIN_TABLE_FAMILIES[query_domain]
-                focused_context = [
-                    item for item in context
-                    if _table_families_from_context([item]).intersection(domain_families)
-                ]
-                if focused_context:
-                    # Mantém apenas tabelas do domínio identificado no prompt; a
-                    # autorização já foi calculada sobre o snapshot completo e os
-                    # nomes/fields abaixo continuam sendo derivados do catálogo real.
-                    context = focused_context
-                else:
+                has_domain_tables = any(
+                    _table_families_from_context([item]).intersection(domain_families)
+                    for item in context
+                )
+                if not has_domain_tables:
                     # Nenhuma tabela do domínio está no snapshot ativo.
-                    # Retornar erro imediato evita enviar centenas de tabelas ao LLM
-                    # (causaria timeout de 120s+ sem resultado útil).
                     families_now = _table_families_from_context(context)
                     diag = _domain_catalog_diagnostic(query_domain, families_now, context)
                     try:
@@ -1329,10 +1390,16 @@ async def process_agent_task(task_id: str, payload: dict):
                     }
                     return
 
-            context_text = render_context_for_prompt(context)
+            # Preserva o contexto completo com todas as tabelas autorizadas para a checagem RBAC
+            full_context = context
+
+            # Seleciona as tabelas mais relevantes para compor o prompt enviado ao LLM (evita estouro de contexto)
+            prompt_context = _select_prompt_tables(str(prompt), query_domain, full_context)
+            context_text = render_context_for_prompt(prompt_context, compact=True)
+
             allowed_table_names = {
                 str(name).strip()
-                for item in context
+                for item in full_context
                 for name in (
                     item["table"].get("table_name"),
                     item["table"].get("physical_name"),
@@ -1342,7 +1409,7 @@ async def process_agent_task(task_id: str, payload: dict):
             }
             allowed_field_names = {
                 str(field.get("field_name")).upper()
-                for item in context
+                for item in full_context
                 for field in item.get("fields", [])
                 if field.get("field_name")
             }

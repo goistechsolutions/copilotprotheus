@@ -345,6 +345,20 @@ def auto_fix_protheus_joins(sql: str) -> str:
         elif clean_tbl == "SF2":
             sql = re.sub(r"(?<![A-Za-z0-9_.])\b(F2_DOC|F2_SERIE|F2_EMISSAO|F2_VALBRUT|F2_VEND1|F2_CLIENTE|F2_LOJA)\b", rf"{prefix}.\1", sql)
 
+    # 5. Tratamento de alucinação F2_TES: a tabela SF2 não possui campo de TES
+    has_sd2 = any(t[0][:3] == "SD2" for t in table_refs)
+    sd2_alias = next((t[1] or t[0] for t in table_refs if t[0][:3] == "SD2"), None)
+    sf2_alias = next((t[1] or t[0] for t in table_refs if t[0][:3] == "SF2"), None)
+    if has_sd2 and sd2_alias:
+        sql = re.sub(r"\b(?:[A-Za-z0-9_]+\.)?F2_TES\b", f"{sd2_alias}.D2_TES", sql, flags=re.IGNORECASE)
+    elif sf2_alias:
+        sql = re.sub(
+            r"\b(?:[A-Za-z0-9_]+\.)?F2_TES\s*=\s*'[^']*'",
+            f"{sf2_alias}.F2_TIPO = 'N'",
+            sql,
+            flags=re.IGNORECASE,
+        )
+
     return sql
 
 

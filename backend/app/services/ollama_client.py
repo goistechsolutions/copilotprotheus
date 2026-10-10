@@ -383,7 +383,8 @@ async def _call_ollama(
             "stream": False, 
             "keep_alive": 0,
             "options": {
-                "temperature": temperature
+                "temperature": temperature,
+                "num_ctx": 8192
             }
         }
         if allow_tools:
@@ -566,7 +567,8 @@ async def stream_llm(
                 "stream": False, 
                 "keep_alive": 0,
                 "options": {
-                    "temperature": 0.0
+                    "temperature": 0.0,
+                    "num_ctx": 8192
                 }
             }
             if allow_tools:

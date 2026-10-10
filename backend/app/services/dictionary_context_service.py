@@ -132,7 +132,7 @@ def build_dictionary_context(
     return context
 
 
-def render_context_for_prompt(context: List[Dict[str, Any]]) -> str:
+def render_context_for_prompt(context: List[Dict[str, Any]], compact: bool = True) -> str:
     """Renderiza SX2/SX3/SIX e regras de compartilhamento para o gerador SQL."""
     parts: List[str] = []
 
@@ -149,16 +149,11 @@ def render_context_for_prompt(context: List[Dict[str, Any]]) -> str:
         parts.append(
             "  SHARING: "
             f"empresa={table.get('usa_empresa') or 'não informado'} "
-            f"unidade={table.get('usa_unidade') or 'não informado'} "
             f"filial={table.get('usa_filial') or 'não informado'} "
-            f"X2_MODO={table.get('x2_modo') or 'não informado'} "
-            f"X2_TAMFIL={table.get('x2_tamfil') if table.get('x2_tamfil') is not None else 'não informado'} "
-            f"X2_MODOUN={table.get('x2_modoun') or 'não informado'} "
-            f"X2_TAMUN={table.get('x2_tamun') if table.get('x2_tamun') is not None else 'não informado'} "
-            f"X2_MODOEMP={table.get('x2_modoemp') or 'não informado'} "
-            f"X2_TAMEMP={table.get('x2_tamemp') if table.get('x2_tamemp') is not None else 'não informado'}"
+            f"X2_MODO={table.get('x2_modo') or 'não informado'}"
         )
-        parts.append(f"  UNIQUE_INDEX: {table.get('unique_index') or 'não informado no snapshot'}")
+        if table.get("unique_index"):
+            parts.append(f"  UNIQUE_INDEX: {table.get('unique_index')}")
         parts.append(
             "  SX3_PHYSICAL_FIELDS: a lista FIELD abaixo é exaustiva para esta tabela; "
             "qualquer identificador ausente não existe no snapshot autorizado."
@@ -171,17 +166,28 @@ def render_context_for_prompt(context: List[Dict[str, Any]]) -> str:
                 f"expression={index.get('expression') or 'não informado'}"
             )
 
-        for field in item.get("fields", []):
-            parts.append(
-                f"  FIELD_PHYSICAL: {field.get('field_name') or 'não informado'} - "
-                f"{field.get('field_label') or 'não informado'} "
-                f"| type={field.get('field_type') or 'não informado'} "
-                f"len={field.get('field_length') if field.get('field_length') is not None else 'não informado'} "
-                f"dec={field.get('field_decimal') if field.get('field_decimal') is not None else 'não informado'} "
-                f"validation={field.get('validation_rule') or 'não informado'} "
-                f"can_select={field.get('can_select') if field.get('can_select') is not None else 'não informado'} "
-                f"can_filter={field.get('can_filter') if field.get('can_filter') is not None else 'não informado'} "
-                f"masked={field.get('masked_flag') if field.get('masked_flag') is not None else field.get('masked') if field.get('masked') is not None else 'não informado'}"
-            )
+        if compact:
+            for field in item.get("fields", []):
+                fname = field.get("field_name")
+                if not fname:
+                    continue
+                ftype = field.get("field_type") or "C"
+                flen = field.get("field_length")
+                flabel = field.get("field_label") or field.get("title") or ""
+                dim = f"{ftype},{flen}" if flen is not None else ftype
+                parts.append(f"  FIELD_PHYSICAL: {fname} ({dim}) - {flabel}")
+        else:
+            for field in item.get("fields", []):
+                parts.append(
+                    f"  FIELD_PHYSICAL: {field.get('field_name') or 'não informado'} - "
+                    f"{field.get('field_label') or 'não informado'} "
+                    f"| type={field.get('field_type') or 'não informado'} "
+                    f"len={field.get('field_length') if field.get('field_length') is not None else 'não informado'} "
+                    f"dec={field.get('field_decimal') if field.get('field_decimal') is not None else 'não informado'} "
+                    f"validation={field.get('validation_rule') or 'não informado'} "
+                    f"can_select={field.get('can_select') if field.get('can_select') is not None else 'não informado'} "
+                    f"can_filter={field.get('can_filter') if field.get('can_filter') is not None else 'não informado'} "
+                    f"masked={field.get('masked_flag') if field.get('masked_flag') is not None else field.get('masked') if field.get('masked') is not None else 'não informado'}"
+                )
 
     return "\n".join(parts)
