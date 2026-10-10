@@ -1,12 +1,13 @@
 import os
 import jwt
+from app.core.secret_env import get_required_secret
 from fastapi import HTTPException, Security, Cookie, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 
 security = HTTPBearer(auto_error=False)
 
-JWT_SECRET = os.getenv("JWT_SECRET", "copilot-protheus-dev-secret-change-me")
+JWT_SECRET = get_required_secret("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
 
 

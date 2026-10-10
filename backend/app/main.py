@@ -100,11 +100,11 @@ async def correlation_id_middleware(request, call_next):
         reset_correlation_id(context_token)
 
 # Configuração de CORS com suporte a domínios do Cloudflare e ambiente local
-cors_origins_env = os.getenv("CORS_ORIGIN", "*")
-if cors_origins_env == "*":
-    allowed_origins = []
-else:
-    allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+cors_origins_env = os.getenv("CORS_ORIGIN", "")
+# Wildcard é ignorado: com allow_credentials=True ele permitiria qualquer origem autenticada.
+allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip() and o.strip() != "*"]
+if "*" in cors_origins_env:
+    logging.getLogger("app.main").warning("CORS_ORIGIN='*' ignorado; defina origens explícitas.")
 
 cloudflare_origins = [
     "https://copilot.elitecorp.tec.br",
@@ -118,7 +118,7 @@ cloudflare_origins = [
     "http://localhost:8000"
 ]
 for o in cloudflare_origins:
-    if o not in allowed_origins and "*" not in allowed_origins:
+    if o not in allowed_origins:
         allowed_origins.append(o)
 
 
@@ -126,7 +126,6 @@ for o in cloudflare_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex="https?://.*" if cors_origins_env == "*" else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

@@ -8,6 +8,7 @@ from typing import List, Optional
 import hashlib
 import uuid
 import jwt
+from app.core.secret_env import get_required_secret
 from datetime import datetime, timedelta
 import os
 
@@ -88,7 +89,7 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
     except ValueError:
         raise HTTPException(status_code=400, detail="UUID inválido")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "super_seguro")
+JWT_SECRET = get_required_secret("JWT_SECRET")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 horas
 

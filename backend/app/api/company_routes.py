@@ -40,7 +40,8 @@ from app.services.queryrest_service import queryrest_exec_tenant
 from app.services.sync_dictionary_v52 import run_snapshot
 from app.core.config import settings
 from app.core.security import encrypt_password
-from app.core.admin_security import authorize_admin_access, require_admin
+from app.core.admin_security import authorize_admin_access, require_admin, _decode_admin_token
+import hmac
 
 logger = logging.getLogger("app.api.company_routes")
 
@@ -54,21 +55,20 @@ def verify_admin_key(
     x_admin_key: Optional[str] = Header(None),
     admin_token: Optional[str] = Cookie(None)
 ):
-    # 1. Permite acesso direto para sessões autenticadas no Painel Admin (cookie JWT)
+    # 1. Sessão do Painel Admin (cookie JWT) — mesma validação de require_admin (iss/exp/iat, segredo >= 32).
     if admin_token:
         try:
-            jwt_secret = os.getenv("ADMIN_JWT_SECRET") or "elitecorp-admin-secret-change-in-prod"
-            payload = jwt.decode(admin_token, jwt_secret, algorithms=["HS256"])
+            payload = _decode_admin_token(admin_token)
             if payload.get("sub") == "admin":
                 return "admin"
-        except Exception:
+        except (jwt.InvalidTokenError, ValueError):
             pass
 
-    # 2. Permite acesso via X-Admin-Key header para requisições externas/scripts
-    admin_pass = os.getenv("ADMIN_PASSWORD", "")
-    jwt_secret = getattr(settings, 'jwt_secret', '') or os.getenv("ADMIN_JWT_SECRET", "") or os.getenv("JWT_SECRET", "")
-    if x_admin_key and ((admin_pass and x_admin_key == admin_pass) or (jwt_secret and x_admin_key == jwt_secret)):
-        return x_admin_key
+    # 2. X-Admin-Key para scripts: somente ADMIN_PASSWORD, em tempo constante.
+    #    Segredos de assinatura (JWT_SECRET/ADMIN_JWT_SECRET) NUNCA são aceitos como chave.
+    admin_pass = os.getenv("ADMIN_PASSWORD", "").strip()
+    if x_admin_key and admin_pass and hmac.compare_digest(x_admin_key.strip(), admin_pass):
+        return "admin-key"
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from app.core.sql_guard import validate_readonly_oracle_sql
 from sqlalchemy.orm import Session
 import uuid
 import logging
@@ -23,7 +24,8 @@ class AgentValidator:
         user_id = payload.get("user_id")
         tables_used = payload.get("tables_used", [])
         fields_used = payload.get("fields_used", [])
-        sql_preview = payload.get("sql_preview", "")
+        # Valida SEMPRE o SQL que será executado: final_sql tem precedência sobre sql_preview.
+        sql_preview = payload.get("final_sql") or payload.get("sql_preview", "")
 
         try:
             cid = uuid.UUID(contract_id) if contract_id else None
@@ -72,15 +74,9 @@ class AgentValidator:
 
         # Step E: Regras de segurança SQL
         upper_sql = sql_preview.upper()
-        forbidden_tokens = ["UPDATE ", "INSERT ", "DELETE ", "DROP ", "ALTER ", "EXEC ", "CREATE "]
-        if any(token in upper_sql for token in forbidden_tokens):
-            return self._block("forbidden_sql")
-
-        if "SELECT *" in upper_sql:
-            return self._block("select_star_forbidden")
-
-        if "D_E_L_E_T_" not in upper_sql:
-            return self._block("missing_delet_filter")
+        verdict = validate_readonly_oracle_sql(sql_preview)
+        if not verdict.allowed:
+            return self._block(verdict.reason or "forbidden_sql")
 
         # Step F: Volume
         limit_apply = {"row_limit": 100 if "WHERE" not in upper_sql else 1000}
