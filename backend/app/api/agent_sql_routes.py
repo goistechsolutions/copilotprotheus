@@ -1076,16 +1076,26 @@ async def process_agent_task(task_id: str, payload: dict):
                         SELECT DISTINCT pm.id::text
                         FROM public.tenant_module_contracts tmc
                         JOIN public.protheus_modules_master pm ON pm.id = tmc.module_id
-                        WHERE lower(btrim(tmc.tenant_id)) = :tenant_id
-                          AND lower(btrim(tmc.status)) IN ('active', 'enabled', 'allowed')
+                        JOIN public.tenants t ON (t.id = tmc.tenant_id OR lower(btrim(t.tenant_code)) = lower(btrim(CAST(tmc.tenant_id AS text))))
+                        WHERE (
+                                lower(btrim(t.tenant_code)) = :tenant_id
+                             OR lower(btrim(t.schema_name)) = :tenant_id
+                             OR lower(btrim(CAST(tmc.tenant_id AS text))) = :tenant_id
+                          )
+                          AND upper(btrim(COALESCE(tmc.status, 'ACTIVE'))) IN ('ACTIVE', 'ENABLED', 'ALLOWED')
                           AND pm.active = TRUE
                     """),
                     {"tenant_id": str(ctx.tenant_id).lower()},
                 ).scalars().all()
                 if contracted_rows:
                     allowed_modules.update(str(code) for code in contracted_rows if code)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("failed_to_load_contracted_modules: %s", exc)
+                if hasattr(db, "rollback"):
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
 
             logger.info({
                 "stage": "module_resolution",

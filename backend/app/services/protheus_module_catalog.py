@@ -388,13 +388,39 @@ def filter_allowed_dictionary_tables(
     schema_name = str(tenant_schema or "").strip()
     schema = quote_tenant_schema(schema_name)
     columns = _available_columns(db, schema_name, "dictionary_tables")
-    if not {"table_code", "table_name", "module_code"}.issubset(columns):
-        raise RuntimeError("Snapshot dictionary_tables não possui as colunas mínimas esperadas.")
+    if not columns:
+        return []
 
     params: dict[str, Any] = {
         "tenant_id": schema_name,
         "module_codes": [str(code) for code in module_codes],
     }
+
+    # 1. Suporte nativo ao schema V2 (snapshot_id vinculando a dictionary_snapshots com module_id)
+    if "snapshot_id" in columns:
+        rows = db.execute(
+            text(f"""
+                SELECT DISTINCT
+                    dt.table_code,
+                    COALESCE(dt.table_name, dt.table_code) AS table_name,
+                    ds.module_id::text AS module_code,
+                    COALESCE(dt.description, dt.business_name, dt.table_name, dt.table_code) AS description,
+                    dt.physical_name
+                FROM {schema}.dictionary_tables dt
+                JOIN {schema}.dictionary_snapshots ds ON ds.id = dt.snapshot_id
+                WHERE ds.module_id::text = ANY(CAST(:module_codes AS text[]))
+                  AND COALESCE(dt.active, TRUE) = TRUE
+                  AND UPPER(ds.status) = 'ACTIVE'
+                ORDER BY dt.table_code
+            """),
+            params,
+        ).mappings().all()
+        return [dict(row) for row in rows]
+
+    if not {"table_code", "table_name", "module_code"}.issubset(columns):
+        return []
+
+    # 2. Suporte ao schema legado
     optional_columns = {
         "physical_name": "dt.physical_name",
         "unique_index": "dt.unique_index",
@@ -417,9 +443,6 @@ def filter_allowed_dictionary_tables(
 
     company_filter = ""
     if company_id is not None and "company_id" in columns:
-        # Compatibilidade com snapshots legados que ainda possuem company_id
-        # textual. A comparação textual evita UndefinedFunction (text = integer)
-        # sem alterar ou copiar dados operacionais do Protheus.
         company_filter = """
             AND (dt.company_id::text = CAST(:company_id AS text) OR dt.company_id IS NULL)
         """
@@ -455,13 +478,41 @@ def load_dictionary_fields(
     table_code: str | None,
     table_name: str | None,
 ) -> list[dict[str, Any]]:
-    """Lê campos do snapshot sem assumir colunas opcionais de versões antigas."""
+    """Lê campos do snapshot suportando tanto schema V2 quanto versões legadas."""
     schema_name = str(tenant_schema or "").strip()
     schema = quote_tenant_schema(schema_name)
     columns = _available_columns(db, schema_name, "dictionary_fields")
     if "field_name" not in columns:
         return []
 
+    # 1. Suporte nativo ao schema V2 (table_id FK para dictionary_tables)
+    if "table_id" in columns:
+        params = {
+            "table_code": str(table_code or "").strip(),
+            "table_name": str(table_name or "").strip(),
+        }
+        rows = db.execute(
+            text(f"""
+                SELECT
+                    df.field_name,
+                    COALESCE(df.business_name, df.description, df.field_name) AS field_label,
+                    COALESCE(df.field_type, 'C') AS field_type,
+                    COALESCE(df.required_flag, FALSE) AS required
+                FROM {schema}.dictionary_fields df
+                JOIN {schema}.dictionary_tables dt ON dt.id = df.table_id
+                WHERE (
+                        dt.table_code = :table_code
+                     OR dt.physical_name = :table_code
+                     OR dt.table_name = :table_name
+                  )
+                  AND COALESCE(df.active, TRUE) = TRUE
+                ORDER BY df.id
+            """),
+            params,
+        ).mappings().all()
+        return [dict(row) for row in rows]
+
+    # 2. Schema legado
     select_parts = ["df.field_name"]
     select_parts.append("COALESCE(df.title, df.field_name) AS field_label" if "title" in columns else "df.field_name AS field_label")
     optional_selects = {
