@@ -788,34 +788,48 @@ def _load_conversation_history(
     linhas, colunas e respostas do ERP nunca são gravadas aqui.
     """
     schema = quote_tenant_schema(tenant_schema)
-    rows = db.execute(
-        text(f"""
-            SELECT memory_key, memory_value
-              FROM {schema}.memories
-             WHERE tenant_id = :tenant_id
-               AND company_id::text = CAST(:company_id AS text)
-               AND memory_type = 'conversation_turn'
-               AND scope = :conversation_id
-               AND source = :actor_key
-             ORDER BY created_at ASC, id ASC
-             LIMIT :limit
-        """),
-        {
-            "tenant_id": tenant_id,
-            # O schema histórico pode armazenar company_id como INTEGER ou
-            # VARCHAR(100). O cast no SQL e o valor textual mantêm o filtro
-            # compatível sem cruzar o escopo de tenant/empresa.
-            "company_id": str(company_id),
-            "conversation_id": conversation_id,
-            "actor_key": actor_key,
-            "limit": limit,
-        },
-    ).mappings().all()
-    return [
-        {"role": str(row["memory_key"]), "content": str(row["memory_value"])}
-        for row in rows
-        if row.get("memory_key") in {"user", "assistant"} and row.get("memory_value")
-    ]
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT memory_key, memory_value
+                  FROM {schema}.memories
+                 WHERE tenant_id = :tenant_id
+                   AND company_id::text = CAST(:company_id AS text)
+                   AND memory_type = 'conversation_turn'
+                   AND scope = :conversation_id
+                   AND source = :actor_key
+                 ORDER BY created_at ASC, id ASC
+                 LIMIT :limit
+            """),
+            {
+                "tenant_id": tenant_id,
+                # O schema histórico pode armazenar company_id como INTEGER ou
+                # VARCHAR(100). O cast no SQL e o valor textual mantêm o filtro
+                # compatível sem cruzar o escopo de tenant/empresa.
+                "company_id": str(company_id),
+                "conversation_id": conversation_id,
+                "actor_key": actor_key,
+                "limit": limit,
+            },
+        ).mappings().all()
+        return [
+            {"role": str(row["memory_key"]), "content": str(row["memory_value"])}
+            for row in rows
+            if row.get("memory_key") in {"user", "assistant"} and row.get("memory_value")
+        ]
+    except Exception as exc:
+        logger.warning(
+            "failed_to_load_memory_conversation_history tenant=%s conversation_id=%s err=%s",
+            tenant_schema,
+            conversation_id,
+            exc,
+        )
+        if hasattr(db, "rollback"):
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        return []
 
 
 def _append_conversation_turn(
@@ -832,26 +846,40 @@ def _append_conversation_turn(
     if role not in {"user", "assistant"} or not str(content or "").strip():
         return
     schema = quote_tenant_schema(tenant_schema)
-    db.execute(
-        text(f"""
-            INSERT INTO {schema}.memories
-                (tenant_id, company_id, visibility, memory_key, memory_value,
-                 memory_type, scope, source)
-            VALUES
-                (:tenant_id, :company_id, 'private', :role, :content,
-                 'conversation_turn', :conversation_id, :actor_key)
-        """),
-        {
-            # String numérica é aceita tanto por instalações com company_id
-            # INTEGER quanto por schemas legados com company_id textual.
-            "tenant_id": tenant_id,
-            "company_id": str(company_id),
-            "role": role,
-            "content": str(content).strip()[:600],
-            "conversation_id": conversation_id,
-            "actor_key": actor_key,
-        },
-    )
+    try:
+        db.execute(
+            text(f"""
+                INSERT INTO {schema}.memories
+                    (tenant_id, company_id, visibility, memory_key, memory_value,
+                     memory_type, scope, source)
+                VALUES
+                    (:tenant_id, :company_id, 'private', :role, :content,
+                     'conversation_turn', :conversation_id, :actor_key)
+            """),
+            {
+                # String numérica é aceita tanto por instalações com company_id
+                # INTEGER quanto por schemas legados com company_id textual.
+                "tenant_id": tenant_id,
+                "company_id": str(company_id),
+                "role": role,
+                "content": str(content).strip()[:600],
+                "conversation_id": conversation_id,
+                "actor_key": actor_key,
+            },
+        )
+    except Exception as exc:
+        logger.warning(
+            "failed_to_append_memory_conversation_turn tenant=%s conversation_id=%s role=%s err=%s",
+            tenant_schema,
+            conversation_id,
+            role,
+            exc,
+        )
+        if hasattr(db, "rollback"):
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
 
 def _normalize_conversation_history(value: Any, limit: int = 12) -> list[dict[str, str]]:
