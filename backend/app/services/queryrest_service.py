@@ -22,6 +22,8 @@ logger = logging.getLogger("app.services.queryrest")
 import base64
 import hashlib
 
+from app.core.secret_env import get_required_secret
+
 def _get_fernet() -> Fernet:
     key = os.getenv("FERNET_KEY", "").strip().encode()
     if key:
@@ -29,7 +31,8 @@ def _get_fernet() -> Fernet:
             return Fernet(key)
         except Exception:
             pass
-    secret = os.getenv("JWT_SECRET") or os.getenv("ADMIN_JWT_SECRET") or "copilot-protheus-fernet-fallback-key"
+    # Sem chave embutida: se FERNET_KEY não for válida, deriva de JWT_SECRET (obrigatório).
+    secret = get_required_secret("JWT_SECRET")
     key_32bytes = hashlib.sha256(secret.encode()).digest()
     fallback_key = base64.urlsafe_b64encode(key_32bytes)
     return Fernet(fallback_key)

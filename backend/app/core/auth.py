@@ -15,8 +15,12 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
     """Valida JWT exclusivamente via Bearer header (Authorization: Bearer <token>).
     Usado nas rotas de API REST padrão.
     """
-    if not credentials:
-        return {}
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Autenticação necessária.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])

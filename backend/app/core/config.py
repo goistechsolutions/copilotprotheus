@@ -3,6 +3,8 @@ from pydantic import BaseModel
 import os
 from typing import Optional
 
+from app.core.secret_env import get_required_secret
+
 load_dotenv()
 
 class Settings(BaseModel):
@@ -23,10 +25,10 @@ class Settings(BaseModel):
     gemini_api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     llm_backend: str = os.getenv("LLM_BACKEND", "gemini")
-    jwt_secret: str = os.getenv("JWT_SECRET", "copilot-protheus-dev-secret-change-me")
+    jwt_secret: str = get_required_secret("JWT_SECRET")
     jwt_expiry_seconds: int = int(os.getenv("JWT_EXPIRY_SECONDS", "3600"))
     database_url: str = os.getenv("DATABASE_URL", "")
-    cors_origin: str = os.getenv("CORS_ORIGIN", "*")
+    cors_origin: str = os.getenv("CORS_ORIGIN", "")
 
     # Driver do banco Protheus ("oracle" ou "mssql")
     db_driver: str = os.getenv("DB_DRIVER", "oracle").lower()
