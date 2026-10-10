@@ -209,19 +209,17 @@ async def ask_gemini(
                     image=image,
                     allow_tools=allow_tools,
                 )
-            if e.response.status_code == 503:
-                logger.warning("[Gemini] Erro 503 no Gemini. Ativando fallback para Ollama (qwen3:8b)...")
-                from app.services.ollama_client import ask_llm
-                return await ask_llm(
-                    question=question,
-                    protheus_data=protheus_data,
-                    intent=intent,
-                    context=context,
-                    history=history,
-                    image=image,
-                    allow_tools=allow_tools,
-                )
-            return f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
+            logger.warning("[Gemini] Erro %s no Gemini (%s). Ativando fallback para LLM Local (Ollama)...", e.response.status_code, e.response.text[:200])
+            from app.services.ollama_client import ask_llm
+            return await ask_llm(
+                question=question,
+                protheus_data=protheus_data,
+                intent=intent,
+                context=context,
+                history=history,
+                image=image,
+                allow_tools=allow_tools,
+            )
         except httpx.RequestError as e:
             logger.warning("[Gemini] Erro de conexão com Gemini: %s. Ativando fallback para Ollama (qwen3:8b)...", e)
             from app.services.ollama_client import ask_llm
@@ -406,21 +404,18 @@ async def stream_gemini(
                 ):
                     yield chunk
                 return
-            if e.response.status_code == 503:
-                logger.warning("[Gemini Stream] Erro 503 no Gemini. Ativando fallback para LLM Local (Hetzner)...")
-                from app.services.ollama_client import stream_llm
-                async for chunk in stream_llm(
-                    question=question,
-                    protheus_data=protheus_data,
-                    intent=intent,
-                    context=context,
-                    history=history,
-                    image=image,
-                    allow_tools=allow_tools,
-                ):
-                    yield chunk
-                return
-            yield f"Erro na API do Gemini: {e.response.status_code} - {e.response.text}"
+            logger.warning("[Gemini Stream] Erro %s no Gemini (%s). Fallback para LLM Local (Ollama)...", e.response.status_code, e.response.text[:200])
+            from app.services.ollama_client import stream_llm
+            async for chunk in stream_llm(
+                question=question,
+                protheus_data=protheus_data,
+                intent=intent,
+                context=context,
+                history=history,
+                image=image,
+                allow_tools=allow_tools,
+            ):
+                yield chunk
             return
         except httpx.RequestError as e:
             logger.warning("[Gemini Stream] Erro de conexão com Gemini (%s). Fallback para LLM Local...", e)
@@ -503,8 +498,8 @@ async def stream_gemini(
         
         try:
             async with client.stream("POST", stream_url, json=payload) as stream_resp:
-                if stream_resp.status_code == 429:
-                    logger.warning("[Gemini Stream] 429 recebido em streamGenerateContent. Ativando fallback para LLM Local (Hetzner)...")
+                if stream_resp.status_code != 200:
+                    logger.warning("[Gemini Stream] Status %s recebido em streamGenerateContent. Ativando fallback para LLM Local (Ollama)...", stream_resp.status_code)
                     from app.services.ollama_client import stream_llm
                     async for chunk in stream_llm(
                         question=question,
