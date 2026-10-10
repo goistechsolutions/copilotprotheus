@@ -1,10 +1,11 @@
 """Power BI Embedded — embed token + dataset refresh."""
+from app.core.admin_security import require_admin
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 import httpx, os
 
-router = APIRouter(prefix="/api/powerbi", tags=["powerbi"])
+router = APIRouter(prefix="/api/powerbi", tags=["powerbi"], dependencies=[Depends(require_admin)])
 
 PBI_TENANT   = os.getenv("POWERBI_TENANT_ID", "")
 PBI_CLIENT   = os.getenv("POWERBI_CLIENT_ID", "")

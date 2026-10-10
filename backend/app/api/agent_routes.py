@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+import logging
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -10,8 +11,23 @@ from app.db.database import get_db
 from app.services.agent_service import AgentValidator
 from app.services.protheus_service import _execute_http_post_with_retry, get_tenant_config, build_protheus_headers
 from app.models.knowledge import Tenant, AgentQueryAudit, QueryUsageCounter
+from app.core.auth import require_current_user
+from app.core.admin_security import require_admin, authorize_admin_access
 
+logger = logging.getLogger("app.agent_routes")
+
+# Todas as rotas exigem autenticação; /usage usa credencial administrativa (ver abaixo).
 router = APIRouter(prefix="/agent", tags=["agent-execution"])
+
+
+def _enforce_token_tenant(current_user: dict, requested_tenant: str) -> str:
+    """O tenant efetivo vem do JWT; o enviado no corpo só pode coincidir com ele."""
+    token_tenant = str(current_user.get("tenant_id") or current_user.get("tenantId") or "").strip()
+    if not token_tenant:
+        raise HTTPException(status_code=401, detail="JWT sem tenant_id.")
+    if token_tenant.lower() != str(requested_tenant or "").strip().lower():
+        raise HTTPException(status_code=403, detail="O tenant do JWT não corresponde ao tenant da requisição.")
+    return token_tenant
 
 class TableUsed(BaseModel):
     table_id: str
@@ -39,7 +55,13 @@ class ExecuteQueryRequest(ValidateQueryRequest):
     final_sql: str
 
 @router.post("/validate-query")
-def validate_query(req: ValidateQueryRequest, db: Session = Depends(get_db)):
+def validate_query(
+    req: ValidateQueryRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_current_user),
+):
+    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
+    req.user_id = str(current_user.get("user_id") or "") or None
     validator = AgentValidator(db)
     result = validator.validate_query(req.dict())
     
@@ -60,16 +82,23 @@ def validate_query(req: ValidateQueryRequest, db: Session = Depends(get_db)):
         )
         db.add(audit)
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
-        
+        logger.exception("Falha ao gravar auditoria de validate-query (tenant=%s)", req.tenant_id)
+
     return result
 
 @router.post("/execute-query")
-async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db)):
-    # 1. Validate again (or trust validate endpoint, but safe to re-validate)
+async def execute_query(
+    req: ExecuteQueryRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_current_user),
+):
+    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
+    req.user_id = str(current_user.get("user_id") or "") or None
+    # 1. Valida o SQL que será de fato executado (final_sql) — nunca apenas o preview.
     validator = AgentValidator(db)
-    validation = validator.validate_query(req.dict())
+    validation = validator.validate_query({**req.dict(), "sql_preview": req.final_sql})
     
     if not validation["allowed"]:
         raise HTTPException(status_code=403, detail=validation["blocked_reason"])
@@ -149,11 +178,18 @@ async def execute_query(req: ExecuteQueryRequest, db: Session = Depends(get_db))
         except:
             db.rollback()
             
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Falha na execução QueryRest (tenant=%s)", req.tenant_id)
+        raise HTTPException(status_code=502, detail="Falha ao executar a consulta no Protheus.")
 
 @router.get("/usage/{tenant_id}/{period_ref}")
-def get_usage(tenant_id: str, period_ref: str, db: Session = Depends(get_db)):
+def get_usage(
+    tenant_id: str,
+    period_ref: str,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin),
+):
     # period_ref expected as 'YYYY-MM'
+    authorize_admin_access(admin, "audit:read", tenant_id)
     try:
         t_str = str(tenant_id or '').strip()
         tenant = db.query(Tenant).filter(Tenant.tenant_code == t_str).first()
@@ -186,7 +222,12 @@ class ValidateContextRequest(BaseModel):
     session_id: Optional[str] = None
 
 @router.post("/validate-context")
-async def proxy_validate_context(req: ValidateContextRequest, db: Session = Depends(get_db)):
+async def proxy_validate_context(
+    req: ValidateContextRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_current_user),
+):
+    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
     try:
         from app.services.protheus_queryrest_client import ProtheusQueryRestClient
         client = ProtheusQueryRestClient(
@@ -216,7 +257,12 @@ class AskAgentRequest(BaseModel):
     prompt: str
 
 @router.post("/ask")
-async def proxy_ask_agent(req: AskAgentRequest, db: Session = Depends(get_db)):
+async def proxy_ask_agent(
+    req: AskAgentRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_current_user),
+):
+    req.tenant_id = _enforce_token_tenant(current_user, req.tenant_id)
     try:
         config = get_tenant_config(req.tenant_id, req.environment_code)
         rest_url = config['rest_url'].strip()

@@ -1,10 +1,11 @@
 """Leonardo AI — geração de imagens para o Copilot Protheus."""
-from fastapi import APIRouter, HTTPException
+from app.core.admin_security import require_admin
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 import httpx, os, asyncio
 
-router = APIRouter(prefix="/api/leonardo", tags=["leonardo"])
+router = APIRouter(prefix="/api/leonardo", tags=["leonardo"], dependencies=[Depends(require_admin)])
 
 LEO_KEY  = os.getenv("LEONARDO_API_KEY", "")
 LEO_BASE = "https://cloud.leonardo.ai/api/rest/v1"
