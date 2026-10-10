@@ -76,6 +76,7 @@ async def queryrest_exec_tenant(
     if not environment_code or str(environment_code).strip().lower() in {"default", "none", "null"}:
         raise HTTPException(status_code=400, detail="environment_code é obrigatório para execução via QueryRest.")
 
+    query = (query or "").strip()
     logger.info("[QueryRest Tenant] Executando consulta tenant=%s ambiente=%s company_id=%s", tenant_id, environment_code, company_id)
     
     from app.services.protheus_queryrest_client import ProtheusQueryRestClient, ProtheusQueryRestError

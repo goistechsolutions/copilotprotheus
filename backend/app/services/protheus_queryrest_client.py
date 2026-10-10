@@ -149,6 +149,7 @@ class ProtheusQueryRestClient:
         method: str = "POST",
         payload: Mapping[str, Any] | None = None,
     ) -> Any:
+        query = (query or "").strip()
         connection = load_connection(self.db, self.tenant_code, self.environment_code)
         base_url = str(connection["base_rest_url"]).rstrip("/")
         url = f"{base_url}{QUERYREST_ENDPOINT}"

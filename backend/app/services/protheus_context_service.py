@@ -263,6 +263,23 @@ def auto_fix_protheus_dates(sql: str) -> str:
     sql = re.sub(r"\bYEAR\s*\(\s*([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{4})", r"\1 LIKE '\2%'", sql, flags=re.IGNORECASE)
     sql = re.sub(r"\bMONTH\s*\(\s*([A-Za-z0-9_.]+)\s*\)\s*=\s*(\d{1,2})", lambda m: f"SUBSTR({m.group(1)}, 5, 2) = '{m.group(2).zfill(2)}'", sql, flags=re.IGNORECASE)
 
+    # 5. Remove TO_CHAR em colunas nativas do Protheus (VARCHAR2(8) 'YYYYMMDD')
+    # Ex: TO_CHAR(SE1.E1_VENCTO, 'YYYYMMDD') -> SE1.E1_VENCTO
+    # Ex: TO_CHAR(SE2.E2_VENCTO, 'YYYYMMDD') -> SE2.E2_VENCTO
+    # Exceção: preserva TO_CHAR(SYSDATE...) e TO_CHAR(ADD_MONTHS...)
+    sql = re.sub(
+        r"\bTO_CHAR\s*\(\s*(?!(?:SYSDATE|ADD_MONTHS|CURRENT_DATE)\b)([A-Za-z0-9_.]+)\s*,\s*['\"]YYYYMMDD['\"]\s*\)",
+        r"\1",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    sql = re.sub(
+        r"\bTO_CHAR\s*\(\s*(?!(?:SYSDATE|ADD_MONTHS|CURRENT_DATE)\b)([A-Za-z0-9_.]+(?:_VENCTO|_EMISSAO|_DATA|VENCTO|EMISSAO))\s*(?:,\s*['\"][^'\"]*['\"])?\s*\)",
+        r"\1",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
     return sql
 
 
