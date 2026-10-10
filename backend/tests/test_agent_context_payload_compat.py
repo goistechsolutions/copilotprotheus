@@ -146,3 +146,29 @@ def test_resolve_context_routes_pedidos_de_venda_to_sigafat_and_never_mod_code_2
     assert context.module_code != "2"
 
 
+def test_resolve_context_falls_back_to_active_company_branch_when_branch_omitted(monkeypatch):
+    monkeypatch.setattr(resolver, "resolve_tenant_schema", lambda db, tenant_id: "rodol_prod")
+    monkeypatch.setattr(
+        resolver,
+        "require_tenant_module",
+        lambda db, schema_name, module: {
+            "mod_code": "6",
+            "mod_sigla": "SIGAFIN",
+            "mod_name": "Financeiro",
+        },
+    )
+
+    context = resolver.resolve_context(_DB(), {
+        "tenant_id": "rodol_prod",
+        "company_code": "01",
+        "branch": "",
+        "module": "SIGAFIN",
+    })
+
+    assert context.tenant_id == "rodol_prod"
+    assert context.company_code == "01"
+    assert context.branch == "0101"
+    assert context.module_sigla == "SIGAFIN"
+
+
+

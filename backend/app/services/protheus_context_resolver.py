@@ -235,14 +235,13 @@ def resolve_context(
     if not module or not str(module).strip():
         raise ValueError("module é obrigatório para execução no Protheus.")
 
-    branch = (
+    raw_branch = (
         raw_context.get("branch")
         or raw_context.get("filial")
         or payload.get("branch")
         or payload.get("filial")
     )
-    if not branch or not str(branch).strip():
-        raise ValueError("branch/filial é obrigatório para execução no Protheus.")
+    branch = str(raw_branch).strip() if raw_branch is not None and str(raw_branch).strip() else None
 
     company_id = raw_context.get("company_id") or payload.get("company_id")
     company_code = (
@@ -252,8 +251,6 @@ def resolve_context(
         or payload.get("company")
         or payload.get("empresa")
     )
-    if company_id in (None, "") and not company_code:
-        raise ValueError("company_id ou company_code é obrigatório para execução no Protheus.")
 
     company = resolve_company(
         db=db,
@@ -264,9 +261,17 @@ def resolve_context(
     )
 
     if not company:
+        if company_id in (None, "") and not company_code:
+            raise ValueError("company_id ou company_code é obrigatório para execução no Protheus.")
         raise ValueError(
             "Empresa/filial ativa não localizada para o contexto informado."
         )
+
+    if not branch:
+        branch = str(company.get("branch_code") or "").strip()
+
+    if not branch:
+        raise ValueError("branch/filial é obrigatório para execução no Protheus.")
 
     resolved_module = require_tenant_module(
         db,
