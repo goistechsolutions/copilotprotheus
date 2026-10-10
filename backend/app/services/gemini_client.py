@@ -15,6 +15,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
+def _get_gemini_config() -> tuple[str, str]:
+    api_key = os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", "") or GEMINI_API_KEY or ""
+    model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "") or GEMINI_MODEL or "gemini-2.5-flash"
+    return api_key, model
+
 # Definição das ferramentas no formato da Gemini API
 GEMINI_TOOLS = [
     {
@@ -142,8 +147,19 @@ async def ask_gemini(
     image: Optional[str] = None,
     allow_tools: bool = True,
 ) -> str:
-    if not GEMINI_API_KEY:
-        return "**Erro:** A variável `GEMINI_API_KEY` não está configurada no ambiente."
+    api_key, model = _get_gemini_config()
+    if not api_key:
+        logger.warning("[Gemini] GEMINI_API_KEY não configurada no ambiente. Ativando fallback automático para LLM Local (Ollama)...")
+        from app.services.ollama_client import ask_llm
+        return await ask_llm(
+            question=question,
+            protheus_data=protheus_data,
+            intent=intent,
+            context=context,
+            history=history,
+            image=image,
+            allow_tools=allow_tools,
+        )
 
     contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
     
@@ -171,7 +187,7 @@ async def ask_gemini(
     if generation_config:
         payload["generationConfig"] = generation_config
 
-    url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    url = f"{GEMINI_BASE_URL}/models/{model}:generateContent?key={api_key}"
     
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
@@ -323,8 +339,20 @@ async def stream_gemini(
     Versão streaming para a API da Gemini.
     Caso solicite ferramenta, resolve-a em background e faz stream da resposta final.
     """
-    if not GEMINI_API_KEY:
-        yield "**Erro:** A variável `GEMINI_API_KEY` não está configurada no ambiente."
+    api_key, model = _get_gemini_config()
+    if not api_key:
+        logger.warning("[Gemini Stream] GEMINI_API_KEY não configurada no ambiente. Ativando fallback automático para LLM Local (Ollama)...")
+        from app.services.ollama_client import stream_llm
+        async for chunk in stream_llm(
+            question=question,
+            protheus_data=protheus_data,
+            intent=intent,
+            context=context,
+            history=history,
+            image=image,
+            allow_tools=allow_tools,
+        ):
+            yield chunk
         return
 
     contents = _build_gemini_messages(question, protheus_data, intent, context, history, image)
@@ -355,7 +383,7 @@ async def stream_gemini(
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         # Primeiro, fazemos chamada síncrona/não-stream para verificar se chamará ferramentas
-        url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        url = f"{GEMINI_BASE_URL}/models/{model}:generateContent?key={api_key}"
         try:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
@@ -471,7 +499,7 @@ async def stream_gemini(
             payload["contents"] = contents
             
         # Agora sim, fazemos o stream da resposta final
-        stream_url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:streamGenerateContent?key={GEMINI_API_KEY}"
+        stream_url = f"{GEMINI_BASE_URL}/models/{model}:streamGenerateContent?key={api_key}"
         
         try:
             async with client.stream("POST", stream_url, json=payload) as stream_resp:
