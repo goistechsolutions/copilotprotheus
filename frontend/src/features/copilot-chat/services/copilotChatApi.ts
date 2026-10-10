@@ -235,10 +235,28 @@ export async function askCopilotQuery(
     'Analisar concentração de volume'
   ];
 
+  const dashboardPayload = response.presentation 
+    || response.dashboard 
+    || (Array.isArray(response.data) && response.data.length > 0 ? {
+        title: prompt,
+        originPrompt: prompt,
+        rows: response.data,
+        columns: response.result?.columns || Object.keys(response.data[0] || {}),
+        backend_kpis: response.result?.backend_kpis,
+        backend_insights: response.result?.backend_insights,
+      } : (Array.isArray(response.result?.rows) && response.result.rows.length > 0 ? {
+        title: prompt,
+        originPrompt: prompt,
+        rows: response.result.rows,
+        columns: response.result.columns || Object.keys(response.result.rows[0] || {}),
+        backend_kpis: response.result?.backend_kpis,
+        backend_insights: response.result?.backend_insights,
+      } : null));
+
   return {
     content: finalContent,
     suggestions: suggestions.slice(0, 3),
-    dashboard: response.presentation || null,
+    dashboard: dashboardPayload,
     analysisId: response.analysisId || response.analysis_id || null,
     dashboardId: response.dashboardId || response.dashboard_id || null
   };

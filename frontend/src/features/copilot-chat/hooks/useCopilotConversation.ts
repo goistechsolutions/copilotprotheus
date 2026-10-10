@@ -132,13 +132,14 @@ export function useCopilotConversation(context?: CopilotSessionContext) {
     try {
       const response = await askCopilotQuery(convId, text, context, controller.signal);
 
-      const dbRef = response.dashboardId ? {
-        id: response.dashboardId,
-        analysisId: response.analysisId,
+      const dbRef = response.dashboard ? {
+        ...(typeof response.dashboard === 'object' ? response.dashboard : {}),
+        id: response.dashboardId || response.dashboard?.id || 'dash-active',
+        analysisId: response.analysisId || response.dashboard?.analysisId || null,
         title: text,
         originPrompt: text,
         payload: response.dashboard
-      } : response.dashboard;
+      } : null;
 
       // 3. Substitui mensagem provisória pela resposta definitiva
       const assistantMsg: CopilotMessage = {

@@ -19,6 +19,7 @@ import { humanizeColumnName } from '../../services/presentationIntelligence';
 import { formatDateBR } from '../../utils/formatDate';
 import { useDashboardStore } from '../../stores/useDashboardStore';
 import { ExecutiveModeToggle } from './ExecutiveModeToggle';
+import { buildAdaptiveDashboard } from '../../services/adaptiveDashboardEngine';
 
 const SCREEN_CONFIGS = {
   time_series: {
@@ -106,15 +107,109 @@ export default function DashboardRenderer({ payload }) {
     executiveMode,
   } = useDashboardStore();
 
+  const normalizedPayload = useMemo(() => {
+    if (!payload) return null;
+
+    // Se já tiver a estrutura completa do Adaptive Dashboard Engine (com data.rows e data.kpis ou data.charts)
+    if (payload.data && Array.isArray(payload.data.rows) && payload.data.rows.length > 0 && (payload.data.kpis?.length > 0 || payload.data.charts?.length > 0)) {
+      return payload;
+    }
+
+    // 1. Desembrulhar possíveis invólucros (ex: payload.payload)
+    let candidate = payload;
+    while (candidate.payload && typeof candidate.payload === 'object' && !Array.isArray(candidate.payload)) {
+      candidate = candidate.payload;
+    }
+
+    // Se o candidato já tem a estrutura completa com data.rows
+    if (candidate.data && Array.isArray(candidate.data.rows) && candidate.data.rows.length > 0 && (candidate.data.kpis?.length > 0 || candidate.data.charts?.length > 0)) {
+      return {
+        ...candidate,
+        originPrompt: payload.originPrompt || candidate.originPrompt || payload.title || candidate.title || '',
+        id: payload.id || candidate.id,
+      };
+    }
+
+    // 2. Extrair rows e columns de qualquer formato suportado
+    const rawRows = Array.isArray(candidate.data?.rows) && candidate.data.rows.length > 0 ? candidate.data.rows
+      : Array.isArray(candidate.rows) && candidate.rows.length > 0 ? candidate.rows
+      : Array.isArray(candidate.records) && candidate.records.length > 0 ? candidate.records
+      : Array.isArray(candidate.items) && candidate.items.length > 0 ? candidate.items
+      : Array.isArray(candidate.result?.rows) && candidate.result.rows.length > 0 ? candidate.result.rows
+      : Array.isArray(candidate.result?.data) && candidate.result.data.length > 0 ? candidate.result.data
+      : Array.isArray(payload.data?.rows) && payload.data.rows.length > 0 ? payload.data.rows
+      : Array.isArray(payload.rows) && payload.rows.length > 0 ? payload.rows
+      : Array.isArray(payload.records) && payload.records.length > 0 ? payload.records
+      : Array.isArray(payload.result?.rows) && payload.result.rows.length > 0 ? payload.result.rows
+      : [];
+
+    if (rawRows.length === 0) {
+      return payload;
+    }
+
+    const rawColumns = (Array.isArray(candidate.data?.columns) && candidate.data.columns.length > 0) ? candidate.data.columns
+      : (Array.isArray(candidate.columns) && candidate.columns.length > 0) ? candidate.columns
+      : (Array.isArray(payload.columns) && payload.columns.length > 0) ? payload.columns
+      : (Array.isArray(candidate.result?.columns) && candidate.result.columns.length > 0) ? candidate.result.columns
+      : Object.keys(rawRows[0] || {});
+
+    const backendKpis = candidate.backend_kpis || candidate.backendKpis || payload.backend_kpis || candidate.result?.backend_kpis || null;
+    const backendInsights = candidate.backend_insights || candidate.backendInsights || payload.backend_insights || candidate.result?.backend_insights || null;
+    const semanticContext = candidate.metadata || payload.metadata || candidate.result?.metadata || {};
+    const originPrompt = payload.originPrompt || candidate.originPrompt || payload.title || candidate.title || '';
+
+    // 3. Executar o motor adaptativo para gerar KPIs, Gráficos e Insights profissionais
+    try {
+      const adapted = buildAdaptiveDashboard(
+        rawRows,
+        rawColumns,
+        semanticContext,
+        backendKpis,
+        backendInsights
+      );
+
+      if (adapted) {
+        return {
+          ...adapted,
+          id: payload.id || candidate.id,
+          analysisId: payload.analysisId || candidate.analysisId,
+          originPrompt: originPrompt || 'Consulta no Protheus',
+          title: payload.title || candidate.title || originPrompt,
+        };
+      }
+    } catch (e) {
+      console.warn('[DashboardRenderer] Falha ao rodar buildAdaptiveDashboard:', e);
+    }
+
+    // 4. Fallback se buildAdaptiveDashboard não conseguir classificar
+    return {
+      screenType: candidate.screenType || payload.screenType || 'ranking',
+      confidence: 0.9,
+      originPrompt: originPrompt || 'Consulta no Protheus',
+      id: payload.id || candidate.id,
+      data: {
+        rows: rawRows,
+        columns: rawColumns,
+        kpis: candidate.kpis || payload.kpis || [],
+        insights: candidate.insights || payload.insights || [],
+        charts: candidate.charts || payload.charts || [],
+        backendKpis,
+        backendInsights,
+      }
+    };
+  }, [payload]);
+
+  const activePayload = normalizedPayload || payload;
+
   const isFavorited = useMemo(() => {
-    if (!payload || !favorites) return false;
-    return favorites.some(f => f.originPrompt === payload.originPrompt || (f.id && f.id === payload.id));
-  }, [payload, favorites]);
+    if (!activePayload || !favorites) return false;
+    return favorites.some(f => f.originPrompt === activePayload.originPrompt || (f.id && f.id === activePayload.id));
+  }, [activePayload, favorites]);
 
   const handleExportExcel = () => {
-    if (!payload?.data?.rows || payload.data.rows.length === 0) return;
-    const rows = payload.data.rows;
-    const headers = payload.data.columns || Object.keys(rows[0]);
+    if (!activePayload?.data?.rows || activePayload.data.rows.length === 0) return;
+    const rows = activePayload.data.rows;
+    const headers = activePayload.data.columns || Object.keys(rows[0]);
     
     // Gerar CSV com separador ; e BOM UTF-8 para Excel abrir nativamente com acentos corretos
     const csvRows = [];
@@ -146,8 +241,8 @@ export default function DashboardRenderer({ payload }) {
   };
 
   const handleRefresh = () => {
-    if (payload?.originPrompt) {
-      triggerPrompt(payload.originPrompt);
+    if (activePayload?.originPrompt) {
+      triggerPrompt(activePayload.originPrompt);
     }
   };
 
@@ -163,14 +258,14 @@ export default function DashboardRenderer({ payload }) {
     const label = typeof itemOrVal === 'string' ? itemOrVal : (itemOrVal.label || itemOrVal.name || Object.values(itemOrVal)[0]);
     if (!label) return;
 
-    const screenType = payload?.screenType || '';
-    if (screenType.includes('seller') || payload?.originPrompt?.toLowerCase().includes('vendedor')) {
+    const screenType = activePayload?.screenType || '';
+    if (screenType.includes('seller') || activePayload?.originPrompt?.toLowerCase().includes('vendedor')) {
       triggerPrompt(`Clientes atendidos pelo vendedor ${label}`);
-    } else if (screenType.includes('customer') || payload?.originPrompt?.toLowerCase().includes('cliente')) {
+    } else if (screenType.includes('customer') || activePayload?.originPrompt?.toLowerCase().includes('cliente')) {
       triggerPrompt(`Produtos mais comprados pelo cliente ${label}`);
-    } else if (screenType.includes('product') || payload?.originPrompt?.toLowerCase().includes('produto')) {
+    } else if (screenType.includes('product') || activePayload?.originPrompt?.toLowerCase().includes('produto')) {
       triggerPrompt(`Clientes que compraram o produto ${label}`);
-    } else if (screenType.includes('receivable') || payload?.originPrompt?.toLowerCase().includes('vencid') || payload?.originPrompt?.toLowerCase().includes('inadimpl')) {
+    } else if (screenType.includes('receivable') || activePayload?.originPrompt?.toLowerCase().includes('vencid') || activePayload?.originPrompt?.toLowerCase().includes('inadimpl')) {
       triggerPrompt(`Títulos em aberto do cliente ${label}`);
     } else {
       triggerPrompt(`Detalhamento de ${label}`);
@@ -224,7 +319,7 @@ export default function DashboardRenderer({ payload }) {
   };
 
 
-  if (!payload) {
+  if (!activePayload) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-slate-400 p-8 text-center">
         <p className="mb-4">O Dashboard Engine aguarda instruções do Copiloto.</p>
@@ -232,7 +327,7 @@ export default function DashboardRenderer({ payload }) {
     );
   }
 
-  const { screenType, confidence, data } = payload;
+  const { screenType, confidence, data } = activePayload;
   const screenConfig = SCREEN_CONFIGS[screenType] || {
     title: screenType ? screenType.replace('-', ' ') : 'Dashboard Analytics',
     badge: 'Adaptativo',
@@ -269,7 +364,7 @@ export default function DashboardRenderer({ payload }) {
   const displayedKpis = executiveMode ? (data?.kpis || []).slice(0, 4) : (data?.kpis || []);
   const displayedInsights = executiveMode ? combinedInsights.slice(0, 3) : combinedInsights;
   const displayedCharts = executiveMode ? (data?.charts || []).slice(0, 1) : (data?.charts || []);
-  const suggestions = payload?.suggestions || data?.suggestions || [];
+  const suggestions = activePayload?.suggestions || data?.suggestions || [];
 
   if (!data || !data.rows || data.rows.length === 0) {
     return (
@@ -297,7 +392,7 @@ export default function DashboardRenderer({ payload }) {
         <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 min-w-0">
           <span className="font-semibold text-slate-500 dark:text-slate-400 shrink-0">Origem:</span>
           <span className="italic font-medium text-slate-800 dark:text-slate-200 truncate">
-            "{payload.originPrompt || 'Consulta no Protheus'}"
+            "{activePayload.originPrompt || 'Consulta no Protheus'}"
           </span>
         </div>
 
@@ -348,7 +443,7 @@ export default function DashboardRenderer({ payload }) {
 
           {/* Salvar Painel (Favoritos) */}
           <button
-            onClick={() => toggleFavorite(payload)}
+            onClick={() => toggleFavorite(activePayload)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-sm shrink-0 ${
               isFavorited
                 ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 font-semibold'
