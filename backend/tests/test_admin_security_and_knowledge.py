@@ -35,3 +35,18 @@ def test_safe_filename_rejects_empty_name():
         _safe_filename("")
 
     assert exc_info.value.status_code == 400
+
+
+def test_admin_login_with_env_credentials(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setenv("ADMIN_USER", "admin-test")
+    monkeypatch.setenv("ADMIN_PASSWORD", "correct-password")
+    monkeypatch.setenv("ADMIN_JWT_SECRET", "temporary-admin-secret-with-32-chars")
+
+    client = TestClient(app)
+    response = client.post("/api/admin/auth/login", json={"username": "admin-test", "password": "correct-password"})
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
