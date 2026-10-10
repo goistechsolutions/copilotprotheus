@@ -12,12 +12,12 @@ from app.services.ollama_client import _analyze_tool_results, get_system_prompt
 logger = logging.getLogger("app.gemini")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 def _get_gemini_config() -> tuple[str, str]:
     api_key = os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", "") or GEMINI_API_KEY or ""
-    model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "") or GEMINI_MODEL or "gemini-2.5-flash"
+    model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "") or GEMINI_MODEL or "gemini-3.8-flash"
     return api_key, model
 
 # Definição das ferramentas no formato da Gemini API

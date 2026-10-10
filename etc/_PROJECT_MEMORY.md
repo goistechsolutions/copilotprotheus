@@ -192,8 +192,8 @@ c:\projeto\copilotprotheus\
 | Variável | Descrição / Exemplo de Configuração |
 | :--- | :--- |
 | `LLM_BACKEND` | Define a engine ativa de LLM da plataforma: `gemini`, `openai` ou `ollama`. |
-| `GEMINI_API_KEY` | Chave de autenticação no Google AI Studio (Modelos 2.5 Flash / Pro). |
-| `GEMINI_MODEL` | Identificador do modelo do Google. Ex: `gemini-2.5-flash`. |
+| `GEMINI_API_KEY` | Chave de autenticação no Google AI Studio (Modelos 3.8 Flash / Pro). |
+| `GEMINI_MODEL` | Identificador do modelo do Google. Ex: `gemini-3.8-flash`. |
 | `OLLAMA_BASE_URL` | Rota para acesso ao LLM hospedado no host Linux fora do Docker: `http://host.docker.internal:11434`. |
 | `OLLAMA_MODEL` | Nome da LLM local na Hetzner (ex: `gemma3:1b`, `llama3:8b`). |
 | `DATABASE_URL` | String completa PostgreSQL com usuário: `postgresql://postgres:password_here@db:5432/copilot_protheus`. |
