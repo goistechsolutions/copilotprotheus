@@ -1671,7 +1671,7 @@ async def process_agent_task(task_id: str, payload: dict):
             "error": error_info["message"],
             **error_info,
         }
-        logger.error(
+        logger.exception(
             "agent_task_failed task_id=%s error_type=%s error_source=%s",
             task_id,
             type(e).__name__,

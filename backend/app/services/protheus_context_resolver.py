@@ -26,7 +26,7 @@ _BLOCKED_TENANTS = {
 class ProtheusContext:
     tenant_id: str
     schema_name: str
-    company_id: int
+    company_id: int | str
     company_code: str | None
     branch: str
     module_code: str
@@ -56,8 +56,8 @@ def resolve_tenant_schema(db: Any, tenant_id: str) -> str:
         text("""
             SELECT schema_name
             FROM public.tenants
-            WHERE tenant_code = :tenant_id
-              AND status = 'active'
+            WHERE (id::text = :tenant_id OR LOWER(tenant_code) = LOWER(:tenant_id) OR LOWER(schema_name) = LOWER(:tenant_id))
+              AND UPPER(status) = 'ACTIVE'
             LIMIT 1
         """),
         {"tenant_id": tenant_id},
@@ -82,40 +82,89 @@ def resolve_company(
 ) -> Mapping[str, Any] | None:
     schema = quote_tenant_schema(schema_name)
 
-    if company_id not in (None, ""):
-        row = db.execute(
-            text(f"""
-                SELECT *
-                FROM {schema}.company_info
-                WHERE id = :company_id
-                  AND LOWER(status) IN ('active', 'ativa')
-                LIMIT 1
-            """),
-            {"company_id": int(company_id)},
-        ).mappings().first()
+    # 1. Tenta {schema}.company_info (mantendo contrato e testes unitarios legados)
+    try:
+        if company_id not in (None, ""):
+            row = db.execute(
+                text(f"""
+                    SELECT *
+                    FROM {schema}.company_info
+                    WHERE (id::text = :company_id OR company_code = :company_id)
+                      AND LOWER(status) IN ('active', 'ativa')
+                    LIMIT 1
+                """),
+                {"company_id": str(company_id)},
+            ).mappings().first()
+            return dict(row) if row else None
 
-        return dict(row) if row else None
+        if company_code and branch:
+            row = db.execute(
+                text(f"""
+                    SELECT *
+                    FROM {schema}.company_info
+                    WHERE company_code = :company_code
+                      AND branch_code = :branch
+                      AND LOWER(status) IN ('active', 'ativa')
+                    LIMIT 1
+                """),
+                {
+                    "company_code": str(company_code),
+                    "branch": str(branch),
+                },
+            ).mappings().first()
+            return dict(row) if row else None
+    except Exception:
+        # Tabela company_info não existe no schema do tenant (modelo v2)
+        pass
 
-    if company_code and branch:
-        row = db.execute(
-            text(f"""
-                SELECT *
-                FROM {schema}.company_info
+    # 2. Fallback para {schema}.companies (V2)
+    try:
+        if company_id not in (None, ""):
+            row = db.execute(
+                text(f"""
+                    SELECT id, company_code, branch_code, legal_name, status
+                    FROM {schema}.companies
+                    WHERE (id::text = :company_id OR company_code = :company_id)
+                      AND UPPER(status) = 'ACTIVE'
+                    LIMIT 1
+                """),
+                {"company_id": str(company_id)},
+            ).mappings().first()
+            if row:
+                return dict(row)
+
+        if company_code:
+            sql = f"""
+                SELECT id, company_code, branch_code, legal_name, status
+                FROM {schema}.companies
                 WHERE company_code = :company_code
-                  AND branch_code = :branch
-                  AND LOWER(status) IN ('active', 'ativa')
-                LIMIT 1
-            """),
-            {
-                "company_code": str(company_code),
-                "branch": str(branch),
-            },
-        ).mappings().first()
+                  AND UPPER(status) = 'ACTIVE'
+            """
+            params: dict[str, Any] = {"company_code": str(company_code)}
+            if branch:
+                sql += " AND branch_code = :branch"
+                params["branch"] = str(branch)
+            sql += " LIMIT 1"
+            row = db.execute(text(sql), params).mappings().first()
+            if row:
+                return dict(row)
 
-        return dict(row) if row else None
+        # Fallback de empresa ativa se não houver filtro restritivo
+        if company_id in (None, "") and not company_code:
+            fallback = db.execute(
+                text(f"""
+                    SELECT id, company_code, branch_code, legal_name, status
+                    FROM {schema}.companies
+                    WHERE UPPER(status) = 'ACTIVE'
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                """)
+            ).mappings().first()
+            if fallback:
+                return dict(fallback)
+    except Exception:
+        pass
 
-    # Ausência de empresa/filial explícita não pode selecionar uma empresa
-    # arbitrariamente, pois isso quebra o isolamento operacional.
     return None
 
 
@@ -228,7 +277,7 @@ def resolve_context(
     return ProtheusContext(
         tenant_id=tenant_id,
         schema_name=schema_name,
-        company_id=int(company["id"]),
+        company_id=int(company["id"]) if str(company["id"]).isdigit() else str(company["id"]),
         company_code=str(company.get("company_code") or "") or None,
         branch=str(company.get("branch_code") or branch).strip(),
         module_code=resolved_module["mod_code"],

@@ -83,9 +83,23 @@ class ConversationUpdateRequest(BaseModel):
     context_state: Optional[Dict[str, Any]] = None
 
 class ConversationTurnRequest(BaseModel):
-    client_message_id: str
-    role: str = Field(..., description='user, assistant ou system')
-    message: str
+    client_message_id: Optional[str] = None
+    clientMessageId: Optional[str] = None
+    role: Optional[str] = 'user'
+    message: Optional[str] = None
+    content: Optional[str] = None
+    prompt: Optional[str] = None
+
+    company: Optional[str] = None
+    company_id: Optional[str] = None
+    branch: Optional[str] = None
+    environment: Optional[str] = None
+    environment_code: Optional[str] = None
+    module: Optional[str] = None
+    module_sigla: Optional[str] = None
+    execute: Optional[bool] = True
+    context: Optional[Dict[str, Any]] = None
+
     metadata: Optional[Dict[str, Any]] = None
     dashboard: Optional[Dict[str, Any]] = None
 
@@ -496,7 +510,7 @@ def delete_conversation(
 
 @router.post('/{conversation_id}/turn', status_code=status.HTTP_201_CREATED)
 @router.post('/{conversation_id}/turns', status_code=status.HTTP_201_CREATED)
-def conversation_turn(
+async def conversation_turn(
     conversation_id: str,
     req: ConversationTurnRequest,
     tenant_ctx: TenantContext = Depends(get_tenant_context),
@@ -506,39 +520,233 @@ def conversation_turn(
         schema_name = TenantSchemaResolver.resolve(db, tenant_ctx.tenant_id)
         repo = TenantConversationRepository(db, schema_name, tenant_ctx)
         
+        # Determina o identificador da mensagem do cliente
+        client_msg_id = req.client_message_id or req.clientMessageId or str(uuid.uuid4())
+        
         # Idempotência
-        existing_msg_id = repo.check_message_idempotency(conversation_id, req.client_message_id)
+        existing_msg_id = repo.check_message_idempotency(conversation_id, client_msg_id)
         if existing_msg_id:
-            return {'status': 'success', 'message_id': str(existing_msg_id), 'conversation_id': conversation_id, 'idempotent': True}
+            return {
+                'status': 'success',
+                'message_id': str(existing_msg_id),
+                'conversation_id': conversation_id,
+                'idempotent': True
+            }
             
         trace_id = str(uuid.uuid4())
-        msg_id = str(uuid.uuid4())
+        user_msg_id = str(uuid.uuid4())
         
         cmid_val = None
         try:
-            if req.client_message_id:
-                cmid_val = str(uuid.UUID(str(req.client_message_id)))
+            cmid_val = str(uuid.UUID(str(client_msg_id)))
         except Exception:
             cmid_val = None
 
         meta_json = req.metadata or {}
-        meta_json['client_message_id'] = req.client_message_id
+        meta_json['client_message_id'] = client_msg_id
         meta_json['trace_id'] = trace_id
         
+        user_text = (req.prompt or req.content or req.message or '').strip()
+        role = (req.role or 'user').lower()
+
+        # Insere a mensagem enviada (seja user ou assistant)
         db.execute(text(f'''
             INSERT INTO {repo._tbl("copilot_messages")} (id, conversation_id, role, content, client_message_id, metadata, created_at)
             VALUES (:id, :conversation_id, :role, :content, :cmid, :metadata, NOW())
         '''), {
-            'id': msg_id,
+            'id': user_msg_id,
             'conversation_id': conversation_id,
-            'role': req.role.lower(),
-            'content': req.message,
+            'role': role,
+            'content': user_text or 'Consulta iniciada',
             'cmid': cmid_val,
             'metadata': json.dumps(meta_json)
         })
         
         dash_id = None
-        if req.dashboard:
+        analysis_id = None
+        asst_msg_id = None
+        asst_content = None
+        suggestions = [
+            'Comparar com período anterior',
+            'Exibir detalhamento dos itens',
+            'Analisar concentração de volume'
+        ]
+        presentation = None
+        result_data = {}
+        raw_rows = []
+
+        # Caso seja uma pergunta do usuário e execute=True: aciona o motor do agente Protheus
+        if role == 'user' and req.execute and user_text:
+            from app.api.agent_sql_routes import process_agent_task, AGENT_TASKS
+
+            # Resolver environment_code
+            env_code = (
+                req.environment_code 
+                or req.environment 
+                or (req.context or {}).get("environment_code") 
+                or (req.context or {}).get("environment")
+            )
+            if not env_code or str(env_code).lower() in ("default", "none", "null", ""):
+                try:
+                    env_row = db.execute(text(f'SELECT environment_code FROM "{schema_name}".environments WHERE UPPER(status) = \'ACTIVE\' LIMIT 1')).scalar()
+                    env_code = env_row or "producao"
+                except Exception:
+                    env_code = "producao"
+
+            # Resolver company e branch
+            comp_val = (
+                req.company_id 
+                or req.company 
+                or (req.context or {}).get("company_id") 
+                or (req.context or {}).get("company")
+            )
+            branch_val = req.branch or (req.context or {}).get("branch") or (req.context or {}).get("filial")
+            if not branch_val or not comp_val:
+                try:
+                    comp_db_row = db.execute(text(f'SELECT id, company_code, branch_code FROM "{schema_name}".companies WHERE UPPER(status) = \'ACTIVE\' LIMIT 1')).mappings().first()
+                    if comp_db_row:
+                        comp_val = comp_val or str(comp_db_row["id"])
+                        branch_val = branch_val or comp_db_row["branch_code"]
+                except Exception:
+                    pass
+            branch_val = branch_val or "0101"
+
+            mod_val = (
+                req.module_sigla 
+                or req.module 
+                or (req.context or {}).get("module_sigla") 
+                or (req.context or {}).get("module") 
+                or "SIGAFAT"
+            )
+
+            task_id = str(uuid.uuid4())
+            agent_payload = {
+                "query": user_text,
+                "prompt": user_text,
+                "tenant_id": tenant_ctx.tenant_id,
+                "user_id": tenant_ctx.user_id,
+                "environment_code": env_code,
+                "company_id": comp_val,
+                "company": comp_val,
+                "branch": branch_val,
+                "module": mod_val,
+                "module_sigla": mod_val,
+                "execute": True,
+                "conversation_id": conversation_id,
+                "context": {
+                    "tenant_id": tenant_ctx.tenant_id,
+                    "environment_code": env_code,
+                    "company_id": comp_val,
+                    "branch": branch_val,
+                    "module": mod_val,
+                    **(req.context or {})
+                }
+            }
+
+            try:
+                await process_agent_task(task_id, agent_payload)
+                agent_res = AGENT_TASKS.get(task_id) or {}
+            except Exception as proc_err:
+                logger.error("Erro na execucao do turno pelo agente: %s", proc_err)
+                agent_res = {"status": "error", "message": f"Erro ao processar consulta no Protheus: {proc_err}"}
+
+            asst_content = (
+                agent_res.get("message") 
+                or agent_res.get("summary") 
+                or agent_res.get("error") 
+                or "Consulta processada com sucesso."
+            )
+            
+            analysis_id = str(uuid.uuid4())
+            dash_id = str(uuid.uuid4())
+            result_data = agent_res.get("result") or {}
+            raw_rows = agent_res.get("data") or result_data.get("rows") or []
+            columns = result_data.get("columns") or []
+            backend_kpis = result_data.get("backend_kpis")
+            backend_insights = result_data.get("backend_insights") or []
+
+            presentation = agent_res.get("presentation")
+            if not presentation and raw_rows:
+                presentation = {
+                    "id": dash_id,
+                    "analysisId": analysis_id,
+                    "title": user_text,
+                    "originPrompt": user_text,
+                    "rows": raw_rows,
+                    "columns": columns,
+                    "metadata": result_data.get("metadata", {}),
+                    "backend_kpis": backend_kpis,
+                    "backend_insights": backend_insights,
+                    "kpis": result_data.get("kpis", []),
+                    "summary": agent_res.get("summary") or asst_content
+                }
+
+            # Persiste copilot_analyses
+            try:
+                db.execute(text(f'''
+                    INSERT INTO {repo._tbl("copilot_analyses")}
+                        (id, conversation_id, source_message_id, dataset_type, row_count, metrics_json, validation_json, insights_json, presentation_json, trace_id, status, created_at, updated_at)
+                    VALUES
+                        (:id, :cid, :mid, :dst, :rc, :met, '{{}}'::jsonb, :ins, :pres, :tid, 'COMPLETED', NOW(), NOW())
+                '''), {
+                    'id': analysis_id,
+                    'cid': conversation_id,
+                    'mid': user_msg_id,
+                    'dst': 'queryrest',
+                    'rc': len(raw_rows) if isinstance(raw_rows, list) else 0,
+                    'met': json.dumps(backend_kpis) if backend_kpis else None,
+                    'ins': json.dumps(backend_insights) if backend_insights else '[]',
+                    'pres': json.dumps(presentation) if presentation else None,
+                    'tid': trace_id
+                })
+            except Exception as ana_err:
+                logger.warning("Falha ao persistir copilot_analyses: %s", ana_err)
+                analysis_id = None
+
+            # Persiste copilot_dashboards se houver apresentação
+            if presentation and analysis_id:
+                try:
+                    db.execute(text(f'''
+                        INSERT INTO {repo._tbl("copilot_dashboards")}
+                            (id, conversation_id, analysis_id, title, dashboard_type, config_json, is_favorite, created_at, updated_at)
+                        VALUES
+                            (:id, :cid, :aid, :title, 'ranking', :cfg, FALSE, NOW(), NOW())
+                    '''), {
+                        'id': dash_id,
+                        'cid': conversation_id,
+                        'aid': analysis_id,
+                        'title': user_text[:300],
+                        'cfg': json.dumps(presentation)
+                    })
+                except Exception as dash_err:
+                    logger.warning("Falha ao persistir copilot_dashboards: %s", dash_err)
+                    dash_id = None
+
+            # Persiste resposta do assistente
+            asst_msg_id = str(uuid.uuid4())
+            asst_meta = {
+                "trace_id": trace_id,
+                "analysis_id": analysis_id,
+                "dashboard_id": dash_id,
+                "dashboard": presentation,
+                "suggestions": [ins.get("title") for ins in backend_insights if isinstance(ins, dict) and ins.get("title")][:3]
+            }
+            db.execute(text(f'''
+                INSERT INTO {repo._tbl("copilot_messages")}
+                    (id, conversation_id, role, content, analysis_id, metadata, created_at)
+                VALUES
+                    (:id, :cid, 'assistant', :content, :aid, :meta, NOW())
+            '''), {
+                'id': asst_msg_id,
+                'cid': conversation_id,
+                'content': asst_content,
+                'aid': analysis_id,
+                'meta': json.dumps(asst_meta)
+            })
+            if asst_meta["suggestions"]:
+                suggestions = asst_meta["suggestions"]
+
+        elif req.dashboard:
             dash_id = str(uuid.uuid4())
             dash_data = req.dashboard.get('dashboard_json') or req.dashboard.get('config_json') or req.dashboard
             if not isinstance(dash_data, dict):
@@ -556,7 +764,7 @@ def conversation_turn(
                     '''), {
                         'id': analysis_id,
                         'cid': conversation_id,
-                        'mid': msg_id,
+                        'mid': user_msg_id,
                         'tid': trace_id
                     })
                 except Exception as ana_err:
@@ -590,12 +798,47 @@ def conversation_turn(
 
         db.commit()
 
+        now_iso = datetime.now(timezone.utc).isoformat()
         return {
             'status': 'success',
             'traceId': trace_id,
-            'message_id': msg_id,
+            'conversationId': conversation_id,
+            'content': asst_content or user_text,
+            'message': asst_content or user_text,
+            'summary': asst_content or user_text,
+            'suggestions': suggestions,
+            'presentation': presentation,
+            'dashboard': presentation,
+            'analysisId': analysis_id,
+            'analysis_id': analysis_id,
+            'dashboardId': dash_id,
             'dashboard_id': dash_id,
-            'conversation_id': conversation_id
+            'message_id': asst_msg_id or user_msg_id,
+            'result': result_data,
+            'records': len(raw_rows),
+            'data': raw_rows,
+            'userMessage': {
+                'id': user_msg_id,
+                'role': 'user',
+                'content': user_text,
+                'createdAt': now_iso
+            },
+            'assistantMessage': {
+                'id': asst_msg_id or user_msg_id,
+                'role': 'assistant',
+                'content': asst_content or user_text,
+                'analysisId': analysis_id,
+                'createdAt': now_iso
+            } if asst_msg_id else None,
+            'analysis': {
+                'analysisId': analysis_id,
+                'conversationId': conversation_id,
+                'sourceMessageId': user_msg_id,
+                'assistantMessageId': asst_msg_id,
+                'presentation': presentation,
+                'insights': suggestions,
+                'version': 1
+            } if analysis_id else None
         }
     except Exception as exc:
         db.rollback()
