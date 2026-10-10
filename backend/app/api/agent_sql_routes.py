@@ -39,6 +39,7 @@ from app.services.protheus_context_service import (
     auto_fix_delet_filters,
     auto_fix_oracle_limit,
     auto_fix_protheus_dates,
+    auto_fix_protheus_joins,
     build_protheus_context,
     mask_sensitive_rows,
     validate_query_security,
@@ -408,9 +409,12 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
             "- Se a tabela SA3 constar no snapshot autorizado acima, faça OBRIGATORIAMENTE INNER JOIN com SA3010 SA3 via SF2.F2_VEND1 = SA3.A3_COD (ou SC5.C5_VEND1 = SA3.A3_COD quando usar pedidos SC5) com SA3.D_E_L_E_T_ <> '*' para projetar SA3.A3_NOME AS VENDEDOR e SF2.F2_VEND1 AS COD_VENDEDOR. "
             "- É terminantemente PROIBIDO retornar apenas o código F2_VEND1 como VENDEDOR sem o nome SA3.A3_NOME quando SA3 estiver no snapshot. Os gráficos, rankings e tabelas executivas de vendas exigem os nomes reais dos vendedores. "
             "- Se a tabela SA3 NÃO constar no snapshot autorizado acima, projete SF2.F2_VEND1 AS COD_VENDEDOR. "
+            "- Para faturamento acumulado por vendedor ou totais de vendas gerais, consulte APENAS a tabela SF2 (SF2010 SF2), sem JOIN com SD2, pois SF2 já contém o total faturado F2_VALBRUT e a quantidade de documentos F2_DOC. NUNCA faça JOIN com SD2 a menos que o usuário peça especificamente produtos, itens ou TES. "
+            "- NUNCA USE OS CAMPOS INEXISTENTES F2_NUM NEM D2_NUM! Os campos reais do Protheus são F2_DOC e D2_DOC. Se precisar fazer JOIN com SD2, a sintaxe OBRIGATÓRIA é: SF2.F2_FILIAL = SD2.D2_FILIAL AND SF2.F2_DOC = SD2.D2_DOC AND SF2.F2_SERIE = SD2.D2_SERIE. "
+            "- FILTRO TEMPORAL (MÊS ATUAL): Se a pergunta pedir 'mês atual' ou período atual, filtre SEMPRE: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM') ou SF2.F2_EMISSAO LIKE TO_CHAR(SYSDATE, 'YYYYMM') || '%'. NUNCA use EXTRACT. "
             "- Selecione OBRIGATORIAMENTE a quantidade de pedidos faturados: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS. "
             "- Selecione o valor total faturado: SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
-            "- Agrupe pelas dimensões selecionadas (incluindo SA3.A3_NOME no GROUP BY) e ordene por VALOR_TOTAL DESC. "
+            "- Agrupe pelas dimensões selecionadas (incluindo SA3.A3_NOME no GROUP BY quando SA3 estiver no snapshot) e ordene por VALOR_TOTAL DESC. "
             "2. ANÁLISE POR CLIENTE: "
             "- Se SA1 constar no snapshot, faça INNER JOIN com SA1010 SA1 para trazer SA1.A1_NOME AS CLIENTE. Se não constar, projete apenas SF2.F2_CLIENTE AS CLIENTE. "
             "- Selecione COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS e SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
@@ -581,6 +585,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     clean_sql = auto_fix_oracle_limit(clean_sql)
     clean_sql = auto_fix_delet_filters(clean_sql)
     clean_sql = auto_fix_protheus_dates(clean_sql)
+    clean_sql = auto_fix_protheus_joins(clean_sql)
     return clean_sql
 
 
@@ -1381,6 +1386,7 @@ async def process_agent_task(task_id: str, payload: dict):
             sql = auto_fix_oracle_limit(sql)
             sql = auto_fix_delet_filters(sql)
             sql = auto_fix_protheus_dates(sql)
+            sql = auto_fix_protheus_joins(sql)
             try:
                 validate_query_security(sql=sql, **validation_args)
             except HTTPException as exc:
@@ -1461,6 +1467,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 sql = auto_fix_oracle_limit(sql)
                 sql = auto_fix_delet_filters(sql)
                 sql = auto_fix_protheus_dates(sql)
+                sql = auto_fix_protheus_joins(sql)
                 _validate_query_domain(str(prompt), sql, domain=query_domain)
                 validate_query_security(sql=sql, **validation_args)
 
@@ -1948,13 +1955,14 @@ async def ask_v2_status(task_id: str, current_user: dict = Depends(require_curre
     # Mantém os campos error/error_code e também summary por compatibilidade com clientes antigos,
     # além dos novos campos diagnósticos da BKL (intent, missing_tables, etc.).
     task_status = AGENT_TASKS[task_id].get("status")
-    if task_status in ("error", "forbidden", "validation_failed"):
+    if task_status in ("error", "forbidden", "validation_failed", "execution_failed"):
         task = AGENT_TASKS[task_id]
         return {
-            "status": "error" if task_status in ("error", "forbidden", "validation_failed") else task_status,
-            "error": task.get("error") or task.get("summary"),
-            "error_code": task.get("error_code") or ("ENTITLEMENT_DENIED" if task_status == "forbidden" else "TASK_ERROR"),
-            "summary": task.get("error") or task.get("summary"),
+            "status": "error",
+            "error": task.get("error") or task.get("message") or task.get("summary"),
+            "error_code": task.get("error_code") or ("ENTITLEMENT_DENIED" if task_status == "forbidden" else ("PROTHEUS_QUERYREST_ERROR" if task_status == "execution_failed" else "TASK_ERROR")),
+            "message": task.get("message") or task.get("error") or task.get("summary"),
+            "summary": task.get("summary") or task.get("message") or task.get("error"),
             "conversation_id": task.get("conversation_id"),
             "correlation_id": task.get("correlation_id"),
             "intent": task.get("intent"),

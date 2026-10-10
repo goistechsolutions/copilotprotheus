@@ -266,6 +266,88 @@ def auto_fix_protheus_dates(sql: str) -> str:
     return sql
 
 
+def auto_fix_protheus_joins(sql: str) -> str:
+    """
+    Corrige alucinações comuns em JOINs e filtros de tabelas do Protheus:
+    1. SF2 com SD2: substitui F2_NUM = D2_NUM pela chave correta F2_FILIAL=D2_FILIAL AND F2_DOC=D2_DOC AND F2_SERIE=D2_SERIE.
+    2. SF1 com SD1: substitui F1_NUM = D1_NUM pela chave correta F1_FILIAL=D1_FILIAL AND F1_DOC=D1_DOC AND F1_SERIE=D1_SERIE AND F1_FORNECE=D1_FORNECE AND F1_LOJA=D1_LOJA.
+    3. TES SF4: D2_TES = F4_TES -> D2_TES = F4_CODIGO.
+    4. Qualifica campos de itens no WHERE (como D2_TES -> SD2.D2_TES) quando a tabela tiver alias.
+    """
+    if not sql or not isinstance(sql, str):
+        return sql
+
+    # 1. SF2 e SD2: F2_NUM = D2_NUM ou D2_NUM = F2_NUM
+    def _replace_f2_sd2_num(m):
+        sf2 = m.group(1) or "SF2"
+        sd2 = m.group(2) or "SD2"
+        return f"{sf2}.F2_FILIAL = {sd2}.D2_FILIAL AND {sf2}.F2_DOC = {sd2}.D2_DOC AND {sf2}.F2_SERIE = {sd2}.D2_SERIE"
+
+    sql = re.sub(
+        r"\b(?:([A-Za-z0-9_]+)\.)?F2_NUM\s*=\s*(?:([A-Za-z0-9_]+)\.)?D2_NUM\b",
+        _replace_f2_sd2_num,
+        sql,
+        flags=re.IGNORECASE,
+    )
+    def _replace_sd2_f2_num(m):
+        sd2 = m.group(1) or "SD2"
+        sf2 = m.group(2) or "SF2"
+        return f"{sf2}.F2_FILIAL = {sd2}.D2_FILIAL AND {sf2}.F2_DOC = {sd2}.D2_DOC AND {sf2}.F2_SERIE = {sd2}.D2_SERIE"
+
+    sql = re.sub(
+        r"\b(?:([A-Za-z0-9_]+)\.)?D2_NUM\s*=\s*(?:([A-Za-z0-9_]+)\.)?F2_NUM\b",
+        _replace_sd2_f2_num,
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 2. SF1 e SD1: F1_NUM = D1_NUM ou D1_NUM = F1_NUM
+    def _replace_f1_sd1_num(m):
+        sf1 = m.group(1) or "SF1"
+        sd1 = m.group(2) or "SD1"
+        return f"{sf1}.F1_FILIAL = {sd1}.D1_FILIAL AND {sf1}.F1_DOC = {sd1}.D1_DOC AND {sf1}.F1_SERIE = {sd1}.D1_SERIE AND {sf1}.F1_FORNECE = {sd1}.D1_FORNECE AND {sf1}.F1_LOJA = {sd1}.D1_LOJA"
+
+    sql = re.sub(
+        r"\b(?:([A-Za-z0-9_]+)\.)?F1_NUM\s*=\s*(?:([A-Za-z0-9_]+)\.)?D1_NUM\b",
+        _replace_f1_sd1_num,
+        sql,
+        flags=re.IGNORECASE,
+    )
+    def _replace_sd1_f1_num(m):
+        sd1 = m.group(1) or "SD1"
+        sf1 = m.group(2) or "SF1"
+        return f"{sf1}.F1_FILIAL = {sd1}.D1_FILIAL AND {sf1}.F1_DOC = {sd1}.D1_DOC AND {sf1}.F1_SERIE = {sd1}.D1_SERIE AND {sf1}.F1_FORNECE = {sd1}.D1_FORNECE AND {sf1}.F1_LOJA = {sd1}.D1_LOJA"
+
+    sql = re.sub(
+        r"\b(?:([A-Za-z0-9_]+)\.)?D1_NUM\s*=\s*(?:([A-Za-z0-9_]+)\.)?F1_NUM\b",
+        _replace_sd1_f1_num,
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 3. SF4 (TES): D2_TES = F4_TES -> D2_TES = F4_CODIGO
+    sql = re.sub(
+        r"\b(?:([A-Za-z0-9_]+)\.)?F4_TES\b",
+        lambda m: f"{m.group(1) or 'SF4'}.F4_CODIGO",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 4. Qualifica campos de itens comuns no WHERE se houver alias para a tabela
+    table_refs = _extract_table_refs(sql)
+    for table_name, alias in table_refs:
+        prefix = alias if alias else table_name
+        clean_tbl = table_name[:3] if len(table_name) >= 3 else table_name
+        if clean_tbl == "SD2":
+            sql = re.sub(r"(?<![A-Za-z0-9_.])\b(D2_TES|D2_TOTAL|D2_QUANT|D2_COD|D2_PEDIDO)\b", rf"{prefix}.\1", sql)
+        elif clean_tbl == "SD1":
+            sql = re.sub(r"(?<![A-Za-z0-9_.])\b(D1_TES|D1_TOTAL|D1_QUANT|D1_COD|D1_PEDIDO)\b", rf"{prefix}.\1", sql)
+        elif clean_tbl == "SF2":
+            sql = re.sub(r"(?<![A-Za-z0-9_.])\b(F2_DOC|F2_SERIE|F2_EMISSAO|F2_VALBRUT|F2_VEND1|F2_CLIENTE|F2_LOJA)\b", rf"{prefix}.\1", sql)
+
+    return sql
+
+
 
 def _split_select_items(body: str) -> list[str]:
     """Separa itens do SELECT sem quebrar funções, CASE ou literais."""
@@ -377,14 +459,25 @@ def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
 
 
 def _extract_filter_field_refs(sql: str) -> set[tuple[str | None, str]]:
+    bodies: list[str] = []
     match = re.search(
         r"\b(?:WHERE|GROUP\s+BY|ORDER\s+BY|HAVING)\b(?P<body>.*?)(?:\bFETCH\b|\bOFFSET\b|$)",
         sql,
         re.IGNORECASE | re.DOTALL,
     )
-    if not match:
+    if match:
+        bodies.append(match.group("body"))
+
+    for on_match in re.finditer(
+        r"\bON\b(?P<on_body>.*?)(?:\b(?:INNER|LEFT|RIGHT|FULL|CROSS)?\s*JOIN\b|\bWHERE\b|\bGROUP\s+BY\b|\bORDER\s+BY\b|$)",
+        sql,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        bodies.append(on_match.group("on_body"))
+
+    if not bodies:
         return set()
-    body = re.sub(r"'(?:''|[^'])*'", " ", match.group("body"))
+
     fields: set[tuple[str | None, str]] = set()
     qualified_pattern = re.compile(
         r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\b",
@@ -394,12 +487,14 @@ def _extract_filter_field_refs(sql: str) -> set[tuple[str | None, str]]:
         r"(?<!\.)\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b(?!\s*\()",
         re.IGNORECASE,
     )
-    for qualifier, field_name in qualified_pattern.findall(body):
-        fields.add((qualifier.upper(), field_name.upper()))
-    for field_name in unqualified_pattern.findall(body):
-        token = field_name.upper()
-        if token not in _SQL_WORDS:
-            fields.add((None, token))
+    for raw_body in bodies:
+        body = re.sub(r"'(?:''|[^'])*'", " ", raw_body)
+        for qualifier, field_name in qualified_pattern.findall(body):
+            fields.add((qualifier.upper(), field_name.upper()))
+        for field_name in unqualified_pattern.findall(body):
+            token = field_name.upper()
+            if token not in _SQL_WORDS:
+                fields.add((None, token))
     return fields
 
 
