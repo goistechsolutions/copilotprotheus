@@ -57,8 +57,8 @@ def test_resolve_company_preserves_tenant_schema_scope():
 
     resolve_company(db, "rodol_prod", 7, None, None)
 
-    assert 'FROM "rodol_prod".company_info' in db.sql
-    assert "FROM public.company_info" not in db.sql
+    assert 'FROM "rodol_prod".companies' in db.sql
+    assert "FROM public." not in db.sql
 
 
 def test_ask_v2_status_preserves_specific_context_error():

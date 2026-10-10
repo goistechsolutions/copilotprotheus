@@ -82,42 +82,7 @@ def resolve_company(
 ) -> Mapping[str, Any] | None:
     schema = quote_tenant_schema(schema_name)
 
-    # 1. Tenta {schema}.company_info (mantendo contrato e testes unitarios legados)
-    try:
-        if company_id not in (None, ""):
-            row = db.execute(
-                text(f"""
-                    SELECT *
-                    FROM {schema}.company_info
-                    WHERE (id::text = :company_id OR company_code = :company_id)
-                      AND LOWER(status) IN ('active', 'ativa')
-                    LIMIT 1
-                """),
-                {"company_id": str(company_id)},
-            ).mappings().first()
-            return dict(row) if row else None
-
-        if company_code and branch:
-            row = db.execute(
-                text(f"""
-                    SELECT *
-                    FROM {schema}.company_info
-                    WHERE company_code = :company_code
-                      AND branch_code = :branch
-                      AND LOWER(status) IN ('active', 'ativa')
-                    LIMIT 1
-                """),
-                {
-                    "company_code": str(company_code),
-                    "branch": str(branch),
-                },
-            ).mappings().first()
-            return dict(row) if row else None
-    except Exception:
-        # Tabela company_info não existe no schema do tenant (modelo v2)
-        pass
-
-    # 2. Fallback para {schema}.companies (V2)
+    # 1. Consulta canônica na tabela oficial V2 ({schema}.companies)
     try:
         if company_id not in (None, ""):
             row = db.execute(
@@ -125,7 +90,7 @@ def resolve_company(
                     SELECT id, company_code, branch_code, legal_name, status
                     FROM {schema}.companies
                     WHERE (id::text = :company_id OR company_code = :company_id)
-                      AND UPPER(status) = 'ACTIVE'
+                      AND LOWER(status) IN ('active', 'ativa')
                     LIMIT 1
                 """),
                 {"company_id": str(company_id)},
@@ -138,7 +103,7 @@ def resolve_company(
                 SELECT id, company_code, branch_code, legal_name, status
                 FROM {schema}.companies
                 WHERE company_code = :company_code
-                  AND UPPER(status) = 'ACTIVE'
+                  AND LOWER(status) IN ('active', 'ativa')
             """
             params: dict[str, Any] = {"company_code": str(company_code)}
             if branch:
@@ -155,7 +120,7 @@ def resolve_company(
                 text(f"""
                     SELECT id, company_code, branch_code, legal_name, status
                     FROM {schema}.companies
-                    WHERE UPPER(status) = 'ACTIVE'
+                    WHERE LOWER(status) IN ('active', 'ativa')
                     ORDER BY created_at ASC
                     LIMIT 1
                 """)
@@ -163,7 +128,51 @@ def resolve_company(
             if fallback:
                 return dict(fallback)
     except Exception:
-        pass
+        if hasattr(db, "rollback"):
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    # 2. Fallback legado apenas se companies não existir no schema
+    try:
+        if company_id not in (None, ""):
+            row = db.execute(
+                text(f"""
+                    SELECT *
+                    FROM {schema}.company_info
+                    WHERE (id::text = :company_id OR company_code = :company_id)
+                      AND LOWER(status) IN ('active', 'ativa')
+                    LIMIT 1
+                """),
+                {"company_id": str(company_id)},
+            ).mappings().first()
+            if row:
+                return dict(row)
+
+        if company_code and branch:
+            row = db.execute(
+                text(f"""
+                    SELECT *
+                    FROM {schema}.company_info
+                    WHERE company_code = :company_code
+                      AND branch_code = :branch
+                      AND LOWER(status) IN ('active', 'ativa')
+                    LIMIT 1
+                """),
+                {
+                    "company_code": str(company_code),
+                    "branch": str(branch),
+                },
+            ).mappings().first()
+            if row:
+                return dict(row)
+    except Exception:
+        if hasattr(db, "rollback"):
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
     return None
 

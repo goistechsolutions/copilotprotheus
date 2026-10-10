@@ -127,20 +127,21 @@ def resolve_global_module(
         domain_row = db.execute(
             text("""
                 SELECT
-                    bdm.mod_code,
-                    bdm.mod_sigla,
+                    pm.id AS mod_code,
+                    pm.module_sigla AS mod_sigla,
                     COALESCE(pm.description, bdm.domain_code) AS mod_name
                 FROM public.business_domain_modules bdm
-                LEFT JOIN public.protheus_modules_master pm ON pm.id = bdm.mod_code
+                JOIN public.protheus_modules_master pm ON pm.id = bdm.module_id
                 WHERE (
                     UPPER(TRIM(bdm.domain_code)) = :token
-                    OR UPPER(TRIM(bdm.mod_sigla)) = :token
+                    OR UPPER(TRIM(pm.module_sigla)) = :token
                     OR (:sigla IS NOT NULL AND (
                         UPPER(TRIM(bdm.domain_code)) = :sigla
-                        OR UPPER(TRIM(bdm.mod_sigla)) = :sigla
+                        OR UPPER(TRIM(pm.module_sigla)) = :sigla
                     ))
                 )
                   AND bdm.is_primary = TRUE
+                  AND pm.active = TRUE
                 LIMIT 1
             """),
             {"token": token, "sigla": canonical_sigla},
@@ -151,7 +152,11 @@ def resolve_global_module(
                 res["mod_code"] = 5
             return res
     except Exception:
-        pass
+        if hasattr(db, "rollback"):
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
     if canonical_sigla:
         try:
@@ -229,28 +234,85 @@ def resolve_tenant_module_codes(
         return []
 
     schema = quote_tenant_schema(tenant_schema)
+    mod_id = int(resolved["mod_code"]) if str(resolved["mod_code"]).isdigit() else None
 
-    rows = db.execute(
-        text(f"""
-            SELECT DISTINCT
-                module_code::text AS module_code
-            FROM {schema}.dictionary_tables
-            WHERE tenant_id = :tenant_id
-              AND (
-                    module_code::text = CAST(:mod_code AS text)
-                 OR module_code::text = CAST(:mod_sigla AS text)
-                 OR module_code::text = '0' || CAST(:mod_code AS text)
-              )
-              AND COALESCE(active_flag, TRUE) = TRUE
-        """),
-        {
-            "tenant_id": str(tenant_schema),
-            "mod_code": str(resolved["mod_code"]),
-            "mod_sigla": str(resolved["mod_sigla"]),
-        },
-    ).mappings().all()
+    # 1. Consulta canônica em {schema}.tenant_modules (V2)
+    if mod_id is not None:
+        try:
+            row = db.execute(
+                text(f"""
+                    SELECT module_id::text AS module_code
+                    FROM {schema}.tenant_modules
+                    WHERE module_id = :mod_id
+                      AND enabled = TRUE
+                    LIMIT 1
+                """),
+                {"mod_id": mod_id},
+            ).mappings().first()
+            if row:
+                return [str(row["module_code"])]
+        except Exception:
+            if hasattr(db, "rollback"):
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
-    return [str(row["module_code"]) for row in rows]
+    # 2. Consulta em public.tenant_module_contracts (V2)
+    if mod_id is not None:
+        try:
+            row = db.execute(
+                text("""
+                    SELECT tmc.module_id::text AS module_code
+                    FROM public.tenant_module_contracts tmc
+                    JOIN public.tenants t ON t.id = tmc.tenant_id
+                    WHERE (t.schema_name = :schema_name OR LOWER(t.tenant_code) = LOWER(:schema_name))
+                      AND tmc.module_id = :mod_id
+                      AND UPPER(tmc.status) = 'ACTIVE'
+                    LIMIT 1
+                """),
+                {"schema_name": tenant_schema, "mod_id": mod_id},
+            ).mappings().first()
+            if row:
+                return [str(row["module_code"])]
+        except Exception:
+            if hasattr(db, "rollback"):
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
+    # 3. Fallback legado em dictionary_tables (se a tabela possuir module_code)
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT DISTINCT
+                    module_code::text AS module_code
+                FROM {schema}.dictionary_tables
+                WHERE tenant_id = :tenant_id
+                  AND (
+                        module_code::text = CAST(:mod_code AS text)
+                     OR module_code::text = CAST(:mod_sigla AS text)
+                     OR module_code::text = '0' || CAST(:mod_code AS text)
+                  )
+                  AND COALESCE(active_flag, TRUE) = TRUE
+            """),
+            {
+                "tenant_id": str(tenant_schema),
+                "mod_code": str(resolved["mod_code"]),
+                "mod_sigla": str(resolved["mod_sigla"]),
+            },
+        ).mappings().all()
+        if rows:
+            return [str(row["module_code"]) for row in rows]
+    except Exception:
+        if hasattr(db, "rollback"):
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    return []
 
 
 
