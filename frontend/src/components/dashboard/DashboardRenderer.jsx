@@ -87,6 +87,11 @@ const SCREEN_CONFIGS = {
     badge: 'Pagar',
     description: 'Acompanhamento de títulos a pagar em aberto por fornecedor e vencimento.',
   },
+  inactive_customers: {
+    title: 'Recuperação de Clientes Inativos',
+    badge: 'Reativação Comercial',
+    description: 'Relação de clientes sem compras recentes com dados de contato, localização e histórico para estratégia comercial de recuperação.',
+  },
   'financial-dashboard': {
 
     title: 'Painel Executivo Financeiro',

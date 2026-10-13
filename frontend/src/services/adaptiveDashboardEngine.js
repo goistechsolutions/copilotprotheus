@@ -18,6 +18,7 @@ import {
   buildReceivablesDashboard,
   buildTimeSeriesDashboard,
   buildInventoryDashboard,
+  buildInactiveCustomersDashboard,
 } from './dashboardFactory.js';
 
 // ─── 1. Padrões Semânticos Protheus ──────────────────────────────────────────
@@ -397,10 +398,15 @@ export function classifyDataset(schema, context = {}) {
   const hasE1 = colNames.some(c => c.startsWith('E1_'));
   const hasE2 = colNames.some(c => c.startsWith('E2_'));
   const hasCustomerCol = colNames.some(c => c.includes('CLIENT') || c.includes('NOMCLI') || c.includes('DEVEDOR'));
-  const hasSupplierCol = colNames.some(c => c.includes('FORNEC') || c.includes('FORN'));
+  const isInactiveQuery = /inativ|sem compra|sem atividade|sem moviment|sem comprar|ultima venda|última venda|reativ|recupera|churn|mais de \d+ dias/i.test(prompt)
+    || colNames.some(c => c.includes('INATIV') || c.includes('DIAS_SEM') || c.includes('ULTIMA_COMPRA') || c.includes('ULTIMA_VENDA'));
 
-  const isPayable = /pagar|pagam|despesa|forneced|e2_/i.test(prompt) || hasE2 || (hasSupplierCol && !hasCustomerCol);
-  const isReceivable = /receb|client|devedor|e1_/i.test(prompt) || hasE1 || hasCustomerCol || (!isPayable && isOverdue) || /titulo|boleto|duplicata/i.test(prompt);
+  if (isInactiveQuery && (schema?.hasCustomer || hasCustomerCol || schema?.hasSeller)) {
+    return { datasetType: 'inactive_customers', confidence: 0.98 };
+  }
+
+  const isPayable = (/pagar|pagam|despesa|forneced|e2_/i.test(prompt) || hasE2 || (hasSupplierCol && !hasCustomerCol)) && !isInactiveQuery;
+  const isReceivable = (/receb|a receber|contas a receber|duplicata a receber|recebimento|devedor|e1_/i.test(prompt) || hasE1 || (!isPayable && isOverdue) || /titulo|boleto|duplicata/i.test(prompt)) && !isInactiveQuery;
 
   // Classificações financeiras especializadas
   if (isOverdue) {
@@ -1443,6 +1449,26 @@ export function buildExecutiveChatSummary(context) {
     return parts.join('\n');
   }
 
+  // Se for clientes inativos / recuperação comercial
+  if (context.screenType === 'inactive_customers') {
+    const totalKpi = data.kpis?.find(k => k.type === 'sum');
+    const countKpi = data.kpis?.find(k => k.type === 'count');
+    const fmtTotal = totalKpi ? `R$ ${totalKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00';
+    const leaderBar = data.charts?.find(c => c.chartType === 'bar' || c.chartType === 'donut');
+    const leaderItem = leaderBar?.data?.[0];
+    const parts = ['**Estratégia de Recuperação de Clientes Inativos:**\n'];
+    parts.push(`• **Clientes a Recuperar:** ${countKpi?.value || count} clientes sem compras há mais de 90 dias`);
+    parts.push(`• **Faturamento Histórico em Risco:** ${fmtTotal}`);
+    if (leaderItem) {
+      const leaderVal = typeof leaderItem.value === 'number'
+        ? `R$ ${leaderItem.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : leaderItem.value;
+      parts.push(`• **Principal Cliente a Contatar:** ${leaderItem.label} (${leaderVal})`);
+    }
+    parts.push(`• **Ação Recomendada:** Utilizar dados de contato e localização para abordagem comercial prioritária.`);
+    return parts.join('\n');
+  }
+
   // Se for contas a receber em aberto
   if (context.screenType === 'accounts_receivable') {
     const totalKpi = data.kpis?.find(k => k.type === 'sum');
@@ -1552,6 +1578,19 @@ export function buildAdaptiveDashboard(rows, columns = [], semanticContext = {},
       kpis = recDashboard.kpis;
       charts = recDashboard.charts;
       insights = buildInsights(schema, rows, backendKpis);
+    } else if (screenType === 'inactive_customers') {
+      const entityCol = (schema.hasCustomer && schema.semantics.customer) || schema.dimensions?.[0] || columns[0];
+      const inactDashboard = buildInactiveCustomersDashboard({
+        schema,
+        rows,
+        measure: schema.primaryMeasure || 'VALOR_TOTAL',
+        entityCol,
+        backendKpis,
+        backendInsights,
+      });
+      kpis = inactDashboard.kpis;
+      charts = inactDashboard.charts;
+      insights = inactDashboard.insights?.length ? inactDashboard.insights : buildInsights(schema, rows, backendKpis);
     } else if (screenType === 'time_series' && backendKpis?.trend) {
       const tsDashboard = buildTimeSeriesDashboard({
         schema,

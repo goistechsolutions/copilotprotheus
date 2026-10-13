@@ -364,6 +364,12 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
     # Detecção de clientes inativos ou histórico de vendas
     is_client_query = any(re.search(r"CLIENTE|A1_NOME|NOME_CLIENTE", str(c).upper()) for c in columns)
     if is_client_query:
+        is_inactive = any(re.search(r"ULTIMA_COMPRA|ULTIMA_VENDA|INATIV|DIAS_SEM", str(c).upper()) for c in columns)
+        if is_inactive:
+            return (
+                f"Foram identificados **{len(rows)} clientes inativos** para estratégia de recuperação comercial, "
+                f"totalizando **{_format_brl_str(total)}** em faturamento histórico a recuperar."
+            )
         return (
             f"Foram identificados **{len(rows)} clientes** na análise, "
             f"totalizando **{_format_brl_str(total)}** com média de **{_format_brl_str(average)}** por cliente."
@@ -475,15 +481,26 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
             "2. ANÁLISE POR CLIENTE / CARTEIRA DE CLIENTES / CLIENTES SEM COMPRAS / ÚLTIMA VENDA: "
             "- REGRA OBRIGATÓRIA (DESCONSIDERAR A1_ULTCOM): NUNCA utilize o campo SA1.A1_ULTCOM. DESCONSIDERE TOTALMENTE O CAMPO A1_ULTCOM EM TODAS AS CONSULTAS. "
             "- A DATA REAL DA ÚLTIMA COMPRA DEVE SER OBTIDA EXCLUSIVAMENTE POR: MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA na tabela SF2010 SF2! "
-            "- Se a pergunta for sobre clientes sem compras há mais de X dias (ex: 90 dias), última venda com mais de X dias ou clientes inativos: "
-            "  * Consulte a tabela SF2010 SF2 com INNER JOIN SA1010 SA1 via SF2.F2_CLIENTE = SA1.A1_COD com SA1.D_E_L_E_T_ <> '*'. "
+            "- Se a pergunta for sobre clientes sem compras há mais de X dias (ex: 90 dias), última venda com mais de X dias, clientes inativos ou reativação de clientes: "
+            "  * Consulte a tabela SF2010 SF2 com INNER JOIN SA1010 SA1 via SF2.F2_CLIENTE = SA1.A1_COD com SA1.D_E_L_E_T_ <> '*. "
             "  * Filtre no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'. "
             "  * Se houver vendedor: filtre SF2.F2_VEND1 = 'codigo' (ex: '01'). "
             "  * NUNCA adicione filtro de mês atual (SF2.F2_EMISSAO LIKE 'YYYYMM%') em consultas de clientes inativos ou sem compras há X dias! "
-            "  * Agrupe no GROUP BY: SF2.F2_CLIENTE, SA1.A1_NOME, SF2.F2_VEND1. "
+            "  * Projete as informações essenciais para a estratégia de reativação comercial: "
+            "    SF2.F2_CLIENTE AS COD_CLIENTE, "
+            "    SA1.A1_NOME AS CLIENTE, "
+            "    SA1.A1_NREDUZ AS NOME_FANTASIA, "
+            "    SA1.A1_MUN AS MUNICIPIO, "
+            "    SA1.A1_EST AS UF, "
+            "    SF2.F2_VEND1 AS COD_VENDEDOR, "
+            "    MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA, "
+            "    ROUND(SYSDATE - TO_DATE(MAX(SF2.F2_EMISSAO), 'YYYYMMDD')) AS DIAS_INATIVO, "
+            "    COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, "
+            "    SUM(SF2.F2_VALBRUT) AS VALOR_HISTORICO "
+            "  * Agrupe OBRIGATORIAMENTE no GROUP BY todas as colunas não agregadas: "
+            "    SF2.F2_CLIENTE, SA1.A1_NOME, SA1.A1_NREDUZ, SA1.A1_MUN, SA1.A1_EST, SF2.F2_VEND1. "
             "  * Filtre a inatividade no HAVING: use OBRIGATORIAMENTE HAVING MAX(SF2.F2_EMISSAO) <= TO_CHAR(SYSDATE - 90, 'YYYYMMDD'). "
-            "  * Projete OBRIGATORIAMENTE: SF2.F2_CLIENTE AS COD_CLIENTE, SA1.A1_NOME AS CLIENTE, SF2.F2_VEND1 AS COD_VENDEDOR, COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL e MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA. "
-            "  * Ordene por DATA_ULTIMA_COMPRA ASC. "
+            "  * Ordene por DIAS_INATIVO DESC. "
             "- Se a pergunta for sobre faturamento por cliente ou ranking de vendas por cliente: "
             "  * Se SA1 constar para compras/vendas gerais: faça INNER JOIN de SF2 com SA1010 SA1 para trazer SA1.A1_NOME AS CLIENTE. Se não constar, projete apenas SF2.F2_CLIENTE AS CLIENTE. "
             "  * Selecione COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS e SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
