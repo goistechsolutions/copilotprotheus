@@ -49,17 +49,7 @@ export function ChatHeader({ onOpenMenu, onClose, isConnected = true }: ChatHead
         <button
           type="button"
           onClick={onOpenMenu}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--cprot-text-sub)',
-            cursor: 'pointer',
-            padding: '6px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          className="copilot-chat-header-btn"
           title="Menu Secundário"
           aria-label="Abrir menu secundário"
         >
@@ -69,17 +59,7 @@ export function ChatHeader({ onOpenMenu, onClose, isConnected = true }: ChatHead
         <button
           type="button"
           onClick={handleClose}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--cprot-text-sub)',
-            cursor: 'pointer',
-            padding: '6px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          className="copilot-chat-header-btn"
           title="Fechar Copilot"
           aria-label="Fechar Copilot"
         >

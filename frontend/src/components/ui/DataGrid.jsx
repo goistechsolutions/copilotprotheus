@@ -35,19 +35,19 @@ export function DataGrid({ data, columns, pagination = true, onRowClick }) {
   };
 
   return (
-    <div className="flex flex-col w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex flex-col w-full overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--surface-1)] shadow-[var(--shadow-sm)]">
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm text-left">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          <thead className="bg-[var(--surface-2)] text-xs uppercase font-semibold text-[var(--text-muted)] border-b border-[var(--border-default)]">
             <tr>
               {columns?.map((col, idx) => (
-                <th key={idx} className="px-6 py-4 font-semibold tracking-wider whitespace-nowrap">
+                <th key={idx} className="px-6 py-3.5 tracking-wider whitespace-nowrap">
                   {col.header || col.accessorKey}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          <tbody className="divide-y divide-[var(--border-default)]">
             {currentData.length > 0 ? (
               currentData.map((row, rowIdx) => (
                 <tr 
@@ -55,12 +55,12 @@ export function DataGrid({ data, columns, pagination = true, onRowClick }) {
                   onClick={() => onRowClick && onRowClick(row)}
                   className={`transition-colors ${
                     onRowClick 
-                      ? 'cursor-pointer hover:bg-blue-50/60 dark:hover:bg-blue-900/20' 
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                      ? 'cursor-pointer hover:bg-blue-500/10' 
+                      : 'hover:bg-[var(--surface-hover)]'
                   }`}
                 >
                   {columns?.map((col, colIdx) => (
-                    <td key={colIdx} className="px-6 py-3.5 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                    <td key={colIdx} className="px-6 py-3 text-[var(--text-primary)] whitespace-nowrap">
                       {formatCell(row, col)}
                     </td>
                   ))}
@@ -68,7 +68,7 @@ export function DataGrid({ data, columns, pagination = true, onRowClick }) {
               ))
             ) : (
               <tr>
-                <td colSpan={columns?.length || 1} className="px-6 py-12 text-center text-slate-500">
+                <td colSpan={columns?.length || 1} className="px-6 py-12 text-center text-[var(--text-muted)]">
                   Nenhum registro encontrado.
                 </td>
               </tr>
@@ -78,22 +78,22 @@ export function DataGrid({ data, columns, pagination = true, onRowClick }) {
       </div>
 
       {pagination && totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900/50">
-          <span className="text-sm text-slate-500">
+        <div className="flex items-center justify-between border-t border-[var(--border-default)] bg-[var(--surface-2)] px-6 py-3">
+          <span className="text-xs sm:text-sm text-[var(--text-secondary)]">
             Página {page + 1} de {totalPages}
           </span>
           <div className="flex gap-2">
             <button
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] p-1.5 text-[var(--text-secondary)] disabled:opacity-40 hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
             >
               <ChevronLeft size={16} />
             </button>
             <button
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] p-1.5 text-[var(--text-secondary)] disabled:opacity-40 hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
             >
               <ChevronRight size={16} />
             </button>

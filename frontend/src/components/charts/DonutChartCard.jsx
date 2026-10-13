@@ -27,9 +27,17 @@ export function DonutChartCard({ title, data, dataKey = 'value', nameKey = 'name
               ))}
             </Pie>
             <Tooltip 
-              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              contentStyle={{ 
+                backgroundColor: 'var(--surface-1)', 
+                color: 'var(--text-primary)', 
+                borderRadius: '12px', 
+                border: '1px solid var(--border-default)', 
+                boxShadow: 'var(--shadow-md)',
+                fontSize: '12px'
+              }}
+              itemStyle={{ color: 'var(--text-primary)' }}
             />
-            <Legend verticalAlign="bottom" height={36} iconType="circle" />
+            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', color: 'var(--text-secondary)' }} />
           </PieChart>
         </ResponsiveContainer>
       </CardContent>

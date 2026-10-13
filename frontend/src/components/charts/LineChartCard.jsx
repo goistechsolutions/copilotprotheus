@@ -33,16 +33,25 @@ export function LineChartCard({
       <CardContent className="flex-1 min-h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey={xAxisKey} axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatYAxis} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-default)" opacity={0.7} />
+            <XAxis dataKey={xAxisKey} axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} dy={10} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickFormatter={formatYAxis} />
             <Tooltip 
               formatter={(value, name) => [formatValue(value), name]}
               labelFormatter={(label, payload) => {
                 const item = payload?.[0]?.payload;
                 return item?.fullLabel || item?.fullDate || label;
               }}
-              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              contentStyle={{ 
+                backgroundColor: 'var(--surface-1)', 
+                color: 'var(--text-primary)', 
+                borderRadius: '12px', 
+                border: '1px solid var(--border-default)', 
+                boxShadow: 'var(--shadow-md)',
+                fontSize: '12px'
+              }}
+              itemStyle={{ color: 'var(--text-primary)' }}
+              labelStyle={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}
             />
             {referenceLineY !== undefined && (
               <ReferenceLine y={referenceLineY} stroke="#94a3b8" strokeDasharray="3 3" label={{ value: 'Equilíbrio (R$ 0)', fill: '#94a3b8', fontSize: 11, position: 'insideTopRight' }} />

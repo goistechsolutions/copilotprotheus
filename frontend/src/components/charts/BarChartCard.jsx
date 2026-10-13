@@ -28,35 +28,44 @@ export function BarChartCard({
 
   return (
     <Card className="flex flex-col h-full">
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle>{title || 'Gráfico de Barras'}</CardTitle>
         {onBarClick && (
-          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md">
-            Clique na barra para drill-down
+          <span className="text-[10px] text-blue-500 font-medium bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">
+            Clique para drill-down
           </span>
         )}
       </CardHeader>
       <CardContent className="flex-1 min-h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-default)" opacity={0.7} />
             <XAxis 
               dataKey={xAxisKey} 
               axisLine={false} 
               tickLine={false} 
-              tick={{ fill: '#64748b', fontSize: 11 }} 
+              tick={{ fill: 'var(--text-muted)', fontSize: 11 }} 
               dy={10} 
               tickFormatter={(val) => (typeof val === 'string' && val.length > 14 ? `${val.slice(0, 12)}…` : val)}
             />
-            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatYAxis} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickFormatter={formatYAxis} />
             <Tooltip 
-              cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }}
+              cursor={{ fill: 'var(--surface-2)', opacity: 0.5 }}
               formatter={(value, name) => [formatValue(value), name]}
               labelFormatter={(label, payload) => {
                 const item = payload?.[0]?.payload;
                 return item?.name || item?.label || label;
               }}
-              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              contentStyle={{ 
+                backgroundColor: 'var(--surface-1)', 
+                color: 'var(--text-primary)', 
+                borderRadius: '12px', 
+                border: '1px solid var(--border-default)', 
+                boxShadow: 'var(--shadow-md)',
+                fontSize: '12px'
+              }}
+              itemStyle={{ color: 'var(--text-primary)' }}
+              labelStyle={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}
             />
             {series && series.length > 0 ? (
               <>

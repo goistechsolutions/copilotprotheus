@@ -48,6 +48,42 @@
   z-index: 20;
 }
 
+.copilot-chat-header-btn {
+  background: transparent;
+  border: none;
+  color: var(--cprot-text-sub);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.copilot-chat-header-btn:hover {
+  background-color: var(--cprot-surface-hover);
+  color: var(--cprot-text-main);
+}
+
+/* Chat Workspace Structure */
+.copilot-chat-workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background-color: var(--cprot-bg);
+}
+
+.copilot-chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+
 /* 80% Conversa */
 .copilot-chat-conversation {
   flex: 1;

@@ -59,8 +59,7 @@ export function CopilotChat({
       />
 
       {/* WORKSPACE (Sidebar + Conversation Area) */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        
+      <div className="copilot-chat-workspace">
         <Sidebar 
           currentConversationId={currentConversationId}
           onSelectConversation={selectConversation}
@@ -68,7 +67,7 @@ export function CopilotChat({
           context={context}
         />
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        <div className="copilot-chat-main">
           {/* Conversation Area */}
           <Conversation
             messages={messages}
