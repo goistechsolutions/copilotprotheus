@@ -482,7 +482,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 
     user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}{tenant_rules_instruction} (Lembre-se: campos de data Protheus são VARCHAR2(8) 'YYYYMMDD', NUNCA use EXTRACT/YEAR/MONTH, use SUBSTR ou LIKE)."
 
-    backend_mode = getattr(settings, "llm_backend", "gemini")
+    backend_mode = getattr(settings, "llm_backend", "ollama")
     raw_response = ""
 
     # 1. Se configurado explicitamente para Ollama / local

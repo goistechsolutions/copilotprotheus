@@ -106,7 +106,7 @@ class AssistantService:
         timeout_sec = 75
         status_audit = "S"
         answer = ""
-        backend_used = getattr(settings, "llm_backend", "gemini")
+        backend_used = getattr(settings, "llm_backend", "ollama")
 
         if str(backend_used).lower() == "openai":
             from app.services.openai_client import ask_openai
@@ -285,7 +285,7 @@ class AssistantService:
 
         # 5. Generate Answer via stream generator
         full_answer = []
-        target_backend = getattr(settings, "llm_backend", "gemini").lower()
+        target_backend = getattr(settings, "llm_backend", "ollama").lower()
         if target_backend == "openai":
             from app.services.openai_client import stream_openai
             try:
@@ -303,7 +303,7 @@ class AssistantService:
                 error_message = "Erro ao se conectar na IA local via OpenAI Compatible API."
                 full_answer.append(error_message)
                 yield error_message
-        elif target_backend == "ollama":
+        elif target_backend in ("ollama", "local"):
             from app.services.ollama_client import stream_llm
             try:
                 async for token in stream_llm(

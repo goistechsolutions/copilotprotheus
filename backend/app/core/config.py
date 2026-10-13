@@ -24,7 +24,7 @@ class Settings(BaseModel):
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
     gemini_api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    llm_backend: str = os.getenv("LLM_BACKEND", "gemini")
+    llm_backend: str = os.getenv("LLM_BACKEND", "ollama")
     jwt_secret: str = get_required_secret("JWT_SECRET")
     jwt_expiry_seconds: int = int(os.getenv("JWT_EXPIRY_SECONDS", "3600"))
     database_url: str = os.getenv("DATABASE_URL", "")
