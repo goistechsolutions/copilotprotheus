@@ -22,6 +22,7 @@ class Settings(BaseModel):
     ollama_url: str = os.getenv("OLLAMA_URL") or os.getenv("OLLAMA_BASE_URL") or "http://host.docker.internal:11434"
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL") or "http://host.docker.internal:11434"
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+    ollama_auxiliary_model: str = os.getenv("OLLAMA_AUXILIARY_MODEL", "qwen2.5-coder:3b")
     gemini_api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     llm_backend: str = os.getenv("LLM_BACKEND", "ollama")

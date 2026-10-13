@@ -27,7 +27,7 @@ class IngestionService:
         import httpx
         import os
         url = os.getenv("OLLAMA_URL", "")
-        model = os.getenv("OLLAMA_MODEL", "llama3")
+        model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
         try:
             with httpx.Client(timeout=60.0) as client:
                 res = client.post(f"{url}/api/embeddings", json={"model": model, "prompt": text})

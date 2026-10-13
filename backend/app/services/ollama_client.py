@@ -22,11 +22,15 @@ def get_ollama_url() -> str:
     )
 
 def get_ollama_model() -> str:
-    return os.getenv("OLLAMA_MODEL") or getattr(settings, "ollama_model", "") or "qwen3:8b"
+    return os.getenv("OLLAMA_MODEL") or getattr(settings, "ollama_model", "") or "qwen2.5-coder:7b"
 
-OLLAMA_URL   = get_ollama_url()
-OLLAMA_MODEL = get_ollama_model()
-LLM_BACKEND  = settings.llm_backend
+def get_ollama_auxiliary_model() -> str:
+    return os.getenv("OLLAMA_AUXILIARY_MODEL") or getattr(settings, "ollama_auxiliary_model", "") or "qwen2.5-coder:3b"
+
+OLLAMA_URL             = get_ollama_url()
+OLLAMA_MODEL           = get_ollama_model()
+OLLAMA_AUXILIARY_MODEL = get_ollama_auxiliary_model()
+LLM_BACKEND            = settings.llm_backend
 
 def _detect_docker_gateway() -> Optional[str]:
     """Detecta o IP do gateway da bridge do Docker lendo a tabela de rotas do Linux."""
@@ -77,12 +81,16 @@ async def _get_active_ollama_url() -> str:
 
 async def _resolve_ollama_model(base_url: str) -> str:
     configured = get_ollama_model()
+    auxiliary = get_ollama_auxiliary_model()
     try:
         available = await _check_ollama_models(base_url)
         if not available:
             return configured
         if configured in available:
             return configured
+        if auxiliary in available:
+            logger.info("[Ollama] Modelo principal '%s' não encontrado. Usando auxiliar '%s'.", configured, auxiliary)
+            return auxiliary
         base_name = configured.split(":")[0].lower()
         for m in available:
             if base_name in m.lower():
@@ -409,10 +417,14 @@ async def _call_ollama(
             if resp.status_code == 500:
                 models = await _check_ollama_models(ollama_url)
                 lighter = None
-                for m in models:
-                    if m != ollama_model and any(light in m.lower() for light in ["qwen", "3b", "2b", "1b", "mini", "llama3.2"]):
-                        lighter = m
-                        break
+                auxiliary = get_ollama_auxiliary_model()
+                if auxiliary in models and auxiliary != ollama_model:
+                    lighter = auxiliary
+                else:
+                    for m in models:
+                        if m != ollama_model and any(light in m.lower() for light in ["3b", "2.5-coder:3b", "qwen", "2b", "1b", "mini", "llama3.2"]):
+                            lighter = m
+                            break
                 if lighter:
                     logger.info("[Ollama] Fallback automático para modelo leve com menor consumo de RAM: %s", lighter)
                     payload["model"] = lighter
@@ -594,10 +606,14 @@ async def stream_llm(
                 if resp.status_code == 500:
                     models = await _check_ollama_models(ollama_url)
                     lighter = None
-                    for m in models:
-                        if m != ollama_model and any(light in m.lower() for light in ["qwen", "3b", "2b", "1b", "mini", "llama3.2"]):
-                            lighter = m
-                            break
+                    auxiliary = get_ollama_auxiliary_model()
+                    if auxiliary in models and auxiliary != ollama_model:
+                        lighter = auxiliary
+                    else:
+                        for m in models:
+                            if m != ollama_model and any(light in m.lower() for light in ["3b", "2.5-coder:3b", "qwen", "2b", "1b", "mini", "llama3.2"]):
+                                lighter = m
+                                break
                     if lighter:
                         ollama_model = lighter
                         payload["model"] = lighter
