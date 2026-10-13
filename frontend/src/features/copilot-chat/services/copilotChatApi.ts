@@ -235,23 +235,36 @@ export async function askCopilotQuery(
     'Analisar concentração de volume'
   ];
 
-  const dashboardPayload = response.presentation 
-    || response.dashboard 
-    || (Array.isArray(response.data) && response.data.length > 0 ? {
-        title: prompt,
-        originPrompt: prompt,
-        rows: response.data,
-        columns: response.result?.columns || Object.keys(response.data[0] || {}),
-        backend_kpis: response.result?.backend_kpis,
-        backend_insights: response.result?.backend_insights,
-      } : (Array.isArray(response.result?.rows) && response.result.rows.length > 0 ? {
-        title: prompt,
-        originPrompt: prompt,
-        rows: response.result.rows,
-        columns: response.result.columns || Object.keys(response.result.rows[0] || {}),
-        backend_kpis: response.result?.backend_kpis,
-        backend_insights: response.result?.backend_insights,
-      } : null));
+  let dashboardPayload = response.presentation || response.dashboard || null;
+  if (!dashboardPayload && ((Array.isArray(response.data) && response.data.length > 0) || (Array.isArray(response.result?.rows) && response.result.rows.length > 0))) {
+    const rawRows = (Array.isArray(response.data) && response.data.length > 0) ? response.data : response.result.rows;
+    dashboardPayload = {
+      title: prompt,
+      originPrompt: prompt,
+      rows: rawRows,
+      columns: response.result?.columns || Object.keys(rawRows[0] || {}),
+      kpis: response.result?.kpis || [],
+      series: response.result?.series || [],
+      applied_filters: response.result?.applied_filters || [],
+      action_buttons: response.result?.action_buttons || [],
+      backend_kpis: response.result?.backend_kpis,
+      backend_insights: response.result?.backend_insights,
+      summary: response.result?.summary || finalContent,
+    };
+  } else if (dashboardPayload) {
+    if (!dashboardPayload.kpis && response.result?.kpis) {
+      dashboardPayload.kpis = response.result.kpis;
+    }
+    if (!dashboardPayload.series && response.result?.series) {
+      dashboardPayload.series = response.result.series;
+    }
+    if (!dashboardPayload.backend_kpis && response.result?.backend_kpis) {
+      dashboardPayload.backend_kpis = response.result.backend_kpis;
+    }
+    if (!dashboardPayload.backend_insights && response.result?.backend_insights) {
+      dashboardPayload.backend_insights = response.result.backend_insights;
+    }
+  }
 
   return {
     content: finalContent,
