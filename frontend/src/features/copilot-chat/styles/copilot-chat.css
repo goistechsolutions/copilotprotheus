@@ -239,21 +239,27 @@ html:not(.dark) {
 .cprot-exec-card {
   width: 100%;
   overflow: hidden;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--cprot-border, rgba(255, 255, 255, 0.08));
   border-radius: 16px;
-  background: #FFFFFF;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-  color: #1E293B;
+  background: var(--cprot-surface, #121E35);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18), inset 0 1px rgba(255, 255, 255, 0.035);
+  color: var(--cprot-text-main, #FFFFFF);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.cprot-exec-body {
+  padding: 16px 16px 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
-  box-sizing: border-box;
 }
 
 /* 1. Texto Executivo da Resposta */
 .cprot-exec-content {
-  color: #334155;
+  color: var(--cprot-text-main, #FFFFFF);
   font-size: 14px;
   line-height: 1.65;
   word-break: break-word;
@@ -265,7 +271,7 @@ html:not(.dark) {
   margin-bottom: 0;
 }
 .cprot-exec-content strong {
-  color: #0F172A;
+  color: #FFFFFF;
   font-weight: 700;
 }
 
@@ -295,12 +301,12 @@ html:not(.dark) {
 }
 
 .cprot-kpi-green {
-  background: #F0FDF4;
-  border: 1px solid #DCFCE7;
+  background: rgba(0, 210, 106, 0.08);
+  border: 1px solid rgba(0, 210, 106, 0.25);
 }
 .cprot-kpi-blue {
-  background: #EFF6FF;
-  border: 1px solid #DBEAFE;
+  background: rgba(79, 124, 255, 0.08);
+  border: 1px solid rgba(79, 124, 255, 0.25);
 }
 
 .cprot-kpi-header {
@@ -316,14 +322,14 @@ html:not(.dark) {
 }
 
 .cprot-kpi-green .cprot-kpi-label {
-  color: #15803D;
+  color: #4ADE80;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .cprot-kpi-blue .cprot-kpi-label {
-  color: #1D4ED8;
+  color: #93C5FD;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -331,13 +337,13 @@ html:not(.dark) {
 }
 
 .cprot-kpi-green .cprot-kpi-value {
-  color: #166534;
+  color: #FFFFFF;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.25;
 }
 .cprot-kpi-blue .cprot-kpi-value {
-  color: #1E40AF;
+  color: #FFFFFF;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.25;
@@ -345,9 +351,9 @@ html:not(.dark) {
 
 /* 3. Gráfico Interativo Inline */
 .cprot-chart-container {
-  border: 1px solid #F1F5F9;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.02);
   padding: 14px 12px 8px;
   display: flex;
   flex-direction: column;
@@ -358,7 +364,7 @@ html:not(.dark) {
 .cprot-chart-title {
   font-size: 13px;
   font-weight: 700;
-  color: #0F172A;
+  color: #FFFFFF;
   margin-left: 4px;
 }
 
@@ -367,14 +373,14 @@ html:not(.dark) {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #475569;
+  color: #94A3B8;
   margin-left: 4px;
   margin-bottom: 4px;
 }
 .cprot-chart-legend-box {
   width: 14px;
   height: 9px;
-  background-color: #2563EB;
+  background-color: #3B82F6;
   border-radius: 2px;
 }
 .cprot-chart-legend-text {
@@ -398,7 +404,7 @@ html:not(.dark) {
 }
 .cprot-chart-bar:hover {
   opacity: 0.85;
-  fill: #1D4ED8;
+  fill: #60A5FA;
 }
 
 /* 4. Card de Insights com 💡 */
@@ -406,12 +412,12 @@ html:not(.dark) {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 12px 14px;
   font-size: 13px;
-  color: #334155;
+  color: #E2E8F0;
   line-height: 1.6;
 }
 .cprot-insight-icon-wrapper {
@@ -419,7 +425,7 @@ html:not(.dark) {
   margin-top: 1px;
 }
 .cprot-insight-icon {
-  color: #F59E0B;
+  color: #FBBF24;
 }
 .cprot-insight-text {
   flex: 1;
@@ -427,14 +433,14 @@ html:not(.dark) {
 
 /* 5 & 6. Accordions (Filtros Aplicados e Detalhamento) */
 .cprot-accordion {
-  border: 1px solid #E2E8F0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   overflow: hidden;
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.02);
   transition: border-color 0.15s ease;
 }
 .cprot-accordion:hover {
-  border-color: #CBD5E1;
+  border-color: rgba(255, 255, 255, 0.18);
 }
 .cprot-accordion-trigger {
   width: 100%;
@@ -445,13 +451,13 @@ html:not(.dark) {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #1E293B;
+  color: #F1F5F9;
   font-size: 13px;
   font-weight: 600;
   transition: background-color 0.12s ease;
 }
 .cprot-accordion-trigger:hover {
-  background: #F8FAFC;
+  background: rgba(255, 255, 255, 0.04);
 }
 .cprot-accordion-title {
   display: flex;
@@ -460,8 +466,8 @@ html:not(.dark) {
 }
 .cprot-accordion-content {
   padding: 12px 14px;
-  border-top: 1px solid #F1F5F9;
-  background: #FAFAFA;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .cprot-filters-tags {
@@ -473,18 +479,18 @@ html:not(.dark) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 11px;
 }
 .cprot-filter-chip-label {
-  color: #64748B;
+  color: #94A3B8;
   font-weight: 600;
 }
 .cprot-filter-chip-val {
-  color: #0F172A;
+  color: #FFFFFF;
   font-weight: 700;
 }
 
@@ -492,9 +498,9 @@ html:not(.dark) {
 .cprot-table-wrapper {
   max-height: 240px;
   overflow: auto;
-  border: 1px solid #E2E8F0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  background: #FFFFFF;
+  background: rgba(0, 0, 0, 0.2);
 }
 .cprot-detail-table {
   width: 100%;
@@ -505,33 +511,33 @@ html:not(.dark) {
 .cprot-detail-table th {
   position: sticky;
   top: 0;
-  background: #F1F5F9;
-  color: #475569;
+  background: rgba(18, 30, 53, 0.95);
+  color: #CBD5E1;
   font-weight: 700;
   padding: 7px 10px;
-  border-bottom: 1px solid #CBD5E1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
 .cprot-detail-table td {
   padding: 6px 10px;
-  border-bottom: 1px solid #F1F5F9;
-  color: #334155;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #E2E8F0;
   white-space: nowrap;
 }
 .cprot-detail-table tr:nth-child(even) {
-  background: #F8FAFC;
+  background: rgba(255, 255, 255, 0.02);
 }
 .cprot-detail-table tr:hover {
-  background: #EFF6FF;
+  background: rgba(79, 124, 255, 0.12);
 }
 .cprot-table-footer {
   padding: 8px 10px;
   font-size: 11px;
-  color: #64748B;
-  background: #F8FAFC;
-  border-top: 1px solid #E2E8F0;
+  color: #94A3B8;
+  background: rgba(0, 0, 0, 0.25);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   text-align: center;
 }
 
@@ -548,10 +554,10 @@ html:not(.dark) {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  color: #1E293B;
+  color: #FFFFFF;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -559,9 +565,9 @@ html:not(.dark) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 .cprot-action-button:hover {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
-  color: #0F172A;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #FFFFFF;
   transform: translateY(-1px);
 }
 .cprot-action-button:active {
@@ -573,36 +579,18 @@ html:not(.dark) {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: #ECFDF5;
-  border: 1px solid #A7F3D0;
+  background: rgba(6, 95, 70, 0.4);
+  border: 1px solid rgba(167, 243, 208, 0.3);
   border-radius: 8px;
-  color: #065F46;
+  color: #A7F3D0;
   font-size: 12px;
   font-weight: 600;
   animation: fadeIn 0.2s ease;
 }
 
-/* 8. Botão Secundário de Expandir */
-.cprot-secondary-expand {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 2px;
-}
-.cprot-open-dash-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  color: #3B82F6;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
-  transition: background-color 0.12s ease;
-}
-.cprot-open-dash-btn:hover {
-  background: #EFF6FF;
-  color: #1D4ED8;
+/* 8. Barra de Ação Inferior - Abrir Dashboard Original */
+.cprot-exec-card .copilot-answer-action {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 0 16px 16px;
 }

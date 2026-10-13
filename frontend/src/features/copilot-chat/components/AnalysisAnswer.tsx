@@ -14,6 +14,7 @@ import {
   ArrowRight,
   CheckCircle2
 } from 'lucide-react';
+import { ArrowRightIcon, SparklesIcon } from './icons';
 import { CopilotDashboardReference, OpenDashboardDetail } from '../types/chat.types';
 
 interface AnalysisAnswerProps {
@@ -212,18 +213,19 @@ export function AnalysisAnswer({
   }, [chartData]);
 
   return (
-    <article className="cprot-exec-card">
-      {/* 1. Texto Executivo da Resposta */}
-      <div className="cprot-exec-content">
-        <ReactMarkdown
-          components={{
-            a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
-            table: ({ node, ...props }) => <div className="cprot-markdown-table"><table {...props} /></div>,
-          }}
-        >
-          {content || 'A análise foi concluída com sucesso.'}
-        </ReactMarkdown>
-      </div>
+    <article className="copilot-answer-card cprot-exec-card">
+      <div className="cprot-exec-body">
+        {/* 1. Texto Executivo da Resposta */}
+        <div className="cprot-exec-content">
+          <ReactMarkdown
+            components={{
+              a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+              table: ({ node, ...props }) => <div className="cprot-markdown-table"><table {...props} /></div>,
+            }}
+          >
+            {content || 'A análise foi concluída com sucesso.'}
+          </ReactMarkdown>
+        </div>
 
       {/* 2. Grid de KPI Cards Inline */}
       {kpiList.length > 0 && (
@@ -428,14 +430,19 @@ export function AnalysisAnswer({
           <span>{exportNotice}</span>
         </div>
       )}
+      </div>
 
-      {/* 8. Botão secundário de visão completa */}
+      {/* 8. Botão de visualização do Dashboard (original) */}
       {dashboard && (
-        <div className="cprot-secondary-expand">
-          <button type="button" onClick={handleOpenDashboard} className="cprot-open-dash-btn">
-            <Sparkles size={13} />
-            <span>Explorar em painel lateral</span>
-            <ArrowRight size={13} />
+        <div className="copilot-answer-action">
+          <div>
+            <span className="copilot-answer-action-eyebrow">Visão executiva pronta</span>
+            <span className="copilot-answer-action-title">Explore os indicadores desta análise</span>
+          </div>
+          <button type="button" onClick={handleOpenDashboard} className="copilot-dashboard-button">
+            <SparklesIcon size={15} />
+            <span>Abrir dashboard</span>
+            <ArrowRightIcon size={14} />
           </button>
         </div>
       )}
