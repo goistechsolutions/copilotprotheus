@@ -71,7 +71,7 @@ export function AnalysisAnswer({
             title="Abrir painel visual completo com KPIs e gráficos"
           >
             <BarChart2 size={16} className="text-blue-400 shrink-0" />
-            <span className="font-semibold">Ver dashboard</span>
+            <span className="font-semibold">Abrir dashboard</span>
             <ArrowRight size={14} className="opacity-70 group-hover:opacity-100 transition-transform group-hover:translate-x-0.5" />
           </button>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { SparklesIcon, MoreVerticalIcon, CloseIcon } from './icons';
+import { MoreVerticalIcon, CloseIcon } from './icons';
 
 interface ChatHeaderProps {
   onOpenMenu: () => void;
@@ -13,57 +13,52 @@ export function ChatHeader({ onOpenMenu, onClose, isConnected = true }: ChatHead
       onClose();
     } else {
       window.dispatchEvent(new CustomEvent('copilot:close'));
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'cprot-close' }, '*');
+      }
     }
   };
 
   return (
     <header className="copilot-chat-header">
       {/* Brand & Connection */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span 
-            style={{
-              display: 'inline-block',
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: isConnected ? 'var(--cprot-success)' : 'var(--cprot-text-muted)',
-              boxShadow: isConnected ? '0 0 8px var(--cprot-success)' : 'none',
-            }}
-            title={isConnected ? 'Oracle Online' : 'Desconectado'}
-          />
+      <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-500/15 text-blue-500 font-bold text-xs select-none">
+          ⚡
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '15px', color: 'var(--cprot-text-main)' }}>
-            <SparklesIcon size={15} />
-            <span>Copilot Executivo</span>
-          </div>
-          <span style={{ fontSize: '12px', color: 'var(--cprot-text-muted)' }}>
-            Assistente Corporativo de Negócios
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-sm text-[var(--cprot-text-main)]">
+            Copilot Protheus
           </span>
+          {isConnected && (
+            <span 
+              className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-xs" 
+              title="Conectado ao Protheus"
+            />
+          )}
         </div>
       </div>
 
-      {/* Menu Secundário e Fechar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      {/* Ações: Menu Secundário e Fechar X */}
+      <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={onOpenMenu}
           className="copilot-chat-header-btn"
-          title="Menu Secundário"
+          title="Menu de opções"
           aria-label="Abrir menu secundário"
         >
-          <MoreVerticalIcon size={17} />
+          <MoreVerticalIcon size={16} />
         </button>
 
         <button
           type="button"
           onClick={handleClose}
-          className="copilot-chat-header-btn"
-          title="Fechar Copilot"
-          aria-label="Fechar Copilot"
+          className="copilot-chat-header-btn hover:text-red-400"
+          title="Fechar painel"
+          aria-label="Fechar painel"
         >
-          <CloseIcon size={17} />
+          <CloseIcon size={16} />
         </button>
       </div>
     </header>
