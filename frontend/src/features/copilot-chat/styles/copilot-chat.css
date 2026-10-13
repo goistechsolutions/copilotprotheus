@@ -230,3 +230,379 @@ html:not(.dark) {
   .copilot-user-bubble { max-width: 94%; }
   .copilot-chat-composer-wrapper { padding: 10px 12px 15px; }
 }
+
+/* ========================================================
+   NOVO MODELO EXECUTIVO DE RESPOSTA DO AGENTE (PROTHEUS V2)
+   Alinhado às 4 imagens de referência do assistente executivo
+   ======================================================== */
+
+.cprot-exec-card {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  background: #FFFFFF;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  color: #1E293B;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* 1. Texto Executivo da Resposta */
+.cprot-exec-content {
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: break-word;
+}
+.cprot-exec-content p {
+  margin: 0 0 10px;
+}
+.cprot-exec-content p:last-child {
+  margin-bottom: 0;
+}
+.cprot-exec-content strong {
+  color: #0F172A;
+  font-weight: 700;
+}
+
+/* 2. Grid de KPI Cards */
+.cprot-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.cprot-kpi-card {
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.cprot-kpi-card:hover {
+  transform: translateY(-1px);
+}
+
+.cprot-kpi-full {
+  grid-column: 1 / -1;
+}
+
+.cprot-kpi-green {
+  background: #F0FDF4;
+  border: 1px solid #DCFCE7;
+}
+.cprot-kpi-blue {
+  background: #EFF6FF;
+  border: 1px solid #DBEAFE;
+}
+
+.cprot-kpi-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cprot-kpi-icon-green {
+  color: #16A34A;
+}
+.cprot-kpi-icon-blue {
+  color: #2563EB;
+}
+
+.cprot-kpi-green .cprot-kpi-label {
+  color: #15803D;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cprot-kpi-blue .cprot-kpi-label {
+  color: #1D4ED8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cprot-kpi-green .cprot-kpi-value {
+  color: #166534;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.cprot-kpi-blue .cprot-kpi-value {
+  color: #1E40AF;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+/* 3. Gráfico Interativo Inline */
+.cprot-chart-container {
+  border: 1px solid #F1F5F9;
+  border-radius: 12px;
+  background: #FFFFFF;
+  padding: 14px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.cprot-chart-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-left: 4px;
+}
+
+.cprot-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #475569;
+  margin-left: 4px;
+  margin-bottom: 4px;
+}
+.cprot-chart-legend-box {
+  width: 14px;
+  height: 9px;
+  background-color: #2563EB;
+  border-radius: 2px;
+}
+.cprot-chart-legend-text {
+  font-weight: 600;
+}
+
+.cprot-chart-scroll-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.cprot-chart-svg {
+  width: 100%;
+  min-width: 320px;
+  height: auto;
+  display: block;
+}
+.cprot-chart-bar {
+  transition: opacity 0.15s ease, fill 0.15s ease;
+  cursor: pointer;
+}
+.cprot-chart-bar:hover {
+  opacity: 0.85;
+  fill: #1D4ED8;
+}
+
+/* 4. Card de Insights com 💡 */
+.cprot-insight-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.6;
+}
+.cprot-insight-icon-wrapper {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.cprot-insight-icon {
+  color: #F59E0B;
+}
+.cprot-insight-text {
+  flex: 1;
+}
+
+/* 5 & 6. Accordions (Filtros Aplicados e Detalhamento) */
+.cprot-accordion {
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #FFFFFF;
+  transition: border-color 0.15s ease;
+}
+.cprot-accordion:hover {
+  border-color: #CBD5E1;
+}
+.cprot-accordion-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #1E293B;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 0.12s ease;
+}
+.cprot-accordion-trigger:hover {
+  background: #F8FAFC;
+}
+.cprot-accordion-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cprot-accordion-content {
+  padding: 12px 14px;
+  border-top: 1px solid #F1F5F9;
+  background: #FAFAFA;
+}
+
+.cprot-filters-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cprot-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.cprot-filter-chip-label {
+  color: #64748B;
+  font-weight: 600;
+}
+.cprot-filter-chip-val {
+  color: #0F172A;
+  font-weight: 700;
+}
+
+/* Tabela Detalhada no Accordion */
+.cprot-table-wrapper {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+}
+.cprot-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+.cprot-detail-table th {
+  position: sticky;
+  top: 0;
+  background: #F1F5F9;
+  color: #475569;
+  font-weight: 700;
+  padding: 7px 10px;
+  border-bottom: 1px solid #CBD5E1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.cprot-detail-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #F1F5F9;
+  color: #334155;
+  white-space: nowrap;
+}
+.cprot-detail-table tr:nth-child(even) {
+  background: #F8FAFC;
+}
+.cprot-detail-table tr:hover {
+  background: #EFF6FF;
+}
+.cprot-table-footer {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #64748B;
+  background: #F8FAFC;
+  border-top: 1px solid #E2E8F0;
+  text-align: center;
+}
+
+/* 7. Botões de Ação Rápida */
+.cprot-actions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+.cprot-action-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  color: #1E293B;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+.cprot-action-button:hover {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  color: #0F172A;
+  transform: translateY(-1px);
+}
+.cprot-action-button:active {
+  transform: translateY(0);
+}
+
+.cprot-toast-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  border-radius: 8px;
+  color: #065F46;
+  font-size: 12px;
+  font-weight: 600;
+  animation: fadeIn 0.2s ease;
+}
+
+/* 8. Botão Secundário de Expandir */
+.cprot-secondary-expand {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+.cprot-open-dash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #3B82F6;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background-color 0.12s ease;
+}
+.cprot-open-dash-btn:hover {
+  background: #EFF6FF;
+  color: #1D4ED8;
+}
