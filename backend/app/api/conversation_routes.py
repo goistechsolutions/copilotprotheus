@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
@@ -666,6 +667,40 @@ async def conversation_turn(
             backend_insights = result_data.get("backend_insights") or []
 
             presentation = agent_res.get("presentation")
+            
+            # Detecção de filtros aplicados a partir da query e contexto
+            applied_filters = []
+            if comp_val:
+                applied_filters.append({"label": "Empresa", "value": comp_val})
+            if branch_val:
+                applied_filters.append({"label": "Filial", "value": branch_val})
+            if env_code:
+                applied_filters.append({"label": "Ambiente", "value": env_code})
+            
+            sql_text = (agent_res.get("sql") or "").upper()
+            if "90" in user_text or "90" in sql_text:
+                applied_filters.append({"label": "Inatividade", "value": "> 90 dias"})
+            if "VEND" in sql_text or "01" in sql_text:
+                vend_m = re.search(r"F2_VEND1\s*=\s*'([^']+)'", sql_text)
+                if vend_m:
+                    applied_filters.append({"label": "Vendedor", "value": vend_m.group(1)})
+            if "2026" in user_text or "2026" in sql_text:
+                applied_filters.append({"label": "Ano", "value": "2026"})
+
+            # Detecção de botões de ação para rotinas Protheus
+            action_buttons = []
+            if any(tbl in sql_text for tbl in ["SF2", "SD2", "SC5", "SC6"]) or "FATUR" in user_text.upper() or "VEND" in user_text.upper():
+                action_buttons.append({"label": "Abrir Relatório de Vendas (MATA410)", "routine": "MATA410", "type": "routine"})
+            elif any(tbl in sql_text for tbl in ["SE1", "FINA040"]):
+                action_buttons.append({"label": "Abrir Contas a Receber (FINA040)", "routine": "FINA040", "type": "routine"})
+            elif any(tbl in sql_text for tbl in ["SE2", "FINA050"]):
+                action_buttons.append({"label": "Abrir Contas a Pagar (FINA050)", "routine": "FINA050", "type": "routine"})
+            elif "SA1" in sql_text or "CLIENTE" in user_text.upper():
+                action_buttons.append({"label": "Abrir Cadastro de Clientes (MATA030)", "routine": "MATA030", "type": "routine"})
+            else:
+                action_buttons.append({"label": "Abrir Relatório no Protheus", "routine": "CONSULTA", "type": "routine"})
+            action_buttons.append({"label": "Exportar para Excel", "action": "export_excel", "type": "export"})
+
             if not presentation and raw_rows:
                 presentation = {
                     "id": dash_id,
@@ -678,8 +713,18 @@ async def conversation_turn(
                     "backend_kpis": backend_kpis,
                     "backend_insights": backend_insights,
                     "kpis": result_data.get("kpis", []),
-                    "summary": agent_res.get("summary") or asst_content
+                    "series": result_data.get("series", []),
+                    "summary": agent_res.get("summary") or asst_content,
+                    "applied_filters": applied_filters,
+                    "action_buttons": action_buttons
                 }
+            elif presentation:
+                if "applied_filters" not in presentation:
+                    presentation["applied_filters"] = applied_filters
+                if "action_buttons" not in presentation:
+                    presentation["action_buttons"] = action_buttons
+                if "series" not in presentation and result_data.get("series"):
+                    presentation["series"] = result_data.get("series")
 
             # Persiste copilot_analyses
             try:
