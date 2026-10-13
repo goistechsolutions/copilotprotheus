@@ -415,8 +415,14 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
             "- Selecione OBRIGATORIAMENTE a quantidade de pedidos faturados: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS. "
             "- Selecione o valor total faturado: SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
             "- Agrupe pelas dimensões selecionadas (incluindo SA3.A3_NOME no GROUP BY quando SA3 estiver no snapshot) e ordene por VALOR_TOTAL DESC. "
-            "2. ANÁLISE POR CLIENTE: "
-            "- Se SA1 constar no snapshot, faça INNER JOIN com SA1010 SA1 para trazer SA1.A1_NOME AS CLIENTE. Se não constar, projete apenas SF2.F2_CLIENTE AS CLIENTE. "
+            "2. ANÁLISE POR CLIENTE / CARTEIRA DE CLIENTES / CLIENTES SEM COMPRAS: "
+            "- Se a pergunta for sobre clientes sem compras há mais de X dias, clientes inativos ou carteira de clientes por vendedor: "
+            "  * Se a tabela SA1 constar no snapshot autorizado acima: consulte a tabela SA1 (SA1010 SA1) filtrando SA1.D_E_L_E_T_ <> '*'. "
+            "    Para filtrar por vendedor, use SA1.A1_VEND = 'codigo' (ex: '01'). "
+            "    Para filtrar clientes sem compras há mais de 90 dias, use: (SA1.A1_ULTCOM IS NULL OR SA1.A1_ULTCOM = ' ' OR SA1.A1_ULTCOM <= TO_CHAR(SYSDATE - 90, 'YYYYMMDD')). "
+            "    Projete obrigatoriamente: SA1.A1_COD AS COD_CLIENTE, SA1.A1_LOJA AS LOJA, SA1.A1_NOME AS CLIENTE, SA1.A1_VEND AS VENDEDOR e SA1.A1_ULTCOM AS DATA_ULTIMA_COMPRA. "
+            "    Ordene por SA1.A1_ULTCOM ASC. "
+            "  * Se SA1 constar para compras/vendas gerais: faça INNER JOIN de SF2 com SA1010 SA1 para trazer SA1.A1_NOME AS CLIENTE. Se não constar, projete apenas SF2.F2_CLIENTE AS CLIENTE. "
             "- Selecione COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS e SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
             "3. ANÁLISE POR PRODUTO: "
             "- Se SB1 constar no snapshot, faça INNER JOIN com SB1010 SB1 via SD2.D2_COD = SB1.B1_COD para trazer SB1.B1_DESC AS PRODUTO. Se não constar, projete SD2.D2_COD AS PRODUTO. "
@@ -633,6 +639,9 @@ def _infer_query_domain(prompt: str) -> str | None:
         return "sales"
     if has_purchases and not has_sales:
         return "purchases"
+    if has_sales and has_purchases:
+        if any(term in normalized for term in ("vendedor", "vendedores", "faturamento", "cliente", "clientes")) and not any(term in normalized for term in ("fornecedor", "fornecedores")):
+            return "sales"
     return None
 
 

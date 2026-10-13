@@ -33,6 +33,9 @@ def infer_query_domain(prompt: str) -> str | None:
         return 'sales'
     if has_purchases and not has_sales:
         return 'purchases'
+    if has_sales and has_purchases:
+        if any(term in normalized for term in ("vendedor", "vendedores", "faturamento", "cliente", "clientes")) and not any(term in normalized for term in ("fornecedor", "fornecedores")):
+            return 'sales'
         
     return None
 
