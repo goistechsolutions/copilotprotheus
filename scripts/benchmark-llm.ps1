@@ -10,13 +10,13 @@
 .EXAMPLE
   .\benchmark-llm.ps1
 .EXAMPLE
-  .\benchmark-llm.ps1 -Models "qwen2.5-coder:7b","qwen2.5-coder:3b" -Repetitions 3
+  .\benchmark-llm.ps1 -Models "qwen2.5-coder:3b","qwen2.5-coder:7b" -Repetitions 3
 .EXAMPLE
-  .\benchmark-llm.ps1 -Models "qwen2.5-coder:7b" -SkipGpuMonitoring
+  .\benchmark-llm.ps1 -Models "qwen2.5-coder:3b" -SkipGpuMonitoring
 #>
 [CmdletBinding()]
 param(
-    [string[]]$Models = @("qwen2.5-coder:7b", "qwen2.5-coder:3b"),
+    [string[]]$Models = @("qwen2.5-coder:3b", "qwen2.5-coder:7b"),
     [string]$OllamaBaseUrl = "http://localhost:11434",
     [ValidateRange(1, 20)][int]$Repetitions = 3,
     [ValidateRange(0, 5)][int]$WarmupRuns = 1,

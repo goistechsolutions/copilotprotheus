@@ -9,7 +9,7 @@ class RAGService:
         import httpx
         import os
         url = os.getenv("OLLAMA_URL", "")
-        model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+        model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:3b")
         try:
             with httpx.Client(timeout=600.0) as client:
                 res = client.post(f"{url}/api/embeddings", json={"model": model, "prompt": text, "keep_alive": 0})

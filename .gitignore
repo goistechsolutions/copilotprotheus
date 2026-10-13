@@ -34,6 +34,7 @@ out/
 backend/app/services/endpoints_cache.json
 tmp/
 backend/tmp/
+*benchmark-llm-resultados/
 
 # Arquivos de sistema do Windows
 desktop.ini

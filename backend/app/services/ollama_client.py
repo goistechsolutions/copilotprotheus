@@ -22,10 +22,10 @@ def get_ollama_url() -> str:
     )
 
 def get_ollama_model() -> str:
-    return os.getenv("OLLAMA_MODEL") or getattr(settings, "ollama_model", "") or "qwen2.5-coder:7b"
+    return os.getenv("OLLAMA_MODEL") or getattr(settings, "ollama_model", "") or "qwen2.5-coder:3b"
 
 def get_ollama_auxiliary_model() -> str:
-    return os.getenv("OLLAMA_AUXILIARY_MODEL") or getattr(settings, "ollama_auxiliary_model", "") or "qwen2.5-coder:3b"
+    return os.getenv("OLLAMA_AUXILIARY_MODEL") or getattr(settings, "ollama_auxiliary_model", "") or "qwen2.5-coder:7b"
 
 OLLAMA_URL             = get_ollama_url()
 OLLAMA_MODEL           = get_ollama_model()
