@@ -1,18 +1,16 @@
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import React, { useMemo, useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { BarChartCard } from '../charts/BarChartCard';
 import { LineChartCard } from '../charts/LineChartCard';
 import { DonutChartCard } from '../charts/DonutChartCard';
 import { DataGrid } from '../ui/DataGrid';
 import { MetricCard } from '../kpis/MetricCard';
-import { MetricsRow } from '../kpis/MetricsRow';
 import { InsightCard } from '../insights/InsightCard';
-import { InsightsGrid } from '../insights/InsightsGrid';
 import { 
   DollarSign, Users, ShoppingCart, Percent, TrendingUp, Award, BarChart3, Package,
-  Sparkles, ArrowLeft, RefreshCw, FileSpreadsheet, Printer, Bookmark, BookmarkCheck, MessageSquare,
-  Lightbulb, AlertCircle
+  Sparkles, ArrowLeft, RefreshCw, FileSpreadsheet, Printer, Bookmark, BookmarkCheck,
+  Lightbulb, AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, X, ChevronRight
 } from 'lucide-react';
 
 import { humanizeColumnName } from '../../services/presentationIntelligence';
@@ -93,13 +91,11 @@ const SCREEN_CONFIGS = {
     description: 'Relação de clientes sem compras recentes com dados de contato, localização e histórico para estratégia comercial de recuperação.',
   },
   'financial-dashboard': {
-
     title: 'Painel Executivo Financeiro',
     badge: 'Executivo',
     description: 'Visão consolidada de receitas, despesas e fluxo de caixa.',
   }
 };
-
 
 export default function DashboardRenderer({ payload }) {
   const { 
@@ -112,21 +108,20 @@ export default function DashboardRenderer({ payload }) {
     executiveMode,
   } = useDashboardStore();
 
+  const [drilldownDrawer, setDrilldownDrawer] = useState(null);
+
   const normalizedPayload = useMemo(() => {
     if (!payload) return null;
 
-    // Se já tiver a estrutura completa do Adaptive Dashboard Engine (com data.rows e data.kpis ou data.charts)
     if (payload.data && Array.isArray(payload.data.rows) && payload.data.rows.length > 0 && (payload.data.kpis?.length > 0 || payload.data.charts?.length > 0)) {
       return payload;
     }
 
-    // 1. Desembrulhar possíveis invólucros (ex: payload.payload)
     let candidate = payload;
     while (candidate.payload && typeof candidate.payload === 'object' && !Array.isArray(candidate.payload)) {
       candidate = candidate.payload;
     }
 
-    // Se o candidato já tem a estrutura completa com data.rows
     if (candidate.data && Array.isArray(candidate.data.rows) && candidate.data.rows.length > 0 && (candidate.data.kpis?.length > 0 || candidate.data.charts?.length > 0)) {
       return {
         ...candidate,
@@ -135,7 +130,6 @@ export default function DashboardRenderer({ payload }) {
       };
     }
 
-    // 2. Extrair rows e columns de qualquer formato suportado
     const rawRows = Array.isArray(candidate.data?.rows) && candidate.data.rows.length > 0 ? candidate.data.rows
       : Array.isArray(candidate.rows) && candidate.rows.length > 0 ? candidate.rows
       : Array.isArray(candidate.records) && candidate.records.length > 0 ? candidate.records
@@ -163,7 +157,6 @@ export default function DashboardRenderer({ payload }) {
     const semanticContext = candidate.metadata || payload.metadata || candidate.result?.metadata || {};
     const originPrompt = payload.originPrompt || candidate.originPrompt || payload.title || candidate.title || '';
 
-    // 3. Executar o motor adaptativo para gerar KPIs, Gráficos e Insights profissionais
     try {
       const adapted = buildAdaptiveDashboard(
         rawRows,
@@ -186,7 +179,6 @@ export default function DashboardRenderer({ payload }) {
       console.warn('[DashboardRenderer] Falha ao rodar buildAdaptiveDashboard:', e);
     }
 
-    // 4. Fallback se buildAdaptiveDashboard não conseguir classificar
     return {
       screenType: candidate.screenType || payload.screenType || 'ranking',
       confidence: 0.9,
@@ -206,17 +198,11 @@ export default function DashboardRenderer({ payload }) {
 
   const activePayload = normalizedPayload || payload;
 
-  const isFavorited = useMemo(() => {
-    if (!activePayload || !favorites) return false;
-    return favorites.some(f => f.originPrompt === activePayload.originPrompt || (f.id && f.id === activePayload.id));
-  }, [activePayload, favorites]);
-
   const handleExportExcel = () => {
     if (!activePayload?.data?.rows || activePayload.data.rows.length === 0) return;
     const rows = activePayload.data.rows;
     const headers = activePayload.data.columns || Object.keys(rows[0]);
     
-    // Gerar CSV com separador ; e BOM UTF-8 para Excel abrir nativamente com acentos corretos
     const csvRows = [];
     csvRows.push(headers.join(';'));
     
@@ -239,7 +225,14 @@ export default function DashboardRenderer({ payload }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
+
+  useEffect(() => {
+    const handleGlobalExport = () => handleExportExcel();
+    window.addEventListener('dashboard:export-excel', handleGlobalExport);
+    return () => window.removeEventListener('dashboard:export-excel', handleGlobalExport);
+  }, [activePayload]);
 
   const handlePrintPDF = () => {
     window.print();
@@ -251,30 +244,32 @@ export default function DashboardRenderer({ payload }) {
     }
   };
 
-  const handleContinueConversation = () => {
-    if (!chat.isOpen) {
-      toggleChat();
+  const handleOpenProtheusRoutine = (routineCode) => {
+    window.dispatchEvent(new CustomEvent('protheus:open-routine', { detail: { routine: routineCode } }));
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'cprot-open-routine', routine: routineCode }, '*');
     }
   };
 
-  // Drill-down dinâmico baseado na entidade clicada
+  // Drill-down dinâmico para abrir o Drawer de registros
   const handleDrillDown = (itemOrVal) => {
     if (!itemOrVal) return;
     const label = typeof itemOrVal === 'string' ? itemOrVal : (itemOrVal.label || itemOrVal.name || Object.values(itemOrVal)[0]);
     if (!label) return;
 
-    const screenType = activePayload?.screenType || '';
-    if (screenType.includes('seller') || activePayload?.originPrompt?.toLowerCase().includes('vendedor')) {
-      triggerPrompt(`Clientes atendidos pelo vendedor ${label}`);
-    } else if (screenType.includes('customer') || activePayload?.originPrompt?.toLowerCase().includes('cliente')) {
-      triggerPrompt(`Produtos mais comprados pelo cliente ${label}`);
-    } else if (screenType.includes('product') || activePayload?.originPrompt?.toLowerCase().includes('produto')) {
-      triggerPrompt(`Clientes que compraram o produto ${label}`);
-    } else if (screenType.includes('receivable') || activePayload?.originPrompt?.toLowerCase().includes('vencid') || activePayload?.originPrompt?.toLowerCase().includes('inadimpl')) {
-      triggerPrompt(`Títulos em aberto do cliente ${label}`);
-    } else {
-      triggerPrompt(`Detalhamento de ${label}`);
-    }
+    const allRows = activePayload?.data?.rows || [];
+    // Filtrar linhas que contenham o termo de busca
+    const filtered = allRows.filter(row => 
+      Object.values(row).some(v => String(v).toLowerCase().includes(String(label).toLowerCase()))
+    );
+
+    setDrilldownDrawer({
+      title: `Detalhamento: ${label}`,
+      subtitle: `${filtered.length} registro(s) encontrado(s)`,
+      rows: filtered.length > 0 ? filtered : allRows.slice(0, 50),
+      columns: activePayload?.data?.columns || [],
+      queryTerm: label,
+    });
   };
 
   const formatLabel = (key) => {
@@ -299,13 +294,13 @@ export default function DashboardRenderer({ payload }) {
     switch (type) {
       case 'receber': return DollarSign;
       case 'pagar': return DollarSign;
-      case 'saldo': return TrendingUp;
-      case 'sum': return DollarSign;
-      case 'avg': return TrendingUp;
-      case 'max': return Award;
-      case 'count': return (l.includes('vendedor') || l.includes('cliente') || l.includes('fornecedor')) ? Users : ((l.includes('produto') || l.includes('item')) ? Package : ShoppingCart);
+      case 'saldo': return DollarSign;
+      case 'vendedor': return Award;
+      case 'cliente': return Users;
+      case 'produto': return Package;
+      case 'count': return BarChart3;
       case 'percent': return Percent;
-      default: return BarChart3;
+      default: return DollarSign;
     }
   };
 
@@ -314,20 +309,19 @@ export default function DashboardRenderer({ payload }) {
       case 'receber': return 'emerald';
       case 'pagar': return 'red';
       case 'saldo': return 'blue';
-      case 'sum': return 'blue';
-      case 'avg': return 'emerald';
-      case 'max': return 'amber';
+      case 'vendedor': return 'purple';
+      case 'cliente': return 'blue';
+      case 'produto': return 'amber';
       case 'count': return 'purple';
       case 'percent': return 'indigo';
       default: return 'blue';
     }
   };
 
-
   if (!activePayload) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-slate-400 p-8 text-center">
-        <p className="mb-4">O Dashboard Engine aguarda instruções do Copiloto.</p>
+      <div className="flex h-full flex-col items-center justify-center text-[var(--text-muted)] p-8 text-center">
+        <p className="mb-4">O Dashboard Engine aguarda instruções do Copilot.</p>
       </div>
     );
   }
@@ -338,20 +332,22 @@ export default function DashboardRenderer({ payload }) {
     badge: 'Adaptativo',
     description: 'Painel gerado dinamicamente a partir dos dados retornados pelo Protheus.'
   };
-  
+
   const combinedInsights = useMemo(() => {
     const list = [];
     if (Array.isArray(data?.backendInsights)) {
       data.backendInsights.forEach(bi => {
-        const type = bi.severity === 'CRITICAL' ? 'critical'
-          : bi.severity === 'WARNING' ? 'information'
-          : bi.severity === 'SUCCESS' ? 'opportunity'
+        const severity = (bi.severity || '').toUpperCase();
+        const type = severity === 'CRITICAL' ? 'critical'
+          : severity === 'WARNING' ? 'warning'
+          : severity === 'SUCCESS' ? 'success'
           : 'information';
         list.push({
           title: bi.title,
           description: bi.description,
           value: bi.value,
           type,
+          severity,
           isAiInsight: true,
         });
       });
@@ -366,300 +362,421 @@ export default function DashboardRenderer({ payload }) {
     return list;
   }, [data]);
 
+  // Agrupamento de Insights por Severidade (Item 5 da Especificação)
+  const { attentionInsights, positiveInsights, generalInsights } = useMemo(() => {
+    const attention = [];
+    const positive = [];
+    const general = [];
+
+    combinedInsights.forEach(insight => {
+      const type = (insight.type || insight.severity || '').toLowerCase();
+      const title = (insight.title || '').toLowerCase();
+
+      if (
+        type === 'critical' || 
+        type === 'danger' || 
+        type === 'warning' ||
+        title.includes('pressão') || 
+        title.includes('queda') || 
+        title.includes('risco') || 
+        title.includes('inadimplência') ||
+        title.includes('atípico')
+      ) {
+        attention.push(insight);
+      } else if (
+        type === 'success' || 
+        type === 'opportunity' ||
+        title.includes('positivo') || 
+        title.includes('crescimento') || 
+        title.includes('superam') ||
+        title.includes('diversificada') || 
+        title.includes('pulverizada')
+      ) {
+        positive.push(insight);
+      } else {
+        general.push(insight);
+      }
+    });
+
+    return { attentionInsights: attention, positiveInsights: positive, generalInsights: general };
+  }, [combinedInsights]);
+
   const displayedKpis = executiveMode ? (data?.kpis || []).slice(0, 4) : (data?.kpis || []);
-  const displayedInsights = executiveMode ? combinedInsights.slice(0, 3) : combinedInsights;
+  const primaryKpi = displayedKpis[0] || null;
+  const secondaryKpis = displayedKpis.slice(1);
+
   const displayedCharts = executiveMode ? (data?.charts || []).slice(0, 1) : (data?.charts || []);
   const suggestions = activePayload?.suggestions || data?.suggestions || [];
 
   if (!data || !data.rows || data.rows.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-slate-500 p-8 text-center bg-slate-50/50 dark:bg-slate-900/50">
-        <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
-          <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-          </svg>
+      <div className="flex h-full flex-col items-center justify-center text-[var(--text-muted)] p-8 text-center bg-[var(--surface-1)] rounded-2xl border border-[var(--border)]">
+        <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-4">
+          <AlertCircle size={28} className="text-[var(--text-muted)]" />
         </div>
-        <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">Nenhum registro encontrado</h2>
-        <p className="text-sm max-w-md">A consulta foi concluída, mas não retornou dados para o período e filtros solicitados.</p>
+        <h2 className="text-lg font-bold text-[var(--text-primary)] mb-2">Nenhum registro retornado</h2>
+        <p className="text-xs max-w-md text-[var(--text-secondary)]">A consulta no ERP Protheus foi concluída, mas não retornou registros para os filtros e período informados.</p>
       </div>
     );
   }
 
+  // Identificação de rotinas do Protheus contextuais (Item 9/10 da Especificação)
+  const protheusRoutines = useMemo(() => {
+    const prompt = (activePayload.originPrompt || '').toLowerCase();
+    const st = (screenType || '').toLowerCase();
+
+    if (st.includes('cash_flow') || prompt.includes('caixa') || prompt.includes('pagar') || prompt.includes('receber')) {
+      return [
+        { name: 'Contas a Receber', code: 'FINA040', desc: 'Títulos e Baixas' },
+        { name: 'Contas a Pagar', code: 'FINA050', desc: 'Compromissos' },
+        { name: 'Fluxo de Caixa', code: 'FINA020', desc: 'Movimentações Bancárias' },
+      ];
+    }
+    if (st.includes('customer') || prompt.includes('cliente')) {
+      return [
+        { name: 'Cadastro de Clientes', code: 'CRMA980', desc: 'Dados e Crédito' },
+        { name: 'Pedidos de Venda', code: 'MATA410', desc: 'Histórico de Compras' },
+      ];
+    }
+    if (st.includes('seller') || prompt.includes('vendedor')) {
+      return [
+        { name: 'Cadastro de Vendedores', code: 'MATA040', desc: 'Equipe Comercial' },
+        { name: 'Metas e Comissões', code: 'MATA490', desc: 'Desempenho' },
+      ];
+    }
+    return [
+      { name: 'Faturamento / Notas', code: 'MATA410', desc: 'Documentos de Saída' },
+      { name: 'Consulta Genérica', code: 'CRMA980', desc: 'Cadastros Gerais' },
+    ];
+  }, [screenType, activePayload.originPrompt]);
+
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="flex h-full flex-col gap-6 p-4 sm:p-6 pb-20"
+      transition={{ duration: 0.35, ease: "easeOut" }}
+      className="flex h-full flex-col gap-6 pb-20"
     >
-      {/* Barra de Ações e Contexto Unificado (Página 9 da Especificação) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
-        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 min-w-0">
-          <span className="font-semibold text-slate-500 dark:text-slate-400 shrink-0">Origem:</span>
-          <span className="italic font-medium text-slate-800 dark:text-slate-200 truncate">
-            "{activePayload.originPrompt || 'Consulta no Protheus'}"
+      {/* ────────────────────────────────────────────────────────────────────────
+          CAMADA 1: AÇÕES RÁPIDAS & CONTEXTO DA CONSULTA
+          ──────────────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xs">
+        <div className="flex items-center gap-2 text-xs min-w-0">
+          <span className="font-semibold text-[var(--text-muted)] shrink-0">Origem:</span>
+          <span className="font-medium text-[var(--text-primary)] truncate">
+            "{activePayload.originPrompt || 'Consulta Protheus'}"
+          </span>
+          <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--surface-2)] text-[var(--text-secondary)] border border-[var(--border)] shrink-0">
+            {screenConfig.badge}
           </span>
         </div>
 
-        {/* Action Bar Completa */}
         <div className="flex items-center flex-wrap gap-2">
-          {/* Voltar ao Chat */}
-          <button
-            onClick={() => setDashboard(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm shrink-0"
-            title="Fechar Dashboard e voltar ao fluxo de chat"
-          >
-            <ArrowLeft size={13} />
-            <span>Voltar ao Chat</span>
-          </button>
-
-          {/* Alternador Modo Executivo / Analítico */}
           <ExecutiveModeToggle />
 
-          {/* Atualizar Dados */}
           <button
             onClick={handleRefresh}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm shrink-0"
-            title="Recalcular e atualizar dados da consulta"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--text-primary)] border border-[var(--border)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs"
+            title="Atualizar dados da consulta no ERP"
           >
             <RefreshCw size={13} />
             <span className="hidden sm:inline">Atualizar</span>
           </button>
 
-          {/* Exportar Excel */}
           <button
             onClick={handleExportExcel}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm shrink-0"
-            title="Baixar planilha formatada para Excel"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--text-primary)] border border-[var(--border)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs"
+            title="Exportar para Excel"
           >
-            <FileSpreadsheet size={13} className="text-emerald-600 dark:text-emerald-400" />
+            <FileSpreadsheet size={13} className="text-emerald-500" />
             <span className="hidden sm:inline">Excel</span>
           </button>
 
-          {/* Exportar PDF */}
           <button
             onClick={handlePrintPDF}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm shrink-0"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--text-primary)] border border-[var(--border)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs"
             title="Imprimir ou salvar em PDF"
           >
             <Printer size={13} />
             <span className="hidden sm:inline">PDF</span>
           </button>
-
-          {/* Salvar Painel (Favoritos) */}
-          <button
-            onClick={() => toggleFavorite(activePayload)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-sm shrink-0 ${
-              isFavorited
-                ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 font-semibold'
-                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
-            }`}
-            title={isFavorited ? 'Remover dos favoritos' : 'Salvar nos favoritos'}
-          >
-            {isFavorited ? <BookmarkCheck size={13} className="text-amber-500 fill-amber-500" /> : <Bookmark size={13} />}
-            <span className="hidden sm:inline">{isFavorited ? 'Salvo' : 'Salvar Painel'}</span>
-          </button>
-
-          {/* Continuar Conversa */}
-          <button
-            onClick={handleContinueConversation}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-sm shrink-0"
-            title="Retomar a conversa no Copiloto"
-          >
-            <MessageSquare size={13} />
-            <span>Continuar Conversa</span>
-          </button>
         </div>
       </div>
 
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800/80 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">
-              {screenConfig.title}
-            </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-              <Sparkles size={12} />
-              {screenConfig.badge}
-            </span>
-            {confidence && (
-              <span className="text-xs text-slate-400 font-medium">
-                ({Math.round(confidence * 100)}% aderência)
-              </span>
-            )}
-            {executiveMode && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
-                Modo Executivo
-              </span>
-            )}
-          </div>
-          <p className="text-slate-500 text-sm mt-1">{screenConfig.description}</p>
-        </div>
-      </header>
-      
-      {/* Camada 3: KPIs Dinâmicos Baseados no Schema */}
+      {/* ────────────────────────────────────────────────────────────────────────
+          CAMADA 2: HIERARQUIA REAL DE KPIS (HERO KPI + APOIO)
+          ──────────────────────────────────────────────────────────────────────── */}
       {displayedKpis.length > 0 && (
-        <MetricsRow>
-          {displayedKpis.map((kpi, idx) => (
-            <MetricCard 
-              key={idx}
-              title={formatLabel(kpi.label)} 
-              subtitle={kpi.subtitle}
-              value={kpi.format === 'currency' 
-                ? `R$ ${kpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                : kpi.format === 'percent'
-                ? `${kpi.value.toFixed(1)}%`
-                : kpi.value.toLocaleString('pt-BR')} 
-              icon={getKpiIcon(kpi.type, kpi.label)} 
-              color={getKpiColor(kpi.type)} 
-            />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {primaryKpi && (
+            <div className={displayedKpis.length >= 3 ? "col-span-1 md:col-span-2 lg:col-span-2" : "col-span-1"}>
+              <MetricCard 
+                title={formatLabel(primaryKpi.label)} 
+                subtitle={primaryKpi.subtitle || 'Indicador Principal Consolidado'}
+                value={primaryKpi.format === 'currency' 
+                  ? `R$ ${primaryKpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                  : primaryKpi.format === 'percent'
+                  ? `${primaryKpi.value.toFixed(1)}%`
+                  : primaryKpi.value.toLocaleString('pt-BR')} 
+                icon={getKpiIcon(primaryKpi.type, primaryKpi.label)} 
+                color={getKpiColor(primaryKpi.type)} 
+                isHero={true}
+                onClick={() => handleDrillDown(primaryKpi.label)}
+              />
+            </div>
+          )}
+
+          {secondaryKpis.map((kpi, idx) => (
+            <div key={idx} className="col-span-1">
+              <MetricCard 
+                title={formatLabel(kpi.label)} 
+                subtitle={kpi.subtitle}
+                value={kpi.format === 'currency' 
+                  ? `R$ ${kpi.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                  : kpi.format === 'percent'
+                  ? `${kpi.value.toFixed(1)}%`
+                  : kpi.value.toLocaleString('pt-BR')} 
+                icon={getKpiIcon(kpi.type, kpi.label)} 
+                color={getKpiColor(kpi.type)} 
+                onClick={() => handleDrillDown(kpi.label)}
+              />
+            </div>
           ))}
-        </MetricsRow>
+        </div>
       )}
 
-      {/* Camada 3: Insights Automatizados (Concentração, Curva ABC, Pareto) */}
-      {displayedInsights.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles size={16} className="text-blue-600 dark:text-blue-400" />
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Insights da IA</h3>
-          </div>
-          <InsightsGrid>
-            {displayedInsights.map((insight, idx) => (
-              <InsightCard 
-                key={idx}
-                title={insight.title || "Insight"} 
-                description={insight.description} 
-                value={insight.value}
-                type={insight.type || "information"}
-              />
-            ))}
-          </InsightsGrid>
-        </div>
-      )}
-      
-      {/* Camada 3: Gráficos com Regras de Cardinalidade e Drill-Down Interativo */}
-      {displayedCharts.length > 0 ? (
-        <div className={`grid grid-cols-1 gap-6 ${displayedCharts.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
-          {displayedCharts.map((chart, idx) => {
-            if (chart.chartType === 'grouped_bar') {
-              const formattedData = (chart.data || []).map(p => ({
-                ...p,
-                date: formatDateTick(p.date || p.label),
-                fullDate: p.fullLabel || p.date,
-              }));
-              return (
-                <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
+      {/* ────────────────────────────────────────────────────────────────────────
+          CAMADA 3: GRID 8 COLUNAS (GRÁFICOS) + 4 COLUNAS (RESUMO DA IA)
+          ──────────────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Coluna da Esquerda (8 Colunas em telas grandes): Gráficos */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          {displayedCharts.length > 0 ? (
+            <div className="flex flex-col gap-6">
+              {displayedCharts.map((chart, idx) => {
+                if (chart.chartType === 'grouped_bar') {
+                  const formattedData = (chart.data || []).map(p => ({
+                    ...p,
+                    date: formatDateTick(p.date || p.label),
+                    fullDate: p.fullLabel || p.date,
+                  }));
+                  return (
+                    <BarChartCard 
+                      key={idx}
+                      title={chart.title} 
+                      data={formattedData} 
+                      xAxisKey={chart.xAxisKey || 'date'} 
+                      series={chart.series}
+                      onBarClick={handleDrillDown}
+                    />
+                  );
+                }
+                if (chart.chartType === 'line') {
+                  const formattedPoints = (chart.data || []).map(p => ({
+                    ...p,
+                    label: formatDateTick(p.label),
+                    fullLabel: p.fullLabel || (typeof p.label === 'string' && p.label.length === 8 ? `${p.label.substring(6, 8)}/${p.label.substring(4, 6)}/${p.label.substring(0, 4)}` : p.label),
+                  }));
+                  return (
+                    <LineChartCard 
+                      key={idx}
+                      title={chart.title} 
+                      data={formattedPoints} 
+                      xAxisKey={chart.xAxisKey || 'label'} 
+                      dataKey={chart.dataKey || 'value'} 
+                      referenceLineY={chart.referenceLineY}
+                      color={chart.color || "#10b981"} 
+                    />
+                  );
+                }
+                if (chart.chartType === 'donut') {
+                  return (
+                    <DonutChartCard 
+                      key={idx}
+                      title={chart.title} 
+                      data={chart.data} 
+                      dataKey={chart.dataKey || 'value'} 
+                      nameKey={chart.nameKey || 'name'} 
+                    />
+                  );
+                }
+                return (
                   <BarChartCard 
-                    title={chart.title} 
-                    data={formattedData} 
-                    xAxisKey={chart.xAxisKey || 'date'} 
-                    series={chart.series}
-                    onBarClick={handleDrillDown}
-                  />
-                </div>
-              );
-            }
-            if (chart.chartType === 'line') {
-              const formattedPoints = (chart.data || []).map(p => ({
-                ...p,
-                label: formatDateTick(p.label),
-                fullLabel: p.fullLabel || (typeof p.label === 'string' && p.label.length === 8 ? `${p.label.substring(6, 8)}/${p.label.substring(4, 6)}/${p.label.substring(0, 4)}` : p.label),
-              }));
-              return (
-                <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
-                  <LineChartCard 
-                    title={chart.title} 
-                    data={formattedPoints} 
-                    xAxisKey={chart.xAxisKey || 'label'} 
-                    dataKey={chart.dataKey || 'value'} 
-                    referenceLineY={chart.referenceLineY}
-                    color={chart.color || "#10b981"} 
-                  />
-                </div>
-              );
-            }
-            if (chart.chartType === 'donut') {
-              return (
-                <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
-                  <DonutChartCard 
+                    key={idx}
                     title={chart.title} 
                     data={chart.data} 
+                    xAxisKey={chart.xAxisKey || 'label'} 
                     dataKey={chart.dataKey || 'value'} 
-                    nameKey={chart.nameKey || 'name'} 
-                  />
-                </div>
-              );
-            }
-            // Bar chart (default) com suporte a onBarClick para drill-down
-            return (
-              <div key={idx} className={displayedCharts.length === 1 ? 'col-span-1' : ''}>
-                <BarChartCard 
-                  title={chart.title} 
-                  data={chart.data} 
-                  xAxisKey={chart.xAxisKey || 'label'} 
-                  dataKey={chart.dataKey || 'value'} 
-                  color={chart.color || "#3b82f6"} 
-                  onBarClick={handleDrillDown}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        // Fallback compatibilidade retroativa para data.series
-        data?.series?.length > 0 && (
-          <div className={`grid grid-cols-1 gap-6 ${data.series.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
-            {data.series.map((s, idx) => {
-              const formattedPoints = s.points.map(p => ({ ...p, label: formatDateTick(p.label) }));
-              return (
-                <div key={idx} className={data.series.length === 1 ? "col-span-1" : ""}>
-                  <BarChartCard 
-                    title={formatLabel(s.label)} 
-                    data={formattedPoints} 
-                    xAxisKey="label" 
-                    color="#3b82f6" 
+                    color={chart.color || "#3b82f6"} 
                     onBarClick={handleDrillDown}
                   />
-                </div>
-              );
-            })}
-          </div>
-        )
-      )}
+                );
+              })}
+            </div>
+          ) : (
+            data?.series?.length > 0 && (
+              <div className="flex flex-col gap-6">
+                {data.series.map((s, idx) => {
+                  const formattedPoints = s.points.map(p => ({ ...p, label: formatDateTick(p.label) }));
+                  return (
+                    <BarChartCard 
+                      key={idx}
+                      title={formatLabel(s.label)} 
+                      data={formattedPoints} 
+                      xAxisKey="label" 
+                      color="#3b82f6" 
+                      onBarClick={handleDrillDown}
+                    />
+                  );
+                })}
+              </div>
+            )
+          )}
 
-      {/* Modo Executivo: Bloco de Recomendações e Sugestões */}
-      {executiveMode && suggestions.length > 0 && (
-        <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/80 shadow-xs">
-          <div className="flex items-center gap-2 mb-2.5">
-            <Lightbulb size={16} className="text-amber-500" />
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-              Recomendações Executivas & Ações Sugeridas
-            </h3>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((sug, sIdx) => (
-              <button
-                key={sIdx}
-                onClick={() => triggerPrompt(sug)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white transition-all shadow-2xs"
-              >
-                <span>{sug}</span>
-              </button>
-            ))}
+          {/* Seção Padronizada: Ações no Protheus (Item 10 da Especificação) */}
+          <div className="p-4 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xs">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ExternalLink size={15} className="text-[var(--brand)]" />
+                <h3 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                  Ações no ERP Protheus
+                </h3>
+              </div>
+              <span className="text-[10px] text-[var(--text-muted)]">Atalhos diretos para rotinas TOTVS</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {protheusRoutines.map((routine) => (
+                <button
+                  key={routine.code}
+                  type="button"
+                  onClick={() => handleOpenProtheusRoutine(routine.code)}
+                  className="flex flex-col items-start p-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] hover:border-[var(--border-hover)] text-left transition-all cursor-pointer group shadow-2xs"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-bold text-[var(--text-primary)] group-hover:text-[var(--brand)] transition-colors">
+                      {routine.name}
+                    </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/5 text-[var(--text-muted)] font-semibold">
+                      {routine.code}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    {routine.desc}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Modo Analítico: Tabela Detalhada com Drill-Down ao Clicar na Linha */}
-      {!executiveMode && data?.rows?.length > 0 && (
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Detalhamento dos Dados</h3>
-              <p className="text-xs text-slate-500">Clique em qualquer linha da tabela para detalhar a entidade no Copiloto.</p>
+        {/* Coluna da Direita (4 Colunas em telas grandes): Resumo da IA & Severidades */}
+        <div className="lg:col-span-4 flex flex-col gap-4">
+          <div className="p-4 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xs flex flex-col gap-4">
+            <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3">
+              <Sparkles size={16} className="text-[var(--brand)]" />
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">Resumo da Inteligência Artificial</h3>
             </div>
-            <span className="text-xs text-slate-500 font-medium">
+
+            {/* Grupo 1: Atenção Necessária (Alertas / Riscos) */}
+            {attentionInsights.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5 px-1">
+                  <AlertTriangle size={12} />
+                  <span>Atenção Necessária</span>
+                </span>
+                {attentionInsights.map((ins, idx) => (
+                  <InsightCard 
+                    key={idx}
+                    title={ins.title}
+                    description={ins.description}
+                    value={ins.value}
+                    type="warning"
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Grupo 2: Sinais Positivos & Oportunidades */}
+            {positiveInsights.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 flex items-center gap-1.5 px-1">
+                  <CheckCircle2 size={12} />
+                  <span>Sinais Positivos</span>
+                </span>
+                {positiveInsights.map((ins, idx) => (
+                  <InsightCard 
+                    key={idx}
+                    title={ins.title}
+                    description={ins.description}
+                    value={ins.value}
+                    type="success"
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Grupo 3: Informações & Contexto Geral */}
+            {generalInsights.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5 px-1">
+                  <Lightbulb size={12} />
+                  <span>Observações Analíticas</span>
+                </span>
+                {generalInsights.map((ins, idx) => (
+                  <InsightCard 
+                    key={idx}
+                    title={ins.title}
+                    description={ins.description}
+                    value={ins.value}
+                    type="information"
+                  />
+                ))}
+              </div>
+            )}
+
+            {combinedInsights.length === 0 && (
+              <p className="text-xs text-[var(--text-muted)] py-4 text-center">
+                Nenhum ponto atípico ou desvio relevante detectado para o período.
+              </p>
+            )}
+          </div>
+
+          {/* Recomendações e Sugestões do Copiloto */}
+          {suggestions.length > 0 && (
+            <div className="p-4 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xs flex flex-col gap-2.5">
+              <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                <Sparkles size={13} className="text-[var(--brand)]" />
+                <span>Explorar Próximos Passos:</span>
+              </span>
+              <div className="flex flex-col gap-1.5">
+                {suggestions.map((sug, sIdx) => (
+                  <button
+                    key={sIdx}
+                    onClick={() => triggerPrompt(sug)}
+                    className="w-full flex items-center justify-between p-2 rounded-xl text-xs bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border)] hover:border-[var(--border-hover)] text-left transition-all cursor-pointer group"
+                  >
+                    <span>{sug}</span>
+                    <ChevronRight size={13} className="text-[var(--text-muted)] group-hover:text-[var(--brand)] shrink-0 transition-colors" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ────────────────────────────────────────────────────────────────────────
+          CAMADA 4: DETALHAMENTO EM TABELA (MODO ANALÍTICO OU ROLAGEM)
+          ──────────────────────────────────────────────────────────────────────── */}
+      {!executiveMode && data?.rows?.length > 0 && (
+        <div className="mt-2 p-5 rounded-2xl bg-[var(--surface-1)] border border-[var(--border)] shadow-xs">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-bold text-[var(--text-primary)]">Tabela Detalhada de Registros</h3>
+              <p className="text-xs text-[var(--text-muted)]">Clique em qualquer linha para disparar análise contextualizada no Copilot.</p>
+            </div>
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-secondary)]">
               {data.rows.length} {data.rows.length === 1 ? 'registro' : 'registros'}
             </span>
           </div>
@@ -674,6 +791,76 @@ export default function DashboardRenderer({ payload }) {
           />
         </div>
       )}
+
+      {/* ────────────────────────────────────────────────────────────────────────
+          CAMADA 5: DRAWER DE DRILL-DOWN LATERAL (SLIDE OVER)
+          ──────────────────────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {drilldownDrawer && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDrilldownDrawer(null)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 cursor-pointer"
+            />
+            <motion.aside
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="fixed right-0 top-0 bottom-0 w-full max-w-xl bg-[var(--surface-1)] border-l border-[var(--border)] shadow-2xl z-50 flex flex-col p-6 overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-4 mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-[var(--text-primary)]">{drilldownDrawer.title}</h3>
+                  <p className="text-xs text-[var(--text-muted)]">{drilldownDrawer.subtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDrilldownDrawer(null)}
+                  className="p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                <DataGrid 
+                  data={drilldownDrawer.rows} 
+                  columns={drilldownDrawer.columns.length > 0 ? drilldownDrawer.columns.map(col => {
+                    const key = typeof col === 'string' ? col : (col.key || col.name || col.accessorKey || '');
+                    const header = typeof col === 'string' ? humanizeColumnName(col) : (col.header || col.label || humanizeColumnName(key));
+                    return { header, accessorKey: key };
+                  }) : []}
+                  onRowClick={(row) => {
+                    setDrilldownDrawer(null);
+                    handleDrillDown(row);
+                  }}
+                />
+              </div>
+
+              <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between mt-4">
+                <button
+                  type="button"
+                  onClick={() => triggerPrompt(`Detalhamento completo de ${drilldownDrawer.queryTerm}`)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[var(--brand)] text-white hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+                >
+                  Perguntar sobre este filtro no Chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrilldownDrawer(null)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

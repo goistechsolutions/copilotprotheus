@@ -4,37 +4,22 @@
  */
 
 :root {
-  --cprot-bg: #07111F;
-  --cprot-surface: #121E35;
-  --cprot-surface-hover: #16233D;
-  --cprot-primary: #2563FF;
-  --cprot-primary-hover: #3B82F6;
-  --cprot-primary-light: rgba(37, 99, 255, 0.12);
-  --cprot-border: rgba(255, 255, 255, 0.08);
-  --cprot-border-focus: rgba(37, 99, 255, 0.4);
-  --cprot-text-main: #FFFFFF;
-  --cprot-text-sub: #B2B8C7;
-  --cprot-text-muted: #7B8497;
-  --cprot-success: #00D26A;
-  --cprot-danger: #FF5A65;
-  --cprot-warning: #FFB020;
+  --cprot-bg: var(--bg);
+  --cprot-surface: var(--surface-1);
+  --cprot-surface-hover: var(--surface-2);
+  --cprot-primary: var(--brand);
+  --cprot-primary-hover: var(--brand-hover);
+  --cprot-primary-light: rgba(79, 124, 255, 0.12);
+  --cprot-border: var(--border);
+  --cprot-border-focus: var(--border-hover);
+  --cprot-text-main: var(--text-primary);
+  --cprot-text-sub: var(--text-secondary);
+  --cprot-text-muted: var(--text-muted);
+  --cprot-success: var(--success);
+  --cprot-danger: var(--danger);
+  --cprot-warning: var(--warning);
   --cprot-radius: 16px;
-  --cprot-input-bg: #0B1326;
-}
-
-/* Force dark mode */
-html:not(.dark) {
-  --cprot-bg: #07111F;
-  --cprot-surface: #121E35;
-  --cprot-surface-hover: #16233D;
-  --cprot-primary: #2563FF;
-  --cprot-primary-hover: #3B82F6;
-  --cprot-primary-light: rgba(37, 99, 255, 0.12);
-  --cprot-border: rgba(255, 255, 255, 0.08);
-  --cprot-border-focus: rgba(37, 99, 255, 0.4);
-  --cprot-text-main: #FFFFFF;
-  --cprot-text-sub: #B2B8C7;
-  --cprot-text-muted: #7B8497;
+  --cprot-input-bg: var(--surface-2);
 }
 
 .copilot-chat-container {
@@ -301,12 +286,15 @@ html:not(.dark) {
 }
 
 .cprot-kpi-green {
-  background: rgba(0, 210, 106, 0.08);
-  border: 1px solid rgba(0, 210, 106, 0.25);
+  background: var(--surface-1);
+  border: 1px solid rgba(39, 200, 129, 0.28);
 }
 .cprot-kpi-blue {
-  background: rgba(79, 124, 255, 0.08);
-  border: 1px solid rgba(79, 124, 255, 0.25);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+.cprot-kpi-blue:hover {
+  border-color: var(--border-hover);
 }
 
 .cprot-kpi-header {
@@ -315,21 +303,21 @@ html:not(.dark) {
   gap: 6px;
 }
 .cprot-kpi-icon-green {
-  color: #16A34A;
+  color: var(--success);
 }
 .cprot-kpi-icon-blue {
-  color: #2563EB;
+  color: var(--brand);
 }
 
 .cprot-kpi-green .cprot-kpi-label {
-  color: #4ADE80;
+  color: var(--success);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .cprot-kpi-blue .cprot-kpi-label {
-  color: #93C5FD;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -337,13 +325,13 @@ html:not(.dark) {
 }
 
 .cprot-kpi-green .cprot-kpi-value {
-  color: #FFFFFF;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 800;
   line-height: 1.25;
 }
 .cprot-kpi-blue .cprot-kpi-value {
-  color: #FFFFFF;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 800;
   line-height: 1.25;

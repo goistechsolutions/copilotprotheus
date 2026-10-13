@@ -1,75 +1,111 @@
 @import "tailwindcss";
 
-@theme {
-  --color-primary: #2563FF;
-  --color-primary-hover: #3B82F6;
-
-  --color-bg-primary: #07111F;
-  --color-bg-secondary: #0D1528;
-  --color-bg-tertiary: #101B33;
-
-  --color-surface-card: #121E35;
-  --color-surface-elevated: #16233D;
-
-  --color-text-primary: #FFFFFF;
-  --color-text-secondary: #B2B8C7;
-  --color-text-muted: #7B8497;
-
-  --color-success: #00D26A;
-  --color-warning: #FFB020;
-  --color-danger: #FF5A65;
-
-  /* Legacy fallbacks just in case something breaks */
-  --color-primary-container: #0f66ff;
-  --color-on-primary: #ffffff;
-  --color-on-primary-container: #f9f8ff;
-  --color-secondary: #495f82;
-  --color-secondary-container: #bfd5fe;
-  --color-tertiary: #a13400;
-  --color-tertiary-container: #cb4400;
-  --color-background: #07111F;
-  --color-surface: #0D1528;
-  --color-surface-container-low: #121E35;
-  --color-surface-container: #16233D;
-  --color-surface-container-high: #1A2A52;
-  --color-surface-container-highest: #1A2A52;
-  --color-surface-container-lowest: #07111F;
-  --color-on-surface: #FFFFFF;
-  --color-on-surface-variant: #B2B8C7;
-  --color-on-surface-subtext: #7B8497;
-  --color-on-surface-heading: #FFFFFF;
-  --color-border-hairline: rgba(255,255,255,0.08);
-  --color-success-emerald: #00D26A;
-  --color-warning-amber: #FFB020;
-  --color-error-ruby: #FF5A65;
-  --color-error: #FF5A65;
-  --color-error-container: #3d0000;
-  --color-accent-tint: #16233D;
-}
-
+/* ==========================================================================
+   Design System Unificado — Copilot Protheus
+   Consolidação dos Design Tokens (Dark & Light semânticos)
+   ========================================================================== */
 
 :root {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #FFFFFF;
-  background-color: #07111F;
+  
+  /* Paleta Semântica Light */
+  --bg: #f6f8fb;
+  --surface-1: #ffffff;
+  --surface-2: #f1f4f9;
+  --surface-3: #e5ebf5;
+
+  --border: rgba(15, 23, 42, 0.08);
+  --border-hover: rgba(79, 124, 255, 0.32);
+
+  --brand: #4F7CFF;
+  --brand-hover: #3D6BF0;
+
+  --success: #27C881;
+  --warning: #F6B73C;
+  --danger: #FF6673;
+
+  --text-primary: #172033;
+  --text-secondary: #475569;
+  --text-muted: #778398;
+
+  /* Aliases compatíveis com componentes legados */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--surface-2);
+  --bg-tertiary: var(--surface-3);
+  --surface-card: var(--surface-1);
+  --surface-elevated: var(--surface-2);
+  --primary: var(--brand);
+  --primary-hover: var(--brand-hover);
+
+  color: var(--text-primary);
+  background-color: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
 .dark {
-  color: #FFFFFF;
-  background-color: #07111F;
+  /* Paleta Semântica Dark */
+  --bg: #090D14;
+  --surface-1: #0E1420;
+  --surface-2: #131B2A;
+  --surface-3: #192337;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(110, 145, 255, 0.32);
+
+  --brand: #4F7CFF;
+  --brand-hover: #6590FF;
+
+  --success: #27C881;
+  --warning: #F6B73C;
+  --danger: #FF6673;
+
+  --text-primary: #F7F9FC;
+  --text-secondary: #AEB8C9;
+  --text-muted: #778398;
+
+  /* Aliases compatíveis com componentes legados */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--surface-2);
+  --bg-tertiary: var(--surface-3);
+  --surface-card: var(--surface-1);
+  --surface-elevated: var(--surface-2);
+  --primary: var(--brand);
+  --primary-hover: var(--brand-hover);
+
+  color: var(--text-primary);
+  background-color: var(--bg);
+}
+
+@theme {
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border-subtle: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  /* Fallback aliases para manter compatibilidade com classes Tailwind existentes */
+  --color-primary: var(--brand);
+  --color-primary-hover: var(--brand-hover);
+  --color-bg-primary: var(--bg);
+  --color-surface-card: var(--surface-1);
+  --color-surface-elevated: var(--surface-2);
 }
 
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: #1A2A52 transparent;
-}
-
-.dark * {
-  scrollbar-color: #1A2A52 transparent;
+  scrollbar-color: var(--border) transparent;
 }
 
 html,
@@ -82,14 +118,9 @@ body,
 }
 
 body {
-  background-color: #07111F;
-  color: #FFFFFF;
+  background-color: var(--bg);
+  color: var(--text-primary);
   transition: background-color 200ms ease, color 200ms ease;
-}
-
-.dark body {
-  background-color: #07111F;
-  color: #FFFFFF;
 }
 
 button,
@@ -103,7 +134,7 @@ button:focus-visible,
 a:focus-visible,
 textarea:focus-visible,
 input:focus-visible {
-  outline: 2px solid rgba(15, 102, 255, 0.4);
+  outline: 2px solid var(--border-hover);
   outline-offset: 2px;
 }
 
@@ -118,115 +149,84 @@ input:focus-visible {
 
 *::-webkit-scrollbar-thumb {
   border-radius: 9999px;
-  background: #cbd5e1;
+  background: rgba(148, 163, 184, 0.3);
 }
 
 .dark *::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(255, 255, 255, 0.15);
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(148, 163, 184, 0.5);
 }
 
 .dark *::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(255, 255, 255, 0.25);
 }
 
-/* Stitch Elevation & Bento Card Styles */
+/* ==========================================================================
+   Classes Utilitárias de Superfície & Bento Cards
+   ========================================================================== */
+
 .stitch-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dark .stitch-card {
-  background: #121e35;
-  border-color: rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 .stitch-card:hover {
-  border-color: #bfd5fe;
-  box-shadow: 0 6px 20px rgba(15, 102, 255, 0.08);
-}
-
-.dark .stitch-card:hover {
-  border-color: #2563ff;
-  box-shadow: 0 6px 20px rgba(37, 99, 255, 0.18);
-}
-
-/* ==========================================================================
-   Design System 3.0: Copilot Protheus Executive Intelligence Workspace
-   ========================================================================== */
-:root {
-  --bg-primary: #0B0E14;
-  --bg-secondary: #10141D;
-  --bg-tertiary: #161C28;
-  --surface-card: #121722;
-  --surface-elevated: #182030;
-  --primary: #4F7CFF;
-  --primary-hover: #3D6BF0;
-  --success: #00D26A;
-  --warning: #FFB020;
-  --danger: #FF5A65;
-  --text-primary: #FFFFFF;
-  --text-secondary: #B2B8C7;
-  --text-muted: #7B8497;
-}
-
-.bg-exec-primary {
-  background-color: var(--bg-primary);
-}
-
-.bg-exec-secondary {
-  background-color: var(--bg-secondary);
-}
-
-.bg-exec-tertiary {
-  background-color: var(--bg-tertiary);
-}
-
-.bg-exec-card {
-  background-color: var(--surface-card);
-}
-
-.bg-exec-elevated {
-  background-color: var(--surface-elevated);
-}
-
-.gradient-executive-blue {
-  background: linear-gradient(135deg, #0A1735 0%, #1A2A52 100%);
-}
-
-.gradient-brand-glow {
-  background: linear-gradient(90deg, #2563FF 0%, #4F80FF 100%);
+  border-color: var(--border-hover);
+  box-shadow: 0 6px 20px rgba(79, 124, 255, 0.12);
 }
 
 .glass-card-executive {
-  background: rgba(18, 30, 53, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: 16px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.dark .glass-card-executive {
+  background: rgba(14, 20, 32, 0.85);
+}
+
 .glass-card-executive:hover {
-  border-color: rgba(37, 99, 255, 0.35);
-  box-shadow: 0 8px 24px rgba(37, 99, 255, 0.12);
+  border-color: var(--border-hover);
+  box-shadow: 0 8px 24px rgba(79, 124, 255, 0.14);
 }
 
-/* Light mode fallback adjustments for executive glass */
-html:not(.dark) .glass-card-executive {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+.bg-exec-primary {
+  background-color: var(--bg);
 }
 
-html:not(.dark) .glass-card-executive:hover {
-  border-color: #2563ff;
-  box-shadow: 0 8px 24px rgba(37, 99, 255, 0.08);
+.bg-exec-secondary {
+  background-color: var(--surface-2);
+}
+
+.bg-exec-tertiary {
+  background-color: var(--surface-3);
+}
+
+.bg-exec-card {
+  background-color: var(--surface-1);
+}
+
+.bg-exec-elevated {
+  background-color: var(--surface-2);
+}
+
+.gradient-executive-blue {
+  background: linear-gradient(135deg, var(--surface-1) 0%, var(--surface-2) 100%);
+}
+
+.gradient-brand-glow {
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-hover) 100%);
 }
