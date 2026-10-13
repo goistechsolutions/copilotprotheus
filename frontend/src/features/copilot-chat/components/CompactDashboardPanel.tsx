@@ -205,7 +205,7 @@ export function CompactDashboardPanel({
           title="Voltar ao chat"
         >
           <ArrowLeft size={13} className="text-blue-500" />
-          <span>Chat</span>
+          <span>Voltar ao chat</span>
         </button>
 
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--cprot-text-muted)]">
@@ -416,7 +416,7 @@ export function CompactDashboardPanel({
           className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-[var(--cprot-surface)] hover:bg-[var(--cprot-surface-hover)] border border-[var(--cprot-border)] text-xs font-semibold text-[var(--cprot-text-main)] transition-all cursor-pointer shadow-xs hover:border-[var(--cprot-primary)]/40"
         >
           <ArrowLeft size={14} className="text-blue-500" />
-          <span>Voltar para conversa</span>
+          <span>Voltar ao chat</span>
         </button>
       </footer>
     </div>

@@ -32,7 +32,10 @@ export function AssistantMessage({
 
   return (
     <div className="copilot-assistant-turn animate-fade-in">
-      <div className="copilot-message-label"><span className="copilot-label-dot" /> Análise concluída</div>
+      <div className="copilot-message-label flex items-center gap-1.5 font-bold text-xs text-blue-500 uppercase tracking-wider mb-2 select-none">
+        <span>⚡</span>
+        <span>COPILOT</span>
+      </div>
       <AnalysisAnswer
         content={message.content}
         dashboard={message.dashboard}

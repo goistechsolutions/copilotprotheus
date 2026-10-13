@@ -61,7 +61,7 @@ export function AnalysisAnswer({
         </ReactMarkdown>
       </div>
 
-      {/* 2. Barra de Ação Secundária: Ver Dashboard sob Demanda */}
+      {/* 2. Barra de Ação Secundária: Abrir Dashboard sob Demanda */}
       {dashboard && (
         <div className="cprot-answer-action-bar">
           <button 
@@ -74,18 +74,6 @@ export function AnalysisAnswer({
             <span className="font-semibold">Abrir dashboard</span>
             <ArrowRight size={14} className="opacity-70 group-hover:opacity-100 transition-transform group-hover:translate-x-0.5" />
           </button>
-
-          {routineAction && routineAction.routine && (
-            <button 
-              type="button" 
-              onClick={handleOpenRoutine} 
-              className="cprot-btn-secondary-routine"
-              title={`Acessar rotina ${routineAction.routine} no Protheus`}
-            >
-              <ExternalLink size={13} className="shrink-0" />
-              <span>{routineAction.label || `Abrir ${routineAction.routine}`}</span>
-            </button>
-          )}
         </div>
       )}
 
