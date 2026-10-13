@@ -5,7 +5,7 @@ from typing import Optional
 
 from app.core.secret_env import get_required_secret
 
-load_dotenv()
+load_dotenv(override=True)
 
 class Settings(BaseModel):
     tenant_name: str = os.getenv("TENANT_NAME", "")
@@ -22,9 +22,9 @@ class Settings(BaseModel):
     ollama_url: str = os.getenv("OLLAMA_URL") or os.getenv("OLLAMA_BASE_URL") or "http://host.docker.internal:11434"
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL") or "http://host.docker.internal:11434"
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
-    gemini_api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
+    gemini_api_key: Optional[str] = None if os.getenv("LLM_BACKEND", "ollama").lower() in ("ollama", "local", "gemini") else os.getenv("GEMINI_API_KEY")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    llm_backend: str = os.getenv("LLM_BACKEND", "ollama")
+    llm_backend: str = "ollama" if os.getenv("LLM_BACKEND", "ollama").lower() in ("ollama", "local", "gemini", "") else os.getenv("LLM_BACKEND", "ollama")
     jwt_secret: str = get_required_secret("JWT_SECRET")
     jwt_expiry_seconds: int = int(os.getenv("JWT_EXPIRY_SECONDS", "3600"))
     database_url: str = os.getenv("DATABASE_URL", "")
