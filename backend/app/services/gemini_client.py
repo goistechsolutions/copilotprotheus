@@ -16,9 +16,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 def _get_gemini_config() -> tuple[str, str]:
-    if getattr(settings, "llm_backend", "ollama").lower() in ("ollama", "local"):
-        return "", os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "") or GEMINI_MODEL or "gemini-3.8-flash"
-    api_key = os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", "") or GEMINI_API_KEY or ""
+    api_key = GEMINI_API_KEY or getattr(settings, "gemini_api_key", "") or os.getenv("GEMINI_API_KEY") or ""
     model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "") or GEMINI_MODEL or "gemini-3.8-flash"
     return api_key, model
 
