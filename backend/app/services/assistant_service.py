@@ -116,7 +116,7 @@ class AssistantService:
                         question=question,
                         protheus_data=protheus_data if protheus_data else None,
                         intent=intent,
-                        context=context,
+                        context=ctx,
                         history=history
                     ),
                     timeout=settings.timeout_seconds
@@ -293,7 +293,7 @@ class AssistantService:
                     question=question,
                     protheus_data=protheus_data if protheus_data else None,
                     intent=intent,
-                    context=context,
+                    context=ctx,
                     history=history
                 ):
                     full_answer.append(token)
