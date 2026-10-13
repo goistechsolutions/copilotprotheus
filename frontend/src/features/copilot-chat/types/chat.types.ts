@@ -19,9 +19,17 @@ export interface CopilotDashboardReference {
   screenType?: string;
   updatedAt?: string;
   payload?: any;
-  kpis?: Array<{ label: string; value: string | number; change?: string; tone?: string }>;
-  insights?: string[];
+  kpis?: Array<{ label: string; value: string | number; change?: string; tone?: string; highlight_text?: string; format?: string }>;
+  insights?: any[];
   sql_query?: string;
+  rows?: any[];
+  columns?: string[];
+  series?: Array<{ id: string; label: string; dimension: string; measure: string; points: Array<{ label: string; value: number }> }>;
+  applied_filters?: Array<{ label: string; value: string }>;
+  action_buttons?: Array<{ label: string; routine?: string; action?: string; type?: string }>;
+  backend_kpis?: any;
+  backend_insights?: any[];
+  summary?: string;
 }
 
 export interface AnalysisSummary {
