@@ -207,8 +207,9 @@
 .copilot-message-list { display: flex; flex-direction: column; width: 100%; max-width: 760px; margin: 0 auto; }
 .copilot-message-label { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 9px; color: var(--cprot-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; }
 .copilot-label-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--cprot-success); box-shadow: 0 0 12px rgba(0, 210, 106, 0.55); }
-.copilot-user-turn { display: flex; flex-direction: column; align-items: flex-end; width: 100%; margin-bottom: 30px; }
-.copilot-user-bubble { max-width: min(88%, 620px); padding: 11px 15px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px 16px 4px 16px; background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(12px); color: var(--cprot-text-main); font-size: 15px; line-height: 1.55; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.copilot-user-turn { display: flex; flex-direction: column; align-items: flex-end; width: 100%; margin-bottom: 24px; }
+.copilot-user-bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px 16px 4px 16px; background-color: #2563EB; color: #FFFFFF; font-size: 14px; line-height: 1.5; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25); border: none; }
+.copilot-user-turn > .copilot-message-label { font-size: 11px; font-weight: 600; color: var(--cprot-text-muted); margin-bottom: 4px; }
 .copilot-assistant-turn { width: 100%; margin-bottom: 34px; }
 .copilot-assistant-turn > .copilot-message-label { color: var(--cprot-primary); }
 .copilot-answer-card { width: 100%; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; background: var(--cprot-surface); backdrop-filter: blur(12px); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18), inset 0 1px rgba(255, 255, 255, 0.035); }

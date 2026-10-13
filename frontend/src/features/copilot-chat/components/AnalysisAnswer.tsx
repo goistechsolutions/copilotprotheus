@@ -1,12 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { 
-  BarChart2, 
-  ExternalLink, 
-  ArrowRight,
-  CheckCircle2
-} from 'lucide-react';
 import { CopilotDashboardReference, OpenDashboardDetail } from '../types/chat.types';
+import { DashboardCTA } from './DashboardCTA';
 
 interface AnalysisAnswerProps {
   content: string;
@@ -23,8 +18,6 @@ export function AnalysisAnswer({
   messageId = '', 
   onOpenDashboard 
 }: AnalysisAnswerProps) {
-  const [toastNotice, setToastNotice] = useState<string | null>(null);
-
   const handleOpenDashboard = () => {
     if (!dashboard) return;
     if (onOpenDashboard) onOpenDashboard(dashboard);
@@ -37,53 +30,29 @@ export function AnalysisAnswer({
     window.dispatchEvent(new CustomEvent('copilot:open-dashboard', { detail }));
   };
 
-  const routineAction = dashboard?.action_buttons?.find(b => b.type === 'routine' || b.routine);
-
-  const handleOpenRoutine = () => {
-    if (!routineAction?.routine) return;
-    const routine = routineAction.routine;
-    setToastNotice(`Abrindo rotina ${routine} no Protheus...`);
-    window.dispatchEvent(new CustomEvent('protheus:open-routine', { detail: { routine } }));
-    setTimeout(() => setToastNotice(null), 3500);
-  };
-
   return (
-    <article className="copilot-answer-card cprot-conversational-answer">
-      {/* 1. Resposta Executiva Conversacional em Markdown */}
-      <div className="copilot-answer-content">
+    <div className="cprot-assistant-body flex flex-col w-full text-sm leading-relaxed text-[var(--cprot-text-main)]">
+      {/* 1. Texto Executivo Natural (sem card pesado) */}
+      <div className="cprot-message-markdown">
         <ReactMarkdown
           components={{
-            a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+            a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" className="text-blue-500 underline" />,
             table: ({ node, ...props }) => <div className="cprot-markdown-table"><table {...props} /></div>,
+            strong: ({ node, ...props }) => <strong {...props} className="font-bold text-[var(--cprot-text-main)]" />,
+            p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0" />
           }}
         >
           {content || 'A análise foi concluída com sucesso.'}
         </ReactMarkdown>
       </div>
 
-      {/* 2. Barra de Ação Secundária: Abrir Dashboard sob Demanda */}
+      {/* 2. DashboardCTA: Card destacado para abrir o modo Dashboard */}
       {dashboard && (
-        <div className="cprot-answer-action-bar">
-          <button 
-            type="button" 
-            onClick={handleOpenDashboard} 
-            className="cprot-btn-open-dashboard"
-            title="Abrir painel visual completo com KPIs e gráficos"
-          >
-            <BarChart2 size={16} className="text-blue-400 shrink-0" />
-            <span className="font-semibold">Abrir dashboard</span>
-            <ArrowRight size={14} className="opacity-70 group-hover:opacity-100 transition-transform group-hover:translate-x-0.5" />
-          </button>
-        </div>
+        <DashboardCTA
+          dashboard={dashboard}
+          onOpen={handleOpenDashboard}
+        />
       )}
-
-      {/* Notificação Toast */}
-      {toastNotice && (
-        <div className="cprot-toast-notice mx-4 mb-3">
-          <CheckCircle2 size={13} />
-          <span>{toastNotice}</span>
-        </div>
-      )}
-    </article>
+    </div>
   );
 }

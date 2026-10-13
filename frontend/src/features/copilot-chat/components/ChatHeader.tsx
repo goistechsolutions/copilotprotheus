@@ -1,5 +1,5 @@
 import React from 'react';
-import { MoreVerticalIcon, CloseIcon } from './icons';
+import { Menu, X } from 'lucide-react';
 
 interface ChatHeaderProps {
   onOpenMenu: () => void;
@@ -20,13 +20,23 @@ export function ChatHeader({ onOpenMenu, onClose, isConnected = true }: ChatHead
   };
 
   return (
-    <header className="copilot-chat-header">
-      {/* Brand & Connection */}
+    <header className="copilot-chat-header flex items-center justify-between px-3 h-14 border-b border-[var(--cprot-border)] bg-[var(--cprot-bg)] z-20">
+      {/* Esquerda: ☰ Menu e Marca ⚡ Copilot Protheus */}
       <div className="flex items-center gap-2.5">
-        <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-500/15 text-blue-500 font-bold text-xs select-none">
-          ⚡
-        </div>
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          className="copilot-chat-header-btn p-1.5 rounded-lg text-[var(--cprot-text-sub)] hover:text-[var(--cprot-text-main)] hover:bg-[var(--cprot-surface-hover)] transition-colors cursor-pointer"
+          title="Histórico e configurações"
+          aria-label="Abrir menu"
+        >
+          <Menu size={18} />
+        </button>
+
         <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-500/15 text-blue-500 font-bold text-xs select-none">
+            ⚡
+          </div>
           <span className="font-semibold text-sm text-[var(--cprot-text-main)]">
             Copilot Protheus
           </span>
@@ -39,26 +49,16 @@ export function ChatHeader({ onOpenMenu, onClose, isConnected = true }: ChatHead
         </div>
       </div>
 
-      {/* Ações: Menu Secundário e Fechar X */}
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={onOpenMenu}
-          className="copilot-chat-header-btn"
-          title="Menu de opções"
-          aria-label="Abrir menu secundário"
-        >
-          <MoreVerticalIcon size={16} />
-        </button>
-
+      {/* Direita: ✕ Fechar painel */}
+      <div>
         <button
           type="button"
           onClick={handleClose}
-          className="copilot-chat-header-btn hover:text-red-400"
+          className="copilot-chat-header-btn p-1.5 rounded-lg text-[var(--cprot-text-sub)] hover:text-red-400 hover:bg-[var(--cprot-surface-hover)] transition-colors cursor-pointer"
           title="Fechar painel"
           aria-label="Fechar painel"
         >
-          <CloseIcon size={16} />
+          <X size={18} />
         </button>
       </div>
     </header>

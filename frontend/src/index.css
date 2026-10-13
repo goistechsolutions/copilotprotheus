@@ -37,6 +37,20 @@
   --primary: var(--brand);
   --primary-hover: var(--brand-hover);
 
+  /* Tokens do Design System Copilot Protheus (Dois estados, uma experiência) */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #0f172a;
+  --color-muted: #64748b;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --radius-lg: 0.75rem;
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+
   color: var(--text-primary);
   background-color: var(--bg);
   font-synthesis: none;
@@ -45,6 +59,11 @@
 }
 
 .dark {
+  --color-bg: #0b1220;
+  --color-surface: #111827;
+  --color-border: #1f2937;
+  --color-text: #f8fafc;
+  --color-muted: #94a3b8;
   /* Paleta Semântica Dark */
   --bg: #090D14;
   --surface-1: #0E1420;
