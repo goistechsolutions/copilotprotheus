@@ -163,10 +163,13 @@ class BusinessRulesEngine:
         elif domain == "sales" or any(w in prompt_lower for w in ["fatur", "venda", "receita"]):
             if tes_sales:
                 formatted = ", ".join(f"'{c}'" for c in tes_sales)
-                instructions.append(f"Para Faturamento e Vendas deste tenant, filtre OBRIGATORIAMENTE as TES de venda: D2_TES IN ({formatted}).")
+                instructions.append(
+                    f"Para Faturamento e Vendas deste tenant: se houver JOIN com a tabela de itens SD2, filtre as TES de venda: D2_TES IN ({formatted}). "
+                    f"IMPORTANTE: Se a consulta for feita apenas na tabela de cabeçalho SF2 (SF2010), NUNCA use F2_TES (F2_TES NÃO EXISTE NO PROTHEUS); filtre notas normais usando EXCLUSIVAMENTE SF2.F2_TIPO = 'N'."
+                )
             if tes_bonus:
                 formatted_bonus = ", ".join(f"'{c}'" for c in tes_bonus)
-                instructions.append(f"NUNCA inclua as TES de bonificação deste tenant: D2_TES NOT IN ({formatted_bonus}).")
+                instructions.append(f"Se houver itens (SD2), NUNCA inclua as TES de bonificação: D2_TES NOT IN ({formatted_bonus}).")
 
         # 2. Regras de Recebíveis / Inadimplência
         cfg = tenant_rules.get("module_config", {})
