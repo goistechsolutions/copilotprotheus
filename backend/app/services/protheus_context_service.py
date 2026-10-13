@@ -280,6 +280,50 @@ def auto_fix_protheus_dates(sql: str) -> str:
         flags=re.IGNORECASE,
     )
 
+    # 6. Converte comparações diretas de strings de data Protheus com SYSDATE - N
+    # Ex: HAVING MAX(SF2.F2_EMISSAO) < SYSDATE - 90 -> HAVING MAX(SF2.F2_EMISSAO) <= TO_CHAR(SYSDATE - 90, 'YYYYMMDD')
+    sql = re.sub(
+        r"(MAX\s*\(\s*[A-Za-z0-9_.]+(?:_EMISSAO|_VENCTO|_DATA)\s*\))\s*(<|<=)\s*SYSDATE\s*-\s*(\d+)",
+        r"\1 <= TO_CHAR(SYSDATE - \3, 'YYYYMMDD')",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    sql = re.sub(
+        r"([A-Za-z0-9_.]+(?:_EMISSAO|_VENCTO|_DATA))\s*(<|<=)\s*SYSDATE\s*-\s*(\d+)",
+        r"\1 <= TO_CHAR(SYSDATE - \3, 'YYYYMMDD')",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 7. Desconsiderar e remover o campo SA1.A1_ULTCOM conforme regra de negócio
+    sql = re.sub(
+        r"\s*AND\s*\(\s*[A-Za-z0-9_.]*A1_ULTCOM\s+IS\s+NULL.*?\)\s*\)",
+        "",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    sql = re.sub(
+        r"\s*AND\s+[A-Za-z0-9_.]*A1_ULTCOM\s*<=[^\s;]+",
+        "",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 8. Remove filtro conflitante de mês atual caso a query filtre clientes inativos por data histórica
+    if re.search(r"HAVING\s+MAX\s*\([^)]+\)\s*<=\s*TO_CHAR\s*\(\s*SYSDATE\s*-\s*\d+", sql, re.IGNORECASE):
+        sql = re.sub(
+            r"\s*AND\s+[A-Za-z0-9_.]*F2_EMISSAO\s+LIKE\s+TO_CHAR\s*\(\s*SYSDATE\s*,\s*['\"]YYYYMM['\"]\s*\)\s*\|\|\s*['\"]%['\"]",
+            "",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\s*AND\s+SUBSTR\s*\(\s*[A-Za-z0-9_.]*F2_EMISSAO\s*,\s*1\s*,\s*6\s*\)\s*=\s*TO_CHAR\s*\(\s*SYSDATE\s*,\s*['\"]YYYYMM['\"]\s*\)",
+            "",
+            sql,
+            flags=re.IGNORECASE,
+        )
+
     return sql
 
 
