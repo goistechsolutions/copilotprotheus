@@ -324,7 +324,88 @@ def auto_fix_protheus_dates(sql: str) -> str:
             flags=re.IGNORECASE,
         )
 
+    # 9. Corrige funções de grupo (MAX, MIN, SUM, COUNT, AVG) indevidamente colocadas no WHERE
+    sql = auto_fix_group_functions(sql)
+
     return sql
+
+
+def auto_fix_group_functions(sql: str) -> str:
+    """
+    No SQL padrão e no Oracle (ORA-00934: group function is not allowed here),
+    funções agregadas (MAX, MIN, SUM, COUNT, AVG) são proibidas na cláusula WHERE.
+    Esta função detecta condições agregadas indevidamente posicionadas no WHERE e as
+    transfere para a cláusula HAVING.
+    """
+    if not sql or not isinstance(sql, str):
+        return sql
+
+    where_match = re.search(r"\bWHERE\b", sql, re.IGNORECASE)
+    if not where_match:
+        return sql
+
+    where_start = where_match.start()
+    after_where = sql[where_match.end():]
+    boundary_match = re.search(r"\b(GROUP\s+BY|ORDER\s+BY|HAVING|FETCH|OFFSET)\b", after_where, re.IGNORECASE)
+
+    if boundary_match:
+        where_body = after_where[:boundary_match.start()]
+        rest_of_query = after_where[boundary_match.start():]
+    else:
+        where_body = after_where
+        rest_of_query = ""
+
+    agg_pattern = r"(?:AND\s+)?(\b(?:MAX|MIN|SUM|COUNT|AVG)\s*\([^)]+\)\s*(?:<=|>=|<|>|=|!=|<>|LIKE)\s*(?:TO_CHAR\s*\([^)]+\)|[^\s\n\(\)]+))"
+
+    agg_conditions = []
+    def extract_agg(m):
+        agg_conditions.append(m.group(1).strip())
+        return ""
+
+    new_where_body = re.sub(agg_pattern, extract_agg, where_body, flags=re.IGNORECASE)
+
+    if not agg_conditions:
+        return sql
+
+    new_where_body = re.sub(r"^\s*AND\s+", " ", new_where_body, flags=re.IGNORECASE)
+    new_where_body = re.sub(r"\s+AND\s*$", " ", new_where_body, flags=re.IGNORECASE)
+    new_where_body = re.sub(r"\s+AND\s+AND\s+", " AND ", new_where_body, flags=re.IGNORECASE)
+    new_where_body = new_where_body.strip()
+
+    if not new_where_body:
+        rebuilt = sql[:where_start].rstrip() + " " + rest_of_query.lstrip()
+    else:
+        rebuilt = sql[:where_match.end()] + " " + new_where_body + "\n" + rest_of_query
+
+    agg_clause = " AND ".join(agg_conditions)
+
+    having_match = re.search(r"\bHAVING\b", rebuilt, re.IGNORECASE)
+    if having_match:
+        h_end = having_match.end()
+        rebuilt = rebuilt[:h_end] + f" {agg_clause} AND" + rebuilt[h_end:]
+    else:
+        group_match = re.search(r"\bGROUP\s+BY\b", rebuilt, re.IGNORECASE)
+        if group_match:
+            after_group = rebuilt[group_match.end():]
+            next_clause = re.search(r"\b(ORDER\s+BY|FETCH|OFFSET)\b", after_group, re.IGNORECASE)
+            if next_clause:
+                idx = group_match.end() + next_clause.start()
+                rebuilt = rebuilt[:idx].rstrip() + f"\nHAVING\n    {agg_clause}\n" + rebuilt[idx:]
+            else:
+                stripped = rebuilt.rstrip()
+                if stripped.endswith(";"):
+                    rebuilt = stripped[:-1].rstrip() + f"\nHAVING\n    {agg_clause};"
+                else:
+                    rebuilt = stripped + f"\nHAVING\n    {agg_clause}"
+        else:
+            order_match = re.search(r"\bORDER\s+BY\b", rebuilt, re.IGNORECASE)
+            if order_match:
+                idx = order_match.start()
+                rebuilt = rebuilt[:idx].rstrip() + f"\nHAVING\n    {agg_clause}\n" + rebuilt[idx:]
+            else:
+                rebuilt = rebuilt.rstrip() + f"\nHAVING\n    {agg_clause}"
+
+    return rebuilt
 
 
 def auto_fix_protheus_joins(sql: str) -> str:

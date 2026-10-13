@@ -37,6 +37,7 @@ from app.services.dictionary_context_service import (
 from app.services.protheus_context_service import (
     CatalogValidationError,
     auto_fix_delet_filters,
+    auto_fix_group_functions,
     auto_fix_oracle_limit,
     auto_fix_protheus_dates,
     auto_fix_protheus_joins,
@@ -597,6 +598,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     clean_sql = auto_fix_delet_filters(clean_sql)
     clean_sql = auto_fix_protheus_dates(clean_sql)
     clean_sql = auto_fix_protheus_joins(clean_sql)
+    clean_sql = auto_fix_group_functions(clean_sql)
     return clean_sql
 
 
@@ -1467,6 +1469,7 @@ async def process_agent_task(task_id: str, payload: dict):
             sql = auto_fix_delet_filters(sql)
             sql = auto_fix_protheus_dates(sql)
             sql = auto_fix_protheus_joins(sql)
+            sql = auto_fix_group_functions(sql)
             try:
                 validate_query_security(sql=sql, **validation_args)
             except HTTPException as exc:
@@ -1548,6 +1551,7 @@ async def process_agent_task(task_id: str, payload: dict):
                 sql = auto_fix_delet_filters(sql)
                 sql = auto_fix_protheus_dates(sql)
                 sql = auto_fix_protheus_joins(sql)
+                sql = auto_fix_group_functions(sql)
                 _validate_query_domain(str(prompt), sql, domain=query_domain)
                 validate_query_security(sql=sql, **validation_args)
 
