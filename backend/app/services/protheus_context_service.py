@@ -368,13 +368,17 @@ def auto_fix_protheus_joins(sql: str) -> str:
     sf2_alias = next((t[1] or t[0] for t in table_refs if t[0][:3] == "SF2"), None)
     if has_sd2 and sd2_alias:
         sql = re.sub(r"\b(?:[A-Za-z0-9_]+\.)?F2_TES\b", f"{sd2_alias}.D2_TES", sql, flags=re.IGNORECASE)
-    elif sf2_alias:
         sql = re.sub(
             r"\b(?:[A-Za-z0-9_]+\.)?F2_TES\s*=\s*'[^']*'",
             f"{sf2_alias}.F2_TIPO = 'N'",
             sql,
             flags=re.IGNORECASE,
         )
+
+    # 6. Remove D2_TES órfão se a consulta NÃO tiver SD2 no FROM/JOIN (evita ORA-00904)
+    if not has_sd2:
+        sql = re.sub(r"\s+AND\s+(?:[A-Za-z0-9_]+\.)?D2_TES\s*(?:IN\s*\([^)]*\)|=\s*'[^']*')", "", sql, flags=re.IGNORECASE)
+        sql = re.sub(r"(?:[A-Za-z0-9_]+\.)?D2_TES\s*(?:IN\s*\([^)]*\)|=\s*'[^']*')\s+AND\s+", "", sql, flags=re.IGNORECASE)
 
     return sql
 
