@@ -167,39 +167,72 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
     
     if measures:
         primary_measure = measures[0]
-        # Calculate KPI value
+        # Calculate KPI values
         total_val = sum((_parse_summary_number(row.get(primary_measure["key"])) or 0) for row in rows)
+        avg_val = total_val / len(rows) if rows else 0.0
         
-        kpi = {
+        # 1. KPI Principal (Total)
+        kpi_total_label = "FATURAMENTO TOTAL" if "FATUR" in primary_measure["label"].upper() or "VALOR" in primary_measure["label"].upper() else f"TOTAL {primary_measure['label'].upper()}"
+        kpis.append({
             "key": f"total_{primary_measure['key'].lower()}",
-            "label": primary_measure["label"],
+            "label": kpi_total_label,
             "value": total_val,
             "format": primary_measure["format"],
             "source_column": primary_measure["key"],
-            "aggregation": primary_measure["aggregation"]
-        }
-        
+            "aggregation": primary_measure["aggregation"],
+            "tone": "positive"
+        })
+
+        # 2. KPI Secundário (Média / Ticket Médio)
         time_dim = next((d for d in dimensions if d["kind"] == "time"), None)
-        if time_dim:
-            kpi["dimension"] = time_dim["key"]
-            
-            # Build series
+        kpi_avg_label = "FATURAMENTO MÉDIO MENSAL" if time_dim else ("TICKET MÉDIO" if "VALOR" in primary_measure["label"].upper() or "FATUR" in primary_measure["label"].upper() else "MÉDIA POR REGISTRO")
+        kpis.append({
+            "key": f"avg_{primary_measure['key'].lower()}",
+            "label": kpi_avg_label,
+            "value": avg_val,
+            "format": primary_measure["format"],
+            "source_column": primary_measure["key"],
+            "aggregation": "avg",
+            "tone": "neutral"
+        })
+
+        # 3. KPI de Maior Destaque / Mês de Maior Faturamento
+        target_dim = time_dim or (dimensions[0] if dimensions else None)
+        if target_dim and len(rows) > 1:
+            try:
+                top_row = max(rows, key=lambda r: _parse_summary_number(r.get(primary_measure["key"])) or 0.0)
+                top_dim_val = str(top_row.get(target_dim["key"], "")).strip()
+                top_num_val = _parse_summary_number(top_row.get(primary_measure["key"])) or 0.0
+                
+                label_destaque = "MÊS DE MAIOR FATURAMENTO" if target_dim.get("kind") == "time" or "MES" in target_dim["key"].upper() else f"MAIOR {target_dim['label'].upper()}"
+                kpis.append({
+                    "key": "top_highlight",
+                    "label": label_destaque,
+                    "value": top_num_val,
+                    "highlight_text": top_dim_val,
+                    "format": primary_measure["format"],
+                    "tone": "positive"
+                })
+            except Exception:
+                pass
+
+        # Build series para gráfico (tempo ou categorias até 20 itens)
+        chart_dim = time_dim or (dimensions[0] if dimensions and len(rows) <= 25 else None)
+        if chart_dim:
             points = []
             for row in rows:
-                lbl = str(row.get(time_dim["key"], ""))
+                lbl = str(row.get(chart_dim["key"], "")).strip()
                 val = _parse_summary_number(row.get(primary_measure["key"])) or 0
                 points.append({"label": lbl, "value": val})
                 
             series.append({
                 "id": f"series_{primary_measure['key'].lower()}",
                 "label": primary_measure["label"],
-                "dimension": time_dim["key"],
+                "dimension": chart_dim["key"],
                 "measure": primary_measure["key"],
                 "format": primary_measure["format"],
                 "points": points
             })
-            
-        kpis.append(kpi)
         
         # Build Real Insights based on actual data
         fmt_total = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if primary_measure["format"] == "currency" else f"{total_val:,.2f}"
@@ -240,6 +273,9 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
         "series": series
     }
 
+def _format_brl_str(val: float) -> str:
+    return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
     if not rows:
         return "Consulta concluída sem registros para o contexto e filtros informados."
@@ -255,10 +291,10 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
         candidates.append((1 if semantic else 0, column, numeric_values))
     candidates.sort(key=lambda item: (item[0], len(item[2])), reverse=True)
     if not candidates:
-        return f"A consulta retornou {len(rows)} registros. Não foi identificada uma métrica numérica financeira segura; consulte a tabela detalhada para analisar os campos autorizados."
+        return f"A consulta retornou **{len(rows)} registros**. Consulte a tabela detalhada para analisar os campos disponíveis."
     _, metric, values = candidates[0]
     total = sum(values)
-    average = total / len(values)
+    average = total / len(values) if values else 0.0
 
     # Detecção de fluxo de caixa (RECEBIMENTO / PAGAMENTO)
     cash_types = {"RECEBIMENTO", "PAGAMENTO", "RECEBER", "PAGAR", "A RECEBER", "A PAGAR"}
@@ -282,50 +318,66 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
             elif tipo in {"PAGAMENTO", "PAGAR", "A PAGAR", "DESPESA", "SAIDA", "DR", "D"}:
                 total_pagar += val
 
-        # Se houver TANTO recebimentos QUANTO pagamentos, é Fluxo de Caixa
         if total_receber > 0 and total_pagar > 0:
             saldo = total_receber - total_pagar
             status_saldo = "Superávit projetado" if saldo >= 0 else "Déficit projetado"
-            fmt_rec = f"R$ {total_receber:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            fmt_pag = f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            fmt_sal = f"R$ {saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             return (
                 f"**Resumo do Fluxo de Caixa (Próximos Dias):**\n\n"
-                f"• **Total em Aberto a Receber:** {fmt_rec}\n"
-                f"• **Total em Aberto a Pagar:** {fmt_pag}\n"
-                f"• **Saldo Projetado (Diferença):** {fmt_sal} ({status_saldo})\n"
+                f"• **Total em Aberto a Receber:** {_format_brl_str(total_receber)}\n"
+                f"• **Total em Aberto a Pagar:** {_format_brl_str(total_pagar)}\n"
+                f"• **Saldo Projetado (Diferença):** {_format_brl_str(saldo)} ({status_saldo})\n"
                 f"• **Títulos em Aberto:** {len(rows)} registros analisados."
             )
         elif total_receber > 0 and total_pagar == 0:
-            fmt_rec = f"R$ {total_receber:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            avg_rec = f"R$ {(total_receber / len(rows)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             return (
                 f"**Resumo de Títulos a Receber em Aberto:**\n\n"
-                f"• **Total em Aberto a Receber:** {fmt_rec}\n"
-                f"• **Média por Título:** {avg_rec}\n"
+                f"• **Total em Aberto a Receber:** {_format_brl_str(total_receber)}\n"
+                f"• **Média por Título:** {_format_brl_str(total_receber / len(rows))}\n"
                 f"• **Quantidade de Títulos:** {len(rows)} títulos analisados."
             )
         elif total_pagar > 0 and total_receber == 0:
-            fmt_pag = f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            avg_pag = f"R$ {(total_pagar / len(rows)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             return (
                 f"**Resumo de Títulos a Pagar em Aberto:**\n\n"
-                f"• **Total em Aberto a Pagar:** {fmt_pag}\n"
-                f"• **Média por Título:** {avg_pag}\n"
+                f"• **Total em Aberto a Pagar:** {_format_brl_str(total_pagar)}\n"
+                f"• **Média por Título:** {_format_brl_str(total_pagar / len(rows))}\n"
                 f"• **Quantidade de Títulos:** {len(rows)} títulos analisados."
             )
 
+    # Detecção de consultas temporais (meses / ano)
+    time_col = next((c for c in columns if re.search(r"^(MES|MÊS|PERIODO|PERÍODO|DATA|ANO_MES|COMPETENCIA)$", str(c).upper())), None)
+    if time_col and len(rows) > 1:
+        try:
+            top_row = max(rows, key=lambda r: _parse_summary_number(r.get(metric)) or 0.0)
+            top_mes = str(top_row.get(time_col, "")).strip()
+            top_val = _parse_summary_number(top_row.get(metric)) or 0.0
+            return (
+                f"O faturamento total consolidado no período é de **{_format_brl_str(total)}**. "
+                f"O período de **{top_mes}** apresentou o maior volume, atingindo **{_format_brl_str(top_val)}**."
+            )
+        except Exception:
+            pass
 
-    dimensions = [
-        column for column in columns
-        if re.search(r"VENDEDOR|VEND|SUBGRUPO|PRODUTO|CLIENTE|MES|MÊS|PERIODO|PERÍODO", str(column).upper())
-        and not _is_non_metric_field(column) or re.search(r"MES|MÊS|SUBGRUPO", str(column).upper())
-    ]
-    dimension_text = f" Dimensões presentes: {', '.join(dict.fromkeys(str(item) for item in dimensions))}." if dimensions else ""
+    # Detecção de clientes inativos ou histórico de vendas
+    is_client_query = any(re.search(r"CLIENTE|A1_NOME|NOME_CLIENTE", str(c).upper()) for c in columns)
+    if is_client_query:
+        return (
+            f"Foram identificados **{len(rows)} clientes** na análise, "
+            f"totalizando **{_format_brl_str(total)}** com média de **{_format_brl_str(average)}** por cliente."
+        )
+
+    # Detecção de vendedores
+    is_vend_query = any(re.search(r"VENDEDOR|VEND1|REPRESENTANTE", str(c).upper()) for c in columns)
+    if is_vend_query:
+        return (
+            f"O faturamento total dos vendedores é de **{_format_brl_str(total)}**, "
+            f"distribuído em **{len(rows)} registros** com média de **{_format_brl_str(average)}**."
+        )
+
+    # Resumo padrão executivo limpo
     return (
-        f"A consulta ao Protheus retornou {len(rows)} registros. "
-        f"Considerando somente o campo numérico autorizado {metric}, o total dos registros retornados é R$ {total:,.2f} "
-        f"e a média por registro é R$ {average:,.2f}.{dimension_text}"
+        f"A análise retornou **{len(rows)} registros**. "
+        f"O volume total consolidado é de **{_format_brl_str(total)}**, "
+        f"com média de **{_format_brl_str(average)}** por registro."
     )
 
 
