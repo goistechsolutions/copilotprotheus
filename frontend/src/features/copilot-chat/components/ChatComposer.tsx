@@ -33,7 +33,7 @@ export function ChatComposer({
 
   const activeSuggestions = suggestions && suggestions.length > 0 
     ? suggestions 
-    : hasMessages 
+    : !hasMessages 
     ? DEFAULT_SUGGESTIONS 
     : [];
 

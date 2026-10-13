@@ -85,7 +85,7 @@ export default function ExecutiveWorkspace() {
                   title="Voltar à conversa atual"
                 >
                   <ArrowLeft size={14} className="text-[var(--brand)]" />
-                  <span className="hidden sm:inline">Voltar ao Chat</span>
+                  <span>Voltar ao chat</span>
                 </button>
 
                 <div className="h-5 w-px bg-[var(--border)] shrink-0" />
