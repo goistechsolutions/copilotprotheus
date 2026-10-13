@@ -712,7 +712,7 @@ async def conversation_turn(
                     "metadata": result_data.get("metadata", {}),
                     "backend_kpis": backend_kpis,
                     "backend_insights": backend_insights,
-                    "kpis": result_data.get("kpis", []),
+                    "kpis": [*result_data.get("kpis", []), *result_data.get("secondary_kpis", [])],
                     "series": result_data.get("series", []),
                     "summary": agent_res.get("summary") or asst_content,
                     "applied_filters": applied_filters,

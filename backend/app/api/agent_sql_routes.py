@@ -163,6 +163,7 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
 
     # Build KPIs
     kpis = []
+    secondary_kpis = []
     series = []
     
     if measures:
@@ -170,23 +171,26 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
         # Calculate KPI values
         total_val = sum((_parse_summary_number(row.get(primary_measure["key"])) or 0) for row in rows)
         avg_val = total_val / len(rows) if rows else 0.0
+        time_dim = next((d for d in dimensions if d["kind"] == "time"), None)
         
-        # 1. KPI Principal (Total)
-        kpi_total_label = "FATURAMENTO TOTAL" if "FATUR" in primary_measure["label"].upper() or "VALOR" in primary_measure["label"].upper() else f"TOTAL {primary_measure['label'].upper()}"
-        kpis.append({
+        # 1. KPI Principal (Contrato Semântico)
+        primary_kpi = {
             "key": f"total_{primary_measure['key'].lower()}",
-            "label": kpi_total_label,
+            "label": primary_measure["label"],
             "value": total_val,
             "format": primary_measure["format"],
             "source_column": primary_measure["key"],
             "aggregation": primary_measure["aggregation"],
             "tone": "positive"
-        })
+        }
+        if time_dim:
+            primary_kpi["dimension"] = time_dim["key"]
+        kpis.append(primary_kpi)
 
-        # 2. KPI Secundário (Média / Ticket Médio)
-        time_dim = next((d for d in dimensions if d["kind"] == "time"), None)
+        # 2. KPIs Executivos Secundários (Média e Maior Destaque)
+        secondary_kpis = []
         kpi_avg_label = "FATURAMENTO MÉDIO MENSAL" if time_dim else ("TICKET MÉDIO" if "VALOR" in primary_measure["label"].upper() or "FATUR" in primary_measure["label"].upper() else "MÉDIA POR REGISTRO")
-        kpis.append({
+        secondary_kpis.append({
             "key": f"avg_{primary_measure['key'].lower()}",
             "label": kpi_avg_label,
             "value": avg_val,
@@ -196,7 +200,6 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
             "tone": "neutral"
         })
 
-        # 3. KPI de Maior Destaque / Mês de Maior Faturamento
         target_dim = time_dim or (dimensions[0] if dimensions else None)
         if target_dim and len(rows) > 1:
             try:
@@ -205,7 +208,7 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
                 top_num_val = _parse_summary_number(top_row.get(primary_measure["key"])) or 0.0
                 
                 label_destaque = "MÊS DE MAIOR FATURAMENTO" if target_dim.get("kind") == "time" or "MES" in target_dim["key"].upper() else f"MAIOR {target_dim['label'].upper()}"
-                kpis.append({
+                secondary_kpis.append({
                     "key": "top_highlight",
                     "label": label_destaque,
                     "value": top_num_val,
@@ -216,7 +219,7 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
             except Exception:
                 pass
 
-        # Build series para gráfico (tempo ou categorias até 20 itens)
+        # Build series para gráfico (tempo ou categorias até 25 itens)
         chart_dim = time_dim or (dimensions[0] if dimensions and len(rows) <= 25 else None)
         if chart_dim:
             points = []
@@ -270,6 +273,7 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
         "dimensions": dimensions,
         "measures": measures,
         "kpis": kpis,
+        "secondary_kpis": secondary_kpis,
         "series": series
     }
 
