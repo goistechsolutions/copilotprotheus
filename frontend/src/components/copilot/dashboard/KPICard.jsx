@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrendingUp, User, DollarSign, BarChart2 } from 'lucide-react';
+import { TrendingUp, User, DollarSign, BarChart2, Award, Package, ShoppingBag } from 'lucide-react';
 
 export function KPICard({ 
   label, 
@@ -10,23 +10,31 @@ export function KPICard({
 }) {
   const getIcon = () => {
     switch (iconType) {
+      case 'award':
       case 'user':
         return (
-          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-            <User size={14} />
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/15 text-amber-500 dark:text-amber-400">
+            <Award size={15} />
           </div>
         );
+      case 'package':
       case 'money':
         return (
-          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            <DollarSign size={14} />
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/15 text-blue-500 dark:text-blue-400">
+            <Package size={15} />
+          </div>
+        );
+      case 'trending':
+        return (
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/15 text-purple-500 dark:text-purple-400">
+            <TrendingUp size={15} />
           </div>
         );
       case 'chart':
       default:
         return (
-          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <BarChart2 size={14} />
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-500 dark:text-emerald-400">
+            <BarChart2 size={15} />
           </div>
         );
     }

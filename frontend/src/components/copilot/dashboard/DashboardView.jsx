@@ -3,6 +3,7 @@ import DashboardHeader from './DashboardHeader';
 import DashboardTitle from './DashboardTitle';
 import KPIGrid from './KPIGrid';
 import KPICard from './KPICard';
+import ExecutiveInsightsCard from './ExecutiveInsightsCard';
 import ChartCard from './ChartCard';
 import FiltersAccordion from './FiltersAccordion';
 import DetailsAccordion from './DetailsAccordion';
@@ -18,38 +19,78 @@ const formatCurrency = (val) => {
 export function DashboardView({ dashboard, onBackToChat, onClose }) {
   const title = dashboard?.title || dashboard?.originPrompt || 'Faturamento por vendedor';
 
-  // Processamento inteligente dos KPIs para o grid 2x
+  // Processamento inteligente dos KPIs executivos (até 4 cards no grid 2x2)
   const kpiData = useMemo(() => {
-    let kpi1 = { label: 'FATURAMENTO TOTAL', value: 'R$ 1.045.388,57', trend: '+12,5% vs. mês anterior', iconType: 'chart' };
-    let kpi2 = { label: 'MAIOR VENDEDOR', value: 'R$ 410.786,65', trend: '39,3% do total', iconType: 'user' };
+    const list = [];
+    const sourceKpis = dashboard?.kpis || [];
 
-    if (dashboard?.kpis && dashboard.kpis.length >= 2) {
-      kpi1 = {
-        label: (dashboard.kpis[0].label || 'FATURAMENTO').toUpperCase(),
-        value: typeof dashboard.kpis[0].value === 'number' ? formatCurrency(dashboard.kpis[0].value) : String(dashboard.kpis[0].value),
-        trend: dashboard.kpis[0].highlight_text || null,
-        iconType: 'chart'
-      };
-      kpi2 = {
-        label: (dashboard.kpis[1].label || 'MAIOR VALOR').toUpperCase(),
-        value: typeof dashboard.kpis[1].value === 'number' ? formatCurrency(dashboard.kpis[1].value) : String(dashboard.kpis[1].value),
-        trend: dashboard.kpis[1].highlight_text || null,
-        iconType: 'user'
-      };
-    } else if (dashboard?.backend_kpis) {
+    if (sourceKpis.length > 0) {
+      sourceKpis.slice(0, 4).forEach((k, idx) => {
+        const isCurr = k.format === 'currency' || (typeof k.value === 'number' && !/PEDIDO|QTD|QUANT|COUNT|REGISTRO/i.test(k.label || ''));
+        const valFormatted = isCurr ? formatCurrency(k.value) : (typeof k.value === 'number' ? k.value.toLocaleString('pt-BR') : String(k.value ?? '-'));
+        
+        let iconType = k.iconType || (idx === 0 ? 'chart' : idx === 1 ? 'award' : idx === 2 ? 'package' : 'trending');
+        if (/LÍDER|MAIOR|TOP|CLIENTE|VENDEDOR/i.test(k.label || '')) iconType = 'award';
+        if (/PEDIDO|QUANT|VOLUME|TOTAL DE/i.test(k.label || '')) iconType = 'package';
+        if (/MÉDIA|TICKET/i.test(k.label || '')) iconType = 'trending';
+
+        list.push({
+          label: (k.label || 'INDICADOR').toUpperCase(),
+          value: valFormatted,
+          trend: k.highlight_text || null,
+          iconType,
+        });
+      });
+    }
+
+    // Se vieram menos de 2 KPIs dos kpis regulares, tenta preencher com backend_kpis
+    if (list.length < 2 && dashboard?.backend_kpis) {
       const bk = dashboard.backend_kpis;
-      if (bk.total !== undefined) {
-        kpi1.value = formatCurrency(bk.total);
+      if (bk.total !== undefined && !list.some(item => /TOTAL|FATURAMENTO/i.test(item.label))) {
+        list.unshift({
+          label: 'FATURAMENTO TOTAL',
+          value: formatCurrency(bk.total),
+          trend: 'Mês atual',
+          iconType: 'chart',
+        });
       }
-      if (bk.max_value !== undefined) {
-        kpi2.value = formatCurrency(bk.max_value);
-        if (bk.maior_ocorrencia_nome) {
-          kpi2.label = `MAIOR (${bk.maior_ocorrencia_nome})`.toUpperCase();
-        }
+      if (bk.max_value !== undefined && !list.some(item => /MAIOR|LÍDER/i.test(item.label))) {
+        list.push({
+          label: `LÍDER (${bk.maior_ocorrencia_nome || 'TOP 1'})`.toUpperCase(),
+          value: formatCurrency(bk.max_value),
+          trend: bk.concentration ? `${bk.concentration.toFixed(1)}% do total` : null,
+          iconType: 'award',
+        });
+      }
+      if (bk.count !== undefined && list.length < 4) {
+        list.push({
+          label: 'TOTAL DE REGISTROS',
+          value: bk.count.toLocaleString('pt-BR'),
+          trend: 'Base analisada',
+          iconType: 'package',
+        });
+      }
+      if (bk.average !== undefined && list.length < 4) {
+        list.push({
+          label: 'MÉDIA POR REGISTRO',
+          value: formatCurrency(bk.average),
+          trend: 'Média geral',
+          iconType: 'trending',
+        });
       }
     }
 
-    return [kpi1, kpi2];
+    // Fallback padrão se estiver vazio
+    if (list.length === 0) {
+      return [
+        { label: 'FATURAMENTO TOTAL', value: 'R$ 1.045.388,57', trend: '+12,5% vs. mês anterior', iconType: 'chart' },
+        { label: 'MAIOR VENDEDOR', value: 'R$ 410.786,65', trend: '39,3% do total', iconType: 'award' },
+        { label: 'TOTAL DE PEDIDOS', value: '184', trend: 'Volume acumulado', iconType: 'package' },
+        { label: 'TICKET MÉDIO', value: 'R$ 5.681,45', trend: 'Por pedido', iconType: 'trending' },
+      ];
+    }
+
+    return list;
   }, [dashboard]);
 
   // Processamento dos pontos da série para o ChartCard
@@ -79,15 +120,22 @@ export function DashboardView({ dashboard, onBackToChat, onClose }) {
       <DashboardHeader onBack={onBackToChat} onClose={onClose} />
 
       {/* 2. Área Rolável de Exploração Analítica */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 scrollbar-thin">
         {/* Título e Subtítulo */}
         <DashboardTitle title={title} />
 
-        {/* Grid de 2 KPIs */}
+        {/* Grid de KPIs Executivos (2x2) */}
         <KPIGrid>
-          <KPICard {...kpiData[0]} />
-          <KPICard {...kpiData[1]} />
+          {kpiData.map((kpi, idx) => (
+            <KPICard key={idx} {...kpi} />
+          ))}
         </KPIGrid>
+
+        {/* Diagnósticos & Insights Executivos (Analytics 2.0) */}
+        <ExecutiveInsightsCard 
+          insights={dashboard?.backend_insights} 
+          backendKpis={dashboard?.backend_kpis}
+        />
 
         {/* Gráfico quase em tela cheia do painel */}
         <ChartCard
