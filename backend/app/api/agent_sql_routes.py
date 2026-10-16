@@ -935,6 +935,48 @@ def _select_prompt_tables(prompt: str, domain: str | None, context: list[dict[st
 
     prompt_norm = unicodedata.normalize("NFKD", str(prompt or "").lower())
     prompt_norm = prompt_norm.encode("ascii", "ignore").decode("ascii")
+
+    # Mapeamento direcionado por intenção para manter o prompt enxuto (< 1000 tokens)
+    # e permitir que modelos leves (ex: qwen2.5-coder:3b) gerem SQL sem alucinações
+    target_codes: list[str] = []
+    if domain == "sales":
+        is_vendor = any(w in prompt_norm for w in ["vendedor", "vendedores", "representante", "representantes", "comercial"])
+        is_inactive = any(w in prompt_norm for w in ["inativo", "inativos", "sem compra", "sem compras", "reativ", "sem comprar"])
+        is_client = any(w in prompt_norm for w in ["cliente", "clientes", "carteira", "comprador"])
+        is_product = any(w in prompt_norm for w in ["produto", "produtos", "item", "itens", "mais vendido", "mais vendidos"])
+
+        if is_vendor:
+            target_codes = ["SF2", "SA3"]
+        elif is_inactive or is_client:
+            target_codes = ["SF2", "SA1"]
+        elif is_product:
+            target_codes = ["SD2", "SB1", "SF2"]
+        else:
+            target_codes = ["SF2"]
+    elif domain == "finance":
+        is_payable = any(w in prompt_norm for w in ["pagar", "pagamento", "forneced", "titulos a pagar"])
+        is_cash_flow = any(w in prompt_norm for w in ["fluxo de caixa", "projecao de caixa", "pagar e receber", "comparar pagar", "entradas e saidas"])
+        if is_cash_flow:
+            target_codes = ["SE1", "SE2"]
+        elif is_payable:
+            target_codes = ["SE2"]
+        else:
+            target_codes = ["SE1"]
+    elif domain == "purchases":
+        target_codes = ["SF1", "SD1", "SA2"]
+
+    if target_codes:
+        domain_items_by_code: dict[str, Any] = {}
+        for item in domain_items:
+            t = item.get("table", {})
+            c = str(t.get("table_code", "")).upper()
+            if c:
+                domain_items_by_code[c] = item
+
+        selected = [domain_items_by_code[tc] for tc in target_codes if tc in domain_items_by_code]
+        if selected:
+            return selected
+
     scored = []
     for item in domain_items:
         t = item.get("table", {})
@@ -977,7 +1019,7 @@ def _select_prompt_tables(prompt: str, domain: str | None, context: list[dict[st
         scored.append((score, item))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    return [item for _, item in scored[:5]]
+    return [item for _, item in scored[:3]]
 
 
 
