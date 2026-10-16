@@ -787,6 +787,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                 history=history or [],
                 image=image,
                 allow_tools=False,
+            )
             candidate_sql = _clean_sql_from_raw(raw_response)
             if not candidate_sql:
                 raise ValueError("Nenhum SELECT/WITH válido encontrado na resposta do modelo principal")
