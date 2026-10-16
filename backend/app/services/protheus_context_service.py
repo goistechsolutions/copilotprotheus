@@ -580,59 +580,46 @@ def _remove_select_aliases(body: str) -> str:
             flags=re.IGNORECASE | re.DOTALL,
         )
         if implicit:
-            expression = implicit.group("expression").rstrip()
-            # Só considera alias implícito quando há uma expressão composta.
-            # Um campo físico isolado nunca é removido.
-            if re.search(r"[().+*/|'\"]|\bCASE\b", expression, re.IGNORECASE):
-                item = expression
+            alias = implicit.group("alias").strip().strip('"').upper()
+            if alias not in _SQL_WORDS:
+                item = implicit.group("expression").rstrip()
         cleaned_items.append(item)
     return ", ".join(cleaned_items)
 
 
 def _extract_select_aliases(sql: str) -> set[str]:
-    """Extrai aliases definidos na cláusula SELECT (ex: SUBSTR(...) AS MES_ANO)."""
-    match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
-    if not match:
-        return set()
+    """Extrai aliases definidos na cláusula SELECT (ex: SUBSTR(...) AS MES_ANO ou expressao alias)."""
     aliases: set[str] = set()
-    for raw_item in _split_select_items(match.group("body")):
-        item = raw_item.strip()
-        if not item:
-            continue
-        as_match = re.search(
-            r"\s+AS\s+([A-Z][A-Z0-9_$#]*|\"(?:\"\"|[^\"])+\")\s*$",
-            item,
-            flags=re.IGNORECASE,
-        )
-        if as_match:
-            alias = as_match.group(1).strip().strip('"').upper()
-            aliases.add(alias)
-            continue
-        implicit = re.match(
-            r"^(?P<expression>.+\S)\s+(?P<alias>[A-Z][A-Z0-9_$#]*|\"(?:\"\"|[^\"])+\")$",
-            item,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        if implicit:
-            expression = implicit.group("expression").rstrip()
-            if re.search(r"[().+*/|'\"]|\bCASE\b", expression, re.IGNORECASE):
-                alias = implicit.group("alias").strip().strip('"').upper()
-                aliases.add(alias)
+    for match in re.finditer(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL):
+        body = match.group("body")
+        for as_match in re.finditer(r"\bAS\s+([A-Z][A-Z0-9_$#]*)", body, re.IGNORECASE):
+            candidate = as_match.group(1).upper()
+            if candidate not in _SQL_WORDS:
+                aliases.add(candidate)
+        for raw_item in _split_select_items(body):
+            item = raw_item.strip()
+            if not item:
+                continue
+            item_no_as = re.sub(r"\s+AS\s+[A-Z][A-Z0-9_$#]*\s*$", "", item, flags=re.IGNORECASE).strip()
+            implicit = re.search(r"\s+([A-Z][A-Z0-9_$#]*)\s*$", item_no_as, flags=re.IGNORECASE)
+            if implicit:
+                candidate = implicit.group(1).upper()
+                if candidate not in _SQL_WORDS:
+                    aliases.add(candidate)
     return aliases
 
 
 def _extract_selected_field_refs(sql: str) -> set[tuple[str | None, str]]:
-    match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
-    if not match:
-        return set()
-    body = _remove_select_aliases(match.group("body"))
+    select_aliases = _extract_select_aliases(sql)
     fields: set[tuple[str | None, str]] = set()
-    for qualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
-        fields.add((qualified[0].upper(), qualified[1].upper()))
-    for unqualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b", body, re.IGNORECASE):
-        token = unqualified.upper()
-        if token not in _SQL_WORDS:
-            fields.add((None, token))
+    for match in re.finditer(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL):
+        body = _remove_select_aliases(match.group("body"))
+        for qualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*)\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
+            fields.add((qualified[0].upper(), qualified[1].upper()))
+        for unqualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b", body, re.IGNORECASE):
+            token = unqualified.upper()
+            if token not in _SQL_WORDS and token not in select_aliases:
+                fields.add((None, token))
     return fields
 
 
@@ -677,18 +664,19 @@ def _extract_filter_field_refs(sql: str) -> set[tuple[str | None, str]]:
 
 
 def _extract_selected_fields(sql: str) -> set[str]:
-    match = re.search(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL)
-    if not match:
-        return set()
-    body = _remove_select_aliases(match.group("body"))
+    select_aliases = _extract_select_aliases(sql)
     fields = set()
-    for qualified in re.findall(r"\b[A-Z][A-Z0-9_$#]*\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
-        fields.add(qualified.upper())
-    for unqualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b", body, re.IGNORECASE):
-        token = unqualified.upper()
-        if token not in _SQL_WORDS:
-            fields.add(token)
-    return fields
+    for match in re.finditer(r"\bSELECT\b(?P<body>.*?)\bFROM\b", sql, re.IGNORECASE | re.DOTALL):
+        body = _remove_select_aliases(match.group("body"))
+        for qualified in re.findall(r"\b[A-Z][A-Z0-9_$#]*\.([A-Z][A-Z0-9_$#]*)\b", body, re.IGNORECASE):
+            token = qualified.upper()
+            if token not in select_aliases and token not in _SQL_WORDS:
+                fields.add(token)
+        for unqualified in re.findall(r"\b([A-Z][A-Z0-9_$#]*_[A-Z0-9_$#]+)\b", body, re.IGNORECASE):
+            token = unqualified.upper()
+            if token not in _SQL_WORDS and token not in select_aliases:
+                fields.add(token)
+    return fields - select_aliases
 
 
 def _has_oracle_limit(sql: str) -> bool:
@@ -770,9 +758,11 @@ def validate_query_security(
                     detail=f"A tabela '{table_name}' não possui filtro lógico D_E_L_E_T_ próprio.",
                 )
 
+    select_aliases = _extract_select_aliases(upper_sql)
+
     if allowed_fields is not None:
         normalized_fields = {str(field).strip().upper() for field in allowed_fields if str(field).strip()}
-        selected_fields = _extract_selected_fields(upper_sql)
+        selected_fields = _extract_selected_fields(upper_sql) - select_aliases
         unauthorized = sorted(field for field in selected_fields if field not in normalized_fields and field != "D_E_L_E_T_")
         if unauthorized:
             raise HTTPException(
@@ -796,7 +786,7 @@ def validate_query_security(
         selected_refs = _extract_selected_field_refs(upper_sql)
         unauthorized_refs: list[str] = []
         for qualifier, field_name in selected_refs:
-            if field_name == "D_E_L_E_T_":
+            if field_name == "D_E_L_E_T_" or field_name in select_aliases:
                 continue
             if qualifier:
                 resolved_table = alias_to_table.get(qualifier, qualifier)

@@ -592,6 +592,84 @@ DIRETRIZES GERAIS:
 7. {finance_directives}"""
 
         user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{tenant_rules_instruction}"
+    elif domain == "sales":
+        prompt_lower = (prompt or "").lower()
+        prompt_norm = unicodedata.normalize("NFKD", prompt_lower).encode("ascii", "ignore").decode("ascii")
+        is_current_month = any(w in prompt_norm for w in ["mes atual", "deste mes", "periodo atual", "recente", "este mes", "mes corrente"])
+        is_vendor = any(w in prompt_norm for w in ["vendedor", "vendedores", "representante", "representantes", "comercial"])
+        is_client = any(w in prompt_norm for w in ["cliente", "clientes", "carteira", "comprador"])
+        is_product = any(w in prompt_norm for w in ["produto", "produtos", "item", "itens", "mais vendido", "mais vendidos"])
+        is_inactive = any(w in prompt_norm for w in ["inativo", "inativos", "sem compra", "sem compras", "reativ", "sem comprar"])
+
+        if is_vendor:
+            sales_directives = (
+                "CONSULTA: FATURAMENTO / VENDAS POR VENDEDOR.\n"
+                "Consulte a tabela SF2010 SF2 com INNER JOIN SA3010 SA3 ON (SA3.A3_COD = SF2.F2_VEND1 AND SA3.D_E_L_E_T_ <> '*').\n"
+                "Filtros obrigatórios no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'.\n"
+                + ("Filtro temporal (mês atual): SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM').\n" if is_current_month else "")
+                + "Projete EXATAMENTE: SF2.F2_VEND1 AS COD_VENDEDOR, SA3.A3_NOME AS VENDEDOR, COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL.\n"
+                "Agrupe OBRIGATORIAMENTE no GROUP BY: SF2.F2_VEND1, SA3.A3_NOME.\n"
+                "Ordene por VALOR_TOTAL DESC.\n"
+                "NUNCA faça JOIN com SD2. NUNCA use F2_TES nem F2_NUM."
+            )
+        elif is_inactive:
+            sales_directives = (
+                "CONSULTA: CLIENTES INATIVOS / SEM COMPRAS.\n"
+                "Consulte a tabela SF2010 SF2 com INNER JOIN SA1010 SA1 ON (SA1.A1_COD = SF2.F2_CLIENTE AND SA1.D_E_L_E_T_ <> '*').\n"
+                "Filtros obrigatórios no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'. NUNCA use filtro de mês atual.\n"
+                "Projete EXATAMENTE: SF2.F2_CLIENTE AS COD_CLIENTE, SA1.A1_NOME AS CLIENTE, MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA, COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, SUM(SF2.F2_VALBRUT) AS VALOR_HISTORICO.\n"
+                "Agrupe OBRIGATORIAMENTE no GROUP BY: SF2.F2_CLIENTE, SA1.A1_NOME.\n"
+                "Filtre no HAVING: MAX(SF2.F2_EMISSAO) <= TO_CHAR(SYSDATE - 90, 'YYYYMMDD').\n"
+                "Ordene por DATA_ULTIMA_COMPRA ASC."
+            )
+        elif is_client:
+            sales_directives = (
+                "CONSULTA: FATURAMENTO / VENDAS POR CLIENTE.\n"
+                "Consulte a tabela SF2010 SF2 com INNER JOIN SA1010 SA1 ON (SA1.A1_COD = SF2.F2_CLIENTE AND SA1.D_E_L_E_T_ <> '*').\n"
+                "Filtros obrigatórios no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'.\n"
+                + ("Filtro temporal (mês atual): SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM').\n" if is_current_month else "")
+                + "Projete EXATAMENTE: SF2.F2_CLIENTE AS COD_CLIENTE, SA1.A1_NOME AS CLIENTE, COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL.\n"
+                "Agrupe OBRIGATORIAMENTE no GROUP BY: SF2.F2_CLIENTE, SA1.A1_NOME.\n"
+                "Ordene por VALOR_TOTAL DESC."
+            )
+        elif is_product:
+            sales_directives = (
+                "CONSULTA: VENDAS POR PRODUTO.\n"
+                "Consulte a tabela SD2010 SD2 com INNER JOIN SB1010 SB1 ON (SB1.B1_COD = SD2.D2_COD AND SB1.D_E_L_E_T_ <> '*').\n"
+                "Filtros obrigatórios no WHERE: SD2.D_E_L_E_T_ <> '*'.\n"
+                + ("Filtro temporal (mês atual): SUBSTR(SD2.D2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM').\n" if is_current_month else "")
+                + "Projete EXATAMENTE: SD2.D2_COD AS COD_PRODUTO, SB1.B1_DESC AS PRODUTO, SUM(SD2.D2_QUANT) AS QUANTIDADE, SUM(SD2.D2_TOTAL) AS VALOR_TOTAL.\n"
+                "Agrupe OBRIGATORIAMENTE no GROUP BY: SD2.D2_COD, SB1.B1_DESC.\n"
+                "Ordene por VALOR_TOTAL DESC."
+            )
+        else:
+            sales_directives = (
+                "CONSULTA: FATURAMENTO / VENDAS GERAIS.\n"
+                "Consulte a tabela SF2010 SF2.\n"
+                "Filtros obrigatórios no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'.\n"
+                + ("Filtro temporal (mês atual): SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM').\n" if is_current_month else "")
+                + "Projete: SUBSTR(SF2.F2_EMISSAO, 1, 6) AS MES_ANO, COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL.\n"
+                "Agrupe no GROUP BY: SUBSTR(SF2.F2_EMISSAO, 1, 6).\n"
+                "Ordene por MES_ANO ASC."
+            )
+
+        system_instruction = f"""Você é o Copilot Protheus SQL Generator, especialista sênior em banco ORACLE para TOTVS Protheus (Módulo de Vendas/Faturamento).
+Sua tarefa é gerar EXCLUSIVAMENTE uma única instrução SELECT Oracle pura, sem formatação markdown, sem comentários e sem explicações.
+
+=== DICIONÁRIO DE DADOS AUTORIZADO ===
+{context_text}
+======================================
+
+DIRETRIZES GERAIS:
+1. Retorne APENAS o código SQL Oracle (SELECT ou WITH). Nunca envolva em markdown ou texto explicativo.
+2. Use somente tabelas e colunas presentes no snapshot acima. Toda tabela deve ter alias.D_E_L_E_T_ <> '*'.
+3. Banco ORACLE: nunca use SELECT TOP nem LIMIT. Use ROWNUM ou FETCH FIRST somente se expressamente solicitado.
+4. Nunca use SELECT *. Projete sempre as colunas necessárias com aliases explícitos.
+5. Datas no Protheus são VARCHAR2(8) no formato 'YYYYMMDD'. Para mês atual use SUBSTR(alias.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM').
+6. Contexto operacional: empresa='{empresa}', filial='{filial}', XFILIAL='{xfilial}'.
+7. {sales_directives}"""
+
+        user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{tenant_rules_instruction}"
     else:
         domain_instruction = ""
         if domain == "sales":
