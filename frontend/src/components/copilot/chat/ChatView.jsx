@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import CopilotHeader from '../common/CopilotHeader';
 import MessageList from './MessageList';
 import ChatComposer from './ChatComposer';
-import { useCopilotConversation } from '../../features/copilot-chat/hooks/useCopilotConversation';
-import { Sidebar } from '../../features/copilot-chat/components/Sidebar';
+import { useCopilotConversation } from '../../../features/copilot-chat/hooks/useCopilotConversation';
+import { Sidebar } from '../../../features/copilot-chat/components/Sidebar';
 
 export function ChatView({ onOpenDashboard, onClose, context }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
