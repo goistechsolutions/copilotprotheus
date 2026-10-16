@@ -153,13 +153,16 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
             # Check if it's a measure
             values = [_parse_summary_number(row.get(col)) for row in rows if isinstance(row, dict)]
             numeric_values = [v for v in values if v is not None]
-            if numeric_values and re.search(r"VALOR|ORIGINAL|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME", name):
+            if numeric_values and re.search(r"VALOR|ORIGINAL|TOTAL|FATUR|RECEITA|SALDO|PRE[ÇC]O|MARGEM|QUANT|QTD|VOLUME|PEDIDOS", name):
                 measures.append({
                     "key": col,
                     "label": col,
                     "format": "currency" if re.search(r"VALOR|ORIGINAL|FATUR|RECEITA|SALDO|PRE[ÇC]O", name) else "number",
                     "aggregation": "sum"
                 })
+
+    # Prioriza métricas financeiras/monetárias sobre contagens/quantidades
+    measures.sort(key=lambda m: 0 if m.get("format") == "currency" or re.search(r"VALOR|FATUR|VALBRUT|TOTAL|SALDO|RECEITA", str(m["key"]).upper()) else 1)
 
     # Build KPIs
     kpis = []
@@ -172,24 +175,76 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
         total_val = sum((_parse_summary_number(row.get(primary_measure["key"])) or 0) for row in rows)
         avg_val = total_val / len(rows) if rows else 0.0
         time_dim = next((d for d in dimensions if d["kind"] == "time"), None)
+        is_sales = any(re.search(r"VEND|FATUR|VALBRUT|SA3|SF2", str(c).upper()) for c in columns)
+        is_client = any(re.search(r"CLIENTE|SA1", str(c).upper()) for c in columns)
+
+        primary_label = "FATURAMENTO TOTAL" if is_sales else ("VALOR TOTAL A RECEBER" if any("REC" in str(c).upper() for c in columns) else ("VALOR TOTAL" if primary_measure["format"] == "currency" else primary_measure["label"]))
         
-        # 1. KPI Principal (Contrato Semântico)
+        # 1. KPI Principal (Faturamento / Valor Total)
         primary_kpi = {
             "key": f"total_{primary_measure['key'].lower()}",
-            "label": primary_measure["label"],
+            "label": primary_label,
             "value": total_val,
             "format": primary_measure["format"],
             "source_column": primary_measure["key"],
             "aggregation": primary_measure["aggregation"],
-            "tone": "positive"
+            "highlight_text": "Mês atual" if time_dim or any("MES" in str(c).upper() for c in columns) else None,
+            "tone": "positive",
+            "iconType": "chart"
         }
         if time_dim:
             primary_kpi["dimension"] = time_dim["key"]
         kpis.append(primary_kpi)
 
-        # 2. KPIs Executivos Secundários (Média e Maior Destaque)
-        secondary_kpis = []
-        kpi_avg_label = "FATURAMENTO MÉDIO MENSAL" if time_dim else ("TICKET MÉDIO" if "VALOR" in primary_measure["label"].upper() or "FATUR" in primary_measure["label"].upper() else "MÉDIA POR REGISTRO")
+        # 2. KPI de Destaque / Líder (Vendedor Líder / Maior Cliente)
+        target_dim = next((d for d in dimensions if re.search(r"NOME|VENDEDOR|CLIENTE|DESC", d["key"].upper())), None) or (dimensions[0] if dimensions else None)
+        if target_dim and len(rows) > 1:
+            try:
+                top_row = max(rows, key=lambda r: _parse_summary_number(r.get(primary_measure["key"])) or 0.0)
+                top_dim_val = str(top_row.get(target_dim["key"], "")).strip()
+                top_num_val = _parse_summary_number(top_row.get(primary_measure["key"])) or 0.0
+                share_pct = (top_num_val / total_val * 100) if total_val > 0 else 0.0
+                
+                label_destaque = "VENDEDOR LÍDER" if is_sales else ("MAIOR CLIENTE" if is_client else f"MAIOR {target_dim['label'].upper()}")
+                secondary_kpis.append({
+                    "key": "top_highlight",
+                    "label": label_destaque,
+                    "value": top_num_val,
+                    "highlight_text": f"{top_dim_val} • {share_pct:.1f}% do total",
+                    "format": primary_measure["format"],
+                    "tone": "positive",
+                    "iconType": "user"
+                })
+            except Exception:
+                pass
+
+        # 3. KPI de Volume (Total de Pedidos ou Total de Vendedores)
+        qty_measure = next((m for m in measures if m.get("format") == "number" or re.search(r"QTD|QUANT|PEDIDO|VOLUME", str(m["key"]).upper())), None)
+        if qty_measure:
+            total_qty = sum((_parse_summary_number(row.get(qty_measure["key"])) or 0) for row in rows)
+            qty_label = "TOTAL DE PEDIDOS" if "PEDIDO" in qty_measure["key"].upper() else ("QUANTIDADE TOTAL" if "QUANT" in qty_measure["key"].upper() else qty_measure["label"])
+            secondary_kpis.append({
+                "key": "total_volume",
+                "label": qty_label,
+                "value": int(total_qty),
+                "format": "number",
+                "highlight_text": f"{len(rows)} vendedores" if is_sales else f"{len(rows)} registros",
+                "tone": "neutral",
+                "iconType": "money"
+            })
+        else:
+            secondary_kpis.append({
+                "key": "total_records",
+                "label": "VENDEDORES COM VENDAS" if is_sales else ("CLIENTES ATIVOS" if is_client else "TOTAL DE REGISTROS"),
+                "value": len(rows),
+                "format": "number",
+                "highlight_text": "Base analisada",
+                "tone": "neutral",
+                "iconType": "money"
+            })
+
+        # 4. KPI de Média / Ticket Médio
+        kpi_avg_label = "MÉDIA POR VENDEDOR" if is_sales else ("MÉDIA POR CLIENTE" if is_client else "MÉDIA POR REGISTRO")
         secondary_kpis.append({
             "key": f"avg_{primary_measure['key'].lower()}",
             "label": kpi_avg_label,
@@ -197,27 +252,10 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
             "format": primary_measure["format"],
             "source_column": primary_measure["key"],
             "aggregation": "avg",
-            "tone": "neutral"
+            "highlight_text": "Média consolidada",
+            "tone": "neutral",
+            "iconType": "chart"
         })
-
-        target_dim = time_dim or (dimensions[0] if dimensions else None)
-        if target_dim and len(rows) > 1:
-            try:
-                top_row = max(rows, key=lambda r: _parse_summary_number(r.get(primary_measure["key"])) or 0.0)
-                top_dim_val = str(top_row.get(target_dim["key"], "")).strip()
-                top_num_val = _parse_summary_number(top_row.get(primary_measure["key"])) or 0.0
-                
-                label_destaque = "MÊS DE MAIOR FATURAMENTO" if target_dim.get("kind") == "time" or "MES" in target_dim["key"].upper() else f"MAIOR {target_dim['label'].upper()}"
-                secondary_kpis.append({
-                    "key": "top_highlight",
-                    "label": label_destaque,
-                    "value": top_num_val,
-                    "highlight_text": top_dim_val,
-                    "format": primary_measure["format"],
-                    "tone": "positive"
-                })
-            except Exception:
-                pass
 
         # Build series para gráfico (tempo ou categorias até 25 itens)
         chart_dim = time_dim or (dimensions[0] if dimensions and len(rows) <= 25 else None)
@@ -378,10 +416,35 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
     # Detecção de vendedores
     is_vend_query = any(re.search(r"VENDEDOR|VEND1|REPRESENTANTE", str(c).upper()) for c in columns)
     if is_vend_query:
-        return (
-            f"O faturamento total dos vendedores é de **{_format_brl_str(total)}**, "
-            f"distribuído em **{len(rows)} registros** com média de **{_format_brl_str(average)}**."
-        )
+        vend_name_col = next((c for c in columns if re.search(r"^(VENDEDOR|NOME_VENDEDOR|A3_NOME|NOME)$", str(c).upper())), None)
+        vend_cod_col = next((c for c in columns if re.search(r"^(COD_VENDEDOR|F2_VEND1|A3_COD|CODIGO)$", str(c).upper())), None)
+        pedidos_col = next((c for c in columns if re.search(r"QTD_PEDIDOS|PEDIDOS|DOC", str(c).upper())), None)
+        
+        try:
+            top_row = max(rows, key=lambda r: _parse_summary_number(r.get(metric)) or 0.0)
+            top_val = _parse_summary_number(top_row.get(metric)) or 0.0
+            top_label = ""
+            if vend_name_col and top_row.get(vend_name_col):
+                top_label = str(top_row.get(vend_name_col)).strip()
+            elif vend_cod_col and top_row.get(vend_cod_col):
+                top_label = f"Vendedor {top_row.get(vend_cod_col)}"
+
+            pct = (top_val / total * 100) if total > 0 else 0.0
+            leader_str = f" O vendedor **{top_label}** lidera o ranking com **{_format_brl_str(top_val)}** ({pct:.1f}% do total)." if top_label else ""
+            
+            total_pedidos = sum(_parse_summary_number(r.get(pedidos_col)) or 0 for r in rows) if pedidos_col else 0
+            pedidos_str = f", somando **{int(total_pedidos)} pedidos**" if total_pedidos > 0 else ""
+
+            return (
+                f"O faturamento total deste mês totaliza **{_format_brl_str(total)}**, "
+                f"distribuído entre **{len(rows)} vendedores**{pedidos_str} "
+                f"com média de **{_format_brl_str(average)}** por vendedor.{leader_str}"
+            )
+        except Exception:
+            return (
+                f"O faturamento total dos vendedores é de **{_format_brl_str(total)}**, "
+                f"distribuído em **{len(rows)} vendedores** com média de **{_format_brl_str(average)}**."
+            )
 
     # Resumo padrão executivo limpo
     return (

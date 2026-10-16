@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
@@ -651,12 +652,21 @@ async def conversation_turn(
                 logger.error("Erro na execucao do turno pelo agente: %s", proc_err)
                 agent_res = {"status": "error", "message": f"Erro ao processar consulta no Protheus: {proc_err}"}
 
-            asst_content = (
-                agent_res.get("message") 
-                or agent_res.get("summary") 
-                or agent_res.get("error") 
-                or "Consulta processada com sucesso."
-            )
+            if agent_res.get("status") == "error":
+                raw_err = str(agent_res.get("error") or agent_res.get("message") or "")
+                if any(x in raw_err for x in ["Erro HTTP 500", "LLM falhou", "O provedor LLM", "HTTPStatusError", "500 ao chamar", "status=500"]):
+                    asst_content = (
+                        "Não foi possível concluir a análise no momento devido a uma oscilação temporária no serviço de IA. "
+                        "Por favor, tente enviar sua pergunta novamente."
+                    )
+                else:
+                    asst_content = raw_err or "Ocorreu uma falha ao consultar os dados no Protheus."
+            else:
+                asst_content = (
+                    agent_res.get("message") 
+                    or agent_res.get("summary") 
+                    or "Consulta processada com sucesso."
+                )
             
             analysis_id = str(uuid.uuid4())
             dash_id = str(uuid.uuid4())
@@ -767,14 +777,46 @@ async def conversation_turn(
                     logger.warning("Falha ao persistir copilot_dashboards: %s", dash_err)
                     dash_id = None
 
-            # Persiste resposta do assistente
-            asst_msg_id = str(uuid.uuid4())
+            # Geração de perguntas sugeridas de continuidade (conversacionais e naturais)
+            follow_up_suggestions = []
+            prompt_norm = unicodedata.normalize("NFKD", str(user_text or "").lower()).encode("ascii", "ignore").decode("ascii")
+            if any(w in prompt_norm for w in ["vendedor", "vendas", "fatur"]):
+                follow_up_suggestions = [
+                    "Quais são os 3 maiores vendedores?",
+                    "Comparar com o mês anterior",
+                    "Ver clientes do vendedor líder"
+                ]
+            elif any(w in prompt_norm for w in ["receber", "inadimpl", "titulo", "vencid"]):
+                follow_up_suggestions = [
+                    "Quais títulos vencem nos próximos 15 dias?",
+                    "Quem são os maiores clientes em atraso?",
+                    "Resumo do fluxo de caixa previsto"
+                ]
+            elif any(w in prompt_norm for w in ["pagar", "forneced"]):
+                follow_up_suggestions = [
+                    "Quais pagamentos vencem nesta semana?",
+                    "Quem são os principais fornecedores a pagar?",
+                    "Comparar pagamentos com recebimentos"
+                ]
+            elif any(w in prompt_norm for w in ["cliente", "inativ"]):
+                follow_up_suggestions = [
+                    "Quais clientes têm maior valor histórico?",
+                    "Ranking de clientes por faturamento",
+                    "Clientes sem compras há mais de 90 dias"
+                ]
+            else:
+                follow_up_suggestions = [
+                    "Exibir os principais destaques",
+                    "Comparar com período anterior",
+                    "Ver análise de concentração"
+                ]
+
             asst_meta = {
                 "trace_id": trace_id,
                 "analysis_id": analysis_id,
                 "dashboard_id": dash_id,
                 "dashboard": presentation,
-                "suggestions": [ins.get("title") for ins in backend_insights if isinstance(ins, dict) and ins.get("title")][:3]
+                "suggestions": follow_up_suggestions
             }
             db.execute(text(f'''
                 INSERT INTO {repo._tbl("copilot_messages")}
