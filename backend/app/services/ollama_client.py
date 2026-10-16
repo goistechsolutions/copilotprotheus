@@ -382,7 +382,7 @@ async def _call_ollama(
         temperature = context["tenant_temperature"]
     
     ollama_url = await _get_active_ollama_url()
-    ollama_model = await _resolve_ollama_model(ollama_url)
+    ollama_model = context.get("forced_model") if context and context.get("forced_model") else await _resolve_ollama_model(ollama_url)
 
     async with httpx.AsyncClient(timeout=600.0) as client:
         payload = {
@@ -578,7 +578,7 @@ async def stream_llm(
         return
 
     ollama_url = await _get_active_ollama_url()
-    ollama_model = await _resolve_ollama_model(ollama_url)
+    ollama_model = context.get("forced_model") if context and context.get("forced_model") else await _resolve_ollama_model(ollama_url)
 
     try:
         async with httpx.AsyncClient(timeout=600.0) as client:

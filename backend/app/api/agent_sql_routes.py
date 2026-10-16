@@ -395,6 +395,107 @@ def _build_safe_result_summary(rows: list[dict[str, Any]]) -> str:
 AGENT_TASKS = {}
 
 
+_DOMAIN_TABLE_FAMILIES = {
+    "sales": {"SF2", "SD2", "SC5", "SC6", "SA1", "SA3", "SE1", "SB1", "SB2", "SF4", "SCJ", "SCK", "DA0", "DA1"},
+    "purchases": {"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2", "SF4", "SC1"},
+    "finance": {"SE1", "SE2", "SE5", "SA1", "SA2", "SA6"}
+}
+
+
+def _infer_query_domain(prompt: str) -> str | None:
+    normalized = unicodedata.normalize("NFKD", str(prompt or "").lower())
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = re.sub(r"[^a-z0-9 ]", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    sales_terms = (
+        "venda", "vendas", "vendido", "faturamento", "faturado", "faturada", "faturadas",
+        "pedido", "pedidos", "pedido de venda", "pedidos de venda", "notas fiscais de saida", "nota de saida", "notas de saida", "cliente", "clientes",
+        "vendedor", "vendedores", "representante", "representantes", "comercial",
+    )
+    purchase_terms = (
+        "compra", "compras", "comprado", "entrada", "entradas", "fornecedor", "fornecedores",
+        "nota de entrada", "notas de entrada", "recebimento", "pedido de compra",
+    )
+    finance_terms = (
+        "financeiro", "fluxo de caixa", "receber", "pagar", "contas a receber", "contas a pagar", "inadimplencia", "inadimplência",
+        "vencimento", "vencido", "vencidos", "boleto", "boletos", "titulo", "titulos", "se1", "se2", "se5",
+        "saldo", "saldo bancario", "movimento bancario", "devedor", "devedores", "divida", "dividas", "cobranca", "extrato",
+    )
+    
+    if any(term in normalized for term in finance_terms):
+        return "finance"
+    
+    has_sales = any(term in normalized for term in sales_terms)
+    has_purchases = any(term in normalized for term in purchase_terms)
+    if has_sales and not has_purchases:
+        return "sales"
+    if has_purchases and not has_sales:
+        return "purchases"
+    if has_sales and has_purchases:
+        if any(term in normalized for term in ("vendedor", "vendedores", "faturamento", "cliente", "clientes")) and not any(term in normalized for term in ("fornecedor", "fornecedores")):
+            return "sales"
+    return None
+
+
+def _table_families_from_sql(sql: str) -> set[str]:
+    families = set()
+    for match in re.finditer(r"\b(?:FROM|JOIN)\s+([A-Z][A-Z0-9_$#]*)", str(sql or "").upper()):
+        compact = re.sub(r"[^A-Z0-9]", "", match.group(1))
+        for family in {"SF1", "SD1", "SA2", "SF2", "SD2", "SA1", "SA3", "SC5", "SC6", "SC7", "SE1", "SE2", "SE5", "SB1", "SB2", "SF4", "SC1", "SCJ", "SCK", "DA0", "DA1", "SA6"}:
+            if compact.startswith(family):
+                families.add(family)
+    return families
+
+
+def _validate_query_domain(prompt: str, sql: str, domain: str | None = None) -> None:
+    domain = domain or _infer_query_domain(prompt)
+    if not domain:
+        return
+    families = _table_families_from_sql(sql)
+    if domain == "sales":
+        if families.intersection({"SF1", "SD1", "SA2"}) and not families.intersection({"SF2", "SD2", "SC5", "SC6", "SA1", "SE1", "SB1", "SB2"}):
+            raise HTTPException(
+                status_code=422,
+                detail="Consulta de vendas gerou tabela de entrada/fornecedor (SF1, SD1 ou SA2); SQL bloqueado.",
+            )
+    elif domain == "purchases":
+        if families.intersection({"SF2", "SD2", "SA1"}) and not families.intersection({"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2"}):
+            raise HTTPException(
+                status_code=422,
+                detail="Consulta de compras gerou tabela de saída/cliente (SF2, SD2 ou SA1); SQL bloqueado.",
+            )
+    elif domain == "finance":
+        if not families.intersection({"SE1", "SE2", "SE5", "SA1", "SA2"}):
+            raise HTTPException(
+                status_code=422,
+                detail="Consulta financeira gerou SQL sem tabelas financeiras adequadas (SE1, SE2, SE5); SQL bloqueado.",
+            )
+
+
+def _clean_sql_from_raw(raw_response: str) -> str:
+    if not raw_response or not isinstance(raw_response, str):
+        return ""
+    clean_sql = re.sub(r'```(?:sql)?|```', '', raw_response, flags=re.IGNORECASE).strip()
+    with_idx = clean_sql.upper().find("WITH")
+    sel_idx = clean_sql.upper().find("SELECT")
+    if with_idx != -1 and (sel_idx == -1 or with_idx < sel_idx):
+        clean_sql = clean_sql[with_idx:].strip()
+    elif sel_idx != -1:
+        clean_sql = clean_sql[sel_idx:].strip()
+    else:
+        return ""
+
+    if ";" in clean_sql:
+        clean_sql = clean_sql.split(";")[0].strip()
+
+    clean_sql = auto_fix_oracle_limit(clean_sql)
+    clean_sql = auto_fix_delet_filters(clean_sql)
+    clean_sql = auto_fix_protheus_dates(clean_sql)
+    clean_sql = auto_fix_protheus_joins(clean_sql)
+    clean_sql = auto_fix_group_functions(clean_sql)
+    return clean_sql
+
+
 async def real_llm_sql_generator(
     prompt: str, 
     context_text: str, 
@@ -412,7 +513,143 @@ async def real_llm_sql_generator(
     para gerar instruções SQL puras adequadas ao banco de dados Oracle do Protheus na TOTVS Cloud,
     respeitando as regras e exclusões lógicas sem inventar estruturas não permitidas.
     """
-    system_instruction = f"""Você é o Copilot Protheus SQL Generator, especialista sênior no dicionário de dados do ERP TOTVS Protheus para banco de dados ORACLE em Cloud (SaaS/Hetzner/Cloudflare).
+    if not domain:
+        domain = _infer_query_domain(prompt)
+    if not domain and history:
+        for turn in reversed(history):
+            if turn.get("role") == "user":
+                past_prompt = turn.get("content") or turn.get("text") or ""
+                past_domain = _infer_query_domain(str(past_prompt))
+                if past_domain:
+                    domain = past_domain
+                    break
+
+    tenant_rules_instruction = ""
+    if tenant_id:
+        try:
+            with SessionLocal() as r_db:
+                t_rules = BusinessRulesEngine.get_tenant_rules(tenant_id, r_db)
+                tenant_rules_instruction = BusinessRulesEngine.build_rules_instruction(t_rules, prompt, domain)
+        except Exception as r_err:
+            logger.warning("Falha ao carregar regras de negocio do tenant %s: %s", tenant_id, r_err)
+
+    if domain == "finance":
+        prompt_lower = (prompt or "").lower()
+        is_payable = any(w in prompt_lower for w in ["pagar", "pagamento", "forneced", "titulos a pagar"])
+        is_cash_flow = any(w in prompt_lower for w in ["fluxo de caixa", "projeção de caixa", "pagar e receber", "comparar pagar", "entradas e saídas"])
+
+        if is_cash_flow:
+            finance_directives = (
+                "CONSULTA: FLUXO DE CAIXA (RECEBER E PAGAR).\n"
+                "Unifique SE1010 SE1 e SE2010 SE2 via UNION ALL:\n"
+                "SELECT 'RECEBIMENTO' AS TIPO_MOVIMENTO, SE1.E1_NUM AS NUM_TITULO, SE1.E1_PREFIXO, SE1.E1_PARCELA, SE1.E1_NOMCLI AS CLIENTE, SE1.E1_VENCTO AS DATA_VENCTO, SE1.E1_VALOR AS VALOR, SE1.E1_SALDO AS SALDO "
+                "FROM SE1010 SE1 WHERE SE1.D_E_L_E_T_ <> '*' AND SE1.E1_SALDO > 0 "
+                "UNION ALL "
+                "SELECT 'PAGAMENTO' AS TIPO_MOVIMENTO, SE2.E2_NUM AS NUM_TITULO, SE2.E2_PREFIXO, SE2.E2_PARCELA, SE2.E2_NOMFOR AS CLIENTE, SE2.E2_VENCTO AS DATA_VENCTO, SE2.E2_VALOR AS VALOR, SE2.E2_SALDO AS SALDO "
+                "FROM SE2010 SE2 WHERE SE2.D_E_L_E_T_ <> '*' AND SE2.E2_SALDO > 0 "
+                "ORDER BY DATA_VENCTO ASC"
+            )
+        elif is_payable and not any(w in prompt_lower for w in ["receber", "recebimento", "inadimpl"]):
+            finance_directives = (
+                "CONSULTA: CONTAS A PAGAR.\n"
+                "Consulte EXCLUSIVAMENTE a tabela SE2010 SE2 (Contas a Pagar).\n"
+                "Filtros obrigatórios: SE2.D_E_L_E_T_ <> '*' AND SE2.E2_SALDO > 0.\n"
+                "Se pedir títulos vencidos ou em atraso: adicione SE2.E2_VENCTO < TO_CHAR(SYSDATE, 'YYYYMMDD').\n"
+                "Se pedir títulos a vencer ou futuros: adicione SE2.E2_VENCTO >= TO_CHAR(SYSDATE, 'YYYYMMDD').\n"
+                "Projete: SE2.E2_NUM AS NUM_TITULO, SE2.E2_PREFIXO, SE2.E2_PARCELA, SE2.E2_FORNECE, SE2.E2_NOMFOR AS FORNECEDOR, SE2.E2_VENCTO AS DATA_VENCTO, SE2.E2_VALOR AS VALOR, SE2.E2_SALDO AS SALDO.\n"
+                "Ordene por SE2.E2_SALDO DESC.\n"
+                "NUNCA use SE1 ou UNION ALL nesta consulta."
+            )
+        else:
+            finance_directives = (
+                "CONSULTA: CONTAS A RECEBER / INADIMPLÊNCIA / TÍTULOS A RECEBER.\n"
+                "Consulte EXCLUSIVAMENTE a tabela SE1010 SE1 (Contas a Receber).\n"
+                "Filtros obrigatórios: SE1.D_E_L_E_T_ <> '*' AND SE1.E1_SALDO > 0.\n"
+                "Se pedir inadimplência, vencidos ou atraso: adicione SE1.E1_VENCTO < TO_CHAR(SYSDATE, 'YYYYMMDD').\n"
+                "Se pedir a vencer, projeção ou recebimentos futuros: adicione SE1.E1_VENCTO >= TO_CHAR(SYSDATE, 'YYYYMMDD').\n"
+                "Projete: SE1.E1_NUM AS NUM_TITULO, SE1.E1_PREFIXO, SE1.E1_PARCELA, SE1.E1_CLIENTE, SE1.E1_NOMCLI AS CLIENTE, SE1.E1_VENCTO AS DATA_VENCTO, SE1.E1_VALOR AS VALOR, SE1.E1_SALDO AS SALDO.\n"
+                "Ordene por SE1.E1_SALDO DESC.\n"
+                "NUNCA use SE2 ou UNION ALL nesta consulta."
+            )
+
+        system_instruction = f"""Você é o Copilot Protheus SQL Generator, especialista sênior em banco ORACLE para TOTVS Protheus (Módulo Financeiro).
+Sua tarefa é gerar EXCLUSIVAMENTE uma única instrução SELECT Oracle pura, sem formatação markdown, sem comentários e sem explicações.
+
+=== DICIONÁRIO DE DADOS AUTORIZADO ===
+{context_text}
+======================================
+
+DIRETRIZES GERAIS:
+1. Retorne APENAS o código SQL Oracle (SELECT ou WITH). Nunca envolva em markdown ou texto explicativo.
+2. Use somente tabelas e colunas presentes no snapshot acima. Toda tabela deve ter alias.D_E_L_E_T_ <> '*'.
+3. Banco ORACLE: nunca use SELECT TOP nem LIMIT. Use ROWNUM ou FETCH FIRST somente se expressamente solicitado.
+4. Nunca use SELECT *. Projete sempre as colunas necessárias com aliases explícitos.
+5. Datas no Protheus são VARCHAR2(8) no formato 'YYYYMMDD'. Compare diretamente como strings:
+   - Títulos vencidos: alias.EX_VENCTO < TO_CHAR(SYSDATE, 'YYYYMMDD')
+   - Títulos a vencer: alias.EX_VENCTO >= TO_CHAR(SYSDATE, 'YYYYMMDD')
+   NUNCA use TO_CHAR(alias.EX_VENCTO) nem EXTRACT/YEAR/MONTH.
+6. Contexto operacional: empresa='{empresa}', filial='{filial}', XFILIAL='{xfilial}'.
+7. {finance_directives}"""
+
+        user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{tenant_rules_instruction}"
+    else:
+        domain_instruction = ""
+        if domain == "sales":
+            domain_instruction = (
+                " A intenção é VENDAS/FATURAMENTO. Use SF2/SD2 para notas de saída "
+                "(e SA1/SA3 quando essas tabelas constarem explicitamente no snapshot autorizado acima); "
+                "nunca use SF1/SD1/SA2, que são entrada/compras/fornecedores. "
+                "DIRETRIZES DE VENDAS: "
+                "1. ANÁLISE POR VENDEDOR/REPRESENTANTE E VENDAS EM GERAL: "
+                "- REGRA OBRIGATÓRIA PARA IDENTIFICAÇÃO DE VENDEDORES: "
+                "  * Se a tabela SA3 CONSTAR explicitamente no snapshot autorizado acima: faça INNER JOIN com SA3010 SA3 via SF2.F2_VEND1 = SA3.A3_COD (ou SC5.C5_VEND1 = SA3.A3_COD) com SA3.D_E_L_E_T_ <> '*' e projete SA3.A3_NOME AS VENDEDOR e SF2.F2_VEND1 AS COD_VENDEDOR. "
+                "  * Se a tabela SA3 NÃO CONSTAR no snapshot autorizado acima: é TERMINANTEMENTE PROIBIDO fazer JOIN com SA3 ou usar campos A3_*! Projete EXCLUSIVAMENTE SF2.F2_VEND1 AS COD_VENDEDOR diretamente da tabela SF2. "
+                "- Para faturamento acumulado por vendedor ou totais de vendas gerais, consulte APENAS a tabela SF2 (SF2010 SF2), sem JOIN com SD2, pois SF2 já contém o total faturado F2_VALBRUT e a quantidade de documentos F2_DOC. NUNCA faça JOIN com SD2 a menos que o usuário peça especificamente produtos, itens ou TES. "
+                "- A TABELA SF2 NÃO POSSUI CAMPO DE TES (O CAMPO F2_TES NÃO EXISTE). Para filtrar notas normais em SF2, use EXCLUSIVAMENTE SF2.F2_TIPO = 'N'. NUNCA utilize F2_TES! "
+                "- NUNCA USE OS CAMPOS INEXISTENTES F2_NUM NEM D2_NUM! Os campos reais do Protheus são F2_DOC e D2_DOC. Se precisar fazer JOIN com SD2, a sintaxe OBRIGATÓRIA é: SF2.F2_FILIAL = SD2.D2_FILIAL AND SF2.F2_DOC = SD2.D2_DOC AND SF2.F2_SERIE = SD2.D2_SERIE. "
+                "- FILTRO TEMPORAL (MÊS ATUAL): Se a pergunta pedir 'mês atual' ou período atual, filtre SEMPRE: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM') ou SF2.F2_EMISSAO LIKE TO_CHAR(SYSDATE, 'YYYYMM') || '%'. NUNCA use EXTRACT. "
+                "- Selecione OBRIGATORIAMENTE a quantidade de pedidos faturados: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS. "
+                "- Selecione o valor total faturado: SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
+                "- Agrupe pelas dimensões selecionadas (incluindo SA3.A3_NOME no GROUP BY quando SA3 estiver no snapshot) e ordene por VALOR_TOTAL DESC. "
+                "2. ANÁLISE POR CLIENTE / CARTEIRA DE CLIENTES / CLIENTES SEM COMPRAS / ÚLTIMA VENDA: "
+                "- REGRA OBRIGATÓRIA (DESCONSIDERAR A1_ULTCOM): NUNCA utilize o campo SA1.A1_ULTCOM. DESCONSIDERE TOTALMENTE O CAMPO A1_ULTCOM EM TODAS AS CONSULTAS. "
+                "- A DATA REAL DA ÚLTIMA COMPRA DEVE SER OBTIDA EXCLUSIVAMENTE POR: MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA na tabela SF2010 SF2! "
+                "- Se a pergunta for sobre clientes sem compras há mais de X dias (ex: 90 dias), última venda com mais de X dias, clientes inativos ou reativação de clientes: "
+                "  * Consulte a tabela SF2010 SF2 com INNER JOIN SA1010 SA1 via SF2.F2_CLIENTE = SA1.A1_COD com SA1.D_E_L_E_T_ <> '*. "
+                "  * Filtre no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'. "
+                "  * Se houver vendedor: filtre SF2.F2_VEND1 = 'codigo' (ex: '01'). "
+                "  * NUNCA adicione filtro de mês atual (SF2.F2_EMISSAO LIKE 'YYYYMM%') em consultas de clientes inativos ou sem compras há X dias! "
+                "  * Projete as informações essenciais para a estratégia de reativação comercial: "
+                "    SF2.F2_CLIENTE AS COD_CLIENTE, "
+                "    SA1.A1_NOME AS CLIENTE, "
+                "    SA1.A1_NREDUZ AS NOME_FANTASIA, "
+                "    SA1.A1_MUN AS MUNICIPIO, "
+                "    SA1.A1_EST AS UF, "
+                "    SF2.F2_VEND1 AS COD_VENDEDOR, "
+                "    MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA, "
+                "    ROUND(SYSDATE - TO_DATE(MAX(SF2.F2_EMISSAO), 'YYYYMMDD')) AS DIAS_INATIVO, "
+                "    COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, "
+                "    SUM(SF2.F2_VALBRUT) AS VALOR_HISTORICO "
+                "  * Agrupe OBRIGATORIAMENTE no GROUP BY todas as colunas não agregadas: "
+                "    SF2.F2_CLIENTE, SA1.A1_NOME, SA1.A1_NREDUZ, SA1.A1_MUN, SA1.A1_EST, SF2.F2_VEND1. "
+                "  * Filtre a inatividade no HAVING: use OBRIGATORIAMENTE HAVING MAX(SF2.F2_EMISSAO) <= TO_CHAR(SYSDATE - 90, 'YYYYMMDD'). "
+                "  * Ordene por DIAS_INATIVO DESC. "
+                "- Se a pergunta for sobre faturamento por cliente ou ranking de vendas por cliente: "
+                "  * Se SA1 constar para compras/vendas gerais: faça INNER JOIN de SF2 com SA1010 SA1 para trazer SA1.A1_NOME AS CLIENTE. Se não constar, projete apenas SF2.F2_CLIENTE AS CLIENTE. "
+                "  * Selecione COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS e SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
+                "3. ANÁLISE POR PRODUTO: "
+                "- Se SB1 constar no snapshot, faça INNER JOIN com SB1010 SB1 via SD2.D2_COD = SB1.B1_COD para trazer SB1.B1_DESC AS PRODUTO. Se não constar, projete SD2.D2_COD AS PRODUTO. "
+                "- Selecione SUM(SD2.D2_TOTAL) AS VALOR_TOTAL e SUM(SD2.D2_QUANT) AS QUANTIDADE. "
+                "4. REGRA DE SEGURANÇA RBAC: NUNCA referencie tabelas ou campos que não estejam explicitamente presentes no snapshot autorizado acima."
+            )
+        elif domain == "purchases":
+            domain_instruction = (
+                " A intenção é COMPRAS/ENTRADA. Use SF1/SD1 para notas de entrada "
+                "e SA2 para fornecedores quando essas famílias estiverem no catálogo; "
+                "não trate tabelas de saída como tabelas de entrada."
+            )
+
+        system_instruction = f"""Você é o Copilot Protheus SQL Generator, especialista sênior no dicionário de dados do ERP TOTVS Protheus para banco de dados ORACLE em Cloud (SaaS/Hetzner/Cloudflare).
 Sua tarefa exclusiva é transformar a pergunta analítica ou de negócio do usuário em UMA ÚNICA consulta SELECT na sintaxe ORACLE perfeitamente formatada para execução via endpoint /QueryRest.
 
 === CONTEXTO DO DICIONÁRIO DE DADOS AUTORIZADO (RBAC / MÓDULOS CONTRATADOS) ===
@@ -438,8 +675,8 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
 15. PROIBIÇÃO ABSOLUTA DE ALUCINAÇÃO DE CAMPOS: Você está INVENTANDO campos que não existem no dicionário. NUNCA crie colunas começando com "X" (ex: F2_XCLIENT, F2_X_COND, C5_XNOME, C5_XVEND, C6_XDESC) tentando trazer descrições. Se o usuário pedir o nome do cliente ou fornecedor, mas a tabela de clientes/fornecedores não estiver no snapshot, USE APENAS O CÓDIGO (ex: C5_VEND1, F2_CLIENTE). A invenção de campos inexistentes quebra o AppServer do Protheus. Use a sintaxe INNER JOIN ao invés de apenas JOIN para maior clareza.
 17. CONSULTAS GERENCIAIS AGRUPADAS: Se o pedido contiver "agrupado", "agrupando", "por vendedor", "por produto", "por subgrupo", "mensal", "por mês" ou combinação equivalente, a resposta DEVE ser uma agregação SQL real. Selecione cada dimensão solicitada, uma métrica física financeira/quantitativa autorizada usando SUM/COUNT/AVG e inclua no GROUP BY todas as dimensões não agregadas. Nunca trate campos de mês, ano, data, código, filial, empresa, identificador ou número como métrica financeira. Não retorne linhas transacionais detalhadas quando a solicitação exigir consolidação. Se não existir no snapshot um campo físico autorizado para a métrica ou uma dimensão solicitada, não substitua por outro campo: informe que a análise não pode ser construída com o catálogo disponível.
 18. COERÊNCIA DO RESULTADO: Para análise mensal do ano, a consulta deve retornar uma coluna de período/mês e uma métrica agregada por mês; para vendedor e subgrupo, deve retornar as respectivas dimensões e a métrica agregada. O alias da métrica deve ser explícito, por exemplo SUM(campo_físico) AS VALOR_TOTAL, sem reutilizar alias ou códigos como valor.
-16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato \'YYYYMMDD\'. NUNCA use EXTRACT(YEAR/MONTH FROM ...), YEAR(), MONTH(), TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão o Oracle retornará erro ORA-30076 (Internal Server Error 500 no QueryRest). Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, \'YYYYMM\') ou SF2.F2_EMISSAO LIKE TO_CHAR(SYSDATE, \'YYYYMM\') || \'%\'. Exemplo de data exata: SF2.F2_EMISSAO = \'20260905\'.
-19. PROIBIÇÃO DE CAMPOS DE DATA INVENTADOS (ANO_EMISSAO, MES_EMISSAO, ETC.): NUNCA use ou invente identificadores como ANO_EMISSAO, MES_EMISSAO, DATA_EMISSAO ou DT_EMISSAO no SELECT, WHERE ou GROUP BY. Não existem tais campos no Protheus; o uso deles causa bloqueio imediato pelo RBAC (ENTITLEMENT_DENIED). Para agrupar ou filtrar por mês/ano, use SEMPRE SUBSTR(alias.CAMPO_DATA, 1, 6) AS MES_ANO e use essa mesma expressão SUBSTR(...) no GROUP BY. Para comparar mês atual com anterior, use SUBSTR(alias.CAMPO_DATA, 1, 6) IN (TO_CHAR(ADD_MONTHS(SYSDATE, -1), \'YYYYMM\'), TO_CHAR(SYSDATE, \'YYYYMM\')).
+16. TRATAMENTO DE DATAS NO PROTHEUS: O Protheus armazena todos os campos de data no banco Oracle como strings VARCHAR2(8) no formato 'YYYYMMDD'. NUNCA use EXTRACT(YEAR/MONTH FROM ...), YEAR(), MONTH(), TO_CHAR() ou TO_DATE() em um campo nativo do Protheus, senão o Oracle retornará erro ORA-30076 (Internal Server Error 500 no QueryRest). Para filtrar datas, use comparação de string. Exemplo de mês atual: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM') ou SF2.F2_EMISSAO LIKE TO_CHAR(SYSDATE, 'YYYYMM') || '%'. Exemplo de data exata: SF2.F2_EMISSAO = '20260905'.
+19. PROIBIÇÃO DE CAMPOS DE DATA INVENTADOS (ANO_EMISSAO, MES_EMISSAO, ETC.): NUNCA use ou invente identificadores como ANO_EMISSAO, MES_EMISSAO, DATA_EMISSAO ou DT_EMISSAO no SELECT, WHERE ou GROUP BY. Não existem tais campos no Protheus; o uso deles causa bloqueio imediato pelo RBAC (ENTITLEMENT_DENIED). Para agrupar ou filtrar por mês/ano, use SEMPRE SUBSTR(alias.CAMPO_DATA, 1, 6) AS MES_ANO e use essa mesma expressão SUBSTR(...) no GROUP BY. Para comparar mês atual com anterior, use SUBSTR(alias.CAMPO_DATA, 1, 6) IN (TO_CHAR(ADD_MONTHS(SYSDATE, -1), 'YYYYMM'), TO_CHAR(SYSDATE, 'YYYYMM')).
 20. SINTAXE GROUP BY NO ORACLE: O banco Oracle NÃO aceita aliases da cláusula SELECT na cláusula GROUP BY. Qualquer expressão projetada (como SUBSTR(...) ou cálculo) DEVE ser repetida de forma idêntica no GROUP BY. Exemplo correto: SELECT SUBSTR(SF2.F2_EMISSAO, 1, 6) AS MES_ANO, SUM(SD2.D2_TOTAL) AS TOTAL ... GROUP BY SUBSTR(SF2.F2_EMISSAO, 1, 6). NUNCA faça 'GROUP BY MES_ANO'.
 21. PREFERÊNCIA DE NOMES E QUANTIDADE DE PEDIDOS EM AGRUPAMENTOS:
 - NUNCA invente tabelas que NÃO estejam listadas no snapshot autorizado acima! Se uma tabela de cadastro (como SA3 para vendedores, SA1 para clientes, SA2 para fornecedores ou SB1 para produtos) NÃO estiver explicitamente no snapshot autorizado, NUNCA faça JOIN com ela e NUNCA referencie seus campos (ex: NUNCA use A3_NOME se SA3 não estiver no snapshot). Nesses casos, use EXCLUSIVAMENTE os códigos disponíveis nas tabelas autorizadas (ex: SF2.F2_VEND1 AS COD_VENDEDOR ou SF2.F2_CLIENTE AS COD_CLIENTE).
@@ -450,115 +687,7 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
   * Produtos (SB1): JOIN SB1010 SB1 ON SD2.D2_COD = SB1.B1_COD com SB1.D_E_L_E_T_ <> '*' -> projete SB1.B1_DESC AS PRODUTO.
 - Em consultas de vendas agrupadas por vendedor ou cliente, selecione OBRIGATORIAMENTE a quantidade de pedidos: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS (ou COUNT(DISTINCT SD2.D2_PEDIDO) AS QTD_PEDIDOS), além do valor total faturado SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. Isso é indispensável para o cálculo correto do Ticket Médio e do Total de Pedidos nos dashboards executivos."""
 
-    if not domain:
-        domain = _infer_query_domain(prompt)
-    if not domain and history:
-        for turn in reversed(history):
-            if turn.get("role") == "user":
-                past_prompt = turn.get("content") or turn.get("text") or ""
-                past_domain = _infer_query_domain(str(past_prompt))
-                if past_domain:
-                    domain = past_domain
-                    break
-    domain_instruction = ""
-    if domain == "sales":
-        domain_instruction = (
-            " A intenção é VENDAS/FATURAMENTO. Use SF2/SD2 para notas de saída "
-            "(e SA1/SA3 quando essas tabelas constarem explicitamente no snapshot autorizado acima); "
-            "nunca use SF1/SD1/SA2, que são entrada/compras/fornecedores. "
-            "DIRETRIZES DE VENDAS: "
-            "1. ANÁLISE POR VENDEDOR/REPRESENTANTE E VENDAS EM GERAL: "
-            "- REGRA OBRIGATÓRIA PARA IDENTIFICAÇÃO DE VENDEDORES: "
-            "  * Se a tabela SA3 CONSTAR explicitamente no snapshot autorizado acima: faça INNER JOIN com SA3010 SA3 via SF2.F2_VEND1 = SA3.A3_COD (ou SC5.C5_VEND1 = SA3.A3_COD) com SA3.D_E_L_E_T_ <> '*' e projete SA3.A3_NOME AS VENDEDOR e SF2.F2_VEND1 AS COD_VENDEDOR. "
-            "  * Se a tabela SA3 NÃO CONSTAR no snapshot autorizado acima: é TERMINANTEMENTE PROIBIDO fazer JOIN com SA3 ou usar campos A3_*! Projete EXCLUSIVAMENTE SF2.F2_VEND1 AS COD_VENDEDOR diretamente da tabela SF2. "
-            "- Para faturamento acumulado por vendedor ou totais de vendas gerais, consulte APENAS a tabela SF2 (SF2010 SF2), sem JOIN com SD2, pois SF2 já contém o total faturado F2_VALBRUT e a quantidade de documentos F2_DOC. NUNCA faça JOIN com SD2 a menos que o usuário peça especificamente produtos, itens ou TES. "
-            "- A TABELA SF2 NÃO POSSUI CAMPO DE TES (O CAMPO F2_TES NÃO EXISTE). Para filtrar notas normais em SF2, use EXCLUSIVAMENTE SF2.F2_TIPO = 'N'. NUNCA utilize F2_TES! "
-            "- NUNCA USE OS CAMPOS INEXISTENTES F2_NUM NEM D2_NUM! Os campos reais do Protheus são F2_DOC e D2_DOC. Se precisar fazer JOIN com SD2, a sintaxe OBRIGATÓRIA é: SF2.F2_FILIAL = SD2.D2_FILIAL AND SF2.F2_DOC = SD2.D2_DOC AND SF2.F2_SERIE = SD2.D2_SERIE. "
-            "- FILTRO TEMPORAL (MÊS ATUAL): Se a pergunta pedir 'mês atual' ou período atual, filtre SEMPRE: SUBSTR(SF2.F2_EMISSAO, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM') ou SF2.F2_EMISSAO LIKE TO_CHAR(SYSDATE, 'YYYYMM') || '%'. NUNCA use EXTRACT. "
-            "- Selecione OBRIGATORIAMENTE a quantidade de pedidos faturados: COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS. "
-            "- Selecione o valor total faturado: SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
-            "- Agrupe pelas dimensões selecionadas (incluindo SA3.A3_NOME no GROUP BY quando SA3 estiver no snapshot) e ordene por VALOR_TOTAL DESC. "
-            "2. ANÁLISE POR CLIENTE / CARTEIRA DE CLIENTES / CLIENTES SEM COMPRAS / ÚLTIMA VENDA: "
-            "- REGRA OBRIGATÓRIA (DESCONSIDERAR A1_ULTCOM): NUNCA utilize o campo SA1.A1_ULTCOM. DESCONSIDERE TOTALMENTE O CAMPO A1_ULTCOM EM TODAS AS CONSULTAS. "
-            "- A DATA REAL DA ÚLTIMA COMPRA DEVE SER OBTIDA EXCLUSIVAMENTE POR: MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA na tabela SF2010 SF2! "
-            "- Se a pergunta for sobre clientes sem compras há mais de X dias (ex: 90 dias), última venda com mais de X dias, clientes inativos ou reativação de clientes: "
-            "  * Consulte a tabela SF2010 SF2 com INNER JOIN SA1010 SA1 via SF2.F2_CLIENTE = SA1.A1_COD com SA1.D_E_L_E_T_ <> '*. "
-            "  * Filtre no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'. "
-            "  * Se houver vendedor: filtre SF2.F2_VEND1 = 'codigo' (ex: '01'). "
-            "  * NUNCA adicione filtro de mês atual (SF2.F2_EMISSAO LIKE 'YYYYMM%') em consultas de clientes inativos ou sem compras há X dias! "
-            "  * Projete as informações essenciais para a estratégia de reativação comercial: "
-            "    SF2.F2_CLIENTE AS COD_CLIENTE, "
-            "    SA1.A1_NOME AS CLIENTE, "
-            "    SA1.A1_NREDUZ AS NOME_FANTASIA, "
-            "    SA1.A1_MUN AS MUNICIPIO, "
-            "    SA1.A1_EST AS UF, "
-            "    SF2.F2_VEND1 AS COD_VENDEDOR, "
-            "    MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA, "
-            "    ROUND(SYSDATE - TO_DATE(MAX(SF2.F2_EMISSAO), 'YYYYMMDD')) AS DIAS_INATIVO, "
-            "    COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, "
-            "    SUM(SF2.F2_VALBRUT) AS VALOR_HISTORICO "
-            "  * Agrupe OBRIGATORIAMENTE no GROUP BY todas as colunas não agregadas: "
-            "    SF2.F2_CLIENTE, SA1.A1_NOME, SA1.A1_NREDUZ, SA1.A1_MUN, SA1.A1_EST, SF2.F2_VEND1. "
-            "  * Filtre a inatividade no HAVING: use OBRIGATORIAMENTE HAVING MAX(SF2.F2_EMISSAO) <= TO_CHAR(SYSDATE - 90, 'YYYYMMDD'). "
-            "  * Ordene por DIAS_INATIVO DESC. "
-            "- Se a pergunta for sobre faturamento por cliente ou ranking de vendas por cliente: "
-            "  * Se SA1 constar para compras/vendas gerais: faça INNER JOIN de SF2 com SA1010 SA1 para trazer SA1.A1_NOME AS CLIENTE. Se não constar, projete apenas SF2.F2_CLIENTE AS CLIENTE. "
-            "  * Selecione COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS e SUM(SF2.F2_VALBRUT) AS VALOR_TOTAL. "
-            "3. ANÁLISE POR PRODUTO: "
-            "- Se SB1 constar no snapshot, faça INNER JOIN com SB1010 SB1 via SD2.D2_COD = SB1.B1_COD para trazer SB1.B1_DESC AS PRODUTO. Se não constar, projete SD2.D2_COD AS PRODUTO. "
-            "- Selecione SUM(SD2.D2_TOTAL) AS VALOR_TOTAL e SUM(SD2.D2_QUANT) AS QUANTIDADE. "
-            "4. REGRA DE SEGURANÇA RBAC: NUNCA referencie tabelas ou campos que não estejam explicitamente presentes no snapshot autorizado acima."
-        )
-    elif domain == "purchases":
-        domain_instruction = (
-            " A intenção é COMPRAS/ENTRADA. Use SF1/SD1 para notas de entrada "
-            "e SA2 para fornecedores quando essas famílias estiverem no catálogo; "
-            "não trate tabelas de saída como tabelas de entrada."
-        )
-    elif domain == "finance":
-        domain_instruction = (
-            " A intenção é FINANCEIRO (Contas a Receber, Contas a Pagar e Fluxo de Caixa). "
-            "1. FLUXO DE CAIXA: Quando o pedido contiver 'fluxo de caixa', 'projeção de caixa' ou comparar 'pagar e receber', "
-            "consulte os TÍTULOS EM ABERTO unificando SE1 (contas a receber com E1_SALDO > 0) e SE2 (contas a pagar com E2_SALDO > 0) "
-            "através de UNION ALL. Projete obrigatoriamente: 'RECEBIMENTO' AS TIPO_MOVIMENTO para SE1 e 'PAGAMENTO' AS TIPO_MOVIMENTO para SE2, "
-            "o número do título (SE1.E1_NUM / SE2.E2_NUM) AS NUM_TITULO, a parcela (SE1.E1_PARCELA / SE2.E2_PARCELA) AS PARCELA, "
-            "o parceiro comercial / cliente / fornecedor (SE1.E1_NOMCLI / SE2.E2_NOMFOR) AS CLIENTE, "
-            "data de vencimento (SE1.E1_VENCTO / SE2.E2_VENCTO) AS DATA_VENCTO, e o saldo em aberto (SE1.E1_SALDO / SE2.E2_SALDO) AS VALOR. "
-            "ATENÇÃO CRÍTICA: Os campos E1_VENCTO e E2_VENCTO JÁ SÃO VARCHAR2(8) no formato 'YYYYMMDD'. NUNCA use TO_CHAR(SE1.E1_VENCTO...) nem TO_DATE nele, pois isso gera erro 500 no Oracle! Use diretamente SE1.E1_VENCTO AS DATA_VENCTO e SE2.E2_VENCTO AS DATA_VENCTO. "
-            "As colunas NUM_TITULO, PARCELA e CLIENTE são OBRIGATÓRIAS para permitir a rastreabilidade e o detalhamento executivo dos títulos. "
-            "2. CONTAS A RECEBER / TÍTULOS A RECEBER / VENCIDOS A RECEBER / INADIMPLÊNCIA / PROJEÇÃO DE RECEBIMENTOS: Quando a pergunta for sobre títulos a receber, vencidos ou projeção de recebimentos futuros, "
-            "consulte EXCLUSIVAMENTE a tabela SE1 (SE1010 SE1). Filtre títulos em aberto (SE1.E1_SALDO > 0) e com SE1.D_E_L_E_T_ <> '*'. "
-            "Se for pedido 'vencidos', filtre SE1.E1_VENCTO < TO_CHAR(SYSDATE, 'YYYYMMDD'). "
-            "Se for pedido 'projeção de recebimentos', 'próximas semanas' ou recebimentos futuros, filtre títulos a vencer: "
-            "SE1.E1_VENCTO >= TO_CHAR(SYSDATE, 'YYYYMMDD') AND SE1.E1_VENCTO <= TO_CHAR(SYSDATE + 60, 'YYYYMMDD'). "
-            "Para agrupar por período, use SUBSTR(SE1.E1_VENCTO, 1, 6) AS MES_ANO, ou simplesmente liste/agrupe por data de vencimento SE1.E1_VENCTO AS DATA_VENCTO com SUM(SE1.E1_SALDO) AS VALOR_TOTAL. "
-            "Selecione OBRIGATORIAMENTE o nome do cliente (SE1.E1_NOMCLI), o código do cliente (SE1.E1_CLIENTE), "
-            "o número do título (SE1.E1_NUM), parcela (SE1.E1_PARCELA), data de vencimento (SE1.E1_VENCTO) e saldo em aberto (SE1.E1_SALDO AS VALOR_SALDO). "
-            "O campo de nome do cliente (SE1.E1_NOMCLI) é INDISPENSÁVEL e OBRIGATÓRIO para a identificação dos clientes nos gráficos de barras e rankings executivos. "
-            "NUNCA selecione apenas o código sem o nome do cliente! "
-            "NUNCA crie coluna TIPO_MOVIMENTO e NUNCA una com a tabela SE2 quando a pergunta for apenas de contas a receber, recebimentos ou títulos vencidos! "
-            "3. CONTAS A PAGAR / TÍTULOS A PAGAR / VENCIDOS A PAGAR: Quando a pergunta for sobre contas a pagar, consulte EXCLUSIVAMENTE "
-            "a tabela SE2 (SE2010 SE2) com SE2.E2_SALDO > 0. Selecione OBRIGATORIAMENTE o nome do fornecedor (SE2.E2_NOMFOR), código do fornecedor (SE2.E2_FORNECE), "
-            "número do título (SE2.E2_NUM), parcela (SE2.E2_PARCELA), vencimento (SE2.E2_VENCTO) e saldo (SE2.E2_SALDO AS VALOR_SALDO). "
-            "O campo de nome do fornecedor (SE2.E2_NOMFOR) é INDISPENSÁVEL para os gráficos e rankings executivos. NUNCA selecione apenas o código! NUNCA una com SE1! "
-            "4. EXTRATO DE TÍTULOS / MAIOR DEVEDOR / CLIENTE ESPECÍFICO: Quando o pedido for um extrato detalhado de devedor ou cliente, "
-            "liste os títulos da tabela SE1 (SE1.E1_SALDO > 0) com SE1.D_E_L_E_T_ <> '*'. Se for pedido o maior devedor, filtre pelo cliente "
-            "que possui o maior somatório de saldo usando subquery: SE1.E1_CLIENTE IN (SELECT E1_CLIENTE FROM (SELECT E1_CLIENTE, SUM(E1_SALDO) AS TOTAL FROM SE1010 WHERE D_E_L_E_T_ <> '*' AND E1_SALDO > 0 GROUP BY E1_CLIENTE ORDER BY TOTAL DESC) WHERE ROWNUM = 1) "
-            "ou filtre pelo nome/código do cliente se especificado no texto. NUNCA use SELECT TOP nem LIMIT. Use SEMPRE ROWNUM ou FETCH FIRST para limites no Oracle. "
-            "5. REGRAS OBRIGATÓRIAS: Sempre aplique D_E_L_E_T_ <> '*' e a filial autorizada. NUNCA use SE5 se SE5 não estiver listada no snapshot autorizado!"
-        )
-
-
-    tenant_rules_instruction = ""
-    if tenant_id:
-        try:
-            with SessionLocal() as r_db:
-                t_rules = BusinessRulesEngine.get_tenant_rules(tenant_id, r_db)
-                tenant_rules_instruction = BusinessRulesEngine.build_rules_instruction(t_rules, prompt, domain)
-        except Exception as r_err:
-            logger.warning("Falha ao carregar regras de negocio do tenant %s: %s", tenant_id, r_err)
-
-    user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}{tenant_rules_instruction} (Lembre-se: campos de data Protheus são VARCHAR2(8) 'YYYYMMDD', NUNCA use EXTRACT/YEAR/MONTH, use SUBSTR ou LIKE)."
+        user_query = f"Gere a instrução SQL em Oracle para responder: {prompt}.{domain_instruction}{tenant_rules_instruction} (Lembre-se: campos de data Protheus são VARCHAR2(8) 'YYYYMMDD', NUNCA use EXTRACT/YEAR/MONTH, use SUBSTR ou LIKE)."
 
     backend_mode = getattr(settings, "llm_backend", "ollama")
     raw_response = ""
@@ -581,17 +710,29 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                 image=image,
                 allow_tools=False,
             )
-        except ProtheusServiceError as e:
-            status_code = e.status_code if e.status_code and 400 <= e.status_code <= 599 else 502
-            raise HTTPException(status_code=status_code, detail=str(e)) from e
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("[SQL Generator] Falha ao acionar provedor LLM provider=%s error_type=%s", backend_mode, type(e).__name__)
-            raise HTTPException(
-                status_code=503,
-                detail=f"O serviço do provedor de IA ({backend_mode}) está temporariamente indisponível para geração da consulta SQL. Erro: {str(e)}"
-            ) from e
+            candidate_sql = _clean_sql_from_raw(raw_response)
+            if not candidate_sql:
+                raise ValueError("Nenhum SELECT/WITH válido encontrado na resposta do modelo principal")
+            if domain:
+                _validate_query_domain(prompt, candidate_sql, domain=domain)
+        except Exception as first_err:
+            aux_model = os.getenv("OLLAMA_AUXILIARY_MODEL") or "qwen2.5-coder:7b"
+            logger.warning("[SQL Generator] Modelo principal falhou na geração/validação (%s). Acionando modelo auxiliar %s...", first_err, aux_model)
+            from app.services.ollama_client import ask_llm
+            raw_response = await ask_llm(
+                question=user_query,
+                protheus_data=None,
+                intent="sql_generation",
+                context={
+                    "tenant_system_prompt": system_instruction,
+                    "tenant_id": tenant_id,
+                    "environment_code": environment_code,
+                    "forced_model": aux_model,
+                },
+                history=history or [],
+                image=image,
+                allow_tools=False,
+            )
     else:
         # 2. Modo Gemini com fallback automático para Ollama
         try:
@@ -637,10 +778,6 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                 allow_tools=False,
             )
 
-        # O ask_gemini já centraliza o fallback para Ollama em 429/503/rede.
-        # Não reprocessar o texto retornado: uma resposta local pode mencionar
-        # quota e isso causava uma segunda chamada ao Ollama.
-
     if not raw_response or not isinstance(raw_response, str):
         raise HTTPException(status_code=500, detail="Provedor LLM retornou uma resposta vazia na geração de SQL.")
 
@@ -650,28 +787,9 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
     if "**LLM offline**" in raw_response or "**LLM Local inacessível" in raw_response:
         raise HTTPException(status_code=503, detail=raw_response)
 
-    # Sanitiza blocos de markdown ou comentários ao redor da query
-    clean_sql = re.sub(r'```(?:sql)?|```', '', raw_response, flags=re.IGNORECASE).strip()
-    
-    # Extrai estritamente a partir do SELECT ou WITH e até o ponto-e-vírgula se aplicável
-    with_idx = clean_sql.upper().find("WITH")
-    sel_idx = clean_sql.upper().find("SELECT")
-    if with_idx != -1 and (sel_idx == -1 or with_idx < sel_idx):
-        clean_sql = clean_sql[with_idx:].strip()
-    elif sel_idx != -1:
-        clean_sql = clean_sql[sel_idx:].strip()
-    else:
-        # Se não há SELECT nem WITH na resposta, provável alucinação ou erro
+    clean_sql = _clean_sql_from_raw(raw_response)
+    if not clean_sql:
         raise HTTPException(status_code=500, detail=f"O provedor LLM falhou ao gerar um SELECT/WITH válido. Resposta bruta: {raw_response}")
-
-    if ";" in clean_sql:
-        clean_sql = clean_sql.split(";")[0].strip()
-
-    clean_sql = auto_fix_oracle_limit(clean_sql)
-    clean_sql = auto_fix_delet_filters(clean_sql)
-    clean_sql = auto_fix_protheus_dates(clean_sql)
-    clean_sql = auto_fix_protheus_joins(clean_sql)
-    clean_sql = auto_fix_group_functions(clean_sql)
     return clean_sql
 
 
@@ -684,46 +802,6 @@ def _is_catalog_field_validation_error(exc: HTTPException) -> bool:
     )
 
 
-_DOMAIN_TABLE_FAMILIES = {
-    "sales": {"SF2", "SD2", "SC5", "SC6", "SA1", "SA3", "SE1", "SB1", "SB2", "SF4", "SCJ", "SCK", "DA0", "DA1"},
-    "purchases": {"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2", "SF4", "SC1"},
-    "finance": {"SE1", "SE2", "SE5", "SA1", "SA2", "SA6"}
-}
-
-
-def _infer_query_domain(prompt: str) -> str | None:
-    normalized = unicodedata.normalize("NFKD", str(prompt or "").lower())
-    normalized = normalized.encode("ascii", "ignore").decode("ascii")
-    normalized = re.sub(r"[^a-z0-9 ]", " ", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    sales_terms = (
-        "venda", "vendas", "vendido", "faturamento", "faturado", "faturada", "faturadas",
-        "pedido", "pedidos", "pedido de venda", "pedidos de venda", "notas fiscais de saida", "nota de saida", "notas de saida", "cliente", "clientes",
-        "vendedor", "vendedores", "representante", "representantes", "comercial",
-    )
-    purchase_terms = (
-        "compra", "compras", "comprado", "entrada", "entradas", "fornecedor", "fornecedores",
-        "nota de entrada", "notas de entrada", "recebimento", "pedido de compra",
-    )
-    finance_terms = (
-        "financeiro", "fluxo de caixa", "receber", "pagar", "contas a receber", "contas a pagar", "inadimplencia", "inadimplência",
-        "vencimento", "vencido", "vencidos", "boleto", "boletos", "titulo", "titulos", "se1", "se2", "se5",
-        "saldo", "saldo bancario", "movimento bancario", "devedor", "devedores", "divida", "dividas", "cobranca", "extrato",
-    )
-    
-    if any(term in normalized for term in finance_terms):
-        return "finance"
-    
-    has_sales = any(term in normalized for term in sales_terms)
-    has_purchases = any(term in normalized for term in purchase_terms)
-    if has_sales and not has_purchases:
-        return "sales"
-    if has_purchases and not has_sales:
-        return "purchases"
-    if has_sales and has_purchases:
-        if any(term in normalized for term in ("vendedor", "vendedores", "faturamento", "cliente", "clientes")) and not any(term in normalized for term in ("fornecedor", "fornecedores")):
-            return "sales"
-    return None
 
 
 def _table_families_from_context(context: list[dict[str, Any]]) -> set[str]:
@@ -911,29 +989,6 @@ def _domain_context_block(
 
 
 
-def _validate_query_domain(prompt: str, sql: str, domain: str | None = None) -> None:
-    domain = domain or _infer_query_domain(prompt)
-    if not domain:
-        return
-    families = _table_families_from_sql(sql)
-    if domain == "sales":
-        if families.intersection({"SF1", "SD1", "SA2"}) and not families.intersection({"SF2", "SD2", "SC5", "SC6", "SA1", "SE1", "SB1", "SB2"}):
-            raise HTTPException(
-                status_code=422,
-                detail="Consulta de vendas gerou tabela de entrada/fornecedor (SF1, SD1 ou SA2); SQL bloqueado.",
-            )
-    elif domain == "purchases":
-        if families.intersection({"SF2", "SD2", "SA1"}) and not families.intersection({"SF1", "SD1", "SC7", "SA2", "SE2", "SB1", "SB2"}):
-            raise HTTPException(
-                status_code=422,
-                detail="Consulta de compras gerou tabela de saída/cliente (SF2, SD2 ou SA1); SQL bloqueado.",
-            )
-    elif domain == "finance":
-        if not families.intersection({"SE1", "SE2", "SE5", "SA1", "SA2"}):
-            raise HTTPException(
-                status_code=422,
-                detail="Consulta financeira gerou SQL sem tabelas financeiras adequadas (SE1, SE2, SE5); SQL bloqueado.",
-            )
 
 
 def _load_conversation_history(
