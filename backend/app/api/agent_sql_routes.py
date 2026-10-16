@@ -787,12 +787,17 @@ Você SÓ pode consultar e referenciar as tabelas e campos listados explicitamen
                 history=history or [],
                 image=image,
                 allow_tools=False,
-            )
             candidate_sql = _clean_sql_from_raw(raw_response)
             if not candidate_sql:
                 raise ValueError("Nenhum SELECT/WITH válido encontrado na resposta do modelo principal")
+            if not re.search(r"\bFROM\b", candidate_sql, re.IGNORECASE) or "D_E_L_E_T_" not in candidate_sql:
+                raise ValueError(f"SQL incompleto ou sem cláusula FROM / D_E_L_E_T_: {candidate_sql[:80]}")
             if domain:
                 _validate_query_domain(prompt, candidate_sql, domain=domain)
+                families = _table_families_from_sql(candidate_sql)
+                domain_families = _DOMAIN_TABLE_FAMILIES.get(domain, set())
+                if domain_families and not families.intersection(domain_families):
+                    raise ValueError(f"Consulta de {domain} não referenciou nenhuma tabela esperada do domínio: {candidate_sql[:80]}")
         except Exception as first_err:
             aux_model = os.getenv("OLLAMA_AUXILIARY_MODEL") or "qwen2.5-coder:7b"
             logger.warning("[SQL Generator] Modelo principal falhou na geração/validação (%s). Acionando modelo auxiliar %s...", first_err, aux_model)
