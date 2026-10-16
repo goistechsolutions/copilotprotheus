@@ -12,7 +12,7 @@ class RAGService:
         model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:3b")
         try:
             with httpx.Client(timeout=600.0) as client:
-                res = client.post(f"{url}/api/embeddings", json={"model": model, "prompt": text, "keep_alive": 0})
+                res = client.post(f"{url}/api/embeddings", json={"model": model, "prompt": text, "keep_alive": "15m"})
                 res.raise_for_status()
                 return res.json().get("embedding")
         except Exception as e:

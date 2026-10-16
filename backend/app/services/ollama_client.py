@@ -389,10 +389,11 @@ async def _call_ollama(
             "model": ollama_model, 
             "messages": messages, 
             "stream": False, 
-            "keep_alive": 0,
+            "keep_alive": "15m",
             "options": {
                 "temperature": temperature,
-                "num_ctx": 4096
+                "num_ctx": 4096,
+                "num_gpu": 999
             }
         }
         if allow_tools:
@@ -585,10 +586,11 @@ async def stream_llm(
                 "model": ollama_model, 
                 "messages": messages, 
                 "stream": False, 
-                "keep_alive": 0,
+                "keep_alive": "15m",
                 "options": {
                     "temperature": 0.0,
-                    "num_ctx": 4096
+                    "num_ctx": 4096,
+                    "num_gpu": 999
                 }
             }
             if allow_tools:
