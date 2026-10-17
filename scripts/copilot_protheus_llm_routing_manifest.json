@@ -1,0 +1,18 @@
+{
+  "files": [
+    "IMPLEMENTACAO_LLM_ROUTING.md",
+    "backend/.env.llm.example",
+    "backend/app/services/llm/__init__.py",
+    "backend/app/services/llm/contracts.py",
+    "backend/app/services/llm/factory.py",
+    "backend/app/services/llm/providers/__init__.py",
+    "backend/app/services/llm/providers/ollama.py",
+    "backend/app/services/llm/providers/openai_compatible.py",
+    "backend/app/services/llm/router.py",
+    "backend/app/services/llm/service.py",
+    "backend/app/services/llm/settings.py",
+    "backend/tests/unit/test_llm_providers.py",
+    "backend/tests/unit/test_model_router.py"
+  ],
+  "python_files_compiled": 11
+}
