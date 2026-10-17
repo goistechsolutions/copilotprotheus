@@ -132,6 +132,37 @@ def build_dictionary_context(
     return context
 
 
+_CORE_ANALYTICAL_FIELD_SUFFIXES = (
+    "_FILIAL", "_DOC", "_SERIE", "_NUM", "_COD", "_LOJA", "_CLIENTE", "_CLI",
+    "_FORNECE", "_VEND", "_VEND1", "_NOME", "_NREDUZ", "_NOMCLI", "_NOMFOR",
+    "_DESC", "_DESCRI", "_EMISSAO", "_VENCTO", "_VENCREA", "_BAIXA", "_VALOR",
+    "_VALBRUT", "_VALMERC", "_VALFAT", "_TOTAL", "_SALDO", "_QUANT", "_QTDVEN",
+    "_QTDENT", "_PRCVEN", "_TIPO", "_TES", "_PEDIDO", "_ITEM", "_PRODUTO",
+    "_MUN", "_EST", "_GRUPO", "_PREFIXO", "_PARCELA", "_NATUREZ", "_STATUS",
+    "_SITUACA", "_CGC", "_TEL", "_EMAIL", "D_E_L_E_T_",
+)
+
+
+def _select_compact_fields(fields: List[Dict[str, Any]], unique_index: str = "") -> List[Dict[str, Any]]:
+    if len(fields) <= 28:
+        return fields
+    idx_upper = (unique_index or "").upper()
+    scored = []
+    for pos, f in enumerate(fields):
+        fname = str(f.get("field_name") or "").upper()
+        if not fname:
+            continue
+        score = 0
+        if any(fname.endswith(sfx) or sfx in fname for sfx in _CORE_ANALYTICAL_FIELD_SUFFIXES):
+            score += 100
+        if fname in idx_upper:
+            score += 50
+        scored.append((score, -pos, f))
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    selected = [item[2] for item in scored[:28]]
+    return selected
+
+
 def render_context_for_prompt(context: List[Dict[str, Any]], compact: bool = True) -> str:
     """Renderiza SX2/SX3/SIX e regras de compartilhamento para o gerador SQL."""
     parts: List[str] = []
@@ -152,14 +183,18 @@ def render_context_for_prompt(context: List[Dict[str, Any]], compact: bool = Tru
             f"filial={table.get('usa_filial') or 'não informado'} "
             f"X2_MODO={table.get('x2_modo') or 'não informado'}"
         )
-        if table.get("unique_index"):
-            parts.append(f"  UNIQUE_INDEX: {table.get('unique_index')}")
+        unique_idx = str(table.get("unique_index") or "")
+        if unique_idx:
+            parts.append(f"  UNIQUE_INDEX: {unique_idx}")
         parts.append(
             "  SX3_PHYSICAL_FIELDS: a lista FIELD abaixo é exaustiva para esta tabela; "
             "qualquer identificador ausente não existe no snapshot autorizado."
         )
 
-        for index in item.get("indexes", []):
+        indexes = item.get("indexes", [])
+        if compact and len(indexes) > 3:
+            indexes = indexes[:3]
+        for index in indexes:
             parts.append(
                 f"  SIX_INDEX: order={index.get('index_order') or 'não informado'} "
                 f"name={index.get('nickname') or 'não informado'} "
@@ -167,7 +202,8 @@ def render_context_for_prompt(context: List[Dict[str, Any]], compact: bool = Tru
             )
 
         if compact:
-            for field in item.get("fields", []):
+            compact_fields = _select_compact_fields(item.get("fields", []), unique_idx)
+            for field in compact_fields:
                 fname = field.get("field_name")
                 if not fname:
                     continue

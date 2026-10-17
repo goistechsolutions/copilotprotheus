@@ -798,7 +798,7 @@ async def conversation_turn(
                     "Quem são os principais fornecedores a pagar?",
                     "Comparar pagamentos com recebimentos"
                 ]
-            elif any(w in prompt_norm for w in ["cliente", "inativ"]):
+            elif any(w in prompt_norm for w in ["cliente", "clliente", "inativ", "90 dias", "ultimo pedido", "ultima compra"]):
                 follow_up_suggestions = [
                     "Quais clientes têm maior valor histórico?",
                     "Ranking de clientes por faturamento",
@@ -811,6 +811,8 @@ async def conversation_turn(
                     "Ver análise de concentração"
                 ]
 
+            # Persiste resposta do assistente
+            asst_msg_id = str(uuid.uuid4())
             asst_meta = {
                 "trace_id": trace_id,
                 "analysis_id": analysis_id,

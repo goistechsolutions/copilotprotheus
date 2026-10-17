@@ -141,9 +141,9 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
     # Identify dimensions and measures
     for col in columns:
         name = str(col).upper()
-        if re.search(r"(^|_)(ANO|MES|DATA|DATE|PERIODO|COD|CODIGO|ID|NUMERO|NR|FILIAL|EMPRESA|BRANCH|VENDEDOR|VEND|PRODUTO|ITEM|GRUPO)(_|$)", name):
+        if re.search(r"(^|_)(ANO|MES|DATA|DATE|PERIODO|COD|CODIGO|ID|NUMERO|NR|FILIAL|EMPRESA|BRANCH|VENDEDOR|VEND|CLIENTE|FORNECEDOR|PRODUTO|ITEM|GRUPO|NOME|DESC|DESCRICAO)(_|$)", name):
             # It's a dimension
-            kind = "time" if re.search(r"ANO|MES|DATA|DATE|PERIODO", name) else "string"
+            kind = "time" if (re.search(r"ANO|MES|DATA|DATE|PERIODO", name) and not re.search(r"ULTIM", name)) else "string"
             dimensions.append({
                 "key": col,
                 "label": col,
@@ -197,7 +197,7 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
         kpis.append(primary_kpi)
 
         # 2. KPI de Destaque / Líder (Vendedor Líder / Maior Cliente)
-        target_dim = next((d for d in dimensions if re.search(r"NOME|VENDEDOR|CLIENTE|DESC", d["key"].upper())), None) or (dimensions[0] if dimensions else None)
+        target_dim = next((d for d in dimensions if re.search(r"^(NOME|VENDEDOR|CLIENTE|PRODUTO|FORNECEDOR|DESC|DESCRICAO)$|_(NOME|DESC)$", d["key"].upper())), None) or (dimensions[0] if dimensions else None)
         if target_dim and len(rows) > 1:
             try:
                 top_row = max(rows, key=lambda r: _parse_summary_number(r.get(primary_measure["key"])) or 0.0)
@@ -228,14 +228,14 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
                 "label": qty_label,
                 "value": int(total_qty),
                 "format": "number",
-                "highlight_text": f"{len(rows)} vendedores" if is_sales else f"{len(rows)} registros",
+                "highlight_text": f"{len(rows)} vendedores" if is_sales else (f"{len(rows)} clientes" if is_client else f"{len(rows)} registros"),
                 "tone": "neutral",
                 "iconType": "money"
             })
         else:
             secondary_kpis.append({
                 "key": "total_records",
-                "label": "VENDEDORES COM VENDAS" if is_sales else ("CLIENTES ATIVOS" if is_client else "TOTAL DE REGISTROS"),
+                "label": "VENDEDORES COM VENDAS" if is_sales else ("CLIENTES ANALISADOS" if is_client else "TOTAL DE REGISTROS"),
                 "value": len(rows),
                 "format": "number",
                 "highlight_text": "Base analisada",
@@ -258,7 +258,7 @@ def _build_semantic_result(rows: list[dict[str, Any]]) -> dict:
         })
 
         # Build series para gráfico (tempo ou categorias até 25 itens)
-        chart_dim = time_dim or (dimensions[0] if dimensions and len(rows) <= 25 else None)
+        chart_dim = time_dim or (target_dim if target_dim and len(rows) <= 25 else None)
         if chart_dim:
             points = []
             for row in rows:
@@ -660,9 +660,13 @@ DIRETRIZES GERAIS:
         prompt_norm = unicodedata.normalize("NFKD", prompt_lower).encode("ascii", "ignore").decode("ascii")
         is_current_month = any(w in prompt_norm for w in ["mes atual", "deste mes", "periodo atual", "recente", "este mes", "mes corrente"])
         is_vendor = any(w in prompt_norm for w in ["vendedor", "vendedores", "representante", "representantes", "comercial"])
-        is_client = any(w in prompt_norm for w in ["cliente", "clientes", "carteira", "comprador"])
+        is_client = any(w in prompt_norm for w in ["cliente", "clientes", "clliente", "cllientes", "carteira", "comprador"])
         is_product = any(w in prompt_norm for w in ["produto", "produtos", "item", "itens", "mais vendido", "mais vendidos"])
-        is_inactive = any(w in prompt_norm for w in ["inativo", "inativos", "sem compra", "sem compras", "reativ", "sem comprar"])
+        is_inactive = any(w in prompt_norm for w in [
+            "inativo", "inativos", "sem compra", "sem compras", "reativ", "sem comprar",
+            "ultimo pedido", "ultima compra", "ultima venda", "sem pedido", "dias sem",
+            "90 dias", "60 dias", "120 dias", "180 dias", "mais de 30 dias",
+        ])
 
         if is_vendor:
             sales_directives = (
@@ -676,13 +680,15 @@ DIRETRIZES GERAIS:
                 "NUNCA faça JOIN com SD2. NUNCA use F2_TES nem F2_NUM."
             )
         elif is_inactive:
+            days_match = re.search(r"\b(\d{1,3})\s*dias\b", prompt_norm)
+            inactive_days = int(days_match.group(1)) if days_match else 90
             sales_directives = (
-                "CONSULTA: CLIENTES INATIVOS / SEM COMPRAS.\n"
+                f"CONSULTA: CLIENTES INATIVOS / COM ÚLTIMO PEDIDO HÁ MAIS DE {inactive_days} DIAS.\n"
                 "Consulte a tabela SF2010 SF2 com INNER JOIN SA1010 SA1 ON (SA1.A1_COD = SF2.F2_CLIENTE AND SA1.D_E_L_E_T_ <> '*').\n"
                 "Filtros obrigatórios no WHERE: SF2.D_E_L_E_T_ <> '*' AND SF2.F2_TIPO = 'N'. NUNCA use filtro de mês atual.\n"
                 "Projete EXATAMENTE: SF2.F2_CLIENTE AS COD_CLIENTE, SA1.A1_NOME AS CLIENTE, MAX(SF2.F2_EMISSAO) AS DATA_ULTIMA_COMPRA, COUNT(DISTINCT SF2.F2_DOC) AS QTD_PEDIDOS, SUM(SF2.F2_VALBRUT) AS VALOR_HISTORICO.\n"
                 "Agrupe OBRIGATORIAMENTE no GROUP BY: SF2.F2_CLIENTE, SA1.A1_NOME.\n"
-                "Filtre no HAVING: MAX(SF2.F2_EMISSAO) <= TO_CHAR(SYSDATE - 90, 'YYYYMMDD').\n"
+                f"Filtre no HAVING: MAX(SF2.F2_EMISSAO) <= TO_CHAR(SYSDATE - {inactive_days}, 'YYYYMMDD').\n"
                 "Ordene por DATA_ULTIMA_COMPRA ASC."
             )
         elif is_client:
@@ -1004,8 +1010,12 @@ def _select_prompt_tables(prompt: str, domain: str | None, context: list[dict[st
     target_codes: list[str] = []
     if domain == "sales":
         is_vendor = any(w in prompt_norm for w in ["vendedor", "vendedores", "representante", "representantes", "comercial"])
-        is_inactive = any(w in prompt_norm for w in ["inativo", "inativos", "sem compra", "sem compras", "reativ", "sem comprar"])
-        is_client = any(w in prompt_norm for w in ["cliente", "clientes", "carteira", "comprador"])
+        is_inactive = any(w in prompt_norm for w in [
+            "inativo", "inativos", "sem compra", "sem compras", "reativ", "sem comprar",
+            "ultimo pedido", "ultima compra", "ultima venda", "sem pedido", "dias sem",
+            "90 dias", "60 dias", "120 dias", "180 dias", "mais de 30 dias",
+        ])
+        is_client = any(w in prompt_norm for w in ["cliente", "clientes", "clliente", "cllientes", "carteira", "comprador"])
         is_product = any(w in prompt_norm for w in ["produto", "produtos", "item", "itens", "mais vendido", "mais vendidos"])
 
         if is_vendor:
